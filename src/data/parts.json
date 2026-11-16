@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "coordinate_system": "right-handed; Z up",
+  "model_units": "meters",
+  "metadata_note": "Masses are illustrative supplied values; do not infer them from mesh volume. Dimensions are derived from mesh bounds. Meshes may contain overlapping disconnected bodies and are not manufacturing-grade CAD solids.",
+  "parts": [
+    {
+      "id": "PART-001",
+      "name": "Machined steel bracket",
+      "model": "PART-001-machined-steel-bracket.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 21.5,
+      "dimensions_mm": [
+        360.0,
+        220.0,
+        258.0
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "PART-002",
+      "name": "Long steel shaft",
+      "model": "PART-002-long-steel-shaft.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 27.0,
+      "dimensions_mm": [
+        1530.0,
+        172.0,
+        172.0
+      ],
+      "suggested_quantities": [
+        1,
+        2,
+        4
+      ]
+    },
+    {
+      "id": "PART-003",
+      "name": "Irregular aluminum housing",
+      "model": "PART-003-irregular-aluminum-housing.glb",
+      "material": "6061-T6 aluminum",
+      "density_kg_m3": 2700,
+      "mass_kg": 11.8,
+      "dimensions_mm": [
+        435.0,
+        445.0,
+        254.0
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    }
+  ]
+}
