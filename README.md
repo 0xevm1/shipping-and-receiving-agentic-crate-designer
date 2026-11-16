@@ -1,97 +1,142 @@
 # Crate Designer
 
-A prototype that designs wooden shipping crates for one or more identical machined parts. Pick a
-part and a quantity. The app packs the parts, builds the crate around them out of plywood and
-lumber, and renders the result in 3D. It also gives a cut list, weights and warnings.
+A browser app that designs **custom wooden shipping crates** for one or more identical
+machined parts. Pick a part and a quantity. The app packs the parts as compactly as it can,
+builds a crate around them from plywood, lumber and wood screws, and shows the result in 3D. It
+also gives a cut list, weights and handling warnings.
 
-**Who it's for:** the shipping/packaging lead or shop carpenter who today sizes crates by hand
-from part drawings.
+Built for Hadrian's Shipping Crate Designer exercise. The full behaviour (algorithms, rules,
+invariants) is in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 
-## Run it
+## Quick start
 
 ```bash
+git clone git@github.com:0xevm1/shipping-ui.git
+cd shipping-ui
 bun install
-bun run dev        # http://localhost:3000
-bun run test       # domain unit tests (vitest) — note: `bun test` would run Bun's own runner instead
+bun run dev          # → http://localhost:3000
 ```
 
-Uses [Bun](https://bun.sh) 1.3+ as the package manager (`bun.lock`); Next.js itself still runs on Node 20+. Tested on Node 24, Next.js 16, three.js r187.
+| Command | What it does |
+|---|---|
+| `bun run dev` | Dev server with hot reload |
+| `bun run build && bun run start` | Production build and serve |
+| `bun run test` | Domain unit tests (vitest) |
+| `bun run lint` | ESLint |
 
-## What it does
+- **Requirements:** [Bun](https://bun.sh) 1.3+ for installing and running scripts (the lockfile
+  is `bun.lock`), and Node 20+, which Next.js runs on. Verified on Bun 1.3.5, Node 24,
+  Next.js 16.4, three.js r187.
+- **Use `bun run test`, not `bun test`.** `bun test` runs Bun's own test runner instead of
+  vitest.
+- **No Bun?** `npm install && npm run dev` also works. It resolves fresh versions because
+  there's no `package-lock.json`.
+- Nothing else is needed: no environment variables, backend or database. The sample GLBs are
+  bundled in `public/parts/`.
 
-1. **Part:** choose from the catalog (`src/data/parts.json`, validated with zod at load time).
-2. **Quantity and packing rules:** keep parts upright or allow any orientation, the maximum
-   number of stacked layers, the gap between parts, and the clearance to the walls.
-3. **Layout search:** enumerates every orientation × nx·ny·nz grid that holds the quantity, and
-   ranks them: stable crates first, then smallest external volume, then lowest height. The best
-   layout is chosen automatically. Any of the alternatives can be picked from the table.
-4. **Crate construction:** a plywood floor on lumber skids (forklift entry from the ends),
-   plywood walls and lid with 1×4 cleat frames, and screws only (no metal brackets). Inside,
-   wood dunnage holds the parts: bearers under the bottom layer, a plywood separator between
-   layers, and blocking posts in every gap. Board sizes scale with payload mass.
-5. **Outputs:** external and interior dimensions (mm and inches), tare, gross, space
-   utilization, a rough material cost, a cut list (downloadable CSV) and warnings (oversize,
-   tip-over, heavy stacks, ISPM-15).
-6. **3D view:** cutaway, assembled or exploded. The real GLB is placed in every slot, and the
-   GLB's measured bounds are checked against the catalog dimensions.
+## Who it's for
 
-## Architecture
+The **shipping or packaging lead, or the shop carpenter**, who today sizes crates by hand from
+part drawings. They need a crate they can build that protects the parts, is cheap and fast to
+make, and is easy to handle with a forklift. They want a cut list, not a CAD model.
+
+## What v1 does
+
+1. **Choose a part** from the catalog (`src/data/parts.json`): 360 mm bracket, 1.53 m shaft, or
+   aluminum housing.
+2. **Set the quantity and packing rules:** keep parts upright, max stacked layers, gap between
+   parts, clearance to walls, and plywood thickness (or Auto).
+3. **Get the best layout automatically.** The app tries every orientation and grid that holds
+   the batch, and ranks them stable first, then smallest outside volume, then lowest height. The
+   runners-up are listed, and you can click one to switch.
+4. **See the crate in 3D:** cutaway, assembled or exploded. The real part models sit in each
+   slot. Each GLB's measured size is checked against the catalog.
+5. **Read off the build data:**
+   - outside and inside dimensions (mm and inches)
+   - tare, payload and gross weight
+   - space utilization and a rough material cost
+   - plywood area, lumber length and screw count
+   - warnings for oversize, tip-over, heavy stacks and export lumber
+6. **Download the cut list** as CSV.
+
+### The crate it designs
+
+- **Base:** a plywood floor on lumber skids. Forklift entry is from the ends.
+- **Walls and lid:** plywood panels, each stiffened by a frame of 1×4 cleats.
+- **Inside:** wood holds the parts in place. Bearers lift the bottom layer, a plywood separator
+  sits between layers, and blocking posts fill every gap.
+- **Fasteners:** wood screws only.
+- **Sizing:** board sizes go up with payload mass.
+
+## Scope and non-goals
+
+**In scope:** one part type per crate, any quantity from 1 to 200, wood plus basic fasteners only.
+
+**Out of scope for v1 (deliberately):**
+
+- **Disposable packing materials** (foam, bubble wrap, stretch film). The brief excludes them.
+- **Mixed-part crates.** A crate never mixes part numbers.
+- **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039,
+  ISPM-15 or a structural calculation.
+- **Metal hardware** (brackets, banding, lag bolts).
+- **Persistence and accounts.** Nothing is saved yet. The plan is in
+  [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
+- **Custom part upload.** Only the three catalog parts for now (see #3).
+
+## Conventions
+
+| | |
+|---|---|
+| **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The UI also shows inches |
+| **Axes** | Right-handed, **Z up**: the same frame as the source GLBs. X is the crate's long axis (the skids run along X) |
+| **GLB files** | Metres, Z up, not centred on their origin. The viewer scales by ×1000 and re-centres each part on its bounding box |
+| **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m. Nothing else converts |
+| **Crate origin** | The interior min corner, on the top face of the floor |
+
+## Key assumptions
+
+- **Packing uses bounding boxes.** Each part is treated as its axis-aligned bounding box. This is
+  exact for boxy parts and wastes space on irregular ones, such as the open housing. There's no
+  nesting.
+- **Lumber sizes** are nominal US sizes, with actual dimensions in mm:
+  - 1×4 cleats are 19 × 89
+  - 4×4 skids are 89 × 89
+  - 4×6 skids are 89 × 140, used when the payload is over 700 kg
+  - blocking is 89 wide, cut to fit each gap
+- **Plywood:** the floor is always 19 mm. With Auto, walls and lid are 12 mm up to 150 kg of
+  payload, 15 mm up to 500 kg, and 19 mm above that.
+- **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
+  $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
+  quoting.
+- **Part masses** come from the catalog as given. They are not derived from mesh volume.
+- **Stability:** a crate counts as "stable" if its outside height is at most 1.5× its narrowest
+  base side.
+- **Screw count** is an estimate:
+  - cleats: one every 150 mm
+  - panel joints: one every 200 mm
+  - skids: one every 300 mm
+  - blocking: 2 per block
+
+All of these are named constants at the top of `src/domain/crate.ts` and
+`src/domain/packing.ts`.
+
+## Project layout
 
 ```
-src/
-  data/parts.json            catalog (copied from Sample Parts/)
-  domain/                    pure TypeScript, no React; unit-tested
-    schema.ts                zod schemas: Part, PartsCatalog, CrateSettings
-    catalog.ts               parse + lookup
-    orientations.ts          6 axis-aligned rotations; rotated bbox via three.js math
-    packing.ts               grid enumeration + ranking → Layout
-    crate.ts                 Layout → boards (Member[]), BOM, weights, screws, warnings
-    design.ts                computeDesign(settings) — the single entry point the UI calls
-    export.ts                cut list CSV
-  components/
-    CrateDesigner.tsx        page state (settings, selected layout, view mode)
-    ControlsPanel.tsx        inputs
-    SummaryPanel.tsx         stats, warnings, alternatives, cut list
-    viewer/                  client-only (next/dynamic, ssr:false)
-      CrateViewer.tsx        <Canvas>, lights, camera framing
-      CrateModel.tsx         one box mesh per board
-      PartInstances.tsx      GLB loaded once, cloned per slot
-docs/
-  DATA_STORE.md              client-side persistence plan (SQLite WASM + OPFS)
-  schema.sql                 proposed tables
+src/domain/        pure TypeScript, no React; all crate logic, unit-tested
+src/components/    React UI; viewer/ is client-only three.js (react-three-fiber)
+src/data/          parts.json catalog
+public/parts/      GLB models
+docs/              SPECIFICATION.md, DATA_STORE.md, schema.sql
 ```
 
-**Key decisions**
+## Docs
 
-- **One coordinate convention.** The domain works in millimetres, Z-up, the same as the GLBs.
-  A single root group in the viewer rotates Z-up → Y-up and scales mm → m, so nothing else
-  converts units.
-- **The domain is pure and synchronous.** `computeDesign()` is cheap (it searches a few hundred
-  layouts), so the UI just recomputes it in `useMemo` on every input change. No store library is
-  needed yet.
-- **Orientation math is shared.** Packing and rendering both use the same three.js `Euler`, so
-  the packed bounding boxes and the rendered models can't disagree.
-- **Packing uses bounding boxes.** It's exact for boxes and conservative for irregular parts
-  (no nesting). This is the main efficiency limit; see the next steps.
-- **Every board is an explicit box.** The same `Member[]` list drives the 3D view, the cut
-  list, the weight and the screw count, so they always agree.
+- [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md): the full spec covering the data model,
+  algorithms, construction rules, invariants, decisions and roadmap.
+- [`docs/DATA_STORE.md`](docs/DATA_STORE.md): the client-side persistence plan (SQLite WASM on
+  OPFS).
+- [`docs/schema.sql`](docs/schema.sql): the proposed tables.
 
-## Assumptions and limits
-
-- Catalog masses are used as given (not derived from the mesh). Material densities: plywood
-  600 kg/m³, lumber 480 kg/m³. Cost rates are placeholders.
-- Construction rules (panel thickness by payload, skid size, cleat spacing ≤ 600 mm, skid count
-  by width) are reasonable shop defaults, not certified engineering. They live as named
-  constants at the top of `src/domain/crate.ts`.
-- Crates hold one part type only, which the brief requires.
-- Nothing is persisted yet. See `docs/DATA_STORE.md`.
-
-## Next steps
-
-- Persist designs and revisions with SQLite WASM (see the plan).
-- Upload a GLB for a new part. Its bounds come from the mesh; mass is entered by the user.
-- Nested or interlocking packing for irregular parts (alternating orientations, convex-hull
-  checks).
-- Constraints such as maximum crate size and maximum gross weight per crate (which would split
-  a batch across several crates), plus shop-specific lumber stock.
-- Printable build sheet with dimensioned drawings.
+The roadmap is tracked as GitHub issues: see the
+[shipping-ui issues](https://github.com/0xevm1/shipping-ui/issues).
