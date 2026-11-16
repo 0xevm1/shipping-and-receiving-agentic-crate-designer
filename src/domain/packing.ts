@@ -41,11 +41,15 @@ export interface Layout {
   externalVolumeM3: number;
   /** Fraction of interior volume occupied by part bounding boxes. */
   utilization: number;
-  /** External height no greater than the narrowest base side (low tip-over risk). */
+  /** External height at most 1.5× the narrowest base side (low tip-over risk). */
   stable: boolean;
   /** Filled slots, bottom layer first. */
   slots: Slot[];
 }
+
+const STABLE_HEIGHT_RATIO = 1.5;
+/** Volumes within this fraction are treated as equal, so the lower crate wins. */
+const VOLUME_TOLERANCE = 0.03;
 
 export function enumerateLayouts(input: PackingInput): Layout[] {
   const { quantity: n, partGapMm: gap, wallClearanceMm: clear, separatorMm: sep } = input;
@@ -106,7 +110,7 @@ export function enumerateLayouts(input: PackingInput): Layout[] {
           external,
           externalVolumeM3: (external[0] * external[1] * external[2]) / 1e9,
           utilization: (n * a * b * c) / (interior[0] * interior[1] * interior[2]),
-          stable: external[2] <= Math.min(external[0], external[1]),
+          stable: external[2] <= STABLE_HEIGHT_RATIO * Math.min(external[0], external[1]),
           slots,
         });
       }
@@ -120,6 +124,6 @@ export function enumerateLayouts(input: PackingInput): Layout[] {
 export function compareLayouts(x: Layout, y: Layout): number {
   if (x.stable !== y.stable) return x.stable ? -1 : 1;
   const dv = x.externalVolumeM3 - y.externalVolumeM3;
-  if (Math.abs(dv) > 1e-6) return dv;
+  if (Math.abs(dv) > VOLUME_TOLERANCE * Math.min(x.externalVolumeM3, y.externalVolumeM3)) return dv;
   return x.external[2] - y.external[2];
 }
