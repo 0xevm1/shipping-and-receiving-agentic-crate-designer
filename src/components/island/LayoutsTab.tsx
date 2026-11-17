@@ -113,7 +113,7 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   if (!score || !best) return null;
   if (isBest) {
     return (
-      <span className="opt-delta">
+      <span className="opt-delta" data-testid="layout-delta">
         <span className="nw">{usd(score.costUsd)} to build</span>
         {" · "}
         <span className="nw">class {score.freightClass}</span>
@@ -126,7 +126,7 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   const density = densityDelta(score.densityLbFt3 - best.densityLbFt3, units);
   const sameClass = score.freightClass === best.freightClass;
   return (
-    <span className="opt-delta" title="Against the recommended layout">
+    <span className="opt-delta" data-testid="layout-delta" title="Against the recommended layout">
       <span className={`nw ${cost > 0 ? "worse" : cost < 0 ? "better" : ""}`}>{usdDelta(cost)}</span>
       {" · "}
       <span className={`nw ${sameClass ? "" : score.freightClass > best.freightClass ? "worse" : "better"}`}>

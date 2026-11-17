@@ -32,7 +32,7 @@ export function ViewBar() {
   const title = `${mode ? `${MODE_NAME[mode]} view` : "Custom view"}. Click for ${MODE_NAME[next].toLowerCase()}.`;
 
   return (
-    <div className="br">
+    <div className="br" data-testid="view-bar">
       <PinBar />
       <button
         type="button"
@@ -154,8 +154,8 @@ function ViewPopover() {
             />
           </div>
           <span className="lab">
-            <span className="hint-mouse">Drag to turn, scroll to zoom, right-drag to pan.</span>
-            <span className="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to pan.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
+            <span className="hint-mouse" data-testid="hint-mouse">Drag to turn, scroll to zoom, right-drag to pan.</span>
+            <span className="hint-touch" data-testid="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to pan.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
           </span>
         </div>
       )}

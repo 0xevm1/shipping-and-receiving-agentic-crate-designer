@@ -42,7 +42,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
         {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
       {/* Values an edit changed flash gold for 1.2 s. */}
-      <div className="big">
+      <div className="big" data-testid="outside-size">
         <Flash on={["outside"]}>{dims(layout.external, units)}</Flash>
         <small>{lengthUnit(units)}</small>
       </div>
@@ -59,7 +59,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
       </div>
       <Scorecard design={design} />
 
-      <ul className="chain">
+      <ul className="chain" data-testid="build-chain">
         <Step name="Parts" value={weight(design.payloadKg, units)} flash={["payload"]}>
           {quantity} × {partWeight(part.mass_kg, units)}, {part.material ?? "material not given"}
         </Step>
@@ -111,6 +111,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
             <div
               key={a}
               className="barrow"
+              data-testid="weight-bar"
               role="group"
               aria-label={`${ASSEMBLY_NAMES[a]}, ${weight(kg, units)}`}
               tabIndex={0}
@@ -139,7 +140,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
 function Verdict({ cautions, onReview }: { cautions: readonly string[]; onReview: () => void }) {
   if (!cautions.length) {
     return (
-      <p className="verdict clear">
+      <p className="verdict clear" data-testid="verdict">
         <i aria-hidden="true" />
         All checks clear
       </p>
@@ -147,7 +148,7 @@ function Verdict({ cautions, onReview }: { cautions: readonly string[]; onReview
   }
   const text = cautionVerdict(cautions);
   return (
-    <button type="button" className="verdict caution" title={`${text}. Open Checks.`} onClick={onReview}>
+    <button type="button" className="verdict caution" data-testid="verdict" title={`${text}. Open Checks.`} onClick={onReview}>
       <i aria-hidden="true" />
       <span>{text}</span>
       <span className="go" aria-hidden="true">

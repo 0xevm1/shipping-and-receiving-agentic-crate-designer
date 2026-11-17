@@ -44,14 +44,14 @@ export function ExportPill() {
       >
         {busy ? <span className="exportspin" aria-hidden="true" /> : <DownloadIcon />}
         <span>{busy ? "Exporting…" : "Export specs"}</span>
-        {caution && <span className="exportdot" aria-hidden="true" />}
+        {caution && <span className="exportdot" aria-hidden="true" data-testid="export-caution-dot" />}
       </button>
       {caution && (
         <span id={CAUTION_NOTE_ID} className="sr-only">
           {caution}
         </span>
       )}
-      <span className={`exportnote${state.kind === "error" ? " bad" : ""}`} role="status">
+      <span className={`exportnote${state.kind === "error" ? " bad" : ""}`} role="status" data-testid="export-note">
         {note}
       </span>
     </div>

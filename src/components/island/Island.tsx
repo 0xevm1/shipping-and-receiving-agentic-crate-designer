@@ -135,13 +135,13 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             >
               {t.label}
               {t.id === "checks" && cautions > 0 && (
-                <span className="count">
+                <span className="count" data-testid="caution-count">
                   {cautions}
                   <span className="sr-only"> {cautions === 1 ? "caution" : "cautions"}</span>
                 </span>
               )}
               {t.id === "checks" && notes > 0 && (
-                <span className="count info">
+                <span className="count info" data-testid="note-count">
                   {notes}
                   <span className="sr-only"> {notes === 1 ? "note" : "notes"}</span>
                 </span>

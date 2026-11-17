@@ -14,7 +14,7 @@ export function ChecksTab({ checks }: { checks: readonly CheckItem[] }) {
       <p className="lede">Rules of thumb for a first pass. Heavy or unusual loads still need an engineering review.</p>
       <CrateTypePicker />
       {checks.map((c) => (
-        <div key={c.id} className={`check ${c.level}`}>
+        <div key={c.id} className={`check ${c.level}`} data-testid="check" data-level={c.level}>
           <i />
           <div>
             <b>{c.title}</b>
