@@ -166,6 +166,16 @@ tab at a time.
     crate B (20)" with the shipment's gross and volume, and **Crate A / Crate B** switches the
     crate shown in 3D, Layouts, Cut list and Checks. The Cut list can show **This crate** or
     the **Whole shipment**. Batches that fit one crate look exactly as before. Spec §7.10.
+11. **Keep a design library and share designs** (#14). At the bottom of the **Overview**,
+    **Save design** stores the crate on screen with a name and optional notes. When that part is
+    loaded again (the catalog part, or a custom GLB with the same file name and size), its
+    saved designs are listed with quantity, outside size, gross and date, and **Use** brings one
+    back in a click, through the same path as opening a design file. Rename and delete (with
+    undo) are inline; **Export library** / **Import library** move the whole library between
+    machines as one JSON file. **Copy share link** puts the design in the URL hash
+    (`#design=…`, never sent to a server). Opening the link restores a catalog part fully; for a
+    custom part it names the `.glb` to load. A damaged link keeps the default crate and says
+    why. Spec §9.
 
 ### The crate it designs
 
@@ -189,9 +199,11 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **Persistence and accounts.** Only the shop standards and the display units are saved (in the
-  browser's `localStorage`); a design can be downloaded as a JSON file and reopened. The plan for the rest is in
-  [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
+- **A database and accounts.** The shop standards, the display units and the design library
+  are saved in the browser's `localStorage` (per browser, under versioned keys; bad data is
+  skipped with a warning). Designs also move as JSON files (one design, or the whole library)
+  and share links. The plan for a real store, SQLite WASM on OPFS, is in
+  [`docs/DATA_STORE.md`](docs/DATA_STORE.md); spec §9 has the details.
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
 

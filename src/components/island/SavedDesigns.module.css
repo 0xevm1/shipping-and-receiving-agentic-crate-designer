@@ -1,0 +1,160 @@
+/*
+ * The design library (#14): "Saved designs" at the bottom of the Overview. A CSS module; the
+ * shared classes it reuses from globals.css (`.btn`, `.linkbtn`, `.actions`) are `:global`.
+ */
+
+.root {
+  margin-top: 4px;
+}
+
+.sub {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.item:first-child {
+  border-top: 1px solid var(--hair);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.name {
+  font-weight: 500;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.date {
+  margin-left: auto;
+  flex: none;
+  font: 400 11.5px/1.2 var(--mono);
+  color: var(--muted);
+}
+.meta {
+  margin-top: 3px;
+  font: 400 12px/1.4 var(--mono);
+  color: var(--gold);
+}
+.notes {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+.rowActions :global(.btn) {
+  padding: 5px 14px;
+}
+
+.form,
+.rename {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.rename {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.form label,
+.link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.form input,
+.form textarea,
+.rename input,
+.link input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px 9px;
+  color: var(--text);
+  font: 400 13px/1.4 var(--sans);
+  resize: vertical;
+}
+.rename input {
+  flex: 1 1 160px;
+  width: auto;
+}
+.link {
+  margin-top: 10px;
+}
+.link input {
+  font: 400 11.5px/1.4 var(--mono);
+  color: var(--soft);
+}
+.form input:focus-visible,
+.form textarea:focus-visible,
+.rename input:focus-visible,
+.link input:focus-visible {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 1px var(--sky);
+}
+
+.actions {
+  margin-top: 4px;
+}
+
+.libraryRow {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+  font-size: 12.5px;
+}
+.libraryRow :global(.linkbtn):disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.status {
+  min-height: 1.4em;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* The drawer (#42): touch targets of at least 44 px. */
+@media (max-width: 980px) {
+  .rowActions :global(.btn),
+  .rowActions :global(.linkbtn),
+  .libraryRow :global(.linkbtn),
+  .status :global(.linkbtn),
+  .form :global(.linkbtn),
+  .rename :global(.btn),
+  .rename :global(.linkbtn) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .form input,
+  .rename input,
+  .link input {
+    min-height: 44px;
+  }
+}

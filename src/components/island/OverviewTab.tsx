@@ -8,6 +8,7 @@ import { plywoodText, sectionText } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
+import { SavedDesigns } from "./SavedDesigns";
 import { Scorecard } from "./Scorecard";
 import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
@@ -96,6 +97,9 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           );
         })}
       </div>
+
+      {/* The design library (#14): save, list and reuse this part's designs; share links. */}
+      <SavedDesigns />
     </>
   );
 }

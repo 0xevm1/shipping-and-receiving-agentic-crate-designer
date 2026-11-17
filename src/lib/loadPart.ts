@@ -170,12 +170,13 @@ const SAME_SIZE_MM = 0.5;
  * - A catalog part comes from the bundled catalog and /public/parts.
  * - A custom part (or a catalog id this app doesn't have) needs its GLB, picked or dropped
  *   together with the design file. Without it nothing changes and the message names the file.
+ * Also the path for a reused library design and a share link (#14).
  */
-async function loadDesign(
+export async function loadDesign(
   file: DesignFile,
   glbs: File[],
-  bundled: Part[],
-  standards: ShopStandards,
+  bundled: Part[] = catalog.parts,
+  standards: ShopStandards = DEFAULT_STANDARDS,
 ): Promise<Omit<LoadOutcome, "catalogAdditions">> {
   const saved = file.part;
   const entry = saved.source === "catalog" ? bundled.find((p) => p.id === saved.id) : undefined;
