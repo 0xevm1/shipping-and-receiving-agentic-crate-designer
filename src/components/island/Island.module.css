@@ -248,6 +248,20 @@
     font-size: 20px;
     overflow-wrap: anywhere;
   }
+  /* With the File check button the buttons don't fit beside the name: the name and the close button keep the first row, the buttons take the second. */
+  .partbar[data-checks] {
+    flex-wrap: wrap;
+  }
+  .partbar[data-checks] h2 {
+    flex: 1 1 8ch;
+  }
+  .partbar[data-checks] .close {
+    order: 1;
+  }
+  .partbar[data-checks] .loaders {
+    order: 2;
+    flex: 1 0 100%;
+  }
   .load,
   .fileCheck {
     min-height: var(--touch);

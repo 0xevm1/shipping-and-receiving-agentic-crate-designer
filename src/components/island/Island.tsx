@@ -133,7 +133,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
       {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open, "data-open": drawer.open || undefined })}
     >
       <div className={styles.parthead} ref={headRef} data-empty={!design || undefined}>
-        <div className={styles.partbar}>
+        <div className={styles.partbar} data-checks={report ? "" : undefined}>
           <h2>{part.name}</h2>
           <div className={styles.loaders}>
             {report && <FileCheckButton report={report} />}
