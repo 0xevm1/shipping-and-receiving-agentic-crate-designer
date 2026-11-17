@@ -62,7 +62,7 @@ describe("reopening the last crate", () => {
     expect(await restoreLastDesign(custom, idb)).toBe(false);
     expect(s().part.id).toBe(initial.part.id);
     expect(s().settings).toEqual(initial.settings);
-    expect(s().loadMessage).toContain("Load widget_v2.glb to reopen it.");
+    expect(s().loadMessage).toContain("Load widget_v2.glb to reopen your last crate");
     expect(useLibrary.getState().pendingShare).toEqual(custom.design);
   });
 

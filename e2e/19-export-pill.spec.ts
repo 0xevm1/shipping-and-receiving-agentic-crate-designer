@@ -43,7 +43,7 @@ function expectPdf(b: Uint8Array, minPages: number) {
 /** Loads the zip's design.json back through Load a part. */
 async function reimport(page: Page, design: Uint8Array, extra: { name: string; mimeType: string; buffer: Buffer }[] = []) {
   await fileInput(page).setInputFiles([{ name: "design.json", mimeType: "application/json", buffer: Buffer.from(design) }, ...extra]);
-  await expect(page.locator(".loadmsg")).toContainText("Design loaded");
+  await expect(page.locator(".loadmsg:not(:empty)")).toContainText("Design loaded");
 }
 
 test("Export downloads one .zip with every file, in imperial, and the design re-imports", async ({ page }) => {

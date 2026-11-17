@@ -12,7 +12,7 @@ import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFil
 
 const SHAFT = "PART-002-long-steel-shaft.glb";
 const KEY = "crate-designer.last-design.v1";
-const loadMessage = (page: Page) => page.locator(".loadrow .loadmsg");
+const loadMessage = (page: Page) => page.locator(".loadrow .loadmsg:not(:empty)");
 
 /** Waits for the scene after a load that may not be the default part (`openApp` expects it). */
 async function waitForScene(page: Page) {
@@ -75,7 +75,7 @@ test("a reload reopens the same crate: rules, layout, ranking, tab and units", a
   await expect(tab(page, "Layouts")).toHaveAttribute("aria-selected", "true");
   await expect(ranking.getByRole("button", { name: "Crate cost" })).toHaveAttribute("aria-pressed", "true");
   // Reopened quietly: no load message, and the clock isn't restarted (no "Designed in").
-  await expect(loadMessage(page)).toBeEmpty();
+  await expect(loadMessage(page)).toHaveCount(0);
   await shot(page, "20-after-reload");
   await page.screenshot({ path: "docs/screenshots/71-last-design/after-reload.png" });
 
@@ -156,7 +156,7 @@ test("a GLB over the 50 MB cap isn't kept: the reload opens the default part and
   await page.reload();
   await openApp(page);
   expect((await crate(page)).partId).toBe("PART-001");
-  await expect(loadMessage(page)).toContainText("Load big_part.glb to reopen it.");
+  await expect(loadMessage(page)).toContainText("Load big_part.glb to reopen your last crate");
 });
 
 test("corrupt saved data opens the default part without an error", async ({ page }) => {
@@ -172,7 +172,7 @@ test("corrupt saved data opens the default part without an error", async ({ page
   expect(s.partId).toBe("PART-001");
   expect(s.quantity).toBe(4);
   expect(s.tab).toBe("overview");
-  await expect(loadMessage(page)).toBeEmpty();
+  await expect(loadMessage(page)).toHaveCount(0);
   expect(errors).toEqual([]);
   expect(warnings.some((w) => w.includes("Last-opened crate ignored"))).toBe(true);
 });

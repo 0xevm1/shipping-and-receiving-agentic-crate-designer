@@ -92,3 +92,8 @@ export function modelNote(matches: boolean | null, readAsMm: boolean | undefined
   if (matches === false) return "model does not match catalog";
   return readAsMm ? "file read as millimetres" : "size measured from the file";
 }
+
+/** "1 caution, see Checks": what the Export pill says when the design has cautions; "" for none. */
+export function cautionNote(count: number): string {
+  return count > 0 ? `${count} ${count === 1 ? "caution" : "cautions"}, see Checks` : "";
+}

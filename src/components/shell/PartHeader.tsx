@@ -9,6 +9,7 @@ import { modelMatchesCatalog } from "@/state/checks";
 import { useDesigner, type ChangeSource } from "@/state/store";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";
+import { LoadToast } from "./LoadToast";
 
 /** Edits from the header's own fields; their change note shows under the header. */
 const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
@@ -59,6 +60,7 @@ export function PartHeader() {
         <ChangeNote sources={PART_SOURCES} />
       </div>
       <ExportPill />
+      <LoadToast />
     </header>
   );
 }
@@ -74,7 +76,7 @@ function Gross() {
     return (
       <>
         {" "}
-        · <span>{crates.crates} crates,</span> <span>{weight(crates.grossKg, units)} gross in all</span>
+        · <span>{crates.crates} crates,</span> <span>{weight(crates.grossKg, units, true)} gross in all</span>
       </>
     );
   }
@@ -84,7 +86,7 @@ function Gross() {
       {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}
       ·{" "}
       <span className="nw">
-        <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units)}</Flash>
+        <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units, true)}</Flash>
       </span>
     </>
   );

@@ -206,7 +206,7 @@ describe("restoreDesign", () => {
     const stale = { ...file, layoutKey: "u:1x1x1:999" };
     const restored = restoreDesign(stale, parts[0]);
     expect(restored.layoutKey).toBeNull();
-    expect(restored.notes.map(metricText).join(" ")).toMatch(/saved layout .* recommended layout/i);
+    expect(restored.notes.map(metricText).join(" ")).toMatch(/saved layout .* recommended one/i);
   });
 
   it("says so when the crate comes out different from the saved summary", () => {
@@ -268,6 +268,6 @@ describe("design file: a split batch (#25)", () => {
     if (!r.ok) throw new Error(r.error);
     expect(restoreDesign(r.file, p, lower.standards).notes).toEqual([]);
     const notes = restoreDesign(r.file, p).notes.map(metricText).join(" ");
-    expect(notes).toMatch(/now ships as .*crate A.*\(saved: .*crate A/);
+    expect(notes).toMatch(/now ships as .*crate A.*\(was .*crate A/);
   });
 });

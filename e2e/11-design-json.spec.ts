@@ -19,7 +19,8 @@ async function downloadDesign(page: Page) {
 
 const designFile = (text: string, name = "crate-design.json") => ({ name, mimeType: "application/json", buffer: Buffer.from(text) });
 /** The load row message under the 3D view (a substring is enough). */
-const loadMessage = (page: Page, text: string) => page.locator(".loadrow").getByRole("status").filter({ hasText: text });
+// The load row shows a message as a note (status) or an error (alert); both are `.loadmsg`.
+const loadMessage = (page: Page, text: string) => page.locator(".loadrow .loadmsg", { hasText: text });
 
 /**
  * Back to PART-001 at quantity 1 with default rules, by loading its GLB. Cheaper than reopening
@@ -94,7 +95,7 @@ test("a design whose layout no longer exists falls back to the recommended one",
   const saved = await downloadDesign(page);
   const stale = { ...saved.json, layoutKey: "u:1x1x1:999" };
   await fileInput(page).setInputFiles(designFile(JSON.stringify(stale)));
-  await expect(loadMessage(page, "no longer fits, so the recommended layout is shown")).toBeVisible();
+  await expect(loadMessage(page, "no longer fits, so the recommended one is shown")).toBeVisible();
   await pollCrate(page, (s) => s.outside).toEqual([932, 652, 497]);
 });
 
@@ -120,7 +121,7 @@ test("a custom design needs its model: named when missing, restored when added",
   await resetToBracket(page);
   await fileInput(page).setInputFiles(designFile(saved.text));
   await expect(
-    loadMessage(page, "This design uses a custom model. Add widget_v2.glb together with the design file: pick or drop both at once."),
+    loadMessage(page, "This design needs widget_v2.glb. Choose its .glb together with the design file."),
   ).toBeVisible();
   await expect(page.getByRole("banner")).toContainText("PART-001");
   await shot(page, "11-design-custom-needs-model");

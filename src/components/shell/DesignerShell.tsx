@@ -58,7 +58,6 @@ function useNarrow() {
 export function DesignerShell() {
   const panelsHidden = useDesigner((s) => s.panelsHidden);
   const drawerOpen = useDesigner((s) => s.drawerOpen);
-  const loadMessage = useDesigner((s) => s.loadMessage);
   const narrow = useNarrow();
   const islandRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -215,13 +214,8 @@ export function DesignerShell() {
         <SizeLabels />
         <Tooltip />
       </section>
-      {/* The load message, the summary chip (narrow) and the view bar; a column at the foot on narrow screens. */}
+      {/* The summary chip (narrow) and the view bar; a column at the foot on narrow screens. */}
       <div className="foot" ref={footRef}>
-        <div className="loadrow">
-          <span className="loadmsg" role="status">
-            {loadMessage}
-          </span>
-        </div>
         <Summary
           onOpen={() => {
             useDesigner.getState().setTab("overview");
@@ -266,7 +260,7 @@ function Summary({ onOpen }: { onOpen: () => void }) {
           <span>
             <span className="summary-lab">{totals ? `Gross, ${totals.crates} crates` : "Gross"}</span>
             <Flash on={["gross"]} className="summary-val">
-              {weight(totals ? totals.grossKg : design.grossKg, units)}
+              {weight(totals ? totals.grossKg : design.grossKg, units, true)}
             </Flash>
           </span>
         </>

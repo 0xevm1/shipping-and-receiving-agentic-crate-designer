@@ -29,3 +29,27 @@ test("the drawer's focus trap reaches Shop standards and opens it from the keybo
   await page.keyboard.press("Shift+Tab");
   expect(await page.evaluate(() => !!document.activeElement?.closest("aside"))).toBe(true);
 });
+
+test("the summary chip is the width of the foot, with a gap between size and weight, at any quantity", async ({ page }) => {
+  await openApp(page);
+  const summary = page.locator(".summary");
+  const measure = () =>
+    summary.evaluate((el) => {
+      const foot = el.parentElement!.getBoundingClientRect();
+      const [size, weight] = [...el.querySelectorAll(".summary-val")].map((v) => v.getBoundingClientRect());
+      return { chip: Math.round(el.getBoundingClientRect().width), foot: Math.round(foot.width), gap: weight.left - size.right };
+    });
+  const before = await measure();
+  expect(before.chip).toBe(before.foot);
+  expect(before.gap).toBeGreaterThanOrEqual(8);
+
+  await page.getByRole("button", { name: "Crate details" }).tap();
+  await openTab(page, "Rules");
+  await page.getByRole("tabpanel").getByLabel("Quantity").fill("200");
+  await page.getByRole("button", { name: "Close the panel" }).tap();
+  await expect(summary).toContainText("crates");
+  const after = await measure();
+  expect(after.chip).toBe(before.chip);
+  expect(after.gap).toBeGreaterThanOrEqual(8);
+  await page.screenshot({ path: `e2e/screenshots/31-summary-chip-${test.info().project.name}.png` });
+});

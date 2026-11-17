@@ -20,17 +20,15 @@ export async function openShareLink(initial: boolean) {
   history.replaceState(history.state, "", window.location.pathname + window.location.search);
   const s = useDesigner.getState();
   if (!r.ok) {
-    const why = r.error.replace(/^This design file/, "This share link");
-    s.setLoadMessage(`Share link not opened${initial ? ", so the default crate is shown" : ""}. ${why}`);
+    const why = r.error.replace(/^(This share link|This design file)/, "That share link");
+    s.setLoadMessage(`${why}${initial ? " The default crate is shown." : ""}`, "error");
     return;
   }
   const file = r.file;
   const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
   if (!inCatalog) {
     useLibrary.getState().setPendingShare(file);
-    s.setLoadMessage(
-      `This link shares a ${file.settings.quantity} × ${file.part.name} design for a custom part. Load ${file.part.model} with Load a part (or drop it here) to open it.`,
-    );
+    s.setLoadMessage(`This link needs ${file.part.model}. Load it (or drop it here) to open the ${file.settings.quantity} × ${file.part.name} design.`, "error");
     return;
   }
   await openDesignFile(file);

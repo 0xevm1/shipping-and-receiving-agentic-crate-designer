@@ -7,7 +7,8 @@ const SHAFT = "PART-002-long-steel-shaft.glb";
 
 const section = (page: Page) => panel(page).getByRole("region", { name: "Saved designs" });
 const list = (page: Page) => section(page).getByRole("list", { name: "Saved designs for this part" });
-const loadMessage = (page: Page, text: string) => page.locator(".loadrow").getByRole("status").filter({ hasText: text });
+// The load row shows a message as a note (status) or an error (alert); both are `.loadmsg`.
+const loadMessage = (page: Page, text: string) => page.locator(".loadrow .loadmsg", { hasText: text });
 
 /** Opens the app at `path` (a share link) and waits for the scene, like `openApp`. */
 async function openAt(page: Page, path: string) {
@@ -148,13 +149,13 @@ test("a share link opens the same crate on a fresh page", async ({ page }) => {
 
 test("a damaged share link falls back to the default crate with a message", async ({ page }) => {
   await openAt(page, "/#design=eyJraW5kIjoiY3JhdGUtZGVzaWduIiwic2NoZW1hVmVyc2lvbiI6MSwic2V0dGluZ3MiOnsicXVhbnRpdHkiOjUwMDB9fQ");
-  await expect(loadMessage(page, "Share link not opened, so the default crate is shown.")).toBeVisible();
+  await expect(loadMessage(page, "The default crate is shown.")).toBeVisible();
   await pollCrate(page, (s) => s.partId).toBe("PART-001");
   await pollCrate(page, (s) => s.quantity).toBe(4);
   expect(new URL(page.url()).hash).toBe("");
 
   await openAt(page, "/#design=not*base64");
-  await expect(loadMessage(page, "This share link is damaged or incomplete.")).toBeVisible();
+  await expect(loadMessage(page, "That share link is damaged or incomplete.")).toBeVisible();
   await shot(page, "14-share-link-invalid");
 });
 
@@ -171,7 +172,7 @@ test("a custom part's share link names the model to load, then opens with it", a
 
   const fresh = page;
   await openAt(fresh, link);
-  await expect(loadMessage(fresh, "Load widget_v2.glb with Load a part")).toBeVisible();
+  await expect(loadMessage(fresh, "This link needs widget_v2.glb.")).toBeVisible();
   await pollCrate(fresh, (s) => s.partId).toBe("PART-001");
   await fileInput(fresh).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(loadMessage(fresh, "Design loaded: 1 × Widget v2.")).toBeVisible();

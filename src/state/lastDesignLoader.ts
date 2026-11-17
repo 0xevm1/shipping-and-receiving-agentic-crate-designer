@@ -27,11 +27,7 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
       if (!ticket.current()) return false;
       if (!kept || kept.name !== file.part.model) {
         useLibrary.getState().setPendingShare(file);
-        useDesigner
-          .getState()
-          .setLoadMessage(
-            `Your last crate (${file.settings.quantity} × ${file.part.name}) wasn't reopened: this browser didn't keep ${file.part.model} (models over 50 MB aren't kept). Load ${file.part.model} to reopen it.`,
-          );
+        useDesigner.getState().setLoadMessage(`Load ${file.part.model} to reopen your last crate (${file.settings.quantity} × ${file.part.name}).`, "error");
         return false;
       }
       glbs = [new File([kept.bytes], kept.name, { type: "model/gltf-binary" })];
@@ -58,7 +54,7 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
     // Only what came out differently is worth a line; the crate itself shows it reopened.
     const lead = `Design loaded: ${file.settings.quantity} × ${outcome.part.name}.`;
     const notes = outcome.message.startsWith(lead) ? outcome.message.slice(lead.length).trim() : "";
-    if (notes) useDesigner.getState().setLoadMessage(`Your last crate reopened. ${notes}`);
+    if (notes) useDesigner.getState().setLoadMessage(`Reopened. ${notes}`);
     return true;
   } catch (e) {
     console.warn("Last-opened crate not reopened, opening the default part.", e);

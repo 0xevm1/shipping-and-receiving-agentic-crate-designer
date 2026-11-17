@@ -34,7 +34,7 @@ describe("glbProblem", () => {
   });
 
   it("rejects non-GLB data and compressed files", () => {
-    expect(glbProblem(new TextEncoder().encode('{"asset":{}}').buffer as ArrayBuffer)).toMatch(/not a .glb/);
+    expect(glbProblem(new TextEncoder().encode('{"asset":{}}').buffer as ArrayBuffer)).toMatch(/isn't a .glb file/);
     expect(glbProblem(fakeGlb({ asset: {}, extensionsRequired: ["KHR_draco_mesh_compression"] }))).toMatch(/Draco/);
     expect(glbProblem(fakeGlb({ asset: {}, extensionsRequired: ["EXT_meshopt_compression"] }))).toMatch(/Meshopt/);
   });
@@ -111,19 +111,19 @@ describe("design files (#28)", () => {
     const out = await loadPartFiles([jsonFile(designJson(custom))], parts);
     expect(out.part).toBeUndefined();
     expect(out.design).toBeUndefined();
-    expect(out.message).toMatch(/custom model\. Add widget_v2\.glb together with the design file/);
+    expect(out.message).toMatch(/needs widget_v2\.glb\. Choose its .glb together with the design file/);
   });
 
   it("still treats other JSON as a parts.json catalog", async () => {
     const out = await loadPartFiles([jsonFile(readFileSync("src/data/parts.json", "utf8"), "parts.json")], []);
     expect(out.catalogAdditions).toHaveLength(3);
-    expect(out.message).toMatch(/Now add the .glb/);
+    expect(out.message).toMatch(/Now choose its .glb/);
   });
 
   it("reports a bad design file or bad JSON plainly", async () => {
     const bad = JSON.parse(designJson(shaft));
     bad.settings.quantity = 0;
     expect((await loadPartFiles([jsonFile(JSON.stringify(bad))], parts)).message).toMatch(/settings\.quantity/);
-    expect((await loadPartFiles([jsonFile("{oops", "x.json")], parts)).message).toBe("x.json is not valid JSON.");
+    expect((await loadPartFiles([jsonFile("{oops", "x.json")], parts)).message).toBe("x.json isn't valid JSON. Choose a design or parts .json file.");
   });
 });

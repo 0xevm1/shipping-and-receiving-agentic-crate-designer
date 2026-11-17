@@ -17,10 +17,12 @@ export function applyOutcome(outcome: Outcome) {
     if (ranking !== s.ranking) s.setRanking(ranking);
     s.loadDesign(outcome.part, settings, layoutKey, crateIndex);
   } else if (outcome.part) s.setPart(outcome.part);
-  s.setLoadMessage(outcome.message);
+  // Without a part nothing opened: the message says what to do, and stays until dismissed.
+  s.setLoadMessage(outcome.message, outcome.part ? "note" : "error");
 }
 
-const failed = (err: unknown) => useDesigner.getState().setLoadMessage(err instanceof Error ? err.message : "That file could not be read.");
+const failed = (err: unknown) =>
+  useDesigner.getState().setLoadMessage(err instanceof Error ? err.message : "That file couldn't be read. Try it again, or choose another.", "error");
 
 /**
  * Applies `work`'s outcome unless a later load started meanwhile. A superseded outcome is
