@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ERROR_NOTE_MS, useExportRun } from "./exportRun";
 
 vi.mock("@/lib/exportBundle", () => ({
-  browserMakers: async () => ({}),
   buildBundle: async () => {
     throw new Error("boom");
   },

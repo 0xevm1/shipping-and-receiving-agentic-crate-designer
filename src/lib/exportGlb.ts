@@ -133,6 +133,3 @@ export function loadPartScene(url: string): Promise<Object3D> {
   }
   return p;
 }
-
-// Kept for importers outside `src/lib`; the download helpers live in `./download`.
-export { downloadBytes } from "./download";
