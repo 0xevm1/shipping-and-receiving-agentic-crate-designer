@@ -16,7 +16,7 @@ import { loadLibrary, saveLibrary } from "./libraryStorage";
 import { browserStorage, type KeyValueStore } from "./persist";
 
 /**
- * The design library (#14): saved designs per part, kept in localStorage. Its own small store,
+ * The design library: saved designs per part, kept in localStorage. Its own small store,
  * separate from the designer, because nothing in the crate depends on it; reusing a design goes
  * through the same path as opening a design file (`useOpenDesign`).
  */

@@ -5,7 +5,7 @@ import { catalogPart, useDesigner } from "./store";
 const initial = useDesigner.getState();
 const s = () => useDesigner.getState();
 
-describe("ranking (#17)", () => {
+describe("ranking", () => {
   beforeEach(() => useDesigner.setState(initial, true));
 
   it("starts on volume, today's ranking", () => {
@@ -38,7 +38,7 @@ describe("ranking (#17)", () => {
   });
 });
 
-describe("time to design (#17)", () => {
+describe("time to design", () => {
   beforeEach(() => useDesigner.setState(initial, true));
 
   it("runs from the clock start to the first export only", () => {

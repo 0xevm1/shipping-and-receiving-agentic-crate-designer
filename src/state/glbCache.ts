@@ -1,5 +1,5 @@
 /**
- * The last custom GLB's bytes, kept in IndexedDB (#71, spec §9) so the last-opened crate can
+ * The last custom GLB's bytes, kept in IndexedDB (spec §9) so the last-opened crate can
  * reopen a loaded part after a reload: its object URL dies with the page. One record (the last
  * custom GLB saved replaces it), and nothing over `MAX_CACHED_GLB_BYTES`. Everything here is
  * best effort: IndexedDB being missing, blocked or full is never an error.

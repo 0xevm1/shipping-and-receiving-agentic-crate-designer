@@ -21,7 +21,7 @@ async function putRaw(idb: IDBFactory, value: unknown) {
   db.close();
 }
 
-describe("last custom GLB in IndexedDB (#71)", () => {
+describe("last custom GLB in IndexedDB", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("keeps one record: the last GLB saved", async () => {

@@ -16,7 +16,7 @@ function memoryStorage() {
 const initial = useDesigner.getState();
 const s = () => useDesigner.getState();
 
-describe("units persistence (#15)", () => {
+describe("units persistence", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("defaults to imperial for a US shop floor", () => {

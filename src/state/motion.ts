@@ -5,7 +5,7 @@
  */
 
 /**
- * 5 s without deliberate input counts as idle (6 s until #64, shortened at the user's request).
+ * 5 s without deliberate input counts as idle.
  * Deliberate input is a click or tap, a drag, the wheel or a key (`isDeliberateInput`); hovering
  * never counts.
  */
@@ -13,7 +13,7 @@ export const IDLE_MS = 5000;
 
 /** Idle mode cycle. Every mode holds for half a turn. */
 export const IDLE_SEQUENCE = ["closed", "exploded", "open", "exploded"] as const;
-/** Crate turn speed while idle, rad/s (slower than the handoff's 0.3, at the user's request). */
+/** Crate turn speed while idle, rad/s (slow enough to read the crate as it turns). */
 export const IDLE_TURN_RATE = 0.18;
 /** The next mode starts this much of a turn before the half-turn completes, so it lands on time. */
 export const IDLE_LEAD = Math.PI * 2 * 0.12;
@@ -45,11 +45,11 @@ export const autoplay = {
 
 let lastInput = -Infinity;
 
-/** Window events that may stop auto-play; `isDeliberateInput` decides per event (#64). */
+/** Window events that may stop auto-play; `isDeliberateInput` decides per event. */
 export const INPUT_EVENTS = ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"] as const;
 
 /**
- * Whether an event is a deliberate action that stops auto-play (#64): a click or tap, the
+ * Whether an event is a deliberate action that stops auto-play: a click or tap, the
  * wheel, a key, a touch, or a pointer moving with a button held (a drag). A pointer moving with
  * no button down is a hover, over the canvas, a board or the island, and doesn't count.
  */
@@ -70,7 +70,7 @@ export function onInputEvent(e: Event) {
 export const pointer = { inCanvas: false };
 
 /** Any user input stops auto-play immediately. */
-export function markInput() {
+function markInput() {
   lastInput = performance.now();
   autoplay.on = false;
   autoplay.slow = false;
@@ -81,7 +81,7 @@ export function isIdle(now = performance.now()) {
 }
 
 /**
- * Dimension-line photon pulse (#65), written by `DimensionLines` each frame and read by the e2e
+ * Dimension-line photon pulse, written by `DimensionLines` each frame and read by the e2e
  * test hook. The pulse is ambient: it never calls `markInput`.
  */
 export const pulse = {

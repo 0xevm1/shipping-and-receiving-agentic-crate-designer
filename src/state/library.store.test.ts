@@ -37,7 +37,7 @@ const bracket = filePart("PART-001");
 const shaft = filePart("PART-002");
 const lib = () => useLibrary.getState();
 
-describe("library storage (#14)", () => {
+describe("library storage", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("uses a versioned key", () => {
@@ -106,7 +106,7 @@ describe("library storage (#14)", () => {
   });
 });
 
-describe("useLibrary (#14)", () => {
+describe("useLibrary", () => {
   let store: ReturnType<typeof memoryStorage>;
   beforeEach(() => {
     store = memoryStorage();

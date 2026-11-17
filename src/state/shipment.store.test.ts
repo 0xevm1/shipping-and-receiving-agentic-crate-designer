@@ -6,7 +6,7 @@ import { catalogPart, useDesigner } from "./store";
 const initial = useDesigner.getState();
 const s = () => useDesigner.getState();
 
-describe("shipment plan in the store (#25)", () => {
+describe("shipment plan in the store", () => {
   beforeEach(() => useDesigner.setState(initial, true));
 
   it("starts as one crate, the same design as before", () => {
