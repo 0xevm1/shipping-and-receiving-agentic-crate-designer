@@ -4,9 +4,10 @@ import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import type { DesignField } from "@/domain/diff";
 import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
 import { countKind } from "@/domain/members";
-import { layoutName, usd } from "@/lib/format";
+import { cautionVerdict, layoutName, usd } from "@/lib/format";
 import { plywoodLabel, sectionLabel } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
+import type { CheckItem } from "@/state/checks";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";
@@ -14,12 +15,13 @@ import { Scorecard } from "./Scorecard";
 import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
-export function OverviewTab({ design }: { design: CrateDesign }) {
+export function OverviewTab({ design, checks }: { design: CrateDesign; checks: readonly CheckItem[] }) {
   const part = useDesigner((s) => s.part);
   const units = useDesigner((s) => s.units);
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const auto = useDesigner((s) => s.settings.panelThickness === "auto");
   const setHover = useDesigner((s) => s.setHover);
+  const setTab = useDesigner((s) => s.setTab);
   const { layout, construction: c } = design;
   // Parts in the crate on screen: the whole batch, or one crate type's share of a split.
   const quantity = layout.slots.length;
@@ -36,7 +38,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
     <>
       <ShipmentSummary />
       <h2>
-        {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name.toLowerCase()}
+        {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name}
         {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
       {/* Values an edit changed flash gold for 1.2 s. */}
@@ -48,6 +50,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
       <div className="line">
         <span className="mono muted">{dimsOther(layout.external, units)}</span>
       </div>
+      <Verdict cautions={checks.filter((c) => c.level === "caution").map((c) => c.title)} onReview={() => setTab("checks")} />
       <div className="line">
         Ships at <span className="mono">{volume(layout.externalVolumeM3, units)}</span>, gross{" "}
         <Flash on={["gross"]} className="mono">
@@ -129,6 +132,28 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
       {/* The design library: save, list and reuse this part's designs; share links. */}
       <SavedDesigns />
     </>
+  );
+}
+
+/** The checks at a glance, so a caution isn't only a small badge on another tab. */
+function Verdict({ cautions, onReview }: { cautions: readonly string[]; onReview: () => void }) {
+  if (!cautions.length) {
+    return (
+      <p className="verdict clear">
+        <i aria-hidden="true" />
+        All checks clear
+      </p>
+    );
+  }
+  const text = cautionVerdict(cautions);
+  return (
+    <button type="button" className="verdict caution" title={`${text}. Open Checks.`} onClick={onReview}>
+      <i aria-hidden="true" />
+      <span>{text}</span>
+      <span className="go" aria-hidden="true">
+        Checks →
+      </span>
+    </button>
   );
 }
 

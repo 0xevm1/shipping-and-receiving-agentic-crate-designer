@@ -16,7 +16,7 @@ test("quantity 8 resizes the crate", async ({ page }) => {
   await panel(page).getByLabel("Quantity").fill("8");
   await pollCrate(page, (s) => s.outside).toEqual(QTY_8_OUTSIDE);
   await openTab(page, "Overview");
-  await expect(panel(page)).toContainText("Crate for 8 × machined steel bracket");
+  await expect(panel(page)).toContainText("Crate for 8 × Machined steel bracket");
   await expect(panel(page)).toContainText("938 × 658 × 823");
   await shot(page, "03-rules-quantity-8");
 });

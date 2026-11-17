@@ -11,7 +11,7 @@ test("loads PART-001 × 4 with a rendered crate", async ({ page }) => {
   await expect(header).toContainText("model matches catalog");
   await expect(island(page).getByRole("heading", { name: "Machined steel bracket", exact: true })).toBeVisible();
   await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
-  await expect(panel(page)).toContainText("Crate for 4 × machined steel bracket");
+  await expect(panel(page)).toContainText("Crate for 4 × Machined steel bracket");
   await expect(panel(page)).toContainText("932 × 652 × 497");
 
   const s = await crate(page);
