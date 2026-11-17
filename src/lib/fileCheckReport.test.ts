@@ -60,6 +60,12 @@ describe("the one-line verdict", () => {
     expect(verdict(checkFiles(files))).toBe(expected);
   });
 
+  it("falls back to counts when several files have something to say", () => {
+    const line = verdict(checkFiles([json("parts-implausible.json"), glb("lopsided.glb"), glb("tiny-light.glb"), glb("draco.glb")]));
+    expect(line.length).toBeLessThanOrEqual(170);
+    expect(line).toMatch(/^Opened lopsided\.glb\. \d+ files checked: 1 error, \d+ warnings, \d+ notes?\. See Details\.$/);
+  });
+
   it("never carries a length, so it needs no units toggle: a size mismatch is a few words", () => {
     expect(verdict(checkFiles([json("parts-size-mismatch.json"), glb("size-mismatch.glb")]))).toBe("size-mismatch.glb: model size differs from parts.json.");
   });

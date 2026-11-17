@@ -83,6 +83,9 @@ const SHORT: Record<string, string> = {
 
 const shorts = (findings: readonly Finding[]): string => [...new Set(findings.map((f) => SHORT[f.code] ?? `1 ${f.severity}`))].join(", ");
 
+/** About two toast lines on a desktop. A verdict about several files that runs longer becomes counts plus "See Details". */
+const VERDICT_MAX_CHARS = 170;
+
 /**
  * The one line the load toast gives when the check found anything: for a parts.json "1 entry
  * skipped (SCN-900: mass_kg), 1 field ignored", for a .glb that can't open the reason, and when
@@ -121,5 +124,11 @@ export function verdict(check: FileCheck): string {
   if (extras.length && check.opened) {
     out.unshift(`Opened ${check.opened.name}. The app designs one part at a time, so ${extras.join(", ")} ${extras.length === 1 ? "was" : "were"} not used.`);
   }
-  return out.join(" ");
+  const line = out.join(" ");
+  // One file's sentence is shown whole, however long. Several files with something to say: the toast
+  // stays short and the report carries the detail.
+  if (out.length <= 1 || line.length <= VERDICT_MAX_CHARS) return line;
+  const files = groupByFile(check.findings).length;
+  const opened = check.opened ? `Opened ${check.opened.name}. ` : "";
+  return `${opened}${noun(files, "file")} checked: ${countsText(check.findings)}. See Details.`;
 }
