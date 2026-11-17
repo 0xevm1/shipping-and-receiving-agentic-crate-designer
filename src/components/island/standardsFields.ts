@@ -288,6 +288,13 @@ export const STANDARD_GROUPS: Group[] = [
         unit: "°",
         hint: "Tilt at which the centre of gravity passes the nearest skid edge.",
       },
+      {
+        path: ["handling", "handCarryMaxKg"],
+        label: "Carried by hand up to",
+        unit: "kg",
+        dim: "mass",
+        hint: "Gross weight. At or under it, no forklift or pallet-jack check. 0 turns it off.",
+      },
     ],
   },
 ];

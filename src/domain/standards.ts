@@ -208,6 +208,12 @@ export const ShopStandardsSchema = z
       cogOffsetRatio: z.number().finite().min(0.01).max(0.5),
       /** Static tip angle (CoG to the nearest base edge) below this, in degrees, is top-heavy. */
       minTipAngleDeg: z.number().finite().min(1).max(80),
+      /**
+       * A crate whose gross weight is at or under this is carried by hand: the forklift and
+       * pallet-jack checks give way to one passing row. 0 turns it off. Defaulted so standards
+       * saved before it existed (stored rows, saved designs, exported files) still parse.
+       */
+      handCarryMaxKg: kg(0, 200).default(23),
     }),
     /** Cradles for long, slender parts (spec §7.5a). */
     cradle: z.object({
@@ -371,12 +377,15 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
    *   mark) once it is more than 10% of the length or width from the middle.
    * - Top-heavy: under 30° static tip angle the crate tips at less than 0.58 g sideways, close
    *   to the 0.5 g lateral that US cargo securement (49 CFR 393.102) designs for.
+   * - Hand-carry: 23 kg (51 lb) is the NIOSH recommended weight limit under ideal lifting
+   *   conditions, the usual one-person cap; at or under it no device is needed.
    */
   handling: {
     forklift: { minClearMm: 75, tineWidthMm: 100, spreadMm: { min: 250, max: 1100 } },
     palletJack: { minClearMm: 85, tineWidthMm: 180, spreadMm: { min: 520, max: 690 } },
     cogOffsetRatio: 0.1,
     minTipAngleDeg: 30,
+    handCarryMaxKg: 23,
   },
   /**
    * Cradles: a slender part (longest ÷ middle ≥ 3) sits in notched saddles of 2× lumber

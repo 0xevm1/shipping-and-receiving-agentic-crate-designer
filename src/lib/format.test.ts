@@ -6,6 +6,7 @@ import {
   cautionVerdict,
   densityDelta,
   densityText,
+  groupThousands,
   documentDate,
   elapsedText,
   hoursText,
@@ -124,5 +125,20 @@ describe("boardTooltipDetail", () => {
     expect(text).toMatch(/^.+ plywood, cut .+″ × .+″\. 2 in this crate$/);
     expect(text).not.toContain(" in. ");
     expect(text).not.toMatch(/ mm/);
+  });
+});
+
+describe("groupThousands", () => {
+  it("groups the whole numbers of a sentence", () => {
+    expect(groupThousands("10000 parts ship as 333 crates (10 × 31 + 323 × 30)")).toBe("10,000 parts ship as 333 crates (10 × 31 + 323 × 30)");
+    expect(groupThousands("Shipment · 12345 parts")).toBe("Shipment · 12,345 parts");
+  });
+
+  it("leaves small numbers, decimals and grouped numbers alone", () => {
+    expect(groupThousands("999 parts at $22.91, 1.2345 m, 2,176 mm")).toBe("999 parts at $22.91, 1.2345 m, 2,176 mm");
+  });
+
+  it("groups dollars of a thousand or more", () => {
+    expect(groupThousands("$1234.50 a part")).toBe("$1,234.50 a part");
   });
 });

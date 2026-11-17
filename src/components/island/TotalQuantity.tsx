@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MAX_TOTAL_QUANTITY } from "@/lib/api/designs";
+import { groupThousands } from "@/lib/format";
 import { renderMessage } from "@/lib/message";
 import { applySavedConfig, updateJob, useJobSync } from "@/state/jobSync";
 import { useDesigner } from "@/state/store";
@@ -34,6 +35,21 @@ export function TotalQuantity() {
   const view = useTotalPlan();
   const [draft, setDraft] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  const request = useView((s) => s.partsToShipRequest);
+  const hasField = Boolean(job) && !reloadNeeded;
+  const empty = view.total === null;
+  // The Rules tab's "go to Parts to ship": take focus, and offer the number they typed if there is no total yet.
+  const [handled, setHandled] = useState(0);
+  if (request && hasField && request.nonce !== handled) {
+    setHandled(request.nonce);
+    if (empty && request.prefill !== null) setDraft(String(request.prefill));
+  }
+  useEffect(() => {
+    if (!request || !hasField || !input.current) return;
+    input.current.focus();
+    useView.getState().clearPartsToShipRequest();
+  }, [request, hasField]);
   if (!job) return null;
 
   const commit = () => {
@@ -61,11 +77,11 @@ export function TotalQuantity() {
 
   const card = (p: PlanView, testId: string) => (
     <div className={styles.plan} data-testid={testId} data-source={p.source}>
-      <b className={styles.headline}>{p.headline}</b>
+      <b className={styles.headline}>{groupThousands(p.headline)}</b>
       <small className={styles.source}>{SOURCE_LABEL[p.source]}</small>
-      <p className={styles.why}>{renderMessage(p.rationale, units)}</p>
+      <p className={styles.why}>{groupThousands(renderMessage(p.rationale, units))}</p>
       {p.crates.length > 0 && (
-        <ul className={styles.crates} aria-label={`Crates for ${p.total} parts`}>
+        <ul className={styles.crates} aria-label={`Crates for ${p.total.toLocaleString("en-US")} parts`}>
           {p.crates.map((c) => {
             const saved = c.configurationId ? configs.find((x) => x.id === c.configurationId) : undefined;
             const onScreen = quantity === c.quantity && layoutKey === c.layoutKey;
@@ -97,6 +113,7 @@ export function TotalQuantity() {
       <label className={styles.field}>
         <span>Parts to ship</span>
         <input
+          ref={input}
           type="number"
           inputMode="numeric"
           min={1}
@@ -104,7 +121,7 @@ export function TotalQuantity() {
           placeholder="Total"
           value={draft ?? (view.total === null ? "" : String(view.total))}
           disabled={reloadNeeded}
-          onFocus={() => setDraft(view.total === null ? "" : String(view.total))}
+          onFocus={() => setDraft((d) => d ?? (view.total === null ? "" : String(view.total)))}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -117,7 +134,7 @@ export function TotalQuantity() {
           </span>
         )}
       </label>
-      {view.total !== null && !view.shown && <p className={styles.why}>Planning {view.total} parts…</p>}
+      {view.total !== null && !view.shown && <p className={styles.why}>Planning {view.total.toLocaleString("en-US")} parts…</p>}
       {view.shown && card(view.shown, "total-plan")}
       {view.other && card(view.other, "total-plan-server")}
       {view.total !== null && view.serverPending && view.shown && !view.unsynced && status === "live" && (
