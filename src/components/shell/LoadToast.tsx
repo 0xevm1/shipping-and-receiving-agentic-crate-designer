@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useDesigner } from "@/state/store";
+import styles from "./LoadToast.module.css";
 
 /** A note goes by itself after this long; an error stays until dismissed or the next load. */
 export const NOTE_DISMISS_MS = 9000;
@@ -25,15 +26,15 @@ export function LoadToast() {
   }, [message, kind]);
 
   return (
-    <div className={`loadrow glass${kind === "error" ? " is-error" : ""}`} data-testid="load-toast">
-      <span className="loadmsg" role="status">
+    <div className={`${styles.row} glass${kind === "error" ? ` ${styles.isError}` : ""}`} data-testid="load-toast">
+      <span className={styles.msg} role="status">
         {kind === "note" ? message : ""}
       </span>
-      <span className="loadmsg" role="alert">
+      <span className={styles.msg} role="alert">
         {kind === "error" ? message : ""}
       </span>
       {message && (
-        <button type="button" className="loadclose" aria-label="Dismiss the message" onClick={dismiss}>
+        <button type="button" className={styles.close} aria-label="Dismiss the message" onClick={dismiss}>
           ×
         </button>
       )}

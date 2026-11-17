@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { autoplay } from "@/state/motion";
 import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
 import { usePopover } from "./usePopover";
+import styles from "./ViewBar.module.css";
 
 const MODES: Mode[] = ["closed", "open", "exploded"];
 const MODE_NAME: Record<Mode, string> = { closed: "Closed", open: "Open", exploded: "Exploded" };
@@ -32,11 +33,11 @@ export function ViewBar() {
   const title = `${mode ? `${MODE_NAME[mode]} view` : "Custom view"}. Click for ${MODE_NAME[next].toLowerCase()}.`;
 
   return (
-    <div className="br" data-testid="view-bar">
+    <div className={styles.bar} data-testid="view-bar">
       <PinBar />
       <button
         type="button"
-        className="iconbtn hideable"
+        className={`iconbtn ${styles.hideable} ${styles.modeButton}`}
         aria-label={title}
         title={title}
         onClick={() => {
@@ -46,7 +47,7 @@ export function ViewBar() {
       >
         <ModeIcon mode={mode} />
       </button>
-      <div className="glass seg units hideable" role="group" aria-label="Units">
+      <div className={`glass seg ${styles.units} ${styles.hideable}`} role="group" aria-label="Units">
         <button type="button" aria-pressed={units === "metric"} onClick={() => setUnits("metric")}>
           mm kg
         </button>
@@ -57,7 +58,7 @@ export function ViewBar() {
       <ViewPopover />
       <button
         type="button"
-        className="glass pillbtn hide-panels"
+        className={`glass pillbtn ${styles.hidePanels}`}
         onClick={() => {
           togglePanels();
           requestFit();
@@ -75,7 +76,7 @@ function PinBar() {
   const line = useDesigner((s) => s.result.design?.bom.find((l) => l.key === s.pin));
   if (!pin || !line) return null;
   return (
-    <div className="pinbar">
+    <div className={styles.pinBar}>
       <span>
         Showing {line.qty} × {line.label.toLowerCase()}
       </span>
@@ -93,12 +94,12 @@ function ViewPopover() {
   const { setView, requestFit } = useDesigner.getState();
 
   return (
-    <div className="viewwrap hideable" {...wrapProps}>
+    <div className={`${styles.viewWrap} ${styles.hideable}`} {...wrapProps}>
       {/* aria-controls only while the popover exists, so it never points at a missing id. */}
       <button
         ref={triggerRef}
         type="button"
-        className="glass pillbtn"
+        className={`glass pillbtn ${styles.viewButton}`}
         title="Camera and display. Drag to turn, right-drag to pan, scroll to zoom."
         aria-expanded={open}
         aria-controls={open ? "view-pop" : undefined}
@@ -107,8 +108,8 @@ function ViewPopover() {
         View
       </button>
       {open && (
-        <div className="glass pop" id="view-pop" data-testid="view-popover">
-          <div className="seg" role="group" aria-label="Camera">
+        <div className={`glass ${styles.pop}`} id="view-pop" data-testid="view-popover">
+          <div className={`seg ${styles.camera}`} role="group" aria-label="Camera">
             {CAMERAS.map((c) => (
               <button
                 key={c.id}
@@ -123,13 +124,13 @@ function ViewPopover() {
               </button>
             ))}
           </div>
-          <div className="pop-switches">
+          <div className={styles.switches}>
             {SWITCHES.map((sw) => (
               <label key={sw.key}>
                 {sw.label}
                 <input
                   type="checkbox"
-                  className="switch"
+                  className={`switch ${styles.switch}`}
                   checked={Boolean(view[sw.key])}
                   onChange={(e) => {
                     setView({ [sw.key]: e.target.checked });
@@ -140,7 +141,7 @@ function ViewPopover() {
             ))}
           </div>
           <div>
-            <span className="lab">Pull apart</span>
+            <span className={styles.lab}>Pull apart</span>
             <input
               type="range"
               min={0}
@@ -153,7 +154,7 @@ function ViewPopover() {
               onKeyUp={() => requestFit()}
             />
           </div>
-          <span className="lab">
+          <span className={styles.lab}>
             <span className="hint-mouse" data-testid="hint-mouse">
               Drag to turn, scroll to zoom, right-drag to pan.
             </span>

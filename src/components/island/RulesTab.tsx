@@ -67,7 +67,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
             </button>
           ))}
         </div>
-        <ChangeNote note={note} />
+        <ChangeNote note={note} className="rule-note" />
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 

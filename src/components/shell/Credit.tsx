@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import styles from "./Credit.module.css";
 
 const SIG_WIDTH = 270;
 const SIG_HEIGHT = 108;
@@ -16,9 +17,10 @@ const ROLE_Y = SIG_HEIGHT - 4;
 /**
  * Bottom-left credit: "HADRIAN × Eric White". The name is a cursive signature,
  * tilted up from the left; "Interview Candidate" sits underneath in a narrow
- * face, letter-spaced to span exactly the signature's on-screen width.
+ * face, letter-spaced to span exactly the signature's on-screen width. With `inline` (the narrow
+ * drawer's foot) it sits in the flow at half size instead of fixed to the corner.
  */
-export function Credit() {
+export function Credit({ inline }: { inline?: boolean }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const sigRef = useRef<SVGTextElement>(null);
   // Horizontal extent of the (tilted) signature, in SVG px; measured once the script font loads.
@@ -42,17 +44,17 @@ export function Credit() {
   }, []);
 
   return (
-    <div className="credit" role="group" aria-label="Hadrian × Eric White, interview candidate">
-      <span className="credit-hadrian">HADRIAN</span>
-      <span className="credit-x" aria-hidden="true">
+    <div className={inline ? `${styles.credit} ${styles.inline}` : styles.credit} role="group" aria-label="Hadrian × Eric White, interview candidate">
+      <span className={styles.hadrian}>HADRIAN</span>
+      <span className={styles.x} aria-hidden="true">
         ×
       </span>
-      <svg ref={svgRef} className="credit-person" width={SIG_WIDTH} height={SIG_HEIGHT} viewBox={`0 0 ${SIG_WIDTH} ${SIG_HEIGHT}`} aria-hidden="true">
-        <text ref={sigRef} className="credit-signature" x={SIG_X} y={SIG_Y} fontSize={SIG_FONT_PX} transform={`rotate(${SIG_TILT_DEG} ${SIG_X} ${SIG_Y})`}>
+      <svg ref={svgRef} className={styles.person} width={SIG_WIDTH} height={SIG_HEIGHT} viewBox={`0 0 ${SIG_WIDTH} ${SIG_HEIGHT}`} aria-hidden="true">
+        <text ref={sigRef} className={styles.signature} x={SIG_X} y={SIG_Y} fontSize={SIG_FONT_PX} transform={`rotate(${SIG_TILT_DEG} ${SIG_X} ${SIG_Y})`}>
           Eric White
         </text>
         {span && (
-          <text className="credit-role" x={span.x} y={ROLE_Y} textLength={span.width} lengthAdjust="spacing">
+          <text className={styles.role} x={span.x} y={ROLE_Y} textLength={span.width} lengthAdjust="spacing">
             INTERVIEW CANDIDATE
           </text>
         )}

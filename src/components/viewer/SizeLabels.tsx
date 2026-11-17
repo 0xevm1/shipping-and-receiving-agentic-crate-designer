@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useDesigner } from "@/state/store";
+import styles from "./SizeLabels.module.css";
 import { buildLines, hiddenAxis, labelText } from "./sizeLines";
 
 /**
@@ -28,14 +29,14 @@ export function SizeLabels() {
   );
   return (
     // aria-hidden (the numbers repeat the Overview), so e2e tests find it by test id.
-    <div className="labels" aria-hidden="true" data-testid="size-labels">
+    <div className={styles.labels} aria-hidden="true" data-testid="size-labels">
       {labels.map((l, i) => (
         <div
           key={i}
           ref={(el) => {
             labelElements[i] = el;
           }}
-          className={l.inner ? "dim inner" : "dim"}
+          className={l.inner ? `${styles.dim} ${styles.inner}` : styles.dim}
           data-testid={l.inner ? "size-label-part" : "size-label"}
         >
           {labelText(l, units)}

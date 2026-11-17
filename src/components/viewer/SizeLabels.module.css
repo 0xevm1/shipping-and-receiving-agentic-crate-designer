@@ -1,0 +1,32 @@
+/* The size labels: DOM pills over the canvas, positioned each frame by `DimensionLines`. */
+
+.labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: var(--z-labels);
+}
+.labels .dim {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+}
+.dim {
+  background: rgba(0, 26, 51, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: 500 12px/1.4 var(--mono);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+/* The part's own pill (open and exploded views). */
+.dim.inner {
+  border-color: rgba(112, 184, 253, 0.7);
+  color: var(--sky);
+  font-size: 11.5px;
+}

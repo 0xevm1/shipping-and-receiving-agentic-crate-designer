@@ -7,6 +7,7 @@ import { pointer } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { CrateModel } from "./CrateModel";
 import styles from "./CrateViewer.module.css";
+import { StageMessage } from "./StageMessage";
 import { DimensionLines } from "./DimensionLines";
 import { hiddenAxis } from "./sizeLines";
 import { Director } from "./Director";
@@ -127,7 +128,7 @@ export default function CrateViewer() {
         )}
         <OrbitControls makeDefault enableDamping={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.3} maxDistance={maxDistance} />
       </Canvas>
-      {!restoring && !design && <div className="stage-msg">{problem?.title ?? "No crate to show."}</div>}
+      {!restoring && !design && <StageMessage>{problem?.title ?? "No crate to show."}</StageMessage>}
       <LoadingOverlay />
       {lost && (
         <div className={styles.lost} role="alert">
@@ -159,5 +160,5 @@ function useReleaseModels(modelUrl: string) {
 function LoadingOverlay() {
   const { active } = useProgress();
   if (!active) return null;
-  return <div className="stage-msg">Loading model…</div>;
+  return <StageMessage>Loading model…</StageMessage>;
 }

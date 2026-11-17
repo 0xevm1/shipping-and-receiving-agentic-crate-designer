@@ -3,6 +3,7 @@
 import type { DesignField } from "@/domain/diff";
 import { changeNote, changeSummary, visibleChanges } from "@/lib/changes";
 import { useDesigner, type ChangeSource } from "@/state/store";
+import styles from "./ChangeFeedback.module.css";
 
 /**
  * A polite live region that says what the last edit from one of `sources` moved:
@@ -13,21 +14,28 @@ import { useDesigner, type ChangeSource } from "@/state/store";
  *
  * With `note` (a message of the caller's own, e.g. a clamped quantity), the region shows that
  * instead and ignores the store; `note.id` restarts the fade for a new message.
+ *
+ * `variant` picks how it looks where it sits: "header" (one line under the part header) or "island"
+ * (a pill over the foot of the part view); with none, the text may wrap. `className` is for the
+ * caller's own layout (a grid cell, a position).
  */
 export function ChangeNote({
   sources = [],
   note,
+  variant,
   className,
 }: {
   sources?: readonly ChangeSource[];
   note?: { id: number; text: string } | null;
+  variant?: "header" | "island";
   className?: string;
 }) {
+  const classes = [styles.note, variant && styles[variant], className].filter(Boolean).join(" ");
   const last = useDesigner((s) => s.lastChange);
   const units = useDesigner((s) => s.units);
   if (note !== undefined) {
     return (
-      <div className={className ? `changenote ${className}` : "changenote"} role="status">
+      <div className={classes} role="status">
         {note && <span key={note.id}>{note.text}</span>}
       </div>
     );
@@ -38,7 +46,7 @@ export function ChangeNote({
   const detail = show ? changeNote(last.changes, units, Infinity) : "";
   const hasDetail = show && detail !== text;
   return (
-    <div className={className ? `changenote ${className}` : "changenote"} role="status" data-testid="change-note">
+    <div className={classes} role="status" data-testid="change-note">
       {/* `title` also keeps the full text where narrow screens cut the note to one line. */}
       {show && (
         <span key={last.id} title={hasDetail ? detail : text}>
@@ -51,7 +59,7 @@ export function ChangeNote({
 }
 
 /**
- * Wraps a value that the last edit changed in a brief gold flash (`.flash`, 1.2 s; none with
+ * Wraps a value that the last edit changed in a brief gold flash (1.2 s; none with
  * reduced motion). Keyed by the change, so a second edit restarts it.
  */
 export function Flash({ on, className, children }: { on: readonly DesignField[]; className?: string; children: React.ReactNode }) {
@@ -60,7 +68,7 @@ export function Flash({ on, className, children }: { on: readonly DesignField[];
   const hit = last !== null && visibleChanges(last.changes, units).some((c) => on.includes(c.field));
   if (!hit) return <span className={className}>{children}</span>;
   return (
-    <span key={last.id} className={className ? `${className} flash` : "flash"} data-testid="flash">
+    <span key={last.id} className={className ? `${className} ${styles.flash}` : styles.flash} data-testid="flash">
       {children}
     </span>
   );

@@ -108,7 +108,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           <PartView />
         </div>
         {/* What a rules or layout edit moved, over the foot of the part view. */}
-        <ChangeNote sources={ISLAND_SOURCES} className="island-note" />
+        <ChangeNote sources={ISLAND_SOURCES} variant="island" className="island-note" />
         <div className="seg tabs" role="tablist" aria-label="Sections" onKeyDown={onTabKey}>
           {TABS.map((t) => (
             <button
