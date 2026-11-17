@@ -149,7 +149,7 @@ describe("the same design file gives the same crate everywhere", () => {
     expect(restoreDesign(earlyFile, entry).notes).toEqual([]);
   });
 
-  it("an older (format 1) file still opens, and says plainly why totals may differ", () => {
+  it("an older (format 1) file still opens without a note: the measured model settles the totals", () => {
     const { text, entry } = savedDesign("PART-001", 4);
     const json = JSON.parse(text);
     delete json.part.outline;
@@ -159,9 +159,8 @@ describe("the same design file gives the same crate everywhere", () => {
     if (!r.ok) throw new Error(r.error);
     expect(r.file.ranking).toBe("volume");
     const notes = restoreDesign(r.file, catalogPart(entry)).notes.map(metricText);
-    expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatch(/before the part's shape was kept/);
-    expect(notes[0]).not.toMatch(/Gross is now/);
+    // Nothing about file history: the viewer measures the model, and the totals return to the saved ones.
+    expect(notes).toEqual([]);
     // Once the model is measured and the part has its outline, the saved crate comes back exactly.
     expect(restoreDesign(r.file, { ...catalogPart(entry), profile: profiles["PART-001"] }).notes).toEqual([]);
   });
@@ -171,7 +170,7 @@ describe("the same design file gives the same crate everywhere", () => {
     const file = (parseDesignFile(text) as { ok: true; file: DesignFile }).file;
     const heavier = { ...catalogPart(entry), mass_kg: entry.mass_kg * 2 };
     const notes = restoreDesign(file, heavier).notes;
-    expect(notes.map(metricText).join(" ")).toMatch(/Gross is now \d+ kg \(saved: 138 kg\)/);
+    expect(notes.map(metricText).join(" ")).toMatch(/Gross is now \d+ kg \(was 138 kg\)/);
     const r = printableFromDesignFile(JSON.stringify({ ...JSON.parse(text), part: { ...JSON.parse(text).part, mass_kg: entry.mass_kg * 2 } }), DEFAULT_STANDARDS, "imperial", NOW);
     if (!r.ok) throw new Error(r.error);
     expect(r.notes.join(" ")).toMatch(/ lb/);

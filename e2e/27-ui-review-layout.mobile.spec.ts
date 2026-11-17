@@ -35,7 +35,7 @@ test('the header keeps "crate gross" together on one line, and the note on one l
   const mass = header(page).getByLabel(/Mass of one part in/);
   await mass.fill("230.5");
   await mass.press("Enter");
-  const span = header(page).getByRole("status").locator("> span");
+  const span = header(page).locator(".changenote").locator("> span");
   await expect(span).toContainText("Crate");
   const [box, line] = await Promise.all([span.boundingBox(), span.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))]);
   expect(box!.height, "one line").toBeLessThanOrEqual(line + 2);
