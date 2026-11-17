@@ -65,7 +65,7 @@ test("a text .gltf is rejected with a message", async ({ page }) => {
     mimeType: "model/gltf+json",
     buffer: Buffer.from(JSON.stringify({ asset: { version: "2.0" } })),
   });
-  await expect(page.getByText("Text .gltf files are not supported. Export the part as a single .glb file.")).toBeVisible();
+  await expect(page.getByText("Text .gltf files can't be used. Export the part as a single .glb file.")).toBeVisible();
   // The current part stays.
   await expect(page.getByRole("banner")).toContainText("PART-001");
   await shot(page, "07-gltf-rejected");

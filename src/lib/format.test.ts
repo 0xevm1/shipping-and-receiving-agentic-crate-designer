@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { densityDelta, densityText, documentDate, elapsedText, hoursText, usd, usdDelta } from "./format";
+import { cautionNote, densityDelta, densityText, documentDate, elapsedText, hoursText, modelNote, usd, usdDelta } from "./format";
 
 describe("scorecard formatting (#17)", () => {
   it("dollars", () => {
@@ -46,5 +46,22 @@ describe("documentDate", () => {
 
   it("falls back to the text's own date for a timestamp it cannot read", () => {
     expect(documentDate("2026-11-16 garbage")).toBe("2026-11-16");
+  });
+});
+
+describe("modelNote", () => {
+  it("says what the measurement was compared with", () => {
+    expect(modelNote(true, false)).toBe("model matches catalog");
+    expect(modelNote(false, true)).toBe("model does not match catalog");
+    expect(modelNote(null, true)).toBe("file read as millimetres");
+    expect(modelNote(null, undefined)).toBe("size measured from the file");
+  });
+});
+
+describe("cautionNote", () => {
+  it("counts cautions and points at Checks", () => {
+    expect(cautionNote(0)).toBe("");
+    expect(cautionNote(1)).toBe("1 caution, see Checks");
+    expect(cautionNote(3)).toBe("3 cautions, see Checks");
   });
 });

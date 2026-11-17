@@ -26,16 +26,16 @@ const GLB_MAGIC = 0x46546c67; // "glTF"
 /** Why a .glb can't be used, or null if it looks fine. Reads only the header and JSON chunk. */
 export function glbProblem(buffer: ArrayBuffer): string | null {
   const view = new DataView(buffer);
-  if (buffer.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC) return "That is not a .glb file.";
+  if (buffer.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC) return "That isn't a .glb file. Choose a .glb or a design .json.";
   const jsonLength = view.getUint32(12, true);
   try {
     const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLength)));
     const required: string[] = json.extensionsRequired ?? [];
     if (required.some((e) => /draco|meshopt/i.test(e))) {
-      return "This file is compressed in a way the viewer cannot read. Export it without Draco or Meshopt compression.";
+      return "That .glb uses compression the viewer can't read. Export it without Draco or Meshopt.";
     }
   } catch {
-    return "That .glb file is damaged.";
+    return "That .glb file is damaged. Try exporting it again.";
   }
   return null;
 }
@@ -129,7 +129,7 @@ export async function loadPartFiles(
     try {
       json = JSON.parse(text);
     } catch {
-      return { catalogAdditions, message: `${f.name} is not valid JSON.` };
+      return { catalogAdditions, message: `${f.name} isn't valid JSON. Choose a design or parts .json file.` };
     }
     if (isDesignFileJson(json)) designText ??= text;
     else catalogAdditions.push(...catalogEntries(json));
@@ -145,10 +145,10 @@ export async function loadPartFiles(
   const glb = glbs[0];
   if (!glb) {
     const message = catalogAdditions.length
-      ? "Part details loaded. Now add the .glb file."
+      ? "Part details loaded. Now choose its .glb file."
       : files.some((f) => /\.gltf$/i.test(f.name))
-        ? "Text .gltf files are not supported. Export the part as a single .glb file."
-        : "Choose a .glb file.";
+        ? "Text .gltf files can't be used. Export the part as a single .glb file."
+        : "Choose a .glb file or a design .json.";
     return { catalogAdditions, message };
   }
 
@@ -214,15 +214,15 @@ export async function loadDesign(
     if (!glb) {
       const why =
         saved.source === "catalog"
-          ? `This design uses ${saved.id}, which is not in this app's catalog.`
-          : `This design uses a custom model.`;
-      return { message: `${why} Add ${saved.model} together with the design file: pick or drop both at once.` };
+          ? `This design uses ${saved.id}, which isn't in the catalog.`
+          : `This design needs ${saved.model}.`;
+      return { message: `${why} Choose its .glb together with the design file.` };
     }
     const read = await readGlb(glb);
     if (typeof read === "string") return { message: `${glb.name}: ${read}` };
-    if (glb.name !== saved.model) notes.push(`Used ${glb.name} for the saved model ${saved.model}.`);
+    if (glb.name !== saved.model) notes.push(`Used ${glb.name} in place of ${saved.model}.`);
     const same = read.sizeMm.every((v, i) => Math.abs(v - saved.dimensions_mm[i]) < SAME_MODEL_SIZE_MM);
-    if (!same) notes.push(`${glb.name} is a different size from the saved part, so the crate is sized to the file.`);
+    if (!same) notes.push(`${glb.name} is a different size from the saved part, so the crate follows the file.`);
     part = {
       id: saved.id,
       name: saved.name,

@@ -42,7 +42,7 @@ export function Credit() {
   }, []);
 
   return (
-    <div className="credit" aria-label="Hadrian × Eric White, interview candidate">
+    <div className="credit" role="group" aria-label="Hadrian × Eric White, interview candidate">
       <span className="credit-hadrian">HADRIAN</span>
       <span className="credit-x" aria-hidden="true">
         ×

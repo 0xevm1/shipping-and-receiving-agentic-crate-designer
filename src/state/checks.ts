@@ -56,3 +56,6 @@ export function allChecks(
   }
   return items.sort((a, b) => RANK[a.level] - RANK[b.level]);
 }
+
+/** How many of the checks are cautions (the Checks tab badge, and the Export pill's note). */
+export const cautionCount = (items: readonly Pick<CheckItem, "level">[]) => items.filter((c) => c.level === "caution").length;

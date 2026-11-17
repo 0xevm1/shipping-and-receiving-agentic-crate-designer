@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Check } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
-import { allChecks, modelMatchesCatalog, MODEL_TOLERANCE_MM } from "./checks";
+import { allChecks, cautionCount, modelMatchesCatalog, MODEL_TOLERANCE_MM } from "./checks";
 
 const catalogDims: Vec3 = [360, 220, 258];
 const catalog = { catalogDims, readAsMm: false, massAssumed: false };
@@ -68,5 +68,12 @@ describe("allChecks", () => {
     const input = [domain("door", "info"), domain("lid", "caution")];
     allChecks(input, { ...catalog, massAssumed: true }, null);
     expect(ids(input)).toEqual(["door", "lid"]);
+  });
+});
+
+describe("cautionCount", () => {
+  it("counts only cautions", () => {
+    expect(cautionCount([{ level: "caution" }, { level: "ok" }, { level: "info" }, { level: "caution" }])).toBe(2);
+    expect(cautionCount([])).toBe(0);
   });
 });
