@@ -129,8 +129,7 @@ test("the controls inside the panels are at least 44 px", async ({ page }) => {
   await expect(faces.getByRole("button", { name: /^Bottom/ })).toBeVisible();
   const small = await page.evaluate(() => {
     const p = document.querySelector('[role="tabpanel"]')!;
-    // A disabled control (the "In use" state of the best-quantity hint) can't be tapped, so it has no target to size.
-    const sel = 'button:not(:disabled), input:not([type="file"]):not(:disabled), select, summary';
+    const sel = 'button, input:not([type="file"]):not(:disabled), select, summary';
     return [...p.querySelectorAll<HTMLElement>(sel)]
       .map((el) => ({ el, r: el.getBoundingClientRect() }))
       .filter(({ r }) => r.width > 0 && (r.height < 43.5 || r.width < 43.5))

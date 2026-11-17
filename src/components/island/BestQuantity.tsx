@@ -38,7 +38,7 @@ export function BestQuantity({ design }: { design: CrateDesign }) {
         <span>
           Best: <b>{rec.quantity} per crate</b>
         </span>
-        <button type="button" className="linkbtn" disabled={inUse || !current} onClick={apply}>
+        <button type="button" className={`linkbtn ${styles.useBtn}`} disabled={inUse || !current} onClick={apply}>
           {inUse ? "In use" : "Use"}
         </button>
       </div>
