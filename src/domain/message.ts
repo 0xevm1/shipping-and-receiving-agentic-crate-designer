@@ -21,7 +21,7 @@ export interface MassQty {
 }
 
 export type Quantity = LengthQty | MassQty;
-export type MessagePart = string | Quantity;
+type MessagePart = string | Quantity;
 export type Message = readonly MessagePart[];
 
 /** An overall size in mm (a door, a crate side, a trailer): inches to one decimal in imperial. */

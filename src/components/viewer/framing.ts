@@ -195,7 +195,7 @@ export function panShift(box: ScreenBox, free: ScreenBox): { dx: number; dy: num
 const corners = new WeakMap<CrateDesign, Vector3[]>();
 
 /** The eight corners of the assembled crate's outside box, world metres. */
-export function crateCorners(design: CrateDesign): Vector3[] {
+function crateCorners(design: CrateDesign): Vector3[] {
   let list = corners.get(design);
   if (!list) {
     const { layout, construction } = design;
@@ -278,15 +278,7 @@ const sph = new Spherical();
  * y); solving for the depth that keeps the point's room inside gives the distance. Returns 0
  * when nothing constrains it.
  */
-export function keepRadius(
-  design: CrateDesign,
-  keep: readonly Keep[],
-  target: Vector3,
-  theta: number,
-  phi: number,
-  free: FreeArea,
-  tanHalfFov: number,
-): number {
+function keepRadius(design: CrateDesign, keep: readonly Keep[], target: Vector3, theta: number, phi: number, free: FreeArea, tanHalfFov: number): number {
   // Camera axes as `lookAt` builds them: z from the target toward the camera.
   axisZ.setFromSpherical(sph.set(1, phi, theta));
   axisX.crossVectors(UP, axisZ).normalize();
