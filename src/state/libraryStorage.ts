@@ -28,11 +28,12 @@ export function loadLibrary(storage: KeyValueStore | null = browserStorage()): S
   return r.entries;
 }
 
-/** Saves the library (an empty one as nothing). False when storage refused it (e.g. quota). */
+/** Saves the library (an empty one as nothing). False when storage is missing or refused it (e.g. quota). */
 export function saveLibrary(entries: SavedDesign[], storage: KeyValueStore | null = browserStorage()): boolean {
+  if (!storage) return false;
   try {
-    if (!entries.length) storage?.removeItem(LIBRARY_STORAGE_KEY);
-    else storage?.setItem(LIBRARY_STORAGE_KEY, libraryToJson(entries));
+    if (!entries.length) storage.removeItem(LIBRARY_STORAGE_KEY);
+    else storage.setItem(LIBRARY_STORAGE_KEY, libraryToJson(entries));
     return true;
   } catch (e) {
     console.warn("Couldn't save the design library.", e);

@@ -35,9 +35,10 @@ export interface LibraryState {
   /** Saves a design under a name; returns an error message, or null. */
   save: (design: DesignFile, name: string, notes?: string) => string | null;
   rename: (id: string, name: string) => string | null;
-  /** Deletes a design and returns what an undo needs. */
-  remove: (id: string) => Removed | null;
-  undoRemove: (removed: Removed) => void;
+  /** Deletes a design and returns what an undo needs, plus `saveError` when the change couldn't be stored. Null if there is no such design. */
+  remove: (id: string) => (Removed & { saveError: string | null }) | null;
+  /** Puts a deleted design back; returns an error message if the change couldn't be stored, or null. */
+  undoRemove: (removed: Removed) => string | null;
   /** The part's saved designs, newest first. */
   forPart: (key: string) => SavedDesign[];
   exportJson: () => string;
@@ -83,10 +84,9 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     },
     remove: (id) => {
       const r = removeEntry(get().entries, id);
-      if (r) commit(r.entries);
-      return r;
+      return r && { ...r, saveError: commit(r.entries) };
     },
-    undoRemove: (removed) => void commit(restoreEntry(get().entries, removed.removed, removed.index)),
+    undoRemove: (removed) => commit(restoreEntry(get().entries, removed.removed, removed.index)),
     forPart: (key) => entriesForPart(get().entries, key),
     exportJson: () => libraryToJson(get().entries),
     importJson: (text) => {
