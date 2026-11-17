@@ -7,6 +7,7 @@ import { dims, lengthUnit, partWeight, weight } from "@/lib/units";
 import { modelMatchesCatalog } from "@/state/checks";
 import { useDesigner, type ChangeSource } from "@/state/store";
 import { ChangeNote, Flash } from "./ChangeFeedback";
+import { ExportPill } from "./ExportPill";
 
 /** Edits from the header's own fields; their change note shows under the header (#39). */
 const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
@@ -17,6 +18,7 @@ const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
  *     id · name
  *     material · mass each · crate gross
  *     measured size · model check
+ *     [Export]  (#51: one-click .zip; hidden with the header by Hide panels)
  *
  * For a part loaded without catalog data, name, material and mass are inline underlined
  * fields. Catalog parts show the same sentence as plain text.
@@ -58,6 +60,7 @@ export function PartHeader() {
         )}
         <ChangeNote sources={PART_SOURCES} />
       </div>
+      <ExportPill />
     </header>
   );
 }
