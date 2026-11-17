@@ -1678,7 +1678,7 @@ The canvas fills the window. Four regions float above it:
 | Region | Contents |
 |---|---|
 | Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a), then the green **Export** pill (#51, §7.13), left-aligned with the lines, with its status note beside it. Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
-| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
+| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px), which folds away (0.25 s, none with reduced motion) once the panel is scrolled, and altogether in windows under 760 px tall, so a laptop gets the room for content (#62); the tabs; the selected tab's panel, which is the only thing that scrolls. The island keeps its fixed height |
 | Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads).  |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
 
@@ -1712,9 +1712,11 @@ The canvas fills the window. Four regions float above it:
     focus to its close button, Tab and Shift+Tab cycle inside it, and closing it (close button,
     scrim, or Escape) returns focus to the hamburger. Escape closes the drawer before it clears
     a pin. It slides in over 0.28 s, and just appears with `prefers-reduced-motion`. Inside: part
-    name, Load a part and close, the part view (130 px; 84 px on screens under 560 px tall),
-    the tabs, the panel (the only thing that scrolls), then the credit at half size (hidden on
-    short screens). `drawerOpen` in the store is separate from `panelsHidden`.
+    name, Load a part and close, the part view (130 px, folded away once the panel is scrolled
+    and on screens under 760 px tall; it only folds if the content overflows by more than its
+    height, so folding can't leave nothing to scroll), the tabs, then the panel (the only thing
+    that scrolls) with the credit at half size as its last item, scrolling with the content
+    instead of pinned (#62). With the thumbnail folded, a rules or layout change note floats under the tabs. `drawerOpen` in the store is separate from `panelsHidden`.
   - **Foot:** the **summary chip** (always the width of the foot, outside size and gross
     weight in amber, with thousands separators, the size shortening before it can touch the weight; for a split batch, "Crate A outside" with the shown type's size and
     "Gross, 7 crates" with the shipment's gross; tapping it opens the drawer on Overview; it flashes with the Overview on an

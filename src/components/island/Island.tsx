@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref, type UIEvent } from "react";
 import { allChecks, cautionCount } from "@/lib/checks";
 import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
@@ -62,6 +62,23 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   const cautions = cautionCount(checks);
   const notes = checks.filter((c) => c.level === "info").length;
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const headRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
+
+  // Scrolling the panel folds the part thumbnail away so the content gets its room; back at the top it returns.
+  // It folds only if the content overflows by more than the thumbnail's height: otherwise folding would
+  // leave nothing to scroll, the panel would jump back to the top, unfold, and flicker.
+  const onPanelScroll = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const scrolled = el.scrollTop > 2;
+    el.toggleAttribute("data-scrolled", scrolled);
+    const head = headRef.current;
+    if (!head) return;
+    if (!head.hasAttribute("data-folded")) {
+      const room = thumbRef.current?.offsetHeight ?? 0;
+      if (scrolled && el.scrollHeight - el.clientHeight > room + 8) head.setAttribute("data-folded", "");
+    } else if (!scrolled) head.removeAttribute("data-folded");
+  };
 
   // WAI-ARIA tabs with automatic activation: one tab stop, arrows move and select.
   const onTabKey = (e: KeyboardEvent) => {
@@ -81,7 +98,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
       ref={ref}
       {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open, "data-open": drawer.open || undefined })}
     >
-      <div className={styles.parthead}>
+      <div className={styles.parthead} ref={headRef}>
         <div className={styles.partbar}>
           <h2>{part.name}</h2>
           <button type="button" className={`pillbtn small ${styles.load}`} onClick={() => fileInput.current?.click()}>
@@ -106,8 +123,11 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             </button>
           )}
         </div>
-        <div role="group" aria-label="The part on its own. Drag to turn it, double-click to reset.">
-          <PartView />
+        {/* Folds to nothing when the panel is scrolled or the window is short (Island.module.css). */}
+        <div className={styles.thumb} ref={thumbRef} role="group" aria-label="The part on its own. Drag to turn it, double-click to reset.">
+          <div className={styles.thumbInner}>
+            <PartView />
+          </div>
         </div>
         {/* What a rules or layout edit moved, over the foot of the part view. */}
         <ChangeNote sources={ISLAND_SOURCES} variant="island" className={styles.note} />
@@ -149,7 +169,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         id={PANEL_ID}
         aria-labelledby={tabId(tab)}
         // Straight on the element, so scrolling doesn't re-render the island: CSS fades the top edge while scrolled.
-        onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 2)}
+        onScroll={onPanelScroll}
       >
         {!design ? (
           <div role="alert">
@@ -174,8 +194,9 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         ) : (
           <ChecksTab checks={checks} />
         )}
+        {/* The credit scrolls with the content: pinned, it cost a phone 69 px of a 505 px panel. */}
+        {footer && <div className={styles.foot}>{footer}</div>}
       </div>
-      {footer && <div className={styles.foot}>{footer}</div>}
     </aside>
   );
 }
