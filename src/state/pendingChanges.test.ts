@@ -151,7 +151,15 @@ describe("effectiveJob", () => {
       enqueuePatch({ jobId: JOB, partKey: "k", partName: "P", baseVersion: 1, changes: { notes: "mine" } }),
       enqueuePatch({ jobId: JOB, partKey: "k", partName: "P", baseVersion: 1, changes: { select: { inputHash: "h" } } }),
     ];
-    expect(effectiveJob(job, items)).toEqual({ selected: { inputHash: "h" }, notes: "mine" });
-    expect(effectiveJob(job, [])).toEqual({ selected: null, notes: null });
+    expect(effectiveJob(job, items)).toEqual({ selected: { inputHash: "h" }, notes: "mine", totalQuantity: null });
+    expect(effectiveJob(job, [])).toEqual({ selected: null, notes: null, totalQuantity: null });
+  });
+
+  it("lays a pending total quantity over the job's, the newest winning, and skips a rejected one", () => {
+    const set = enqueuePatch({ jobId: JOB, partKey: "k", partName: "P", baseVersion: 1, changes: { totalQuantity: 40 } });
+    expect(effectiveJob(job, [set]).totalQuantity).toBe(40);
+    const cleared = enqueuePatch({ jobId: JOB, partKey: "k", partName: "P", baseVersion: 1, changes: { totalQuantity: null } });
+    expect(effectiveJob({ ...job, totalQuantity: 12 }, [set, cleared]).totalQuantity).toBeNull();
+    expect(effectiveJob({ ...job, totalQuantity: 12 }, [{ ...set, state: "rejected" }]).totalQuantity).toBe(12);
   });
 });

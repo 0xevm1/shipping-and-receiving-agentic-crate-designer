@@ -5,13 +5,20 @@ import { hoursText, usd } from "@/lib/format";
 import { renderMessage } from "@/lib/message";
 import { volume, weight, weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useTotalPlan } from "@/state/totalPlan";
 import { CrateTypePicker } from "./CrateTypePicker";
 import styles from "./Shipment.module.css";
+import { TotalShipmentSummary } from "./TotalShipment";
 
-/** "Ships as 3 × crate A (64 each) + 1 × crate B (8)", with the shipment's gross and volume. */
+/**
+ * "Ships as 3 × crate A (64 each) + 1 × crate B (8)", with the shipment's gross and volume. With a
+ * total quantity on the shared job, the shipment is that total's plan instead (§7.16).
+ */
 export function ShipmentSummary() {
   const plan = useDesigner((s) => s.plan);
   const units = useDesigner((s) => s.units);
+  const total = useTotalPlan();
+  if (total.shown) return <TotalShipmentSummary plan={total.shown} />;
   if (!plan.split) return null;
   const { totals } = plan;
   return (
