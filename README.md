@@ -38,7 +38,9 @@ bun run dev          # → http://localhost:3000
 | `bun run dev` | Dev server with hot reload |
 | `bun run build && bun run start` | Production build and serve |
 | `bun run test` | Domain unit tests (vitest) |
-| `bun run e2e` | End-to-end UI tests (Playwright): builds the app with the test hook, serves it on port 3320, runs every flow and saves screenshots to `e2e/screenshots/`. First run `bunx playwright install chromium` once. `bun run e2e:ui` opens Playwright's UI mode |
+| `bun run e2e` | End-to-end UI tests (Playwright): builds the app with the test hook, serves it on port 3320 (`E2E_PORT` changes it), runs every flow and saves screenshots to the git-ignored `e2e/screenshots/`. First run `bunx playwright install chromium` once. Locally it uses 1 to 3 workers (`E2E_WORKERS`). `bun run e2e:ui` opens Playwright's UI mode; `bun run e2e:docs-shots` copies chosen shots into `docs/screenshots/` |
+| `bun run format` / `bun run format:check` | Prettier (`.prettierrc`: 160 columns); CI runs the check |
+| `bun run knip` | Unused files, exports and dependencies (a report; it has known findings) |
 | `bun run lint` | ESLint |
 | `bun run typecheck` | `next typegen` (route types), then `tsc --noEmit` |
 
@@ -65,7 +67,7 @@ bun run dev          # → http://localhost:3000
 Every pull request to `main`, and every push to `main`, runs
 [CI](.github/workflows/ci.yml) as two jobs:
 
-- **`checks`:** `bun install --frozen-lockfile`, lint, typecheck, unit tests and build.
+- **`checks`:** `bun install --frozen-lockfile`, Prettier check, lint, typecheck, unit tests and build.
 - **`e2e`:** the Playwright suite (`bun run e2e`) in headless Chromium against a production
   build. It uploads the screenshots (`e2e-screenshots`) and the HTML report
   (`playwright-report`) as artifacts, even when a test fails.
@@ -77,7 +79,9 @@ public.
 
 **UI changes:** run `bun run e2e` before you push, update the specs in `e2e/` when the
 behaviour changes, and attach screenshots from `e2e/screenshots/` (or the CI artifact) to the
-PR instead of hand-captured ones.
+PR instead of hand-captured ones. Specs are named by topic (`design-library.spec.ts`, with
+`.narrow` and `.mobile` suffixes for the other viewports), find things by role, label or test
+id, never by CSS class, and share their helpers in `e2e/helpers/` (spec §10).
 
 ## Who it's for
 

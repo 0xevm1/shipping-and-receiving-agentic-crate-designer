@@ -281,7 +281,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/scene.ts` | Units and shared constants (`MM_TO_M`, `FOV_DEG`, click slop, far plane), colours, explode offsets, opacity rules, highlight rules, part material |
 | `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity stencils on the outside faces (only when a CoG check is a caution, #87), and the fork-entry arrows at both ends, which fade out when the crate hides them (#8, §8.4) |
 | `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with the store's types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
-| `playwright.config.ts`, `e2e/*.spec.ts` | End-to-end UI tests (`bun run e2e`, §10) |
+| `playwright.config.ts`, `e2e/*.spec.ts`, `e2e/helpers/` | End-to-end UI tests and their shared helpers (`bun run e2e`, §10); screenshots go to the git-ignored `e2e/screenshots/` |
+| `scripts/docs-shots.mjs` | `bun run e2e:docs-shots`: copies chosen e2e screenshots into `docs/screenshots/` on request |
+| `.prettierrc`, `.prettierignore`, `knip.json` | Formatting (`bun run format`, checked in CI) and the unused-code report (`bun run knip`) |
 
 ## 6. Data model
 
@@ -1236,7 +1238,7 @@ is testable). The same date is in the PDF header and the zip's README.txt.
      uses and its screws. Every cut-list piece is in exactly one step, and the steps' screws
      sum to the schedule's total.
 3. **Shipping label**, exactly one page per crate type (the end view scales to the room the
-   page has left, and `e2e/29-print-layout.spec.ts` checks the page count in print media):
+   page has left, and `e2e/print.spec.ts` checks the page count in print media):
    - part number and name, quantity ("4 PCS"), and outside size;
    - gross weight in the selected units, with the other units under it;
    - "THIS SIDE UP" with the ISO 780 two-arrow mark;
@@ -2598,275 +2600,103 @@ which the exporter's binary path uses, so the test installs a minimal one.
 When you change packing or construction rules, keep these passing. If a rule change
 deliberately changes an expected value, update the test and this spec in the same PR.
 
-### End-to-end UI tests (#34)
+### End-to-end UI tests
 
-`bun run e2e` runs Playwright (`playwright.config.ts`, specs in `e2e/`, excluded from vitest).
-It builds the production app with `NEXT_PUBLIC_E2E=1`, serves it on port 3320 and drives
-headless Chromium with SwiftShader WebGL, so the canvas really renders. Four projects: desktop
-1440 × 900 runs every spec except `*.narrow.spec.ts` and `*.mobile.spec.ts`; narrow 900 × 900
-(the drawer layout with a mouse) runs only `*.narrow.spec.ts`; mobile-390 (390 × 844) and
-mobile-360 (360 × 800), both with touch, `isMobile` and 2× pixels, run only `*.mobile.spec.ts`
-(#42). Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
-transitions are instant (§8.4); the idle tests (`06-view`, `12-mobile`, `21-idle-hover`)
-turn motion back on. Each flow saves named full-page
-screenshots to `e2e/screenshots/` (git-ignored); CI uploads them as `e2e-screenshots` with the
-HTML report as `playwright-report`.
+`bun run e2e` runs Playwright (`playwright.config.ts`, specs in `e2e/`, excluded from vitest). It builds the
+production app with `NEXT_PUBLIC_E2E=1`, serves it on port 3320 (`E2E_PORT` changes it; a local run reuses
+whatever already listens there) and drives headless Chromium with SwiftShader WebGL, so the canvas really
+renders. `E2E_SKIP_BUILD=1` serves an existing e2e build. Four projects: desktop 1440 × 900 runs every spec
+except `*.narrow.spec.ts` and `*.mobile.spec.ts`; narrow 900 × 900 (the drawer layout with a mouse) runs only
+`*.narrow.spec.ts`; mobile-390 (390 × 844) and mobile-360 (360 × 800), both with touch, `isMobile` and 2× pixels,
+run only `*.mobile.spec.ts`. Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
+transitions are instant (§8.4); the specs that test motion (`idle-autoplay`, `dimension-pulse`, `camera`, `layout`,
+`drawer.mobile`, `export-zip`, `change-note`) turn it back on for the test that needs it.
 
-- **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`)
-  exposes a read-only `window.__crate` with `getState()` (mode from the view targets, view
-  switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play,
-  `idle` (no deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, frame count,
-  `shapedBlocking` and `profileMs`, #16) and `canvasCoverage()` (share
-  of canvas pixels drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`.
-  `next.config.ts` always inlines the flag (`"0"` when unset), so normal builds drop the branch
-  and don't bundle the module. Everything else is found by role, label or text; the only test
-  id is `size-labels` (the labels are `aria-hidden`).
-- **Coverage:**
-  - `01-load`: PART-001 × 4, the header line and "model matches catalog", 932 × 652 × 497 mm,
-    the canvas draws.
-  - `02-tabs`: Overview chain and weight bars; Layouts cards with "recommended"; Cut list
-    groups; Rules controls; Checks with "Fits a 53' dry van" and no count badge.
-  - `03-rules`: quantity 8 gives 938 × 658 × 823; a typed 500 clamps to 200 and shows the
-    note "Quantity is 1–200; set to 200"; Reset rules
-    restores the defaults and keeps the quantity.
-  - Specs that assert mm / kg text pick metric first with `setUnits(page, "metric")` (the view
-    bar toggle, in `helpers.ts`), since the app opens in imperial (#15).
-  - `04-units`: opens in imperial (header in / lb, Overview 36.7 × 25.7 × 19.6 with
-    932 × 652 × 497 mm under it, size labels in inches), then metric, then back.
-  - `14-imperial-default` (#15): first load is imperial (header "47.4 lb each", Overview "1/2″ ply",
-    "stiffened with 1x4 cleats", "4x4 skids under a 3/4″ floor"); the Cut list has `Cut, in`,
-    `3/4″ plywood`, `4x4`, `1/2″ plywood`, `1x4` and blocking "1 15/16″ × 3 1/2″ from 4x4";
-    the downloaded CSV is imperial (`cut_in`, nominal stock). After switching to metric a reload
-    keeps metric (and its CSV is `cut_mm`); switching back to imperial is remembered too.
-    Screenshots `15-overview-imperial`, `15-cutlist-nominal`, `15-cutlist-blocking`,
-    `15-overview-metric`.
-  - `05-cutlist`: hovering a row sets the hover key, clicking pins it and shows
-    "Showing N × piece", Escape clears it.
-  - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
-    View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
-    Hide panels keeps the credit and makes the hidden controls unfocusable; idle auto-play starts after 5 s without input; from the
-    exploded view, the pill's export (the popover has no export button) shows "Exporting…" and saves
-    `crate-PART-001-x4.zip` with the pill's five entries, whose GLB has the `glTF` header, a
-    matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1` … `Part 4`),
-    and the pill's note then says "Downloaded crate-PART-001-x4.zip" (#77, #62); the first framing
-    aims at the crate's middle; for PART-001 × 4, PART-002 × 1 and × 4 and PART-003 × 8 no
-    size label overlaps the island or leaves the window, in every mode.
-  - `07-load-parts` (through the hidden file input, in-memory files): a catalog GLB fills in
-    mass and material (PART-002: 1692 × 334 × 411) and has no fields; an unknown GLB gets the
-    stand-in tag, caution and Checks badge until name, material and mass are entered (Enter
-    commits); a text `.gltf` is rejected; a 30 m part (a generated GLB read as millimetres)
-    shows the over-20 m problem.
-  - `08-layout`: at 1440 × 900 the document doesn't scroll and the island panel does; at
-    900 px the canvas is full-bleed, the summary and view bar share the bottom row, the drawer
-    opens from the hamburger with every tab and no page scroll, and a scrim click closes it.
-  - `12-mobile` (#42, at 390 × 844 and 360 × 800): the page doesn't scroll, the canvas is
-    full-bleed and the size labels sit between the header and the summary; the summary shows
-    36.7 × 25.7 × 19.6 in and the gross in lb by default, then 932 × 652 × 497 mm after the
-    units toggle, with the gross in amber; the hamburger opens the drawer (a modal dialog
-    85–90 vw wide, focus on close), Tab stays inside it, and Escape, the scrim and the close
-    button each close it and return focus to the hamburger; every tab works inside it with no
-    page scroll and only the panel scrolls; drawer controls are at least 44 px; tapping the
-    crate's front opens the drawer on Cut list with the pinned row in view; the view bar and
-    the View popover (above the bar) stay on screen; Load a part from the drawer loads
-    PART-002; resizing to 1440 px closes the drawer and shows the desktop island, back to
-    narrow with Hide panels off, and landscape keeps the drawer layout; with motion on, idle
-    auto-play holds while the drawer is open and starts after it closes. Screenshots
-    `42-<project>-closed-summary`, `-drawer-overview`, `-drawer-cutlist-pinned` and
-    `-view-popover`.
-  - `11-design-json`: Download design (.json) gives `crate-design-PART-001-x4.json` with the
-    expected part, settings and summary (932 × 652 × 497); a catalog design (PART-002 × 8, a
-    picked layout) reopens on a fresh page with the same quantity, outside size and cut list,
-    and saving it again gives the same file; a stale layout key falls back with a message; a
-    custom design without its GLB names `widget_v2.glb` and changes nothing, and with it
-    restores the entered name, material and mass; a newer `schemaVersion` is refused.
-  - `17-design-library` (#14): two designs saved from the Overview (one with notes) are listed
-    after a reload, newest first, with "8 parts · 938 × 658 × 823 mm"; **Use** restores
-    quantity 8 and that size with "Design loaded: 8 × Machined steel bracket."; another part
-    has an empty list; rename by keyboard, delete and Undo; Export library gives
-    `crate-design-library.json`, which imports back. A share link for PART-002 × 8 with a
-    picked layout opens on a fresh page load (library cleared) at the same outside size and
-    leaves no hash; a tampered link (quantity 5000) and a non-base64 one show "Share link not
-    opened, so the default crate is shown." and keep PART-001 × 4; a custom part's link names
-    `widget_v2.glb` and opens once that file is loaded. `17-design-library.mobile` (both phone
-    projects): save and reuse inside the drawer with 44 px targets and no page scroll.
-    Screenshots `14-saved-designs-list`, `14-saved-designs-island`, `14-share-link-restored`,
-    `14-share-link-invalid`, `14-<project>-drawer-saved-designs`.
-  - `31-shell-a11y` (and `.mobile`): the View popover (Escape and focus return, focus-out, press
-    outside, `aria-controls`, placement and an opaque surface at 1440 × 900, 1280 × 720,
-    900 × 800 and 390 × 844); text dragged over the page doesn't raise the drop veil; an error
-    toast (alert, stays, dismissible) and a note toast (status, goes by itself) at desktop and
-    390 × 844; the Export pill's caution dot, title and description; on a phone, Tab reaches and
-    opens Shop standards in the drawer, and the summary chip keeps its width and a gap at
-    quantity 200. Screenshots `31-*`.
-  - `29-print-layout`: `/print` in print media, rendered with `page.pdf()` and read back page
-    by page with Ghostscript (skipped when it is not installed): five pages for one crate,
-    the label (part number to fork note) on exactly one page, and the assembly order
-    (Base to Lid) whole on one page. The PDF is saved to `e2e/screenshots/29-print-layout.pdf`.
-    A second case downloads the design after the model is measured (it has an `outline` and
-    `ranking: "volume"`), opens it on `/print`, and finds no note and the app's gross (304 lb)
-    and the shaped blocks in the cut list.
-  - `20-last-design` (#71): quantity 8, two layers, a 40 mm gap, Rank by Crate cost, a picked
-    layout and the Layouts tab in metric survive a reload (same outside size, no load message,
-    no "Designed in"); a custom `widget_v2.glb` with a 12.5 kg mass at quantity 2 comes back from
-    IndexedDB, and damaged kept bytes open PART-001 with no page error; a 51 MB GLB isn't kept,
-    so the reload opens PART-001 and says "Load big_part.glb to reopen it."; a corrupt entry
-    opens PART-001 × 4 on Overview with a warning; a share link wins over a remembered crate and
-    becomes the remembered one. Screenshots go to `docs/screenshots/71-last-design/`.
-    `17-design-library` now expects the reload to reopen the last crate (quantity 1).
-  - `09-part-header` (#40, #39): a catalog part reads as the same sentence with no fields; each
-    field edited by keyboard in Tab order, with the stand-in (dashed) showing and clearing, no
-    box, the sky focus underline and ↑ / Shift+↓ steps; an invalid mass shows its reason (gold,
-    `aria-describedby`), Enter doesn't save it and Escape reverts, and blur restores a blanked
-    name; a 1 mm part (generated GLB) at 10 → 14.71 kg updates the header to "crate gross
-    20 kg", notes "Crate heavier: 20 kg" (the title and the hidden text carry "Gross 16 → 20 kg,
-    parts 10 → 15 kg", #62) and highlights the Overview (motion on);
-    +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
-    shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
-    `09-header-*`.
-  - `25-handling` (#8, #87): with **bounding-box blocking** (shape analysis stubbed off) the
-    Checks tab lists "Centre of gravity near the middle" (on both centre lines), "Low centre of
-    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and the ticked "Pallet jack
-    won't fit: use a forklift" (text in metric and imperial; also at quantity 1, and Pass in the
-    print checks table), still with no badge; the test hook's `cog.mm` is exactly on the
-    interior centre lines, there is no CoG marker (centred and low) and there are 2 arrows (one
-    opening, both ends), in closed and exploded modes; Size labels off hides the arrows but not
-    the CoG. With **shaped blocking** (#16) the blocks in each bracket's −X recess move the CoG
-    toward −X and Checks says "2 mm toward the left end"; raising "Top-heavy below tip angle" to
-    80° makes `cog-tip` a caution and the stencils appear at the CoG, and back at 30° they go;
-    the print tab's shipping label has the "Centre of gravity" mark centred on the crate end, the
-    FORKS arrow and FORK ENTRY FROM THE ENDS. Saves `25-handling-checks`, `25-handling-3d`,
-    `25-handling-3d-exploded`, `25-handling-cog-stencil` and `25-handling-label`.
-  - `22-dimension-pulse` (#65, motion on): a pulse fires within 12 s of load; photons are on
-    screen past the first split (≥ 7) and all fade afterwards; again in exploded mode; none fire
-    with size labels off or with reduced motion (12 s each). Saves `22-pulse-closed` and
-    `22-pulse-exploded`.
-  - `18-scorecard` (#17): checks the wiring, not the figures that the domain tests pin (it
-    once pinned $186 for PART-001 × 4, which became $201 with shaped blocks). The Overview's
-    scorecard sits between the outside size and the chain: every tile is there in its format,
-    material + labour equal the crate cost (within a rounded dollar), and the metric density and
-    dim weight equal the imperial ones converted (1 lb/ft³ = 16.0185 kg/m³); at
-    quantity 8 the recommended Layouts card shows "$… to build · class …" and every other card
-    a cost and class delta; Rank by Crate cost leaves no stable card cheaper than the
-    recommendation and says "Ranked by crate cost", Freight class says "Ranked by freight",
-    Volume goes back; the Labour group lists the rate (35) and minutes, Screw cost and the dim
-    divisor, and a $70/h rate (double) adds exactly the old labour cost until Reset to defaults; the first
-    cut-list download shows "Designed in …". Crops are saved to `e2e/screenshots/crops/17-*`.
-    `02-tabs` and `11-design-json` find layout cards as `button.opt`; `17-design-library` finds them
-    in the `Layouts` group, since the Rank-by toggle also has pressed buttons, and checks that the
-    picked card's size becomes the crate's.
-  - `32-island-a11y` and `32-island-cutlist.mobile` (#89): the tabs are one tab stop and move with arrows, Home and End, the panel is labelled by its tab; a cut-list row is a real toggle button (Space / Enter), Overview bars are named groups; Save, Rename and Delete leave focus on a live control and Undo is outside the status region; Shop standards render inputs only when open and announce a bad value; the Overview verdict (clear, then "1 caution: parts are not restrained" linking to Checks); the Checks tab counts cautions and notes apart; the panel's top fade only when scrolled; one island height on all tabs; "Designed in" shifts nothing and is gone after an edit; at quantity 200 the Shipment block shows cost, labour and grouped weights and the scorecard no longer says "Whole shipment"; layout-card delta parts stay on one line; piece names stay on one line; on a phone the cut list has no sideways scroll and keeps Cut and Qty inside the drawer. Screenshots `32-*`.
-  - `10-shop-standards`: the section is collapsed by default and shows all eight groups when
-    opened; changing the plywood cost to 2200 shows "Customised" and raises the Overview's
-    "$ of wood", which survives a reload; Reset to defaults restores the cost (also after a
-    reload); a light-panel threshold of 50 kg switches the Overview to 15 mm ply; a negative
-    density is flagged and reverts on blur.
-  - `24-structure` (#7): the default batch keeps 4x4 skids and no floor joists, and Checks shows
-    "Base rated … kg; this crate's payload is 86 kg". 30 brackets are one crate with 3 4x6 skids
-    and 7 2x4 floor joists in the cut list (pinning the joists lights them in 3D), the exact
-    base-rating text ("Base rated 859 kg; this crate's payload is 645 kg (75%)…"), the Overview's
-    joists and rating, the exploded and end views, and a build sheet with the joists, their screw
-    lines, the base step and the rating. Screenshots `24-structure-cutlist`, `-checks`,
-    `-exploded`, `-end` and `-build-sheet`.
-  - `13-batch-split` (#25): PART-001 × 8 is one crate with no Shipment block; × 200 splits into
-    two crate types totalling 200 with "Ships as … crate A (k each) + 1 × crate B (r)"; picking
-    Crate B changes the crate on screen (outside size, parts), the heading and the Checks
-    ("Within the per-crate limits"); the cut list follows the type and "Whole shipment" lists
-    every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
-    defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
-    summary chip reads "Crate A outside" and "Gross, N crates".
-  - `23-cradles` (#6): the shaft (PART-002 × 4, open view) has Cradle, Stacking cradle and End
-    stop rows in the cut list and no Bearer, Layer separator or Blocking post rows; hovering
-    and pinning the Cradle row lights it in 3D ("Showing 4 × cradle", pin key ending
-    "|2 notches"). PART-002 × 1 says "4 cradles" in the Overview and names the cradles and end
-    stops in the blocking check. Shop standards has a Cradles group. The print build sheet's
-    Section A–A and B–B titles name the cradles, and its cut list and assembly list them with
-    "Cradles to floor". Screenshots `23-cradles-pinned`, `23-cradles-cutlist`,
-    `23-cradles-build-drawings`, `23-cradles-build-cutlist`.
-  - `26-shaped-blocking` (#16): PART-003 × 8 in metric. After the analysis (`shapedBlocking`
-    true, `profileMs` under 1 s and reported as a test annotation), the `blocking` check reads
-    "… shaped to the part with 44 shaped blocks in its recesses: 63% of the blocking face touches
-    it (bounding box: 10%), and the most a part can shift is 0 mm (bounding box: 65 mm)." and the cut
-    list has "Shaped block". With `requestIdleCallback` stubbed so the analysis never runs, the
-    check keeps the bounding-box text. Screenshots `26-shaped-checks`, `26-shaped-open`,
-    `26-shaped-exploded`, `26-bbox-checks`, `26-bbox-open` and `26-bbox-exploded` (copies in
-    `docs/screenshots/16-shaped-blocking/`).
-  - `27-ui-review-layout` (#62; desktop, plus `.mobile` at 390 and 360): quantity 200 gives the
-    note "Crate grew: … mm, … kg" (under 50 characters, the title has "Gross … → … kg, outside
-    932 × 652 × 497 → …", the hidden text "Details: …") and in imperial "Crate shrank: … in, … lb";
-    the header note at quantity 200 is one line and stops short of the island (and inside the
-    screen on phones), "crate gross" is not split across lines on phones; the cut list's Qty
-    column ends inside the panel's padding with no sideways scroll, metric and imperial (phones:
-    imperial); the skid stock reads "4x4" with `calt` off while the cut and the Overview sizes
-    keep "×"; on phones every control in the Rules tab, and every button and field in the other
-    tabs, is at least 44 px (the switch's hit area too); and the near-end fork arrow's screen box
-    (`cog.arrowBox`) shares no pixels with the width label, closed and exploded. Screenshots
-    `27-*` (copies in `docs/screenshots/62-layout-viewer/`).
-  - `28-ui-review-units` (#62): in imperial the Checks tab reads "98.0 in × 108.0 in door" and
-    "Base rated … lb" with no "mm" or "kg" in any check, and in metric "2,489 mm × 2,743 mm door"
-    and "… kg"; the header and Overview both say "47.4 lb"; the Cut list's Print / save PDF opens
-    `/print#design=…&u=imperial&print=1`, whose checks carry no metric unit, and the same page
-    still opens from an old `#d=…` link. Screenshots `28-checks-imperial`, `28-checks-metric`,
-    `28-mass-overview` and `28-print-spec-imperial` (copies in `docs/screenshots/62-units-text/`).
-  - `30-viewer` (#62 D4, D11; desktop, plus `.mobile` at 390 and 360): Top, Front and End each leave
-    out one crate size pill and 3D brings it back; open and exploded show exactly one part pill
-    ("14.2 × 8.7 × 10.2 in", metric "…  mm") and no two pills overlap (the check is like
-    `27`'s arrow-versus-label one); closed shows no part pill; the far-end fork arrow is hidden and
-    the near one shown in 3D, the other way round in End, and both in Top; forcing the context
-    loss (`WEBGL_lose_context`) shows the navy cover with its button, the context returning removes
-    it, and the button builds a fresh canvas that draws. Saves `30-top-*`, `30-pills-*`,
-    `30-arrows-3d-*` and `30-context-lost-*`.
-  - `30-free-area` (#96): the closed crate's projected box sits left of the island (at 1440 × 900
-    and 1280 × 720), and its centre stays in the free area after a reload that restores the last
-    design, after Hide and Show panels, after a resize across the narrow breakpoint and back, and
-    through the idle turn.
-  - `30-pan` (#96; desktop, plus `.mobile`): the View popover and the View button's title name the
-    gestures (touch wording on phones) and nothing floats over the stage; a right-drag (on touch a
-    two-finger drag) pans, stops idle, and clears the preset; after hard drags in every direction at
-    1440 × 900 and 1280 × 720 the projected crate centre stays left of the island and on screen;
-    View > 3D re-centres; the idle turn eases a panned view back to the middle.
-  - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
-    the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
-    and `idle` on and the camera turning, while it hovers at least one board and one bar; one
-    click on empty canvas turns both off at once, and auto-play resumes 4–15 s later with the
-    pointer still hovering. A wheel, a key and a drag each stop it. A pointer held still on
-    the turning crate keeps a tooltip, and its hover key changes as boards pass under it; the
-    PR screenshot `docs/screenshots/64-idle-hover/hover-while-turning.png` is saved there.
-  - `15-app-icons` (#58, HTTP only): `/favicon.ico`, `/icon.svg`, `/icon1.png` and
-    `/apple-icon.png` return 200 with their image types; `/icon.svg` is the crate mark;
-    `/site.webmanifest` has name "Crate Designer", start URL `/`, theme `#002548` and two icon
-    srcs that return PNGs; the HTML head has the title and the manifest, icon and
-    apple-touch-icon links.
-  - `16-export-bundle` (#26):
-    - Print / save PDF in the Cut list opens `/print#design=…&u=imperial&print=1` in a new tab,
-      which calls `window.print()` once (stubbed to a counter).
-    - The crate spec has the part, 47.4 lb, 36.7 × 25.7 × 19.6 in with 932 × 652 × 497 mm, the
-      dimensional weight, lb/ft³, no freight class, the layout reason, the runner-up and the
-      checks.
-    - The build sheet has the five drawings ("Front" dimensioned 36 11/16″). The cut list page
-      has 3/4″ and 1/2″ plywood, 4x4 and 1x4, the fasteners and the five steps in order.
-    - The label has PART-001, 4 PCS, lb, THIS SIDE UP and the fork marks.
-    - In metric: mm, 21.5 kg, kg/m³, `19 × 89 lumber` and KG.
-    - 200 brackets print the plan, plus a spec section, build sheet, cut list and label per
-      crate type.
-    - Each case makes a PDF with `page.pdf()` (Chromium) and checks that it is a non-empty PDF
-      with enough pages. `/print` without a design explains itself.
-    - One screenshot per page: `26-spec`, `26-build-drawings`, `26-build-cutlist`, `26-label`,
-      `26-spec-metric`, `26-split-spec` and `26-split-build-b`, plus the PDFs, in
-      `e2e/screenshots/`.
-  - `19-export-pill` (#51): the pill sits under the part lines, left-aligned; Export downloads
-    `crate-PART-001-x4.zip`, the note says "Downloaded crate-PART-001-x4.zip", and the test
-    unzips it with `fflate`: exactly the five entries, the GLB has the glTF magic, version 2 and
-    its length, the PDF starts `%PDF-` with at least 4 pages and imperial cuts, the CSV and
-    README are imperial, `design.json` has the on-screen outside size and the Overview shows
-    "Designed in". Re-importing `design.json` (in metric) gives the same outside size. Metric
-    gives mm / kg CSV, PDF and README. 200 brackets give both crate GLBs, both cut lists, the
-    shipment cut list and a PDF with both build sheets. A loaded custom GLB exports, its README
-    names the GLB to load, and the design reopens with it to the same size. With motion on, the
-    busy state ("Exporting…", `aria-busy`) lasts at least 1.4 s. Hide panels hides it (and Tab can't reach it). At
-    390 × 844 it stays under the part lines at 44 px and exports. Screenshots `19-export-idle`,
-    `-loading`, `-success`, `-narrow` and the PDF `19-export.pdf`.
-- **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
-  its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
+**Running:** software WebGL is CPU-heavy, so locally the suite uses a third of the cores (1 to 3 workers; set
+`E2E_WORKERS` to change it) with a 60 s test timeout (`test.slow()` triples it for long flows); CI runs one worker
+with a 120 s timeout. There are no retries: a test that needs one is flaky and gets fixed. Several worktrees can run at
+once if each has its own `E2E_PORT`. `bun run typecheck` and `bun run lint` cover `e2e/` too.
+
+**Screenshots** go only to `e2e/screenshots/` (git-ignored; CI uploads it as `e2e-screenshots`, with the HTML report as
+`playwright-report`), through one helper, `shot(page | locator, name)`: a page is shot full-page, a locator is cropped.
+Names start with the spec's topic (`part-header-standin`), and a run in a project other than desktop adds the project
+(`layout-closed-summary-mobile-390`). Generated files (the print PDFs) are attached to the report, not written to disk. No
+spec writes into `docs/screenshots/`, so a run never dirties the repo; `bun run e2e:docs-shots` (`scripts/docs-shots.mjs`)
+copies chosen shots there on request.
+
+**Conventions for specs:**
+
+- Find things by role, label or text. Where that isn't possible, use a `data-testid` (`size-label`, `check` with
+  `data-level`, `cut-piece` / `cut-stock` / `cut-size` / `cut-qty`, `load-toast`, `change-note`, `flash`, `summary`,
+  `view-popover`, and others); never a CSS class, because styles move. The two places a computed style is the behaviour under
+  test are the plain "4x4" (`font-feature-settings`) and the stand-in / invalid underline styles in `part-header`.
+- Prove wiring and behaviour; don't pin what a unit test owns. Read the expected numbers from `window.__crate` (the
+  outside size, quantity, CoG) and check the screen shows them in the right format; assert relationships (a doubled rate
+  raises the cost, the check's skid count is the cut list's). Keep an exact string only where the string is the contract (the
+  zip's file names, a message a user reads, the print title).
+- No fixed sleeps. Wait on the probe: `pollCrate(page, (s) => s.frames)`, `waitForFrames(page, n)`, `s.idle`, `s.pulses`. The
+  few waits for real elapsed time (the 5 s idle delay, the 9 s toast, the 10 s pulse period) are bounded by `expect.poll`
+  timeouts or documented as the quiet period a negative assertion needs.
+- Shared locators and flows live in `e2e/helpers/` (`probe`, `locators`, `files`, `stubs`, `layout`, `format`, `shot`); import
+  from `./helpers`. A flow another spec needs belongs there, not copied.
+
+- **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`) exposes a read-only
+  `window.__crate` with `getState()` (typed as `CrateSnapshot`, so specs are checked at compile time): the mode from the
+  view targets, view switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play, `idle` (no
+  deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, crate types, frame count, pulses,
+  `shapedBlocking`, `profileMs` and the CoG and fork-arrow marks, and `canvasCoverage()` (share of canvas pixels
+  drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`; `next.config.ts` always inlines the flag (`"0"` when unset),
+  so normal builds drop the branch and don't bundle the module.
+
+- **Specs** (a `.narrow` or `.mobile` suffix means that project; the rest run on desktop):
+  - `first-load`: PART-001 × 4 loads with the header sentence, "model matches catalog", the heading and a drawn canvas.
+  - `island`: each tab's contents (Overview chain and weight bars, Layouts cards, Cut list groups, Rules controls); the tab
+    strip is one tab stop with arrows, Home and End and a labelled panel; the scroll fade; one island height on every tab.
+  - `rules`: quantity resizes the crate; a typed 500 clamps to 200 with a note; Reset rules keeps the quantity.
+  - `units`: imperial by default (header, Overview, size labels, nominal lumber in the Overview, Cut list and CSV); the toggle;
+    the mass reads the same in the header and Overview; metric survives a reload.
+  - `cut-list` (`.mobile`): hover lights a row, click pins it, Escape clears it; the row is a real toggle button; the Qty
+    column is visible in both units; "4x4" keeps a plain x; piece names stay on one line; on a phone each row stacks.
+  - `checks`: every check is listed and the default crate has no cautions; check text follows the units; the Overview verdict
+    names a caution and links to Checks; the tab counts cautions and notes apart.
+  - `load-part`: a catalog GLB fills in its details; an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
+    parts are refused with a message; dragging text doesn't raise the drop veil, a file does.
+  - `load-messages`: the toast under the header: an error (alert) stays until dismissed, a note (status) goes by itself;
+    both sit clear of the header, island and window edge at desktop and phone sizes.
+  - `part-header`: the inline fields (Tab order, Enter commits, the stand-in clears, an invalid value shows its reason, imperial
+    entry). `change-note`: the short note, the before → after on hover and for screen readers, the gold flash, "No change to
+    the crate", one line at quantity 200.
+  - `view-controls`: the mode icon, the first framing, camera presets, the switches and Pull apart, Hide panels. `view-popover`
+    (`.mobile`): placement, nothing covering it, closing by Escape, focus-out and a press outside, the gesture hint.
+  - `size-labels`: labels stay in the free area for every sample part and mode. `viewer` (`.mobile`): which labels each camera
+    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, a lost WebGL context.
+  - `camera` (`.mobile`): right-drag and two-finger pan, bounded so the crate can't be lost; a preset or the idle turn returns
+    to the middle. `layout` (`.narrow`, `.mobile`): only the island panel scrolls; the crate sits in the free area at load, after
+    a reload, Hide / Show panels and a resize; the narrow drawer and the phone layout. `drawer.mobile`: the drawer's open and
+    close paths, focus trap and return, every tab, tapping a board, Load a part, resizing across 980 px.
+  - `idle-autoplay`: hover never stops auto-play, a click, drag, wheel or key does, it resumes after 5 s, and the tooltip follows
+    the turning crate. `dimension-pulse`: a pulse fires after framing, splits at the witness lines and ends; none with size
+    labels off or reduced motion.
+  - `shop-standards`: collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
+    resets; a lower threshold switches the plywood; bad input is flagged. `scorecard`: the Overview card, the Layouts deltas and
+    ranking toggle, the labour rate, "Designed in" after the first export.
+  - `design-file`: Download design (.json) and reopen it (catalog, custom with and without its model, stale layout, newer
+    version). `design-library` (`.mobile`): save, list, reuse, rename, delete with undo, export and import the library, share
+    links, focus after each action. `last-design`: a reload reopens the last crate (including a custom GLB from IndexedDB);
+    damaged or oversize data opens the default; a share link wins.
+  - `batch-split` (`.mobile`): one crate for the sample quantities; 200 splits and the crate type picker, Checks and cut list
+    follow; a lower max gross changes the split; the Shipment block; layout card deltas keep units on their numbers.
+  - `export-zip`: Export downloads one `.zip` with every file in the units on screen and the design re-imports; split and custom
+    parts; an exploded view still exports the assembled crate; the busy state; the caution dot. `print`: the route's spec,
+    build sheet and label for the default, metric and split designs; the print link and the old `#d=` link; in print media
+    the label is one page and the assembly order is whole (read back with Ghostscript when installed); the print page shows
+    what the app shows.
+  - `cradles`, `structure`, `handling`, `shaped-blocking`: the cradles, the heavy base, the CoG and forklift checks and the
+    shaped blocking reach the cut list, Checks, the 3D view and the build sheet. Their figures are the domain's.
+  - `app-icons` (HTTP only): the icons, the manifest and the head links.
+
+- **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use its screenshots in the PR.
+  Tests have no retries, so a flaky test is a bug to fix.
 
 ## 11. Decision log
 
@@ -2995,7 +2825,7 @@ Other known gaps:
 - **CSS modules work.** Give a component its own `Name.module.css` and import it as `styles`
   (see `ShopStandards.module.css`). Wrap the shared classes from `globals.css` in `:global()`
   (`:global(.rule)`), and use the design tokens (`var(--…)`) from `globals.css`.
-- Before you push, run `bun run test`, `bun run lint` and `bun run build`. For UI changes, also
+- Before you push, run `bun run test`, `bun run lint`, `bun run format:check` and `bun run build`. For UI changes, also
   run `bun run e2e` and update the specs in `e2e/` (§10); CI's `e2e` job runs them on every PR.
 - Prefer roles and accessible names for anything the e2e tests need to find. Add a
   `data-testid` only where there is no accessible handle, and read 3D state through the

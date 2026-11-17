@@ -72,6 +72,10 @@ jobs:
         env:
           SKIP_INSTALL_SIMPLE_GIT_HOOKS: "1"
 
+      # Prettier (.prettierrc); `bun run format` fixes it.
+      - name: Format
+        run: bun run format:check
+
       - name: Lint
         run: bun run lint
 
