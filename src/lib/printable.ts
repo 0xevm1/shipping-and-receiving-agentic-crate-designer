@@ -24,11 +24,12 @@ import type { Message } from "@/domain/message";
 import type { Layout } from "@/domain/packing";
 import type { DesignPart } from "@/domain/schema";
 import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
-import type { ShopStandards } from "@/domain/standards";
+import { costsArePlaceholder, type ShopStandards } from "@/domain/standards";
+import type { QuantitySweep, SweepConstraint } from "@/domain/sweep";
 import { renderMessage } from "./message";
 import { allChecks } from "@/lib/checks";
 import { crateDrawings, type Drawing } from "./drawings";
-import { cutText, describeLayout, documentDate, stockText } from "./format";
+import { cutText, describeLayout, documentDate, stockText, usdCents } from "./format";
 import { memberBounds } from "./memberBounds";
 import { LB_PER_KG } from "@/domain/units";
 import { area, cut, dims, dimsOther, groupDigits, lengthUnit, run, volume, weight, type Units } from "./units";
@@ -122,6 +123,25 @@ export interface PrintableCrate {
   label: PrintableLabel;
 }
 
+/** The quantity per crate and why (spec §7.16), when the document was made with the sweep. */
+export interface PrintableQuantity {
+  /** The crate on the page is the sweep's recommendation (its quantity and layout). */
+  recommended: boolean;
+  /** "Recommended: 34 per crate", or "20 per crate; the sweep recommends 34". */
+  heading: string;
+  /** The sweep's rationale: the score and what stopped a larger crate. */
+  rationale: string;
+  rows: Row[];
+  /** "Costs use the shipped placeholder rates …", or null when the shop entered its own. */
+  costNote: string | null;
+}
+
+/** The engine's stamp (spec §5.1), printed in the footer and the PDF's keywords. */
+export interface PrintableStamp {
+  engineVersion: string;
+  inputHash: string;
+}
+
 export interface PrintableDesign {
   units: Units;
   unitsNote: string;
@@ -133,6 +153,12 @@ export interface PrintableDesign {
   crates: PrintableCrate[];
   /** Why there is no crate (spec §7.9), or null. */
   problem: string | null;
+  /** The quantity rationale, when a sweep was given (the engine's PDF; not the /print route). */
+  quantity?: PrintableQuantity | null;
+  /** Set when the engine built the document. */
+  stamp?: PrintableStamp;
+  /** The ISO time the document was made: the PDF's creation date, so equal inputs give equal bytes. */
+  createdAt?: string;
 }
 
 export interface PrintableInput {
@@ -146,6 +172,10 @@ export interface PrintableInput {
   generatedAt: string;
   /** IANA zone the document date is read in; this device's own zone when absent. */
   timeZone?: string;
+  /** The part's quantity sweep (spec §7.16): adds the quantity rationale. */
+  sweep?: QuantitySweep | null;
+  /** The engine's stamp, when the engine builds the document. */
+  stamp?: PrintableStamp;
 }
 
 const other = (u: Units): Units => (u === "imperial" ? "metric" : "imperial");
@@ -405,6 +435,58 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   };
 }
 
+/** The hard rule that stopped a crate, in a few words (spec §7.16). */
+export const CONSTRAINT_TEXT: Record<SweepConstraint, string> = {
+  door: "trailer door and floor",
+  stable: "stability",
+  blocking: "room to block the parts",
+  "base-rating": "base rating",
+  "max-gross": "per-crate gross limit",
+  "max-parts": "per-crate part limit",
+};
+
+/** Said wherever a crate cost is shown while the cost inputs are the shipped placeholders. */
+export const PLACEHOLDER_COST_NOTE =
+  "Costs use the shipped placeholder wood and screw prices and shop times (shop standards): good for comparing designs, not for a quote.";
+
+/** True when the plan's crate is the sweep's recommendation: its quantity and its layout, in one crate type. */
+export function isRecommended(plan: ShipmentPlan, sweep: QuantitySweep | null | undefined): boolean {
+  const rec = sweep?.recommendation;
+  const design = plan.crates[0]?.result.design;
+  return !!rec && !!design && !plan.split && plan.totals.parts === rec.quantity && design.layout.key === rec.crate.layoutKey;
+}
+
+/** The quantity section: the recommendation, its rationale and the constraint that stopped a larger crate. */
+function quantitySection(plan: ShipmentPlan, sweep: QuantitySweep, standards: ShopStandards, u: Units): PrintableQuantity | null {
+  const rec = sweep.recommendation;
+  if (!rec || plan.problem) return null;
+  const recommended = isRecommended(plan, sweep);
+  const here = plan.split ? plan.crates.map((c) => c.quantity).join(" and ") : String(plan.totals.parts);
+  const { stoppedBy } = rec;
+  const rows: Row[] = [
+    { label: "Recommended", value: `${rec.quantity} per crate`, note: `${usdCents(rec.crate.scoreUsdPerPart)} a part in crate cost` },
+    stoppedBy
+      ? {
+          label: "Stopped a larger crate",
+          value: `${stoppedBy.quantity} per crate fails the ${CONSTRAINT_TEXT[stoppedBy.binding]}`,
+          note: renderMessage(stoppedBy.reason, u),
+        }
+      : { label: "Stopped a larger crate", value: `Nothing up to ${sweep.maxQuantity} per crate` },
+    {
+      label: "Freight",
+      value: sweep.basis === "crate-only" ? "Not priced" : "Priced from the given rates",
+      note: sweep.basis === "crate-only" ? "No freight rates were given, so the score is crate cost per part." : undefined,
+    },
+  ];
+  return {
+    recommended,
+    heading: recommended ? `Recommended: ${rec.quantity} per crate` : `${here} per crate; the sweep recommends ${rec.quantity}`,
+    rationale: renderMessage(rec.rationale, u),
+    rows,
+    costNote: costsArePlaceholder(standards) ? PLACEHOLDER_COST_NOTE : null,
+  };
+}
+
 /** The whole hand-off document for a plan, in the selected units. Pure. */
 export function buildPrintable(input: PrintableInput): PrintableDesign {
   const { part, plan, units: u, generatedAt, timeZone } = input;
@@ -437,6 +519,8 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
     },
     crates,
     problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,
+    ...(input.sweep ? { quantity: quantitySection(plan, input.sweep, input.standards, u) } : {}),
+    ...(input.stamp ? { stamp: { engineVersion: input.stamp.engineVersion, inputHash: input.stamp.inputHash }, createdAt: generatedAt } : {}),
   };
 }
 
