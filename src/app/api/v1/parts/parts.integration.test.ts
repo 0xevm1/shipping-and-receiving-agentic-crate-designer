@@ -87,6 +87,9 @@ describe("POST /api/v1/parts", () => {
     expect(first.headers.get("location")).toBe(`/api/v1/parts/${a.part.id}`);
     // The size comes from the file, as the browser measures it (PART-001 is about 300 × 200 × 150 mm).
     a.part.sizeMm.forEach((v) => expect(v).toBeGreaterThan(50));
+    // Its org-wide part.created event committed with it.
+    const created = await t.sql`select job_id, payload from event where type = 'part.created'`;
+    expect(created.map((r) => r.payload.partId)).toContain(a.part.id);
 
     const second = await POST(upload({ mass: "22 kg", name: "Bracket rev B" }, { bytes: sampleBytes, name: "copy.glb" }));
     expect(second.status).toBe(201);

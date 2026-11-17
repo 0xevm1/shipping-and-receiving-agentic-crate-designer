@@ -3,11 +3,11 @@
  * stamps) `org_id` from it, so application code has no way to query across orgs. Code outside
  * this file should not use the drizzle handle directly; add a method here instead.
  */
-import { and, asc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { type OrgContext, requireOrg } from "./org";
 import * as schema from "./schema";
-import { artifact, configuration, designJob, event, part, partModel } from "./schema";
+import { artifact, type ConfigurationOrigin, configuration, designJob, event, idempotencyKey, jobConfiguration, part, partModel } from "./schema";
 
 export type Database = PostgresJsDatabase<typeof schema>;
 export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -22,6 +22,10 @@ export type NewDesignJob = Pick<typeof designJob.$inferInsert, "partId" | "total
 export type DesignJobPatch = Partial<Pick<DesignJob, "status" | "selectedConfigurationId" | "notes" | "totalQuantity">>;
 export type Configuration = typeof configuration.$inferSelect;
 export type NewConfiguration = Omit<typeof configuration.$inferInsert, "orgId" | "id" | "createdAt">;
+/** A configuration as a job sees it: the content-addressed row plus how it joined this job. */
+export type JobConfiguration = Configuration & { origin: ConfigurationOrigin; addedAt: Date };
+export type Artifact = typeof artifact.$inferSelect;
+export type IdempotencyRecord = typeof idempotencyKey.$inferSelect;
 export type CrateEvent = typeof event.$inferSelect;
 export type NewCrateEvent = Pick<typeof event.$inferInsert, "jobId" | "type" | "payload">;
 
@@ -35,6 +39,22 @@ function one<T>(rows: T[]): T {
 }
 
 export function createRepository(db: Executor) {
+  async function jobConfigurations(orgId: string, jobId: string, configurationId?: string): Promise<JobConfiguration[]> {
+    const rows = await db
+      .select({ configuration, origin: jobConfiguration.origin, addedAt: jobConfiguration.createdAt })
+      .from(jobConfiguration)
+      .innerJoin(configuration, and(eq(configuration.orgId, jobConfiguration.orgId), eq(configuration.id, jobConfiguration.configurationId)))
+      .where(
+        and(
+          eq(jobConfiguration.orgId, orgId),
+          eq(jobConfiguration.jobId, jobId),
+          configurationId ? eq(jobConfiguration.configurationId, configurationId) : undefined,
+        ),
+      )
+      .orderBy(asc(jobConfiguration.createdAt), asc(configuration.id));
+    return rows.map((r) => ({ ...r.configuration, origin: r.origin, addedAt: r.addedAt }));
+  }
+
   return {
     parts: {
       async create(ctx: OrgContext, input: NewPart): Promise<Part> {
@@ -57,6 +77,24 @@ export function createRepository(db: Executor) {
       async list(ctx: OrgContext): Promise<Part[]> {
         const orgId = requireOrg(ctx);
         return db.select().from(part).where(eq(part.orgId, orgId)).orderBy(asc(part.createdAt), asc(part.id));
+      },
+      /**
+       * The org's part for a catalog entry, creating it the first time (`created: true`). One row
+       * per (org, catalogId), so concurrent first loads agree on the part.
+       */
+      async ensureCatalog(ctx: OrgContext, input: NewPart & { catalogId: string }): Promise<{ row: Part; created: boolean }> {
+        const orgId = requireOrg(ctx);
+        const inserted = await db
+          .insert(part)
+          .values({ ...input, source: "catalog", orgId })
+          .onConflictDoNothing()
+          .returning();
+        if (inserted[0]) return { row: inserted[0], created: true };
+        const [row] = await db
+          .select()
+          .from(part)
+          .where(and(eq(part.orgId, orgId), eq(part.catalogId, input.catalogId)));
+        return { row: row!, created: false };
       },
     },
 
@@ -96,12 +134,14 @@ export function createRepository(db: Executor) {
             .returning(),
         );
       },
-      async get(ctx: OrgContext, id: string): Promise<DesignJob | undefined> {
+      /** With `forUpdate`, locks the row until the transaction ends (read, check, then update). */
+      async get(ctx: OrgContext, id: string, { forUpdate = false } = {}): Promise<DesignJob | undefined> {
         const orgId = requireOrg(ctx);
-        const [row] = await db
+        const query = db
           .select()
           .from(designJob)
           .where(and(eq(designJob.orgId, orgId), eq(designJob.id, id)));
+        const [row] = forUpdate ? await query.for("update") : await query;
         return row;
       },
       /**
@@ -117,6 +157,35 @@ export function createRepository(db: Executor) {
           .where(and(eq(designJob.orgId, orgId), eq(designJob.id, id), eq(designJob.version, expectedVersion)))
           .returning();
         return row;
+      },
+      /**
+       * The newest job that isn't archived for the same part: the part itself, the same catalog
+       * entry, or an upload of the same GLB (by sha256). Lets two tabs that load the same part
+       * meet on one job instead of opening one each.
+       */
+      async findReusable(ctx: OrgContext, of: Part): Promise<DesignJob | undefined> {
+        const orgId = requireOrg(ctx);
+        const samePart = or(
+          eq(part.id, of.id),
+          of.catalogId ? eq(part.catalogId, of.catalogId) : undefined,
+          of.modelSha256 && of.source === "upload" ? and(eq(part.modelSha256, of.modelSha256), eq(part.source, "upload")) : undefined,
+        );
+        const [row] = await db
+          .select({ job: designJob })
+          .from(designJob)
+          .innerJoin(part, and(eq(part.orgId, designJob.orgId), eq(part.id, designJob.partId)))
+          .where(and(eq(designJob.orgId, orgId), ne(designJob.status, "archived"), samePart))
+          .orderBy(desc(designJob.createdAt), desc(designJob.id))
+          .limit(1);
+        return row?.job;
+      },
+      /**
+       * A transaction-level advisory lock on `key` within the org (e.g. a part id), so "find or
+       * create" runs one at a time per key. Only meaningful inside a transaction.
+       */
+      async lock(ctx: OrgContext, key: string): Promise<void> {
+        const orgId = requireOrg(ctx);
+        await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:${key}`}, 0))`);
       },
     },
 
@@ -147,13 +216,78 @@ export function createRepository(db: Executor) {
           .where(and(eq(configuration.orgId, orgId), eq(configuration.inputHash, inputHash)));
         return row;
       },
-      async listForJob(ctx: OrgContext, jobId: string): Promise<Configuration[]> {
+      /**
+       * Adds a configuration to a job. One link per (job, configuration): linking again keeps the
+       * first link (and its origin) and returns `created: false`.
+       */
+      async link(ctx: OrgContext, jobId: string, configurationId: string, origin: ConfigurationOrigin): Promise<{ created: boolean }> {
         const orgId = requireOrg(ctx);
-        return db
+        const inserted = await db
+          .insert(jobConfiguration)
+          .values({ orgId, jobId, configurationId, origin })
+          .onConflictDoNothing()
+          .returning({ id: jobConfiguration.configurationId });
+        return { created: inserted.length > 0 };
+      },
+      async isLinked(ctx: OrgContext, jobId: string, configurationId: string): Promise<boolean> {
+        const orgId = requireOrg(ctx);
+        const rows = await db
+          .select({ id: jobConfiguration.configurationId })
+          .from(jobConfiguration)
+          .where(and(eq(jobConfiguration.orgId, orgId), eq(jobConfiguration.jobId, jobId), eq(jobConfiguration.configurationId, configurationId)));
+        return rows.length > 0;
+      },
+      /** A job's configurations, in the order they joined it. */
+      async listForJob(ctx: OrgContext, jobId: string): Promise<JobConfiguration[]> {
+        return jobConfigurations(requireOrg(ctx), jobId);
+      },
+      /** One configuration as this job has it, or undefined when it isn't linked to the job. */
+      async getForJob(ctx: OrgContext, jobId: string, configurationId: string): Promise<JobConfiguration | undefined> {
+        const [row] = await jobConfigurations(requireOrg(ctx), jobId, configurationId);
+        return row;
+      },
+    },
+
+    artifacts: {
+      /** Generated files of every configuration linked to the job. */
+      async listForJob(ctx: OrgContext, jobId: string): Promise<Artifact[]> {
+        const orgId = requireOrg(ctx);
+        const rows = await db
+          .select({ artifact })
+          .from(artifact)
+          .innerJoin(
+            jobConfiguration,
+            and(eq(jobConfiguration.orgId, artifact.orgId), eq(jobConfiguration.configurationId, artifact.configurationId), eq(jobConfiguration.jobId, jobId)),
+          )
+          .where(eq(artifact.orgId, orgId))
+          .orderBy(asc(artifact.createdAt), asc(artifact.id));
+        return rows.map((r) => r.artifact);
+      },
+    },
+
+    idempotency: {
+      /**
+       * Claims `key` for this request inside the caller's transaction. Returns null when the key
+       * is new (the caller does the work, then `complete`s it), or the stored record when it was
+       * used before. A concurrent request with the same key waits on the row lock until the first
+       * commits (and then sees its record) or rolls back (and then claims it itself).
+       */
+      async claim(ctx: OrgContext, key: string, requestHash: string): Promise<IdempotencyRecord | null> {
+        const orgId = requireOrg(ctx);
+        const inserted = await db.insert(idempotencyKey).values({ orgId, key, requestHash, statusCode: 0 }).onConflictDoNothing().returning();
+        if (inserted.length) return null;
+        const [row] = await db
           .select()
-          .from(configuration)
-          .where(and(eq(configuration.orgId, orgId), eq(configuration.jobId, jobId)))
-          .orderBy(asc(configuration.createdAt), asc(configuration.id));
+          .from(idempotencyKey)
+          .where(and(eq(idempotencyKey.orgId, orgId), eq(idempotencyKey.key, key)));
+        return row!;
+      },
+      async complete(ctx: OrgContext, key: string, statusCode: number, response: unknown): Promise<void> {
+        const orgId = requireOrg(ctx);
+        await db
+          .update(idempotencyKey)
+          .set({ statusCode, response })
+          .where(and(eq(idempotencyKey.orgId, orgId), eq(idempotencyKey.key, key)));
       },
     },
 
@@ -179,6 +313,15 @@ export function createRepository(db: Executor) {
               .returning(),
           );
         });
+      },
+      /** The newest event id a stream for `jobId` would send (0 when none): a snapshot's resume point. */
+      async lastIdForStream(ctx: OrgContext, jobId: string): Promise<number> {
+        const orgId = requireOrg(ctx);
+        const [row] = await db
+          .select({ id: max(event.id) })
+          .from(event)
+          .where(and(eq(event.orgId, orgId), or(eq(event.jobId, jobId), isNull(event.jobId))));
+        return Number(row?.id ?? 0);
       },
       /** A job's events after `afterId`, oldest first (SSE catch-up). */
       async listAfter(ctx: OrgContext, jobId: string, afterId = 0, limit = 500): Promise<CrateEvent[]> {

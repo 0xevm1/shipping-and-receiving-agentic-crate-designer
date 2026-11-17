@@ -291,8 +291,9 @@ tab at a time.
   the last-opened crate are saved in the browser's `localStorage` (and the last loaded `.glb` in
   IndexedDB), per browser, under versioned keys; bad data is
   skipped with a warning). Designs also move as JSON files (one design, or the whole library)
-  and share links. The shared store is Postgres (#46), being built in slices:
-  [`docs/POSTGRES.md`](docs/POSTGRES.md); spec §9 has the details.
+  and share links. The shared store is Postgres (#46), being built in slices: a part's
+  configurations can be saved to a shared job on the server that every open tab sees
+  ([`docs/API.md`](docs/API.md), [`docs/POSTGRES.md`](docs/POSTGRES.md)); spec §9 has the details.
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
 
@@ -409,13 +410,15 @@ public/            also site.webmanifest and its 192/512 icons (tab icons: src/a
 e2e/               Playwright end-to-end UI tests (bun run e2e)
 db/migrations/     SQL migrations written by drizzle-kit (bun run db:generate)
 infra/             blob emulator bucket setup (CORS) for docker-compose.yml
-docs/              SPECIFICATION.md, POSTGRES.md, BLOB_STORAGE.md, design-handoff/
+docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, design-handoff/
 ```
 
 ## Docs
 
 - [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md): the full spec covering the data model,
   algorithms, construction rules, invariants, decisions and roadmap.
+- [`docs/API.md`](docs/API.md): the `/api/v1` HTTP API: parts, design jobs, server-verified
+  configuration saves, error codes, idempotency and the events each write emits.
 - [`docs/POSTGRES.md`](docs/POSTGRES.md): the Postgres data store: tables, org scoping,
   scripts, environment and ports.
 - [`docs/BLOB_STORAGE.md`](docs/BLOB_STORAGE.md): GLBs and generated files in S3-compatible

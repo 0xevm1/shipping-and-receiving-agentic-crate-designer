@@ -49,7 +49,7 @@ export const CreatePartFieldsSchema = z.object({
 });
 export type CreatePartFields = z.infer<typeof CreatePartFieldsSchema>;
 
-const PartResponseSchema = z.object({
+export const PartResponseSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   material: z.string().nullable(),
@@ -59,6 +59,8 @@ const PartResponseSchema = z.object({
   sizeMm: Vec3Schema,
   modelSha256: z.string().nullable(),
   source: z.enum(["catalog", "upload"]),
+  /** The catalog entry a `catalog` part was registered from; null for uploads. */
+  catalogId: z.string().nullable().optional(),
   createdAt: z.iso.datetime({ offset: true }),
 });
 export type PartResponse = z.infer<typeof PartResponseSchema>;
@@ -84,7 +86,23 @@ export const ModelUrlResponseSchema = z.object({
 });
 export type ModelUrlResponse = z.infer<typeof ModelUrlResponseSchema>;
 
-const API_ERROR_CODES = ["invalid_request", "unsupported_file", "invalid_glb", "too_large", "not_found", "internal"] as const;
+const API_ERROR_CODES = [
+  "invalid_request",
+  "unsupported_file",
+  "invalid_glb",
+  "too_large",
+  "not_found",
+  "internal",
+  // Jobs and configurations (src/lib/api/jobs.ts, docs/API.md):
+  /** 409: the save was made by another engine; the client reloads to get the server's. */
+  "engine_version_mismatch",
+  /** 422: the server recomputed the configuration and got a different inputHash or result. */
+  "result_mismatch",
+  /** 409: the job changed since the client read it; the body carries the current job. */
+  "version_conflict",
+  /** 422: an Idempotency-Key reused with a different request. */
+  "idempotency_conflict",
+] as const;
 
 export const ApiErrorSchema = z.object({
   error: z.object({
@@ -96,3 +114,4 @@ export const ApiErrorSchema = z.object({
   }),
 });
 export type ApiError = z.infer<typeof ApiErrorSchema>;
+export type ApiErrorCode = ApiError["error"]["code"];

@@ -25,6 +25,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -61,10 +62,16 @@ export const part = pgTable(
     /** sha256 of the GLB in `part_model`; null for a part with no model. */
     modelSha256: text("model_sha256"),
     source: text("source").$type<PartSource>().notNull(),
+    /** The catalog entry (`src/data/parts.json` id) a `catalog` part was registered from; one row per org and id. */
+    catalogId: text("catalog_id"),
     createdAt: createdAt(),
   },
   (t) => [
     unique("part_org_id_id_key").on(t.orgId, t.id),
+    uniqueIndex("part_org_catalog_id_key")
+      .on(t.orgId, t.catalogId)
+      .where(sql`${t.catalogId} is not null`),
+    index("part_org_model_idx").on(t.orgId, t.modelSha256),
     index("part_org_id_idx").on(t.orgId, t.createdAt),
     foreignKey({
       name: "part_model_fk",
@@ -73,6 +80,7 @@ export const part = pgTable(
     }),
     check("part_source_check", sql`${t.source} in ('catalog', 'upload')`),
     check("part_mass_positive", sql`${t.massKg} > 0`),
+    check("part_catalog_id_check", sql`${t.catalogId} is null or ${t.source} = 'catalog'`),
   ],
 );
 
@@ -108,7 +116,10 @@ export const designJob = pgTable(
     totalQuantity: integer("total_quantity"),
     createdBy: text("created_by"),
     status: text("status").$type<DesignJobStatus>().notNull().default("open"),
-    /** Same org as the job (composite FK below). Configurations are never deleted. */
+    /**
+     * One of this job's configurations: the composite FK below points at `job_configuration`, so
+     * a job can only select a configuration linked to it. Configurations are never deleted.
+     */
     selectedConfigurationId: uuid("selected_configuration_id"),
     notes: text("notes"),
     version: integer("version").notNull().default(1),
@@ -122,8 +133,8 @@ export const designJob = pgTable(
     foreignKey({ name: "design_job_part_fk", columns: [t.orgId, t.partId], foreignColumns: [part.orgId, part.id] }),
     foreignKey({
       name: "design_job_selected_configuration_fk",
-      columns: [t.orgId, t.selectedConfigurationId],
-      foreignColumns: [configuration.orgId, configuration.id],
+      columns: [t.orgId, t.id, t.selectedConfigurationId],
+      foreignColumns: [jobConfiguration.orgId, jobConfiguration.jobId, jobConfiguration.configurationId],
     }),
     check("design_job_status_check", sql`${t.status} in ('open', 'running', 'ready', 'error', 'archived')`),
     check("design_job_total_positive", sql`${t.totalQuantity} is null or ${t.totalQuantity} > 0`),
@@ -135,36 +146,60 @@ export type ConfigurationOrigin = (typeof CONFIGURATION_ORIGINS)[number];
 
 /**
  * A crate configuration, content-addressed by the engine's `inputHash` (unique per org). Rows are
- * never updated: saving the same inputs twice finds the existing row.
+ * never updated: saving the same inputs twice finds the existing row. Not owned by a job: two jobs
+ * that reach the same inputs share the row, and `job_configuration` links them (#46 slice 5).
  */
 export const configuration = pgTable(
   "configuration",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: orgId(),
-    jobId: uuid("job_id").notNull(),
     inputHash: text("input_hash").notNull(),
     quantityPerCrate: integer("quantity_per_crate").notNull(),
     layout: text("layout").notNull(),
-    /** Design settings JSON; validated with the domain's Zod schemas on read. */
+    /**
+     * The engine's whole `DesignRequest` (part design fields, settings, standards, layout pick,
+     * ranking), so the server can recompute it; validated with `DesignRequestSchema` on read.
+     */
     settings: jsonb("settings").$type<unknown>().notNull(),
+    /** The engine's `DesignSummary` for those inputs, as the server recomputed it. */
     resultSummary: jsonb("result_summary").$type<unknown>(),
+    /** Crate cost per part in USD (lower is better); null when there is no crate. */
     score: doublePrecision("score"),
-    origin: text("origin").$type<ConfigurationOrigin>().notNull(),
     engineVersion: text("engine_version").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
     unique("configuration_org_id_id_key").on(t.orgId, t.id),
     unique("configuration_org_id_input_hash_key").on(t.orgId, t.inputHash),
-    index("configuration_job_idx").on(t.orgId, t.jobId),
-    foreignKey({
-      name: "configuration_job_fk",
-      columns: [t.orgId, t.jobId],
-      foreignColumns: [designJob.orgId, designJob.id],
-    }),
-    check("configuration_origin_check", sql`${t.origin} in ('precomputed', 'user')`),
     check("configuration_quantity_positive", sql`${t.quantityPerCrate} > 0`),
+  ],
+);
+
+/**
+ * Which configurations a job has, and how each got there (`precomputed` by a sweep, or saved by
+ * a `user`). One row per job and configuration, so saving the same configuration twice is one link.
+ */
+export const jobConfiguration = pgTable(
+  "job_configuration",
+  {
+    orgId: orgId(),
+    jobId: uuid("job_id").notNull(),
+    configurationId: uuid("configuration_id").notNull(),
+    origin: text("origin").$type<ConfigurationOrigin>().notNull(),
+    createdAt: createdAt(),
+  },
+  // Annotated: design_job and job_configuration reference each other.
+  (t): PgTableExtraConfigValue[] => [
+    primaryKey({ name: "job_configuration_pkey", columns: [t.orgId, t.jobId, t.configurationId] }),
+    index("job_configuration_job_idx").on(t.orgId, t.jobId, t.createdAt),
+    foreignKey({ name: "job_configuration_job_fk", columns: [t.orgId, t.jobId], foreignColumns: [designJob.orgId, designJob.id] }),
+    foreignKey({
+      name: "job_configuration_configuration_fk",
+      columns: [t.orgId, t.configurationId],
+      foreignColumns: [configuration.orgId, configuration.id],
+    }),
+    check("job_configuration_origin_check", sql`${t.origin} in ('precomputed', 'user')`),
   ],
 );
 

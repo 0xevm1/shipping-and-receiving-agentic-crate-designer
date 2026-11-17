@@ -247,6 +247,12 @@ and `massAssumed` from `designedFrom`, so a spec that waits on them waits for th
 PDF, ZIP and GLB code is loaded only then, and nothing goes to a server. The same call in Node
 takes `bytesModelReader(glbBytes)`.
 
+**On the server.** A configuration saved from the browser (`POST /api/v1/jobs/:id/configs`,
+`docs/API.md`) is not trusted: the server runs `designShipment` on the same request and stores it
+only if its `engineVersion`, `inputHash` and summary (as canonical JSON) are the browser's
+(`src/server/jobs/verify.ts`). Another engine version is `409` and the tab is asked to reload;
+any other difference is `422`. Parity is what makes an honest save always match.
+
 **Parity.** `parity.node.test.ts` (Node) and `parity.jsdom.test.ts` (jsdom) run the three sample
 parts at each suggested quantity and compare against one committed baseline,
 `src/engine/__snapshots__/parity.json`: the summary (outside size, gross, tare, screws, cost),
@@ -376,6 +382,12 @@ bump `ENGINE_REVISION`.
 | `src/lib/fileNames.ts` | File names of the cut list CSV and the design file |
 | `src/lib/events.ts` | Live event types (#46 §3), shared by server and browser: `CRATE_EVENT_TYPES`, payload schemas (`parseEventPayload`, 4 KB cap), the NOTIFY payload and the SSE message (`JobEventMessageSchema`); `CRATE_EVENTS_CHANNEL` |
 | `src/lib/jobEvents.ts` | `subscribeJobEvents(jobId, onEvent)`: EventSource on `/api/v1/events` that resumes from the last id and delivers each event once |
+| `src/lib/api/jobs.ts` | Zod shapes of `/api/v1/jobs*` (#46 slice 5), shared by the Route Handlers and the browser: create, snapshot, save configuration, patch, the 409 bodies; reference in `docs/API.md` |
+| `src/state/jobApi.ts` | The browser's calls to `/api/v1/parts` and `/api/v1/jobs*`; never throws, and any network error or 5xx is `offline` |
+| `src/state/jobSync.ts` | `useJobSync` and `startJobSync`: the part on screen as a shared job on the server (register or upload the part, open or reuse its job, snapshot, events); `saveConfiguration` (the one save path, for the offline queue to wrap), `selectConfiguration`, `configurationBody` |
+| `src/components/island/SharedJob.tsx` | "Shared job" under Saved designs on the Overview: save to the job, the job's configurations (use, recommend), connection status, the reload prompt (`SharedJob.module.css`) |
+| `src/server/jobs/` | Jobs and configurations logic behind the Route Handlers: `jobs.ts` (create, snapshot, save, patch), `verify.ts` (recompute and compare a saved configuration), `idempotency.ts` (`Idempotency-Key`), `hooks.ts` (`onJobCreated`, for the queue's sweep) |
+| `src/server/auth.ts` | `callerOrg(request)`: the default org until there are accounts; the one place auth plugs in |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
@@ -2451,9 +2463,13 @@ in `db/migrations/`, the first tables (`org`, `part`, `part_model`, `design_job`
 `org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Slice 2
 adds live events: an `event` row written in the same transaction as the change NOTIFYs channel
 `crate_events`, one LISTEN connection per process fans out to `GET /api/v1/events?job=…` (SSE,
-resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Nothing
-in the UI reads or writes it yet: the browser storage above stays the source until the jobs API
-lands. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
+resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Slice 5 adds the
+jobs and configurations API (`docs/API.md`): when a part loads, the app opens (or reuses) a job for
+it on the server and lists the job's saved configurations; **Save to job** posts the crate on
+screen, which the server recomputes with the engine before storing, and other tabs see it through
+the job's events. When the server or database can't be reached nothing is saved there and
+everything else works as before; the browser storage above is still what reopens a crate after a
+reload. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
 through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The
 earlier SQLite WASM plan, `DATA_STORE.md`, was dropped for this.)
 

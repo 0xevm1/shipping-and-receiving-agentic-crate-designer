@@ -7,8 +7,8 @@ Docker; the Next.js app runs on the host and reaches them through environment va
 **Status:** infrastructure, migrations, the first tables and the org-scoped repository (slice 1);
 the blob store's client, part uploads (`POST /api/v1/parts`) and presigned model downloads (slice
 1a, [BLOB_STORAGE.md](BLOB_STORAGE.md)); and the event framework: LISTEN/NOTIFY, the SSE stream and
-the health check (slice 2, see [Events](#events)). Nothing in the UI reads or writes the database
-yet; the jobs API is a later slice of #46.
+the health check (slice 2, see [Events](#events)); and the jobs and configurations API, which the
+UI uses to save configurations to a shared job (slice 5, [API.md](API.md)).
 
 ## Quick start
 
@@ -112,10 +112,11 @@ The schema is `src/server/db/schema.ts`; `db/migrations/` is generated from it.
 | Table | Holds |
 |---|---|
 | `org` | Organisations. The first migration seeds one, `DEFAULT_ORG_ID` (`00000000-0000-4000-8000-000000000001`, slug `default`) |
-| `part` | Name, material, density, mass (kg), bounding size (3 columns, mm), model sha256, source (`catalog` or `upload`) |
+| `part` | Name, material, density, mass (kg), bounding size (3 columns, mm), model sha256, source (`catalog` or `upload`), and for catalog parts the `catalog_id` (unique per org, so a catalog part is registered once) |
 | `part_model` | GLB metadata by content hash: sha256, size, object key, how it was validated. Keyed `(org_id, sha256)`. The bytes live in blob storage, never in Postgres |
 | `design_job` | One per part being crated: part, optional total quantity, created by, status (`open`, `running`, `ready`, `error`, `archived`), selected configuration, notes, and a `version` for optimistic concurrency |
-| `configuration` | Content-addressed by the engine's `input_hash`, **unique per `(org_id, input_hash)`**: job, quantity per crate, layout, settings JSON (validated with the Zod schemas on read), result summary, score, origin (`precomputed` or `user`), engine version. Never updated |
+| `configuration` | Content-addressed by the engine's `input_hash`, **unique per `(org_id, input_hash)`**: quantity per crate, layout, the whole `DesignRequest` as `settings` JSON (validated with `DesignRequestSchema` on read), result summary, score (crate cost per part, USD), engine version. Never updated. Not owned by a job: jobs that reach the same inputs share the row |
+| `job_configuration` | Which configurations a job has: `(org_id, job_id, configuration_id)` and how it got there, `origin` (`precomputed` by a sweep, or saved by a `user`). A job's `selected_configuration_id` references this table, so a job can only select one of its own |
 | `artifact` | A generated file for a configuration: kind (`glb`, `pdf`, `csv`, `zip`), sha256, size, object key, built by (`browser` or `server`). One per `(configuration, kind)` |
 | `event` | Append-only outbox: `bigserial` id (the SSE replay cursor), job, type, small payload |
 | `shop_standard` | Rates and limits (#19) as JSON, versioned per org |
@@ -131,7 +132,7 @@ default org, but the scoping is built in from the first migration:
 
 - **`org_id` on every root table.** Child rows reference their parent through a composite
   `(org_id, parent_id)` foreign key, so a job can't point at another org's part, nor a
-  configuration at another org's job.
+  job_configuration link at another org's job or configuration.
 - **Content-addressed keys are per org.** `part_model (org_id, sha256)` and
   `configuration (org_id, input_hash)`; nothing is looked up by hash alone.
 - **No query without an `OrgContext`.** Application code reaches the database only through the
