@@ -95,6 +95,15 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Blob and database credentials stay on the server (#46): the built client bundles must not
+      # contain the emulator's secret (the server code's default) or the variables' names.
+      - name: No credentials in client bundles
+        run: |
+          if grep -rl -e crate-dev-secret -e BLOB_SECRET_ACCESS_KEY -e BLOB_ACCESS_KEY_ID -e 'crate:crate@' .next/static; then
+            echo "::error::A client bundle contains a server credential."
+            exit 1
+          fi
+
   # Postgres integration tests (#46). Starts Postgres and the blob emulator from the same
   # docker-compose.yml developers use (not a `services:` block), so CI and local can't drift.
   integration:
