@@ -26,7 +26,7 @@ test.describe("app icons", () => {
     const svg = await (await request.get("/icon.svg")).text();
     expect(svg).toContain('viewBox="0 0 64 64"');
     expect(svg).toContain("#d9a938");
-    expect(svg).toContain("#0c2548");
+    expect(svg).toContain("White gear with blue and gold crate");
   });
 
   test("the manifest names the app and its icons resolve", async ({ request }) => {
