@@ -3,9 +3,9 @@ import { downloadBytes } from "@/lib/download";
 import { useDesigner } from "./store";
 
 /** The busy state shows at least this long, so a fast export still registers (not with reduced motion). */
-const MIN_BUSY_MS = 1500;
+export const MIN_BUSY_MS = 1500;
 /** How long "Downloaded …" stays up. */
-const DONE_NOTE_MS = 8000;
+export const DONE_NOTE_MS = 8000;
 /** A failure stays up longer, since it asks the person to do something. */
 export const ERROR_NOTE_MS = 15000;
 
