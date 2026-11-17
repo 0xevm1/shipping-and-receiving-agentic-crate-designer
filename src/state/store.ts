@@ -194,7 +194,10 @@ export interface DesignerState {
   setRanking: (ranking: Ranking) => void;
   /** Starts the time-to-design clock if it isn't running (called once after mount). */
   startDesignClock: (now?: number) => void;
-  /** Records the first export or download since the part was loaded. Later exports don't move it. */
+  /**
+   * Records the time from the clock start to the first export or download of the design on screen.
+   * Later exports don't move it; an edit clears it, and the next export records the new time.
+   */
   markExported: (now?: number) => void;
 }
 
@@ -280,6 +283,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
   const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
     const next = { ...get(), ...patch };
     const { plan, crateIndex, result } = replan(next);
+    // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
+    const staleClock = get().designedInMs !== null && !("designedInMs" in patch);
     const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
     set({
       ...patch,
@@ -287,6 +292,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       crateIndex,
       result,
       ...(source ? change(source, get().result, result) : { lastChange: null }),
+      ...(staleClock ? { designedInMs: null } : {}),
       hover: null,
       ...dropStaleLines({ pin: next.pin, hover: null }, result),
       ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
