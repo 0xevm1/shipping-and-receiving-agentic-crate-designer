@@ -202,6 +202,12 @@ tab at a time.
 2. **Set the quantity and packing rules** in the **Rules** tab: quantity, keep upright, most
    layers, gap between parts, clearance to walls, and plywood thickness (or Auto). Under the
    quantity, **Best: N per crate** says why that quantity wins, with **Use** to go back to it.
+   - **Ship a total.** Under **Shared job** on the Overview, **Parts to ship** takes how many
+     parts ship in all and splits them evenly over the cheapest number of crates: "40 parts →
+     2 crates × 20, $20.51 per part", why that many crates (one fewer fails the 1,000 kg limit,
+     one more costs more per part), **Use** per crate type and its files from the server. It is
+     planned in the browser at once (offline too) and by the server for the shared job; the
+     Overview's shipment shows the same split.
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one

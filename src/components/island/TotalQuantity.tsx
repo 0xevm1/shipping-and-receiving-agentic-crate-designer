@@ -44,11 +44,7 @@ export function TotalQuantity() {
     const r = updateJob({ totalQuantity: next });
     if (r.kind === "queued")
       setMessage(
-        next === null
-          ? "Total cleared."
-          : status === "live"
-            ? `Planning ${next} parts…`
-            : `Planning ${next} parts here; the total syncs when the server is back.`,
+        next === null ? "Total cleared." : status === "live" ? "Total saved to the job." : "Total kept on this device; it syncs when the server is back.",
       );
     else if (r.kind === "unavailable") setMessage(r.message);
   };
@@ -77,7 +73,13 @@ export function TotalQuantity() {
                 <span>
                   Crate {c.label}: <b>{c.count}</b> × {c.quantity} parts
                 </span>
-                <button type="button" className="linkbtn" disabled={onScreen} aria-label={`Use crate ${c.label}, ${c.quantity} parts`} onClick={() => use(c)}>
+                <button
+                  type="button"
+                  className="linkbtn"
+                  disabled={onScreen}
+                  aria-label={onScreen ? `Crate ${c.label} is on screen` : `Use crate ${c.label}, ${c.quantity} parts`}
+                  onClick={() => use(c)}
+                >
                   {onScreen ? "On screen" : "Use"}
                 </button>
                 {saved && status === "live" && <SavedConfigFiles jobId={job.id} config={saved} />}
@@ -90,7 +92,7 @@ export function TotalQuantity() {
   );
 
   return (
-    <div className={styles.root} data-testid="total-quantity">
+    <div className={styles.root} data-testid="total-quantity" data-job-id={job.id}>
       <label className={styles.field}>
         <span>Parts to ship</span>
         <input

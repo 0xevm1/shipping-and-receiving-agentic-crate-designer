@@ -347,6 +347,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
 | `src/domain/sweep.ts` | Choosing the best quantity (#46, §7.16): `sweepQuantities()` (the curve over 1–200 per crate, hard checks first, cost per part, the recommendation and shortlist), `planTotal()` and `evenSplit()` (total-quantity mode), `FreightRatesSchema` / `freightCostUsd()` (caller-supplied rates) |
+| `src/domain/totalPlan.ts` | `explainTotalPlan()`: why a total ships as so many crates (§7.16), from the curve; `splitOutcome()`, `planText()` |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file, the library, the shop standards file and the last-design entry |
@@ -415,6 +416,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
 | `src/state/bestQuantity.ts` | `startSweeps`: the page's one quantity sweeper (§7.16) for the part and rules on screen, in the engine worker (a new part at once, a rule change 250 ms after the last), handing each current result to the store's `applyRecommendation` (recommended on load); `useSweep`, its small store; `useBestQuantity` for the hint |
 | `src/components/island/BestQuantity.tsx` | The best-quantity hint and its **Use** action on the Rules tab (§7.16) |
+| `src/state/totalPlan.ts` | `useTotalPlan` / `totalPlanView`: the shared job's total and its plan, this browser's (`planTotal` over the worker's sweep) and the server's, shown once when they agree (§7.16) |
+| `src/components/island/TotalQuantity.tsx`, `TotalShipment.tsx` | **Parts to ship** in the Shared job section, and the Overview's shipment for a total (§7.10, §7.16) |
 | `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange`; designs through the engine client, `designedFrom` (§5.1) |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
 | `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
@@ -1366,6 +1369,14 @@ cut lists for the whole shipment (each type's quantities × its count; equal pie
 case (a tiny part with only a part-count limit, where about 100 candidate k tie on crate count)
 takes about 150 ms. The tests fail above 200 ms and 500 ms.
 
+**With a total quantity (§7.16).** `planShipment` answers "how do the parts on screen ship", the
+batch of `settings.quantity`; a shared job's total quantity answers "how do N parts ship", by
+`planTotal`. When the job has a total, the Overview's **Shipment** block shows the total's plan
+(the same split, cost per part and rationale as the shared job's **Parts to ship**), not the
+batch's, so the page never shows two splits; the crate on screen is then one crate, and a batch on
+screen that is itself over a per-crate limit is named only as what is on screen ("The 80 parts on
+screen are over one crate's limits, so they show as …"). Without a total the block is as above.
+
 **In the store:** `plan`, `crateIndex` (the crate type on screen) and `result`, which is always
 `plan.crates[crateIndex].result`, so the 3D view, Layouts, Cut list and Checks follow the
 selected type unchanged. `setCrateIndex(i)` switches type (clears the pin and hover, re-frames,
@@ -1844,6 +1855,28 @@ per part wins (crate types' costs × counts, plus freight with rates, ÷ N); tie
 (each `c` has one split, so density never breaks a tie here). Null when no split passes (one part
 alone fails a hard check). `planShipment` (§7.10) plans the quantity on screen by the largest
 crate that fits; `planTotal` plans a total by cost.
+
+**Why this many crates (`explainTotalPlan(sweep, N, plan?)`, `src/domain/totalPlan.ts`).** One to
+three sentences from the curve, kept apart from the per-crate rationale: the plan and its cost per
+part, then its neighbours, **one crate fewer** and **one crate more**, each either failing a hard
+check (with the failing size's own check text, or "would need more than the 200 parts a crate the
+sweep tries") or costing more per part ("would cost the same per part; fewer crates win a tie"
+when it ties to the cent). E.g. PART-001 × 40: "40 parts ship as 2 crates × 20 at $20.51 a part in
+crate cost. 1 crate of 40 would fail a hard check: Gross 1,159 kg is over the 1,000 kg per-crate
+limit. 3 crates (1 × 14 + 2 × 13) would cost $25.89 a part." Without a plan it says why (the
+design problem, or one part alone failing). A `Message`, so it renders in either unit system; the
+headless answer carries it as `total.rationale` (metric text) and `total.rationaleMessage`.
+
+**Total quantity in the app.** The shared job's `totalQuantity` (**Parts to ship**, 1–10,000 in
+the field) is planned twice by the same engine: in the browser at once, `planTotal` over the sweep
+the engine worker keeps for the rules on screen (`useTotalPlan`, `src/state/totalPlan.ts`; works
+offline), and by the server's sweep job, stored on the job as the shared record (§9,
+[API.md](API.md#total-quantity-spec-716)). With the same rules and standards they are the same
+plan and one card shows it ("This browser and the server agree", with the server's configurations
+for files); they differ only when the rules or standards on screen differ from the server's
+(default rules, the org's standards), and then the server's plan is shown under the browser's,
+labelled. A server plan for another total or engine version is never shown. **Use** on a crate
+type puts it on screen (its saved configuration, else its quantity and layout).
 
 **The sweep and the shipment plan agree.** A quantity and layout from the sweep (the
 recommendation or any shortlist entry) given to `planShipment` as the quantity and `layoutKey`
@@ -2610,6 +2643,15 @@ everything but sharing works as before.
   recomputes before storing (§5.1), and other tabs see it through the job's events. A new job also
   queues a server-side sweep ([QUEUE.md](QUEUE.md)) that saves the shortlist as `precomputed`
   configurations.
+- **Total quantity** (§7.16, [API.md](API.md#total-quantity-spec-716)): the job's
+  `total_quantity` and its plan, `design_job.total_plan` (JSON stamped with the engine version, the
+  sweep's `inputHash` and the total; each crate type names its `precomputed` configuration). The
+  sweep job writes it, only while the job's total is the one it planned and without bumping the
+  job's `version`; a new total clears it and queues the sweep (deduplicated per job and total); the
+  first start of a new engine re-plans every stale one. `GET /jobs/:id` serves it only when its
+  total and engine version are current. In the browser the total changes local first like any job
+  change (`updateJob({ totalQuantity })`, the pending queue), the server's plan is kept in the job
+  cache with the job, and `effectiveJob` lays an unsynced total over the job's.
 
 **Offline saves (#46 slice 7a).** Saves to the shared job are local first: each is written to
 `localStorage` under `crate-designer.pending-changes.v1` (`src/state/pendingChanges.ts`, behind a

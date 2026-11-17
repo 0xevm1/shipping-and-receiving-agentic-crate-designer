@@ -109,7 +109,8 @@ the queue row commits with the job. A queue worker (`bun run worker`, [QUEUE.md]
 runs it on worker threads, saves the shortlist as `precomputed` configurations, sets the job to
 `ready` with the recommendation selected (unless a selection was already made; this bumps the
 job's `version`), and emits `configs.ready`. With no worker running the sweep stays queued; the
-browser still runs its own sweep for the Rules hint (spec §7.16).
+browser still runs its own sweep for the Rules hint (spec §7.16). With a `totalQuantity` the same
+sweep also plans the total (see "Total quantity" below).
 
 ### `GET /api/v1/jobs/:id`
 
@@ -121,6 +122,7 @@ The job's snapshot, for first load and reconnects (`JobSnapshotSchema`):
 | `part` | The part (`PartResponseSchema`), with `catalogId` for catalog parts |
 | `configurations` | Every configuration linked to the job, oldest first: `{ id, inputHash, engineVersion, quantityPerCrate, layout, score, origin, summary, design, createdAt, addedAt }`. `summary` is the engine's `DesignSummary`; `design` is what to put back on screen (`settings`, `layoutKey`, `ranking`); `score` is crate cost per part in USD; `origin` is `user` or `precomputed` |
 | `artifacts` | Generated files of those configurations (`{ id, configurationId, kind, sha256, sizeBytes, builtBy, createdAt }`) |
+| `totalPlan` | How the job's `totalQuantity` ships (`TotalPlanSchema`, see "Total quantity" below), or null: no total, or not planned yet for this total and engine |
 | `lastEventId` | The newest event id this job's stream would send |
 | `engineVersion` | The server's `ENGINE_VERSION`; a client running another one should reload before saving |
 
@@ -183,6 +185,52 @@ there. The job row is locked, then:
   selection's foreign key points at `job_configuration`);
 - otherwise the job is updated, `version` goes up by one, and `200 { job }` comes back. When the
   selection changed, `recommendation.changed` is emitted with the new `configurationId`.
+- a **new** `totalQuantity` (a number other than the job's) clears the stored plan in the same
+  update and queues the sweep in the same transaction (an `onTotalPlanNeeded` hook); `null` clears
+  the total and its plan and queues nothing; the same total again changes nothing. The plan
+  arrives with `configs.ready`.
+
+### Total quantity (spec §7.16)
+
+A job's `totalQuantity` is how many parts ship in all. The queue's sweep job plans it with
+`planTotal` (the even split: crate sizes differ by at most one, the lowest cost per part wins, ties
+go to fewer crates) over the same sweep that makes the shortlist, with the job's org standards and
+the default packing rules, and:
+
+1. saves every crate type of the plan as a `precomputed` configuration of the job (the shortlist
+   usually has them already), so each has its files (`/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`)
+   and can be put on screen;
+2. stores the plan on the job (`design_job.total_plan`) **only if the job's total is still the one
+   it planned** (a total changed meanwhile has its own sweep queued), without bumping the job's
+   `version` (it is derived data, so no client's pending change conflicts with it);
+3. emits `configs.ready` with a `totalPlan` hint.
+
+`totalPlan` in the snapshot (`TotalPlanSchema`):
+
+```json
+{
+  "total": 40, "engineVersion": "0.1.0+engine.3", "inputHash": "4be1…", "basis": "crate-only",
+  "computedAt": "2026-11-17T09:00:00.000Z",
+  "plan": {
+    "crates": 2, "perCrate": 20, "crateCostUsd": 820.4, "freightUsd": null, "scoreUsdPerPart": 20.51,
+    "types": [{ "label": "A", "count": 2, "quantity": 20, "layoutKey": "2x5x2-…", "configurationId": "c1d2…" }]
+  },
+  "rationale": ["40 parts ship as 2 crates × 20 at $20.51 a part in crate cost. 1 crate of 40 would fail a hard check: Gross ", { "kind": "mass", "kg": 1159 }, " is over …"]
+}
+```
+
+`plan` is null when no even split passes (one part alone fails a hard check); `rationale`
+(`explainTotalPlan`) is a typed message (`MessageSchema`: text and `{ kind: "length", mm }` /
+`{ kind: "mass", kg }` parts) to render in the client's units. **Stale plans are never served:**
+the snapshot carries `totalPlan` only when its `total` is the job's `totalQuantity` and its
+`engineVersion` is the server's; otherwise `null` ("still planning"). The first server to start on
+a new engine version queues the sweep for every job whose plan is missing or from another engine
+(`replanTotals`, alongside `engine.updated`). Sweeps are deduplicated per job **and total**
+(`sweepDedupeKey`: `<jobId>` without a total, `<jobId>:total:<n>` with one).
+
+The browser plans the same total itself, at once and offline (`planTotal` over the sweep its engine
+worker keeps for the rules on screen); the same engine with the same rules and standards gives the
+same plan, so the UI shows one. See "In the UI".
 
 ### Shop standards
 
@@ -288,6 +336,15 @@ server needed, from the list as last seen); the Export pill's **Download all** b
 on screen plus the job's saved configurations when there are any (`defaultConfigs`), else the
 sweep's shortlist as before.
 
+**Parts to ship** (`TotalQuantity.tsx`, in the Shared job section): the job's total, changed local
+first through the pending-change queue (`updateJob({ totalQuantity })`, so it works offline and a
+replay applies once), and its plan: "40 parts → 2 crates × 20, $20.51 per part", why that many
+crates, and per crate type **Use** (its saved configuration, or its quantity and layout) and the
+server's files. The plan is this browser's (`useTotalPlan`, `src/state/totalPlan.ts`); when the
+server's stored plan is the same it is one card ("This browser and the server agree") with the
+server's configurations; when they differ (other rules or standards on screen) the server's is
+shown below it, labelled. The Overview's shipment then shows the same plan (§7.10, §7.16).
+
 ## Events
 
 Writes emit events in the same transaction, as its last statements (POSTGRES.md "Writing"):
@@ -298,7 +355,7 @@ Writes emit events in the same transaction, as its last statements (POSTGRES.md 
 | `POST /jobs` creating a job | `job.created` | the job | `partId` |
 | `POST /jobs/:id/configs` adding a configuration to the job | `config.added` | the job | `configurationId`, `inputHash` |
 | `PATCH /jobs/:id` moving the selection | `recommendation.changed` | the job | `configurationId` (null when cleared) |
-| The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash` |
+| The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash`, `totalPlan` (`{ total, crates, perCrate, scoreUsdPerPart }` when it stored a plan for the job's total, else null; the plan itself is in the snapshot) |
 | The queue, when a sweep is dead-lettered | `job.error` | the job | `message` (generic; the cause is in `queue_job.last_error`) |
 | A server-built file or bundle stored (first request, or the queue's bundle job) | `artifact.ready` | the job | `artifactId`, `configurationId` (a bundle's first), `kind` (`glb`, `pdf`, `csv`, `zip`), plus `file` or `bundleId` |
 | The first server to start on a new engine version, once per org ([POSTGRES.md](POSTGRES.md#engine-updates)); an old tab also learns from the `409` on its next save | `engine.updated` | none (org-wide) | `engineVersion` |
@@ -401,6 +458,16 @@ once, and a recommendation replayed after a lost response are each applied once.
 conflict and engine-version flows, the cache and the liveness backoff with fake timers.
 `src/server/jobs/verify.test.ts`, `src/state/jobApi.test.ts` and `src/state/jobSync.test.ts` are
 unit tests.
+
+`src/app/api/v1/jobs/totalPlan.integration.test.ts` covers total quantity: a job opened with a
+total queues its sweep under the job and total; the sweep stores the plan (the same as the
+browser's `planTotal`), links each crate type's configuration and puts the hint on `configs.ready`;
+a plan crate's files build; a PATCH to a new total drops the old plan at once, re-runs the sweep and
+serves the new one; the same total queues nothing; a late sweep for an old total stores nothing; a
+plan from another engine is not served and `replanTotals` re-plans it; a total change replayed
+with its `Idempotency-Key` applies once with one sweep; clearing the total clears the plan.
+`src/server/jobs/totalPlan.test.ts`, `src/state/totalPlan.test.ts` and `src/domain/totalPlan.test.ts`
+are the unit tests.
 
 `src/app/api/v1/jobs/artifacts.integration.test.ts` covers the artifact and bundle routes: built
 on the first request and then served from storage (one object, one row, one `artifact.ready`),
