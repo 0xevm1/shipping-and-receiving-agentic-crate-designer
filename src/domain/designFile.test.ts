@@ -14,6 +14,8 @@ import {
   type DesignFilePart,
 } from "./designFile";
 import type { CrateSettings } from "./schema";
+import { planShipment } from "./shipment";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
 
 const SAVED_AT = "2026-11-16T12:00:00.000Z";
 
@@ -215,5 +217,56 @@ describe("restoreDesign", () => {
     expect(restored.notes.join(" ")).toMatch(/gross/i);
     const tampered = { ...file, summary: { ...file.summary, outsideMm: [1000, 652, 497] as [number, number, number] } };
     expect(restoreDesign(tampered, parts[0]).notes.join(" ")).toMatch(/932 × 652 × 497 mm.*1000 × 652 × 497 mm/);
+  });
+});
+
+describe("design file: a split batch (#25)", () => {
+  const p = parts.find((x) => x.id === "PART-001")!;
+  const settings = { ...DEFAULT_SETTINGS, quantity: 200 };
+
+  function saveType(index: number, standards = DEFAULT_STANDARDS) {
+    const plan = planShipment(p, settings, null, standards);
+    const design = plan.crates[index].result.design!;
+    return serializeDesign({ part: catalogFilePart(p.id), settings, layoutKey: design.layout.key, design, plan, savedAt: SAVED_AT });
+  }
+
+  it("writes the crate types only for a split, so single-crate files are unchanged", () => {
+    const json = JSON.parse(saveType(1));
+    const plan = planShipment(p, settings);
+    expect(json.summary.shipment).toEqual(plan.crates.map((c) => ({ count: c.count, quantity: c.quantity })));
+    expect(json.summary.quantity).toBe(plan.crates[1].quantity);
+    const one = planShipment(p, DEFAULT_SETTINGS);
+    const text = serializeDesign({
+      part: catalogFilePart(p.id),
+      settings: DEFAULT_SETTINGS,
+      layoutKey: one.crates[0].result.design!.layout.key,
+      design: one.crates[0].result.design!,
+      plan: one,
+      savedAt: SAVED_AT,
+    });
+    expect(JSON.parse(text).summary.shipment).toBeUndefined();
+    expect(text).toBe(save(catalogFilePart(p.id), DEFAULT_SETTINGS).text);
+  });
+
+  it("re-opens to the same plan, showing the crate type that was saved", () => {
+    for (const index of [0, 1]) {
+      const r = parseDesignFile(saveType(index));
+      if (!r.ok) throw new Error(r.error);
+      const restored = restoreDesign(r.file, p);
+      expect(restored.notes).toEqual([]);
+      expect(restored.crateIndex).toBe(index);
+      const plan = planShipment(p, restored.settings, restored.layoutKey);
+      expect(plan.crates.map((c) => [c.count, c.quantity])).toEqual(r.file.summary.shipment!.map((c) => [c.count, c.quantity]));
+    }
+  });
+
+  it("restores with the shop's standards, and says so when the plan comes out different", () => {
+    const lower = parseStandards(mergeStandards(DEFAULT_STANDARDS, { limits: { perCrate: { maxGrossKg: 500 } } }));
+    if (!lower.ok) throw new Error(lower.error);
+    const r = parseDesignFile(saveType(0, lower.standards));
+    if (!r.ok) throw new Error(r.error);
+    expect(restoreDesign(r.file, p, lower.standards).notes).toEqual([]);
+    const notes = restoreDesign(r.file, p).notes.join(" ");
+    expect(notes).toMatch(/now ships as .*crate A.*\(saved: .*crate A/);
   });
 });

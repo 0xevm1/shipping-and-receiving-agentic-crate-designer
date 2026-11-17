@@ -7,15 +7,18 @@ import { layoutName } from "@/lib/format";
 import { dims, dimsOther, fraction, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
+import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
 export function OverviewTab({ design }: { design: CrateDesign }) {
   const part = useDesigner((s) => s.part);
   const units = useDesigner((s) => s.units);
-  const quantity = useDesigner((s) => s.settings.quantity);
+  const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const auto = useDesigner((s) => s.settings.panelThickness === "auto");
   const setHover = useDesigner((s) => s.setHover);
   const { layout, construction: c } = design;
+  // Parts in the crate on screen: the whole batch, or one crate type's share of a split (#25).
+  const quantity = layout.slots.length;
   const imperial = units === "imperial";
   const count = (kind: string) => design.members.filter((m) => m.kind === kind).length;
   const posts = count("blocking");
@@ -27,8 +30,10 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
 
   return (
     <>
+      <ShipmentSummary />
       <h2>
-        Crate for {quantity} × {part.name.toLowerCase()}
+        {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name.toLowerCase()}
+        {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
       {/* Values an edit changed flash gold for 1.2 s (#39). */}
       <div className="big">

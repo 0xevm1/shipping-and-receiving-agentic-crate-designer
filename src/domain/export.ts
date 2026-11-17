@@ -1,5 +1,6 @@
 import type { Assembly, CrateDesign } from "./crate";
 import type { DesignPart } from "./schema";
+import { describeShipment, shipmentBom, type ShipmentPlan } from "./shipment";
 
 export const ASSEMBLY_NAMES: Record<Assembly, string> = {
   base: "Base",
@@ -23,6 +24,24 @@ export function bomToCsv(part: DesignPart, design: CrateDesign): string {
     [`${ASSEMBLY_NAMES[l.assembly]}: ${l.label}`, l.material, l.stock, l.cutMm.join(" x "), l.qty].map(csvCell).join(","),
   );
   return [...header, ...rows, `Wood screws (approx),fastener,,,${design.screws}`].join("\n") + "\n";
+}
+
+/**
+ * Cut list for every crate of a split batch (#25): each crate type's pieces × its count,
+ * equal pieces merged. Same columns as `bomToCsv`.
+ */
+export function shipmentToCsv(part: DesignPart, plan: ShipmentPlan): string {
+  const all = shipmentBom(plan);
+  const header = [
+    `# Shipment of ${plan.totals.parts} x ${part.id} ${part.name}: ${describeShipment(plan).replace(/×/g, "x")}`,
+    `# Part ${part.material ?? "material not given"}, ${+part.mass_kg.toFixed(2)} kg each`,
+    `# ${plan.totals.crates} crates, gross ${Math.round(plan.totals.grossKg)} kg in all; quantities are for every crate`,
+    "component,material,stock,cut_mm,qty",
+  ];
+  const rows = all.lines.map((l) =>
+    [`${ASSEMBLY_NAMES[l.assembly]}: ${l.label}`, l.material, l.stock, l.cutMm.join(" x "), l.qty].map(csvCell).join(","),
+  );
+  return [...header, ...rows, `Wood screws (approx),fastener,,,${all.screws}`].join("\n") + "\n";
 }
 
 function csvCell(v: string | number): string {

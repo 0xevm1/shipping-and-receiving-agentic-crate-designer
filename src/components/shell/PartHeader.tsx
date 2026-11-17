@@ -66,7 +66,17 @@ export function PartHeader() {
 function Gross() {
   const gross = useDesigner((s) => s.result.design?.grossKg);
   const units = useDesigner((s) => s.units);
+  const crates = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   if (gross === undefined) return null;
+  // A split batch (#25): the shipment, not one crate.
+  if (crates) {
+    return (
+      <>
+        {" "}
+        · <span>{crates.crates} crates,</span> <span>{weight(crates.grossKg, units)} gross in all</span>
+      </>
+    );
+  }
   return (
     <>
       {" "}

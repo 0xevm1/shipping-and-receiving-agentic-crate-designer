@@ -85,7 +85,7 @@ export interface BomLine {
 }
 
 export interface Check {
-  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "cardboard";
+  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "cardboard" | "crate-limit";
   /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
   level: "ok" | "caution" | "info";
   title: string;

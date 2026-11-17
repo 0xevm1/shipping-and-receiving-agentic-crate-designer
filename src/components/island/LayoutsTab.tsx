@@ -7,6 +7,7 @@ import type { Layout } from "@/domain/packing";
 import { describeLayout } from "@/lib/format";
 import { dims, lengthUnit, volume } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { CrateTypePicker } from "./Shipment";
 
 const FIRST_SHOWN = 4;
 
@@ -31,6 +32,7 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
         <Why explanation={explainLayout(layouts, current, standards)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from
         above, then from the side.
       </p>
+      <CrateTypePicker />
       {shown.map((l) => (
         <button
           key={l.key}

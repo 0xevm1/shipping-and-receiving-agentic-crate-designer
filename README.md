@@ -131,6 +131,14 @@ tab at a time.
 9. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
    through **Load a part** or a drop. It restores the part, rules and layout; for a custom
    part, add its `.glb` in the same pick or drop. The format is in spec §6.5.
+10. **Split a big batch across crates** (#25). When one crate would be over the per-crate
+    limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
+    per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
+    most one smaller remainder crate. The plan uses the fewest crates, then the least outside
+    volume, then the most even split. The Overview says "Ships as 6 × crate A (30 each) + 1 ×
+    crate B (20)" with the shipment's gross and volume, and **Crate A / Crate B** switches the
+    crate shown in 3D, Layouts, Cut list and Checks. The Cut list can show **This crate** or
+    the **Whole shipment**. Batches that fit one crate look exactly as before. Spec §7.10.
 
 ### The crate it designs
 
@@ -191,6 +199,9 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Part masses** come from the catalog as given, or from the user for unknown files (as do
   their name and material). They are
   never derived from mesh volume.
+- **Per-crate limits:** at most 1,000 kg gross (the standard base rating) and the 53' dry van
+  door and floor; no part-count limit. None of the sample parts splits at its suggested
+  quantities.
 - **Stability:** a crate counts as "stable" if its outside height is at most 1.5× its narrowest
   base side.
 - **Screw count** is an estimate:

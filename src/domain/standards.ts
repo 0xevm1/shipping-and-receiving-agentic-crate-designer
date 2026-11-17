@@ -88,6 +88,16 @@ export const ShopStandardsSchema = z
       stableHeightRatio: z.number().finite().min(0.5).max(10),
       /** Below this share of the interior filled, say it is mostly air. */
       lowUtilization: z.number().finite().min(0).max(1),
+      /**
+       * Per-crate limits for splitting a batch across crates (#25). A crate must also fit the
+       * trailer door and floor (`trailerMm`), so there is no separate size limit.
+       */
+      perCrate: z.object({
+        /** Most gross weight one crate may have; a heavier batch is split. */
+        maxGrossKg: kg(1, 100000),
+        /** Most parts in one crate; 0 means no limit. */
+        maxParts: z.number().int().min(0).max(200),
+      }),
     }),
     /** Material properties, prices and fastening. */
     rates: z.object({
@@ -166,6 +176,8 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     baseRatingKg: 1000,
     stableHeightRatio: 1.5,
     lowUtilization: 0.25,
+    /** The standard base's 1,000 kg rating; no part-count limit. No sample part splits at its suggested quantities. */
+    perCrate: { maxGrossKg: 1000, maxParts: 0 },
   },
   rates: {
     densityKgM3: { plywood: 600, lumber: 480 },

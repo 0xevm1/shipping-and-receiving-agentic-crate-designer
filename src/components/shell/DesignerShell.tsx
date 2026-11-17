@@ -272,26 +272,29 @@ export function DesignerShell() {
 
 /**
  * Narrow screens: the answer (outside size and gross weight, in amber) while the drawer is
- * closed. Tapping it opens the drawer on Overview. Hidden by CSS above 980 px.
+ * closed. Tapping it opens the drawer on Overview. Hidden by CSS above 980 px. For a batch split
+ * across crates (#25): the size of the crate type on screen, and the whole shipment's gross.
  */
 function Summary({ onOpen }: { onOpen: () => void }) {
   const design = useDesigner((s) => s.result.design);
   const problem = useDesigner((s) => s.result.problem);
   const units = useDesigner((s) => s.units);
+  const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
+  const totals = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   return (
     <button type="button" className="glass summary" onClick={onOpen}>
       {design ? (
         <>
           <span>
-            <span className="summary-lab">Outside</span>
+            <span className="summary-lab">{crateType ? `Crate ${crateType.label} outside` : "Outside"}</span>
             <Flash on={["outside"]} className="summary-val">
               {dims(design.layout.external, units)} {lengthUnit(units)}
             </Flash>
           </span>
           <span>
-            <span className="summary-lab">Gross</span>
+            <span className="summary-lab">{totals ? `Gross, ${totals.crates} crates` : "Gross"}</span>
             <Flash on={["gross"]} className="summary-val">
-              {weight(design.grossKg, units)}
+              {weight(totals ? totals.grossKg : design.grossKg, units)}
             </Flash>
           </span>
         </>
