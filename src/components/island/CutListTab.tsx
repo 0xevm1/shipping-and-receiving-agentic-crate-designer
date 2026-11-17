@@ -10,6 +10,7 @@ import { downloadText } from "@/lib/download";
 import { cutListFileName, designFileName } from "@/lib/fileNames";
 import { cutText, stockText } from "@/lib/format";
 import { PRINT_PATH, printHash } from "@/lib/printLink";
+import { sheetsHint, sheetsTotal } from "@/lib/sheets";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
@@ -162,6 +163,9 @@ export function CutListTab({ design }: { design: CrateDesign }) {
         </div>
         <div>
           <b>{run(totals.lumberM, units)}</b>lumber
+        </div>
+        <div title={sheetsHint(totals.sheets, units)} data-testid="sheets-needed">
+          <b>{sheetsTotal(totals.sheets)}</b>plywood sheets
         </div>
         <div>
           <b>~{totals.screws}</b>wood screws

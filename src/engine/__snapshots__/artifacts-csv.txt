@@ -1,10 +1,10 @@
-==> crate-PART-001-x8.csv 676961ed7d215acff4483d3e72b8ace9f3a14df66b075f20b23f0bde52c7cda4
+==> crate-PART-001-x8.csv 0094166758dd384055bb7b115891bd33fa482e9a5ef05f319c563af236994992
 # Crate for 8 x PART-001 Machined steel bracket
 # Part 4140 steel, 47.4 lb each
 # External 36.9 x 25.9 x 32.4 in, gross 548 lb
 # Layout 2 x 2 x 2, As modeled
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 676961ed7d215acff4483d3e72b8ace9f3a14df66b075f20b23f0bde52c7cda4
+# Engine <engine>, input 0094166758dd384055bb7b115891bd33fa482e9a5ef05f319c563af236994992
 component,material,stock,cut_in,qty
 Base: Floor,plywood,3/4 in,36 15/16 in x 25 7/8 in,1
 Base: Skid,lumber,4x4,36 15/16 in,2
@@ -21,15 +21,17 @@ Inside the crate: Layer separator,plywood,5/8 in,34 1/4 in x 23 1/4 in,1
 Inside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,8
 Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,14 1/8 in,12
 Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 3/16 in,12
+Plywood sheets (approx),plywood,5/8 in,48 1/16 in x 96 1/16 in,2
+Plywood sheets (approx),plywood,3/4 in,48 1/16 in x 96 1/16 in,1
 Wood screws (approx),fastener,,,258
 
-==> crate-PART-002-x4.csv 6fd96c39135bf0a003a922805c2dc4b0950c8b4fb36d6c52c36089390006f463
+==> crate-PART-002-x4.csv 8467cfad412d30d03d12b9190701fa0888497850ac7828fa9a729f4090920854
 # Crate for 4 x PART-002 Long steel shaft
 # Part 4140 steel, 59.52 lb each
 # External 66.6 x 21.9 x 25.4 in, gross 397 lb
 # Layout 1 x 2 x 2, As modeled
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 6fd96c39135bf0a003a922805c2dc4b0950c8b4fb36d6c52c36089390006f463
+# Engine <engine>, input 8467cfad412d30d03d12b9190701fa0888497850ac7828fa9a729f4090920854
 component,material,stock,cut_in,qty
 Base: Floor,plywood,3/4 in,66 5/8 in x 21 7/8 in,1
 Base: Skid,lumber,4x4,66 5/8 in,2
@@ -45,15 +47,17 @@ Lid: Lid cross cleat,lumber,1x4,13 3/8 in,4
 Inside the crate: Cradle,lumber,1 1/2 in x 3 11/16 in from 2x6,19 7/16 in,4
 Inside the crate: Stacking cradle,lumber,1 1/2 in x 5 13/16 in from 2x8,19 7/16 in,4
 Inside the crate: End stop,lumber,1 15/16 in x 3 1/2 in from 4x4,17 15/16 in,4
+Plywood sheets (approx),plywood,1/2 in,48 1/16 in x 96 1/16 in,2
+Plywood sheets (approx),plywood,3/4 in,48 1/16 in x 96 1/16 in,1
 Wood screws (approx),fastener,,,272
 
-==> crate-PART-003-x8.csv 9d9e4c0be7f135af5cc5a37d4a4a92a6eb3fe239211df36726281893f188b720
+==> crate-PART-003-x8.csv 22d237d32212d71f4ff1513c154494b4c20efc7ba6bab0dc9114fdc3c5cbf997
 # Crate for 8 x PART-003 Irregular aluminum housing
 # Part 6061-T6 aluminum, 26.01 lb each
 # External 43.4 x 42.6 x 31.9 in, gross 430 lb
 # Layout 2 x 2 x 2, Turned 90°
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 9d9e4c0be7f135af5cc5a37d4a4a92a6eb3fe239211df36726281893f188b720
+# Engine <engine>, input 22d237d32212d71f4ff1513c154494b4c20efc7ba6bab0dc9114fdc3c5cbf997
 component,material,stock,cut_in,qty
 Base: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1
 Base: Skid,lumber,4x4,43 3/8 in,3
@@ -70,4 +74,6 @@ Inside the crate: Layer separator,plywood,1/2 in,40 15/16 in x 40 3/16 in,1
 Inside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,8
 Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,12
 Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,12
+Plywood sheets (approx),plywood,1/2 in,48 1/16 in x 96 1/16 in,2
+Plywood sheets (approx),plywood,3/4 in,48 1/16 in x 96 1/16 in,1
 Wood screws (approx),fastener,,,308

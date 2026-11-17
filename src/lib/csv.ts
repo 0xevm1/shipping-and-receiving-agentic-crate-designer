@@ -3,6 +3,7 @@ import type { BomLine, CrateDesign } from "@/domain/crate";
 import type { DesignPart } from "@/domain/schema";
 import { describeShipment, shipmentBom, type ShipmentPlan } from "@/domain/shipment";
 import { lumberText, plywoodText } from "./lumber";
+import { sheetRows } from "./sheets";
 import { formatMass } from "./partFields";
 import { dims, fraction, lengthUnit, weight, type Units } from "./units";
 
@@ -44,7 +45,7 @@ export function bomToCsv(part: DesignPart, design: CrateDesign, u: Units): strin
     columns(u),
   ];
   const rows = design.bom.map((l) => csvRow(l, u));
-  return [...header, ...rows, `Wood screws (approx),fastener,,,${design.screws}`].join("\n") + "\n";
+  return [...header, ...rows, ...sheetRows(design.sheets, u), `Wood screws (approx),fastener,,,${design.screws}`].join("\n") + "\n";
 }
 
 /**
@@ -61,7 +62,7 @@ export function shipmentToCsv(part: DesignPart, plan: ShipmentPlan, u: Units): s
     columns(u),
   ];
   const rows = all.lines.map((l) => csvRow(l, u));
-  return [...header, ...rows, `Wood screws (approx),fastener,,,${all.screws}`].join("\n") + "\n";
+  return [...header, ...rows, ...sheetRows(all.sheets, u), `Wood screws (approx),fastener,,,${all.screws}`].join("\n") + "\n";
 }
 
 /**

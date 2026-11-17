@@ -131,12 +131,17 @@ describe("stored data from before persist.ts still loads", () => {
     // Standards added since take their defaults: no per-crate size limit (#108), hand-carry 23 kg (#113).
     expect(loaded.limits.perCrate.maxOutsideMm).toEqual({ length: 0, width: 0, height: 0 });
     expect(loaded.handling.handCarryMaxKg).toBe(23);
+    // ... and the plywood sheet and the longest lumber (#107): 4 × 8 ft sheets, 16 ft lumber.
+    expect(loaded.stock.sheetMm).toEqual({ width: 1220, length: 2440 });
+    expect(loaded.stock.maxLumberLengthMm).toBe(4880);
     // Saving what was loaded writes the stored text back, plus only those fields.
     const store = memoryStorage();
     expect(saveStandards(loaded, store)).toBe(true);
     const stored = JSON.parse(fixture("shop-standards.v1.json"));
     stored.standards.limits.perCrate.maxOutsideMm = { length: 0, width: 0, height: 0 };
     stored.standards.handling.handCarryMaxKg = 23;
+    stored.standards.stock.sheetMm = { width: 1220, length: 2440 };
+    stored.standards.stock.maxLumberLengthMm = 4880;
     expect(JSON.parse(store.data.get(STANDARDS_STORAGE_KEY)!)).toEqual(stored);
   });
 

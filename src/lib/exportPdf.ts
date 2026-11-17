@@ -441,7 +441,9 @@ function buildSheet(w: Writer, doc: PrintableDesign, c: PrintableCrate) {
   }
   w.rule(w.y);
   w.y += 5;
-  w.para(c.build.totals.map((t) => `${t.value} ${t.label.toLowerCase()}`).join("   ·   "), { style: "bold" }, 10);
+  w.para(c.build.totals.map((t) => `${t.value} ${t.label.toLowerCase()}`).join("   ·   "), { style: "bold" }, 2);
+  for (const t of c.build.totals) if (t.note) w.para(`${t.label}: ${pdfSafe(t.note)}`, { size: 7.5, gray: GREY }, 2);
+  w.y += 6;
 
   w.ensure(40);
   w.y += w.h3("Fasteners");

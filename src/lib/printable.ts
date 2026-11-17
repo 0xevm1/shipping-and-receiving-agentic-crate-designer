@@ -34,6 +34,7 @@ import { crateDrawings, type Drawing } from "./drawings";
 import { cutText, describeLayout, documentDate, stockText, usdCents } from "./format";
 import { memberBounds } from "./memberBounds";
 import { LB_PER_KG } from "@/domain/units";
+import { sheetsHint, sheetsTotal } from "./sheets";
 import { area, cut, dims, dimsOther, groupDigits, lengthUnit, run, volume, weight, type Units } from "./units";
 
 /** A labelled value, with an optional second line (the other units, or how it was worked out). */
@@ -373,6 +374,18 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
           "full layer, load the next layer on it, and block it the same way."
         : "Screw a blocking post into the gap on each side of every part, from the floor to the top of the part.";
   out[4].text = "Screw the edge and cross cleats to the lid panel, set the lid on the walls and screw it down around the top.";
+  // Panels bigger than a sheet come in pieces: say where the seams are and what backs them.
+  const seamsOf = (names: string[]) => design.splices.spliced.filter((p) => names.includes(p.name)).reduce((n, p) => n + p.seams, 0);
+  const joined = (n: number, where: string) =>
+    n
+      ? ` The ${where} ${n === 1 ? "has 1 seam" : `have ${n} seams`}: lay the pieces edge to edge and screw a joint cleat across each seam that is not already over a ${where === "floor" ? "joist or skid" : "cross cleat"}.`
+      : "";
+  out[0].text += joined(seamsOf(["Floor"]), "floor");
+  const wallSeams = seamsOf(["Side panel", "End panel"]);
+  if (wallSeams) {
+    out[1].text += ` Wall panels bigger than a sheet are in pieces (${wallSeams} ${wallSeams === 1 ? "seam" : "seams"} in all): join them with their joint cleats, over an upright where one is there, before standing the wall.`;
+  }
+  out[4].text += joined(seamsOf(["Lid"]), "lid");
   return out;
 }
 
@@ -436,6 +449,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       cutList: cutList(design, u),
       totals: [
         { label: "Plywood", value: area(design.plywoodM2, u) },
+        { label: "Plywood sheets", value: sheetsTotal(design.sheets), note: sheetsHint(design.sheets, u) },
         { label: "Lumber", value: run(design.lumberM, u) },
         { label: "Wood screws", value: `~${design.screws}` },
       ],
