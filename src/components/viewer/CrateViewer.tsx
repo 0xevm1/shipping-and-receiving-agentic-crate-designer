@@ -3,13 +3,13 @@
 import { OrbitControls, useProgress } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { lazy, Suspense, useRef } from "react";
-import type { Vec3 } from "@/domain/schema";
 import { useDesigner } from "@/state/store";
 import { CrateModel } from "./CrateModel";
 import { DimensionLines } from "./DimensionLines";
 import { Director, FOV_DEG } from "./Director";
 import { Floor } from "./Floor";
 import { PartInstances } from "./PartInstances";
+import { sceneOrigin } from "./scene";
 
 const MM_TO_M = 0.001;
 const CLICK_SLOP_PX = 5;
@@ -38,10 +38,7 @@ export default function CrateViewer() {
 
   if (!design) return <div className="stage-msg">{problem?.title ?? "No crate to show."}</div>;
 
-  const [L, W] = design.layout.interior;
-  const { floorMm, skid } = design.construction;
-  // Centre the footprint on the origin, with the bottom of the skids on the ground.
-  const origin: Vec3 = [-L / 2, -W / 2, floorMm + skid.tall];
+  const origin = sceneOrigin(design);
   const maxDistance = Math.max(MAX_DISTANCE_M, 4 * Math.max(...design.layout.external) * MM_TO_M);
 
   const clearHover = () => {

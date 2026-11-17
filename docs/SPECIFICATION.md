@@ -608,6 +608,15 @@ open question for the user (see #20).
   that just fits the whole scene (`MODE_ZOOM` in `Director.tsx`): closed 0.68, open 0.8,
   exploded 1.0. Hide panels moves in a further ×0.82. Mode changes re-frame, so idle auto-play
   glides in and out with the modes.
+- **Room for the size labels:** with size labels on, the fit also projects the crate's three
+  label anchors (moved out with the walls) at the goal angle and backs the camera off just
+  enough that each label, taken as about 88 × 28 px, sits inside the free area. This only ever
+  zooms out, so it changes nothing when the labels already fit (the default crate); it keeps
+  a long crate's end labels from landing under the island (#43).
+- **First framing:** OrbitControls registers as the default controls one render after
+  `Director` first frames the crate. `Director` keeps the orbit target it placed and hands it to
+  the controls when they arrive, so the camera orbits the crate's middle from the first frame
+  (#43).
 - **Continuous transitions:** `Director` eases `anim.explode`, `anim.lidAlpha` and
   `anim.frontAlpha` toward the store's targets: rate 10 /s for user changes, 1.5 /s during idle
   auto-play. `CrateModel` writes position and opacity each frame.
@@ -851,7 +860,9 @@ HTML report as `playwright-report`.
     Hide panels keeps the credit; idle auto-play starts after 6 s without input; from the
     exploded view, "Download 3D model (.glb)" saves `crate-PART-001-x4.glb` with the `glTF`
     header, a matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1`
-    … `Part 4`), and with "Include parts" off the file has no `Parts` node.
+    … `Part 4`), and with "Include parts" off the file has no `Parts` node; the first framing
+    aims at the crate's middle; for PART-001 × 4, PART-002 × 1 and × 4 and PART-003 × 8 no
+    size label overlaps the island or leaves the window, in every mode.
   - `07-load-parts` (through the hidden file input, in-memory files): a catalog GLB fills in
     mass and material (PART-002: 1692 × 334 × 411) and has no fields; an unknown GLB gets the
     stand-in tag, caution and Checks badge until name, material and mass are entered (Enter
@@ -868,8 +879,6 @@ HTML report as `playwright-report`.
     +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
     shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
     `09-header-*`.
-- **Known bug, marked `test.fixme`:** the first framing runs before OrbitControls registers,
-  so the orbit target stays at the floor until the first re-frame.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 
