@@ -1873,9 +1873,10 @@ the engine worker keeps for the rules on screen (`useTotalPlan`, `src/state/tota
 offline), and by the server's sweep job, stored on the job as the shared record (§9,
 [API.md](API.md#total-quantity-spec-716)). With the same rules and standards they are the same
 plan and one card shows it ("This browser and the server agree", with the server's configurations
-for files); they differ only when the rules or standards on screen differ from the server's
-(default rules, the org's standards), and then the server's plan is shown under the browser's,
-labelled. A server plan for another total or engine version is never shown. **Use** on a crate
+for files); they differ when the rules or standards on screen differ from the server's (default rules, the
+org's standards) or the part on screen has a measured outline (shaped blocking, §7.5b, changes the
+crate's wood and weight) that the server's part, known by its overall size, lacks; then the
+server's plan is shown under the browser's, labelled. A server plan for another total or engine version is never shown. **Use** on a crate
 type puts it on screen (its saved configuration, else its quantity and layout).
 
 **The sweep and the shipment plan agree.** A quantity and layout from the sweep (the

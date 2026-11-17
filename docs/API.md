@@ -229,8 +229,10 @@ a new engine version queues the sweep for every job whose plan is missing or fro
 (`sweepDedupeKey`: `<jobId>` without a total, `<jobId>:total:<n>` with one).
 
 The browser plans the same total itself, at once and offline (`planTotal` over the sweep its engine
-worker keeps for the rules on screen); the same engine with the same rules and standards gives the
-same plan, so the UI shows one. See "In the UI".
+worker keeps for the rules on screen); the same engine with the same inputs gives the same plan, so
+the UI shows one. The inputs can differ (rules or standards on screen, or the measured outline of a
+loaded model, which the server's part doesn't have); then the UI shows both, labelled. See "In the
+UI".
 
 ### Shop standards
 
@@ -342,8 +344,8 @@ replay applies once), and its plan: "40 parts → 2 crates × 20, $20.51 per par
 crates, and per crate type **Use** (its saved configuration, or its quantity and layout) and the
 server's files. The plan is this browser's (`useTotalPlan`, `src/state/totalPlan.ts`); when the
 server's stored plan is the same it is one card ("This browser and the server agree") with the
-server's configurations; when they differ (other rules or standards on screen) the server's is
-shown below it, labelled. The Overview's shipment then shows the same plan (§7.10, §7.16).
+server's configurations; when they differ (other rules or standards on screen, or the part's
+measured outline, which the server's part doesn't have) the server's is shown below it, labelled. The Overview's shipment then shows the same plan (§7.10, §7.16).
 
 ## Events
 

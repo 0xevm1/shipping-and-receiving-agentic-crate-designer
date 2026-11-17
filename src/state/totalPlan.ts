@@ -17,9 +17,10 @@ import { changesFor, effectiveJob, usePendingChanges } from "./pendingChanges";
  * - **the server's**, the shared record (`GET /jobs/:id` `totalPlan`), over the server's sweep
  *   with the job's standards and the default packing rules.
  *
- * With the same rules and standards they are the same plan, and one is shown (with the server's
- * configuration ids, for its files). They differ only when the rules or standards on screen
- * differ from the server's; then both are shown, each labelled.
+ * With the same inputs they are the same plan, and one is shown (with the server's configuration
+ * ids, for its files). They differ when the rules or standards on screen differ from the
+ * server's, or the part on screen has a measured outline (shaped blocking, spec §7.5b) that the
+ * server's part, known by its overall size, doesn't; then both are shown, each labelled.
  */
 
 /** One crate type of a plan as shown. */
