@@ -249,7 +249,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
 | `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
 | `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
-| `src/components/shell/LoadToast.tsx` | The load message as a glass toast under the part header: a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
+| `src/components/shell/LoadToast.tsx` | The load message as a glass toast by the part header (beside it on desktop, under it on narrow screens): a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (`usePopover`), Hide panels |
@@ -1783,8 +1783,11 @@ open question for the user (see #20).
   foot. Its surface is near-opaque (0.97 / 0.98), as is the drawer's, so the crate's colours don't
   show through the blur. It closes on Escape (focus returns to View), a press outside, or focus
   leaving it; `aria-controls` is set only while it exists.
-- **Load messages (`LoadToast`):** one glass toast under the part header on every layout, never
-  loose text over the floor. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
+- **Load messages (`LoadToast`):** one glass toast by the part header on every layout, never
+  loose text over the floor. On a desktop it sits beside the header, level with the app name
+  (left at the header's right edge + 18 px, width up to 440 px and never under the island), so
+  it can't brush the crate's top-left corner, which it did when it hung under the header (#62);
+  under 981 px it hangs under the header as wide as it. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
   region and goes after 9 s; an error is `role="alert"`, has a gold edge and stays until
   dismissed or the next load. Both have a dismiss button.
 - **Export specs:** only the header's Export pill (§7.13) exports; the View popover has no export

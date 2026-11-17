@@ -16,8 +16,9 @@ import {
 } from "./helpers";
 
 /**
- * The toast under the part header: a note (status) goes by itself, an error (alert) waits to be
- * dismissed; both hang clear of the island, the header and the window edge, on a desktop and a phone.
+ * The load toast: a note (status) goes by itself, an error (alert) waits to be dismissed; both stay clear
+ * of the island, the header and the window edge, on a desktop (beside the app name, above the crate's
+ * band) and a phone (under the header).
  */
 
 const SIZES = [
@@ -26,12 +27,18 @@ const SIZES = [
 ];
 const narrow = (width: number) => width <= 980;
 
-/** The toast hangs under the header: inside the window, clear of the island and below the header. */
+/** Phone: under the header. Desktop: beside it, level with the app name, so it never hangs over the crate. Always inside the window and clear of the island. */
 async function expectToastPlaced(page: Page) {
   const box = await screenBox(loadToast(page));
   const head = await screenBox(header(page));
   const vp = page.viewportSize()!;
-  expect(box.top).toBeGreaterThanOrEqual(head.bottom);
+  if (narrow(vp.width)) expect(box.top).toBeGreaterThanOrEqual(head.bottom);
+  else {
+    expect(box.left).toBeGreaterThanOrEqual(head.right);
+    // Level with the app name and well above the export pill's row, where the crate's top-left corner reaches.
+    expect(box.top).toBeLessThan(head.top + 40);
+    expect(box.bottom).toBeLessThan(head.bottom);
+  }
   expect(box.left).toBeGreaterThanOrEqual(0);
   expect(box.right).toBeLessThanOrEqual(vp.width);
   if (!narrow(vp.width)) expect(box.right).toBeLessThanOrEqual((await screenBox(page.getByRole("complementary"))).left);
