@@ -27,6 +27,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
   const posts = count("blocking");
   const bearers = count("bearer");
   const separators = count("separator");
+  const cradles = count("cradle");
   // Imperial uses shop names (#15): "1/2″" plywood, "1x4" cleats, "4x4" skids.
   const ply = (v: number) => (imperial ? plywoodText(v) : `${v} mm`);
   const section = (a: number, b: number) => (imperial ? sectionText(a, b) : `${a} × ${b}`);
@@ -71,10 +72,16 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           {c.joist && `${c.joist.count} ${section(c.joist.wide, c.joist.tall)} joists and a `}
           <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
         </Step>
-        <Step name="Blocking" value={`${posts} posts`}>
-          {bearers} bearer{bearers === 1 ? "" : "s"} underneath
-          {separators > 0 && `, ${separators} layer separator${separators === 1 ? "" : "s"}`}
-        </Step>
+        {cradles > 0 ? (
+          <Step name="Cradles" value={`${cradles} cradles`}>
+            Notched saddles along each part, {posts} end stop{posts === 1 ? "" : "s"}
+          </Step>
+        ) : (
+          <Step name="Blocking" value={`${posts} posts`}>
+            {bearers} bearer{bearers === 1 ? "" : "s"} underneath
+            {separators > 0 && `, ${separators} layer separator${separators === 1 ? "" : "s"}`}
+          </Step>
+        )}
         <Step name="Gross weight" value={weight(design.grossKg, units)} flash={["gross"]} end>
           empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about $
           {Math.round(design.materialCostUsd)} of wood

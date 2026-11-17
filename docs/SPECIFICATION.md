@@ -148,9 +148,12 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/orientations.ts` | The 6 orientations; `rotatedSize()` |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
+| `src/domain/cradles.ts` | Cradles for slender parts (#6, §7.5a): `isSlender`, `usesCradles`, `cradleStations`, `notchFor`, `addCradleDunnage`, and the notch outline (`cradleProfile`, `cradleSolidAt`) |
+| `src/components/viewer/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
+| `src/domain/handling.ts` | Centre of gravity, fork openings, tine placement and the handling checks (`analyseHandling`, `forkOpenings`, `placeTines`, `handlingChecks`; §7.14, #8). Read-only over the members |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
-| `src/domain/structure.ts` | Structural sizing (§7.14, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
+| `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (an export edge, formatted with `src/lib`), `downloadText()`, `ASSEMBLY_NAMES` |
@@ -202,7 +205,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
 | `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
-| `src/components/viewer/CrateModel.tsx` | One box per `Member`; explode, fades, highlight, ghosting, picking |
+| `src/components/viewer/CrateModel.tsx` | One box per `Member` (a notched solid for cradles, #6); explode, fades, highlight, ghosting, picking |
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
 | `src/components/viewer/DimensionLines.tsx` | Crate and part size lines; positions the DOM labels each frame; drives the photon pulse |
 | `src/components/viewer/dimensionPulse.ts` | Pure size-line geometry (`buildLines`), photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
@@ -211,6 +214,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/Floor.tsx` | Grid and warm light pool |
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
 | `src/components/viewer/scene.ts` | Colours, explode offsets, opacity rules, highlight rules, part material |
+| `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity mark with its drop line, and the fork-entry arrows at both ends (#8, §8.4) |
 | `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook; only in `NEXT_PUBLIC_E2E=1` builds (§10) |
 | `playwright.config.ts`, `e2e/*.spec.ts` | End-to-end UI tests (`bun run e2e`, §10) |
 
@@ -335,6 +339,8 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
     `dimDivisorIn3PerLb`, `densityLbFt3`, `freightClass`) (#17, §7.12)
   - `freightClass`, `densityLbFt3` and `dimWeightLb`: the same freight values at the top level,
     for exports and the build sheet (#26)
+  - `centerOfGravityMm` (crate-interior frame) and `handling` (`Handling`: the CoG offset,
+    height and tip angle, the fork openings and the device fits) (#8, §7.14)
   - `checks[]`
 - **`LayoutExplanation`** (from `explainLayout`, §7.8).
 - **`DesignResult`:** `{ layouts, design, problem }`. `problem` (`DesignProblem`:
@@ -349,8 +355,8 @@ one zod-validated object in `src/domain/standards.ts`, and `computeDesign(part, 
 layoutKey?, standards = DEFAULT_STANDARDS)` passes it down to `resolveConstruction`,
 `enumerateLayouts`, `designCrate`, the dunnage, the screw estimate and the checks. Nothing in
 the domain reads a rule from a module constant. **With `DEFAULT_STANDARDS`, every design is
-exactly what it was before** (the 18-case baseline in §10 is unchanged, including after the
-structural sizing of #7, §7.14).
+exactly what it was before** (the 18-case baseline in §10 was unchanged by #19; #6's cradles
+later re-captured the PART-002 rows on purpose; #7's structural sizing left it unchanged, §7.15).
 
 Units are fixed per field (mm, kg, kg/m³, USD/m³, USD per 100 screws, minutes, USD/h, in³/lb),
 whatever the display units.
@@ -359,19 +365,19 @@ whatever the display units.
 |---|---|---|
 | **`stock`** — what the shop keeps on hand | | |
 | `cleatMm {thick, wide}` | 19 × 89 (1×4) | Wall and lid frames; wall allowance; minimum interior = 2 × `wide` (§7.2) |
-| `skidMm.standard {wide, tall}` | 89 × 89 (4×4) | Skids: structural sizing tries it first (§7.14) |
+| `skidMm.standard {wide, tall}` | 89 × 89 (4×4) | Skids: structural sizing tries it first (§7.15) |
 | `skidMm.heavy {wide, tall}` | 89 × 140 (4×6) | Skids when the standard section fails, and always above `construction.heavySkidOverKg` |
 | `floorPlywoodMm` | 19 | The floor |
 | `panelPlywoodMm {light, medium, heavy}` | 12 / 15 / 19 | Auto wall, lid and separator plywood (§7.3) |
 | `blockWidthMm` | 89 | Blocking posts and bearers (§7.5) |
-| `joistMm {thick, wide}` | 38 × 89 (2×4) | Floor joists on edge across the skids, and lid joists when crates are stacked (§7.14, #7) |
+| `joistMm {thick, wide}` | 38 × 89 (2×4) | Floor joists on edge across the skids, and lid joists when crates are stacked (§7.15, #7) |
 | **`defaults`** — what a new crate starts with | | |
 | `partGapMm`, `wallClearanceMm`, `maxLayers` | 50, 50, 2 | Settings defaults (§6.2); same ranges as the settings |
 | `volumeTolerance` | 0.03 | Layout volumes within 3% tie, and the lower crate wins (§7.2, §7.8) |
 | **`construction`** — when to use which stock | | |
 | `panelLightMaxKg`, `panelMediumMaxKg` | 150, 500 | Auto panel thresholds by payload (§7.3) |
 | `heavySkidOverKg` | 700 | Heavy skids at least, above this payload (sizing may pick them sooner) |
-| `skidSpacingMm` | 800 | Fewest skids = `max(2, ceil(extW / spacing) + 1)`; sizing may add more (§7.14) |
+| `skidSpacingMm` | 800 | Fewest skids = `max(2, ceil(extW / spacing) + 1)`; sizing may add more (§7.15) |
 | `maxCleatSpacingMm` | 600 | Wall uprights and lid cross cleats (§7.4) |
 | `minBlockingGapMm` | 19 | Smallest gap that gets a blocking post; the `blocking` check |
 | **`limits`** — what the checks test (§7.7) | | |
@@ -381,7 +387,7 @@ whatever the display units.
 | `stackKg` | 100 | `stack` |
 | `stableHeightRatio` | 1.5 | `Layout.stable`, ranking and the `stable` check |
 | `lowUtilization` | 0.25 | `utilization` |
-| `perCrate.maxGrossKg` | 1000 (a handling limit) | Shipment planning (§7.10): a heavier crate is split. The computed base rating (§7.14) also applies |
+| `perCrate.maxGrossKg` | 1000 (a handling limit) | Shipment planning (§7.10): a heavier crate is split. The computed base rating (§7.15) also applies |
 | `perCrate.maxParts` | 0 (no limit) | Shipment planning: most parts in one crate |
 | **`rates`** — material properties, prices and fastening (§7.6) | | |
 | `densityKgM3 {plywood, lumber}` | 600, 480 | Tare weight |
@@ -395,7 +401,7 @@ whatever the display units.
 | `screwMin` | 0.15 | Minutes per screw (9 s) |
 | `assemblyStepMin` | 6 | Minutes per assembly step: base, four walls, lid, dunnage per layer |
 | `handlingMin` | 15 | Minutes per crate: moving, marking, staging |
-| **`structure`** — structural sizing (§7.14, #7) | | |
+| **`structure`** — structural sizing (§7.15, #7) | | |
 | `lumberBendingMPa` | 7.8 | Allowable bending stress Fb of the lumber: SPF No. 2, 875 psi × size factor 1.3 |
 | `lumberShearMPa` | 0.93 | Allowable shear Fv: SPF No. 2, 135 psi |
 | `lumberBearingMPa` | 2.93 | Allowable bearing across the grain Fc⊥: SPF No. 2, 425 psi |
@@ -408,11 +414,24 @@ whatever the display units.
 | `lidStackKg` | 0 (not stacked) | Weight on the lid it is sized for; 0 keeps the nominal lid |
 | **`freight`** — LTL terms (§7.12, #17) | | |
 | `dimDivisorIn3PerLb` | 139 | Dimensional weight = outside in³ / divisor |
+| **`handling`** — centre of gravity and lifting (§7.14, #8) | | |
+| `forklift {minClearMm, tineWidthMm, spreadMm {min, max}}` | 75, 100, 250–1100 | `forklift`: Class II tines about 4″ wide and 1.5–2″ thick, so 3″ clear leaves room for a tine that isn't level; tines slide from about 10″ to 43″ apart, outside to outside |
+| `palletJack {minClearMm, tineWidthMm, spreadMm {min, max}}` | 85, 180, 520–690 | `pallet-jack`: forks about 7″ wide and 2.9–3.2″ high lowered; a narrow (20.5″) to a standard (27″) jack |
+| `cogOffsetRatio` | 0.1 | `cog-offset`: past 10% of the length or width from the middle, mark the CoG (the ISO 7000-0627 centre-of-gravity mark of ISO 780, MIL-STD-129's centre-of-balance marking) |
+| `minTipAngleDeg` | 30 | `cog-tip`: under 30° the crate tips at under 0.58 g sideways, close to the 0.5 g lateral that US cargo securement (49 CFR 393.102) designs for |
+| **`cradle`** — cradles for slender parts (§7.5a, #6) | | |
+| `slenderRatio` | 3 | A part is slender when longest ÷ middle side ≥ this (1.5–50) |
+| `maxSpacingMm` | 600 | Cradles along the part at most this far apart, centre to centre |
+| `endOffsetMm` | 150 | End cradles' centre lines this far in from each part end (cut to ¼ of a short part) |
+| `notchDepth` | 0.25 | Notch depth as a fraction of the part's height (0.05–0.45) |
+| `roundTolerance` | 0.1 | Cross-section sides within 10% count as round: a circular seat, not a flat pocket |
+| `thickMm` | 38 | Cradle board thickness along the part (2× lumber) |
 
 **Validation.** Every number is finite and inside a sane range (for example cleat spacing
 100–5000 mm, so a typo can't make thousands of boards). Across fields: panel plywood must go
-`light ≤ medium ≤ heavy`, `panelLightMaxKg ≤ panelMediumMaxKg`, the trailer door can't be
-bigger than the trailer inside, and blocking can't be wider than the minimum interior (two
+`light ≤ medium ≤ heavy`, `panelLightMaxKg ≤ panelMediumMaxKg`, a device's spread must go
+`min ≤ max` and be at least two tines wide, the trailer door can't be
+bigger than the trailer inside, the end-cradle offset can't be more than the cradle spacing, and blocking can't be wider than the minimum interior (two
 cleats), or a bearer would poke through a wall. The structure group (#7) has ranges too: a load
 factor of 1–5, stresses above zero, joist spacing 100–2000 mm and a stacking load of 0 or more.
 `parseStandards` returns the first problem as
@@ -440,8 +459,8 @@ the defaults (so a file can hold only the house's differences), and rejects inva
 different `version`, or an invalid value.
 
 **In the UI.** Rules → **Shop standards · house rules for every crate**, a `<details>` section
-collapsed by default. Eight groups (Stock on hand, Defaults, Construction, Limits, Structure,
-Rates, Labour, Freight) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
+collapsed by default. Ten groups (Stock on hand, Defaults, Construction, Cradles, Limits,
+Structure, Rates, Labour, Freight, Handling) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
 text is a valid standard; invalid text is outlined in gold with the reason and reverts on blur.
 A changed field is tinted and says its default. A **Customised** tag shows when anything
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
@@ -611,15 +630,15 @@ Values are the defaults; the standards field is in brackets (§6.4).
 |---|---|
 | Panel plywood (walls, lid, separators) | Auto: payload ≤ 150 kg [`construction.panelLightMaxKg`] → **12 mm** [`stock.panelPlywoodMm.light`]; ≤ 500 kg [`panelMediumMaxKg`] → **15 mm** [`medium`]; otherwise **19 mm** [`heavy`]. Overridable by hand with 12 / 15 / 19 |
 | Floor plywood | Always **19 mm** [`stock.floorPlywoodMm`] |
-| Skids | Sized per layout from the load and spans (§7.14, #7): the smallest of **89 × 89** (4×4) [`stock.skidMm.standard`] and **89 × 140** (4×6) [`stock.skidMm.heavy`] that passes. Payload over 700 kg [`construction.heavySkidOverKg`] starts at 4×6 |
-| Skid count | At least `max(2, ceil(externalWidth / 800) + 1)` [`construction.skidSpacingMm`], more if no section passes (§7.14), evenly spread across the width |
-| Floor joists | 2×4 on edge [`stock.joistMm`] across the skids, when the payload is over 450 kg or the floor fails over the skids (§7.14) |
+| Skids | Sized per layout from the load and spans (§7.15, #7): the smallest of **89 × 89** (4×4) [`stock.skidMm.standard`] and **89 × 140** (4×6) [`stock.skidMm.heavy`] that passes. Payload over 700 kg [`construction.heavySkidOverKg`] starts at 4×6 |
+| Skid count | At least `max(2, ceil(externalWidth / 800) + 1)` [`construction.skidSpacingMm`], more if no section passes (§7.15), evenly spread across the width |
+| Floor joists | 2×4 on edge [`stock.joistMm`] across the skids, when the payload is over 450 kg or the floor fails over the skids (§7.15) |
 | Cleats | **19 × 89** (1×4) [`stock.cleatMm`], returned as `construction.cleat` |
 
 **`structureAllowance`** is what the structure adds to the interior. Here `t` is the panel
 thickness and `ct` is the cleat thickness (19, `construction.cleat.thick`). Since #7 it is worked
 out per layout, because the base is sized for that layout's spans: the packer calls
-`planStructure` for each grid (§7.14) and `designCrate` makes the same call, so the boards'
+`planStructure` for each grid (§7.15) and `designCrate` makes the same call, so the boards'
 bounds still equal `layout.external`.
 
 ```
@@ -641,7 +660,7 @@ All coordinates are relative to the interior origin, with `cw = 89` (cleat width
 | Side cleats | Outside each side panel. Top and bottom horizontals, plus verticals at ≤ 600 mm spacing (`construction.maxCleatSpacingMm`) |
 | End walls (±X) | Panel spans y ∈ [0, W], fitted between the side panels |
 | End cleats | Outside each end panel. They span the full external width, so they wrap the corners over the side cleats |
-| Lid | Panel over x ∈ [−t, L+t], y ∈ [−t, W+t] at z = H. Two long edge cleats on top, plus cross-cleats at ≤ 600 mm. When crates may be stacked (#7) the frame is sized for the load: more cleats, or 2×4 joists on edge (§7.14) |
+| Lid | Panel over x ∈ [−t, L+t], y ∈ [−t, W+t] at z = H. Two long edge cleats on top, plus cross-cleats at ≤ 600 mm. When crates may be stacked (#7) the frame is sized for the load: more cleats, or 2×4 joists on edge (§7.15) |
 
 Each member is tagged where it is created:
 
@@ -651,7 +670,7 @@ Each member is tagged where it is created:
 | `sides` | `side-` (front) / `side+` (back) | Side panel, Side rail (top and bottom cleats), Side upright (vertical cleats) |
 | `ends` | `end-` / `end+` | End panel, End rail, End upright |
 | `lid` | `lid` | Lid panel, Lid edge cleat, Lid cross cleat (Lid edge joist, Lid joist when stacking needs joists) |
-| `inside` | `inside` | Bearer, Layer separator, Blocking post |
+| `inside` | `inside` | Bearer, Layer separator, Blocking post; for slender parts (§7.5a) Cradle, Stacking cradle, End stop |
 
 **Invariant:** the bounding box of all members equals `layout.external`, which is tested.
 
@@ -675,6 +694,71 @@ Each member is tagged where it is created:
     or for the top layer, to the part's top. This means the posts also carry the layer above.
   - Posts are only made when the gap is ≥ 19 mm (`construction.minBlockingGapMm`).
   - Posts shared by two neighbouring parts are de-duplicated by rounded position and size.
+- **Slender parts** get cradles instead of all of the above (§7.5a).
+
+### 7.5a Cradles for slender parts (`src/domain/cradles.ts`, #6)
+
+A round shaft on two flat bearers with one post per side can roll, bow and slide. Real shaft
+crates sit the part in **notched wooden saddles** across its length, with stops at the ends.
+Values are the defaults; the standards field is in brackets (§6.4, group `cradle`).
+
+**Which parts.** `isSlender(dims, standards)`: the part's **longest side ÷ its middle side ≥ 3**
+[`slenderRatio`]. It reads the part's own dimensions, not the layout. PART-002 (1530 × 172 ×
+172) is 8.9 and qualifies; PART-001 (1.4) and PART-003 (1.02) do not, and their crates are
+unchanged. A flat plate (600 × 500 × 10) is 1.2: thin, but not long. **Ownership:** cradles own
+slender parts and the general / geometry-aware blocking (#16) owns the rest, using the same
+predicate. `designCrate` takes the cradle path (`usesCradles`) when the part is slender **and**
+its long axis lies horizontal in the layout (along X or, for a wide batch, Y). A slender part
+stood on end (a layout the user picks) has no length to cradle and keeps the general blocking.
+
+**Stations.** `cradleStations(start, length)`: the end cradles' centre lines **150 mm in from
+each end** [`endOffsetMm`] (cut to a quarter of the length on a short part, so the two don't
+meet), and the rest evenly between them **at most 600 mm apart** [`maxSpacingMm`]: `count =
+max(2, ceil((length − 2·150) / 600) + 1)`. The 1530 mm shaft gets 4, 410 mm apart. Every part in
+a row along the long axis shares the stations, and every layer uses the same ones, so stacked
+cradles line up.
+
+**The notch.** `notchFor(width, height)`: depth = **25% of the part's height** [`notchDepth`]. A
+cross-section whose sides are within 10% [`roundTolerance`] is taken as **round** and gets a
+circular seat of the part's radius; its opening is the chord at that depth, `2√(d(2r − d))`
+(shaft: r = 86, d = 43, opening 149 mm). Any other section gets a **flat** pocket as wide as the
+part. The bounding box can't tell round from square, so a square bar also gets a round seat.
+
+**Members** (all `assembly: "inside"`, `face: "inside"`, lumber, so the Blocking switch fades
+them like other dunnage):
+
+| Label | Kind | Geometry |
+|---|---|---|
+| Cradle | `cradle` | At each station, on the floor: **38 mm** thick along the part [`thickMm`], spanning the interior **wall to wall** across it, from z = 0 to the part's bottom + notch depth (the part rests on the notch bottom; the bottom layer's parts sit at the floor clearance, so the shaft's cradle is 50 + 43 = 93 mm tall). One `top` notch per part in the row. Replaces the bearers and the side posts |
+| Stacking cradle | `cradle` | Between each pair of layers, at the same stations: from the lower part's top − notch depth to the upper part's bottom + notch depth, with `bottom` notches over the layer below and `top` notches for the layer above. The part gap and the separator's thickness become wood between the notches, so **there is no separator sheet**; the layers' cradles stack into one column. Only where the upper layer has parts |
+| End stop | `blocking` | At both ends of every column of parts, in the gap to the end wall or the next part, from the floor to the top of the column. Width and minimum gap as blocking posts (`stock.blockWidthMm`, `construction.minBlockingGapMm`); de-duplicated |
+
+Packing is untouched: the layout, slot positions and outside size are the packer's. A cradle
+member is still its bounding box, with `cradle: { axis, notches }` (`CradleProfile`) for the
+notches; each `Notch` has its centre, width, depth, shape, radius and face. BOM, weight and
+cost use the box (the stock it is cut from). `cradleProfile(member)` gives the outline in the
+board's plane (round notches as 16-segment arcs), and `cradleSolidAt(member, at)` the solid Z
+range at a point along it.
+
+**Outputs.**
+
+- **Cut list:** Cradle and Stacking cradle lines, stock "{38} × {height}" cut to the interior
+  width; imperial reads e.g. "1 1/2″ × 3 11/16″ from 2x6" (cut to size, like blocking). Pieces
+  with a different notch count are different lines (key suffix `|n notches`, `BomLine.notches`).
+- **Screws** (§7.6): 4 per cradle, two at each end: "Cradles to floor", and "Stacking cradles
+  through the side walls". End stops are 2 each, and the blocking line is titled "End stops".
+- **Labour** (§7.12): each notch is one more lumber cut.
+- **Checks:** the `blocking` pass names them: "4 notched cradles hold the parts across their
+  length, and 2 end stops hold them along it."
+- **3D:** each cradle is its profile extruded through its thickness (`cradleGeometry`), with
+  edges drawn above 20°, so the notch reads clearly; it picks, tooltips, highlights and ghosts
+  like any board. The GLB export uses the same solid.
+- **Overview:** a "Cradles" step ("N cradles", the end stops) in place of "Blocking".
+- **Build sheet** (§7.11): floor cradles are placed in "Load the parts", with the notch size
+  ("a round seat of 86 mm radius, 43 mm deep and 149 mm across"); stacking cradles and end
+  stops in "Blocking and separators". Section A–A shows the floor cradles under the parts (seen
+  below the cut) and the end stops; Section B–B cuts the cradles through the notch, so each shows
+  its solid part only. Both titles name the cradles.
 
 ### 7.6 Outputs
 
@@ -695,11 +779,13 @@ Each member is tagged where it is created:
   - each skid: `ceil(len/300)+1`; with floor joists (#7) instead 2 where each joist crosses a
     skid, plus `ceil(len/300)+1` along each joist (floor to joists)
   - each block or bearer: 2
+  - each cradle or stacking cradle: 4 (#6, §7.5a)
   - walls-to-floor plus lid-to-walls: `2·ceil(2(L+W)/200)`
   - corners: `4·ceil(H/200)`
   - `screwSchedule(members, interior, standards)` returns these line by line (floor to skids,
-    side and end wall cleats, walls to floor, corners, bearers, blocking, lid cleats, lid to
-    walls; with joists, joists to skids and floor to joists), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
+    side and end wall cleats, walls to floor, corners, bearers, cradles, stacking cradles,
+    blocking (titled "End stops" in a cradled crate), lid cleats, lid to walls; with floor joists,
+    joists to skids and floor to joists), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
     `screws` is its sum, so the estimate is unchanged.
 - **BOM:** members are grouped by `(assembly, label, stock, cut)`; that string is the line's
   `key` and each member's `bomKey`.
@@ -732,10 +818,11 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 |---|---|---|---|
 | `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`limits.trailerMm`) |
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
-| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
+| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). For a cradled slender part (§7.5a) the pass text names the cradles and end stops instead of the posts. The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
-| `base-rating` | Within the base rating ("Base rated 859 kg; this crate's payload is 645 kg (75%). 3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).") | caution: Over the base rating ("… Even 3 × 4×6 skids … can't carry it (skid bending governs). Split the batch, or add heavier skid or joist stock.") | payload ≤ the computed base rating (§7.14, #7; it replaced the fixed 1,000 kg `limits.baseRatingKg`). Sections are named "4×4", "4×6", "2×4", or in mm for non-standard stock |
-| `lid` | Lid carries the stacking load | caution: Lid can't take the stacking load | Only when `structure.lidStackKg` > 0 (§7.14): the lid's rated stacking load ≥ `lidStackKg` |
+| `base-rating` | Within the base rating ("Base rated 859 kg; this crate's payload is 645 kg (75%). 3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).") | caution: Over the base rating ("… Even 3 × 4×6 skids … can't carry it (skid bending governs). Split the batch, or add heavier skid or joist stock.") | payload ≤ the computed base rating (§7.15, #7; it replaced the fixed 1,000 kg `limits.baseRatingKg`). Sections are named "4×4", "4×6", "2×4", or in mm for non-standard stock |
+| `lid` | Lid carries the stacking load | caution: Lid can't take the stacking load | Only when `structure.lidStackKg` > 0 (§7.15): the lid's rated stacking load ≥ `lidStackKg` |
+| `cog-offset`, `cog-tip`, `forklift`, `pallet-jack` | §7.14 | §7.14 | Centre of gravity and handling (#8), in this order after `base-rating` |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% (`limits.lowUtilization`) |
 | `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`) |
@@ -750,7 +837,7 @@ about 52'6" × 101" × 110" and a rear door opening of about 98–100" × 108–
 interior, limits width and height, so the check uses the low end of the door range: 98" (2489
 mm) wide and 108" (2743 mm) high, and the 52'6" (16000 mm) floor for length. Separately, most LTL
 carriers add an excessive-length accessorial for handling units over 8 ft, which `oversize`
-notes. Forklift and pallet-jack handling is #8.
+notes. Forklift and pallet-jack handling is §7.14.
 
 **When a crate is overkill.** The brief says smaller aluminum parts might ship in ordinary
 cardboard boxes. `cardboard` suggests it, while still producing the crate design, when:
@@ -822,7 +909,7 @@ needs "this batch ships as N crates", each buildable, handleable and within limi
 
 - gross ≤ the smaller of `limits.perCrate.maxGrossKg` (1,000 kg, a handling limit) and the
   crate's computed base rating as a gross weight, `structure.ratedPayloadKg + tareKg`
-  (`crateGrossLimitKg`; #7, §7.14). Each candidate crate is designed anyway, so this costs
+  (`crateGrossLimitKg`; #7, §7.15). Each candidate crate is designed anyway, so this costs
   nothing extra, and the bisection still terminates;
 - outside L ≤ `trailerMm.interiorLength`, W ≤ `doorWidth`, H ≤ `doorHeight` (the `door` check's
   limits, `withinOutsideLimits`);
@@ -920,6 +1007,9 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
      - **Section B–B**, a side cut through the front row of parts: blocking, separators, lid
        and floor are cut, the bearers under the row are seen beyond the cut, and the interior
        L and H are dimensioned.
+     - For a cradled slender part (#6, §7.5a), A–A also shows the floor cradles seen below the
+       cut, B–B cuts the cradles through the notch (only the solid part is drawn), and both
+       titles name the cradles.
 
      Dimensions are shop sizes: fractional inches to 1/16″, or whole mm.
    - **Cut list by stock:** the crate's cut list regrouped by stock name (`stockText`). Each
@@ -937,10 +1027,12 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
    - gross weight in the selected units, with the other units under it;
    - "THIS SIDE UP" with the ISO 780 two-arrow mark;
    - the crate type and count, for a split batch;
-   - the crate's end, with the skids and **fork-entry arrows** between them ("FORK ENTRY FROM
-     THE ENDS");
-   - a **centre-of-gravity** mark when the design carries `centerOfGravityMm` (#8 adds it).
-     Until then the label has no CoG mark.
+   - the crate's end, with the skids and a **fork-entry arrow** in each opening between them
+     ("FORK ENTRY FROM THE ENDS"). The openings are `design.handling.openings` (§7.14), the
+     same ones the forklift and pallet-jack checks measure (`PrintableLabel.openings`);
+   - the **centre-of-gravity** mark (ISO 7000-0627, the quartered circle) at the design's
+     `centerOfGravityMm`, projected onto the end view (`cogEnd`: Y and Z from the outside
+     bottom-left corner). A design without a usable CoG (not three finite numbers) has no mark.
 
 **How the design reaches the page.** The Cut list's **Print / save PDF** serializes the design
 on screen as a design file (§6.5, `serializeDesign`) and opens
@@ -984,7 +1076,8 @@ hours     = Σ / 60;   labour $ = hours × rateUsdPerHour
 ```
 
 Pieces are the cut list's quantities (one cut per lumber piece; one plywood piece is a rip and a
-cross-cut, hence its own time). The same size in two assemblies is one set-up.
+cross-cut, hence its own time). Each cradle notch (#6, `BomLine.notches`) counts as one more
+lumber cut. The same size in two assemblies is one set-up.
 
 **Cost (`crateCost`).** `woodUsd` = `materialCostUsd` (§7.6); `fastenersUsd` = screws / 100 ×
 `rates.screwCostUsdPer100`; `materialUsd` = wood + fasteners; `totalUsd` = material + labour.
@@ -1063,7 +1156,7 @@ then per crate type the build sheet (the five drawings; the cut list by stock wi
 the fastener schedule and its total, the five assembly steps with their pieces and screws) and
 the shipping label (part number and name, quantity, gross in both units, outside size, the
 crate-type bar for a split, THIS SIDE UP with the ISO 780 arrows, the end with skids and fork
-arrows, the centre of gravity once #8 adds it). Letter pages with 0.5″ margins; a sheet's
+arrows in the openings, the centre-of-gravity mark). Letter pages with 0.5″ margins; a sheet's
 header repeats when it runs onto another page, and every page has "page i of n".
 
 - **Vector throughout.** Text uses the PDF's built-in Helvetica; the drawings are drawn from
@@ -1096,7 +1189,76 @@ pill: one shared run and state (`src/components/shell/exportRun.ts`), so either 
 replaced #27's "Download 3D model (.glb)" and its "Include parts" switch; the zip's GLB always
 includes the parts.
 
-### 7.14 Structural sizing (`src/domain/structure.ts`, #7)
+### 7.14 Centre of gravity and handling (`src/domain/handling.ts`, #8)
+
+`analyseHandling(members, layout, partKg, standards)` reads the finished crate: the members
+`designCrate` built and the part placements (`layout.slots`). It never changes the
+construction, so it follows whatever skids, bearers, blocking or cradles the construction rules
+produce (#6, #7, #16). `designCrate` stores the result as `design.handling` and
+`design.centerOfGravityMm`, and appends `handlingChecks` to the checks after `base-rating`.
+
+**Frame.** Everything is in the crate-interior frame of `Member` (§4): origin at the interior min
+corner on top of the floor, Z up, X along the length. The ground is the bottom of the skids
+(`handling.groundZ`, −(floor + skid height)). Forks enter from the ends (−X and +X), between the
+skids, which run the full length.
+
+**Combined centre of gravity.** The mass-weighted mean of:
+
+- every board, at its box centre, with mass = volume × `rates.densityKgM3` of its material (the
+  tare model of §7.6, so the boards sum to `tareKg`);
+- every part, at the centre of its packed bounding box (`slot.min + cellSize / 2`), with the
+  part's mass. **Without mesh analysis a part's own CoG is assumed to be its bounding-box
+  centre.** A part whose mass sits off its box centre (a flanged shaft, a bracket with a heavy
+  base) moves the true CoG by up to half its box in that direction.
+
+The total equals `grossKg`. A full, symmetric grid puts the CoG on both centre lines; a part
+missing from the last slot of a partial layer moves it away from that slot.
+
+**Offset.** `offsetMm = CoG − the middle of the outside footprint` (X, Y), named in the text as
+"toward the left end / right end" (−X / +X, as seen from the front) and "toward the front /
+back" (−Y / +Y).
+
+**Tip angle.** The static tip angle is `atan(d / h)`: `h` is the CoG height above the ground and
+`d` is the horizontal distance from the CoG to the nearest edge of the base the crate stands on
+(the outline of the skids). Past that tilt the CoG passes over the edge and the crate tips. The
+sideways tip acceleration is `tan(angle)` g.
+
+**Fork openings.** `forkOpenings(members)` sorts the `skid` members across Y; each gap between
+neighbours is an opening (`y`, `width`). Its clear height is from the ground to the lowest
+non-skid board over that gap: normally the floor, so the skid height; anything hung under the
+floor (a joist from structural sizing) lowers it.
+
+**Devices.** A device is two tines of `tineWidthMm` whose outside spread can be anywhere in
+`spreadMm` (`placeTines`). It fits when both tines lie inside openings that are tall enough
+(both in one wide opening, or one in each), the spread is in range, and **the CoG lies between
+the tine centre lines**, so the load can't roll off a tine. The pallet jack's range covers a
+narrow (20.5″) and a standard (27″) jack; any one jack has a fixed spread.
+
+**Checks** (thresholds are the `handling` standards, §6.4):
+
+| id | Pass (`ok`) | Problem | Rule |
+|---|---|---|---|
+| `cog-offset` | Centre of gravity near the middle ("It is on both centre lines, within 10% of the length (93 mm) and width (65 mm). 265 mm above the ground.") | caution: Off-centre centre of gravity ("Centre of gravity is 120 mm toward the left end; mark it on the crate. The limit is 10% …") | \|offset X\| ≤ `cogOffsetRatio` × outside length and \|offset Y\| ≤ `cogOffsetRatio` × outside width |
+| `cog-tip` | Low centre of gravity ("… the crate tips over a side only past 51°. The limit is 30°.") | caution: Top-heavy ("… tips over a side at 24°, under the 30° limit. Strap it down, mark the centre of gravity, or pick a lower layout.") | tip angle ≥ `minTipAngleDeg` |
+| `forklift` | Forklift fits from the ends ("Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, …") | caution: Forklift may not fit (too low: "… 70 mm clear under the floor, needs 75 mm. Use taller skids."; too narrow: "the widest opening between the skids is 156 mm; it needs room for …") | `placeTines` with `handling.forklift` |
+| `pallet-jack` | Pallet jack fits from the ends | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either); **info**: "Forklift only: too narrow for a pallet jack" when only the width rules the jack out and a forklift fits | `placeTines` with `handling.palletJack` |
+
+A crate needs one way to be lifted. A small crate too narrow for a pallet jack is a fact of its
+size rather than a defect, so while a forklift fits it is info, and the default PART-001 × 4
+crate (one 474 mm opening, under a jack's 520 mm spread) still has no cautions. Too little height
+under the floor is always a caution.
+
+With the defaults, the sample parts at their suggested quantities: every CoG is on the centre
+lines (full grids) and every tip angle is 36° or more. The forklift fits all but the single
+bracket (204 mm opening) and the single shaft (156 mm): forks can't go in from the ends of a
+crate that narrow, so both devices are cautions there. The pallet jack fits only PART-003 × 8,
+whose 1,102 mm wide crate has a middle skid and two 408 mm openings.
+
+**Where it shows.** The Checks tab and the export document list the four checks (§7.11). The
+3D view marks the CoG and the fork entry (§8.4). The shipping label draws the CoG mark on the
+end view and the fork arrows in `design.handling.openings` (§7.11).
+
+### 7.15 Structural sizing (`src/domain/structure.ts`, #7)
 
 Before #7 the base was picked from mass thresholds: 4×4 skids, 4×6 above 700 kg of payload, a
 skid every 800 mm, and a flat "1,000 kg base rating" that only produced a warning. Now the skids,
@@ -1350,6 +1512,10 @@ open question for the user (see #20).
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
   it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
   - **Units and frame:** metres, Z up, like the input GLBs (§4).
+  - **Origin (#81):** the `Crate` node is offset so the assembled crate's bounding-box centre is
+    the file's origin (`crateCentreMm`). Viewers orbit about the origin, so the crate turns about
+    its own middle; before, the origin was the inside corner of the floor and the crate swung
+    around an empty point. The parts move with it, because they are children of `Crate`.
   - **Node tree:** `Crate` → `Base`, `Side walls`, `End walls`, `Lid`, `Inside the crate`
     (empty assemblies are left out), each holding one box mesh per board named
     `{label} {n}`, numbered per label across the crate (e.g. `Side rail 3`); then, with parts,
@@ -1395,6 +1561,17 @@ open question for the user (see #20).
     (`events.update()`, only while the pointer is over the canvas). The board tooltip and
     highlight follow the board under the pointer.
   - With `prefers-reduced-motion` it never runs, and mode changes and camera moves are instant.
+- **Centre of gravity and fork entry (#8):** shown with the size labels (the View popover's
+  "Size labels" switch), by `HandlingMarks`:
+  - **CoG:** a ball split into eight black and white octants, so it reads as the ISO 7000-0627
+    quartered circle from any side, at `design.centerOfGravityMm`, with a dashed drop line to the
+    ground. Both skip depth testing like the size lines, so the mark shows through the walls.
+    It belongs to the assembled crate, so it stays put when exploded.
+  - **Fork entry:** a flat gold arrow on the ground at each end (−X and +X) for every opening
+    between the skids (`design.handling.openings`), pointing in. They are depth-tested and slide
+    out with the end walls when exploded, as the length line does.
+  - Neither can be hovered or clicked (no raycast) and neither calls `markInput`, so they never
+    count as input (#64). The e2e hook reports them as `cog { mm, marker, arrows }`.
 - **Size lines:**
   - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
     the back right corner. Their groups slide out with the walls when exploded; the numbers stay
@@ -1698,6 +1875,27 @@ The ranking option (#17) is saved only as part of the last-opened crate; the tim
 - **Regression baseline:** 18 part × quantity × keepUpright cases. For each, the external size,
   gross, screws, member count, layout count and total BOM quantity must equal the values captured
   before the #20 redesign. For example, PART-003 × 8 is 1102 × 1082 × 809 mm with 308 screws.
+  The six PART-002 rows were deliberately re-captured by #6 (cradles, §7.5a): same outside size
+  and layouts, gross 76.25 / 120.44 / 193.08 → 70.61 / 109.30 / 180.15 kg, screws 200 / 226 /
+  268 → 208 / 228 / 272, members 40 / 45 / 53 → 40 / 42 / 46 (× 1 / 2 / 4). PART-001 and
+  PART-003 did not change.
+- **Cradles (#6, `cradles.test.ts`):** `isSlender` picks PART-002 and not PART-001 or PART-003,
+  at exactly the ratio, in any side order, and follows the standard; a flat plate isn't
+  slender; a shaft stood on end keeps the general blocking. Stations: 150 mm from each end,
+  ≤ 600 mm apart, at least 2, a third one exactly past 900 mm, a short part's two don't meet.
+  Notches: a round seat of the part's radius, 25% deep, opening = the chord; a flat pocket as
+  wide as the part; the depth follows the standard. In the shaft crate: only cradles and end
+  stops inside; 4 cradles wall to wall under one shaft, top at the part's bottom + notch depth;
+  one notch per shaft side by side; stacking cradles at the same stations, notched both ways,
+  clear of the floor cradles, no separator; end stops from the floor to the top of the stack;
+  everything inside the crate; a part along Y turns the cradles; a flat bar gets a flat
+  pocket. Cut-list lines (with notch counts), 4 screws per cradle, "End stops", one lumber cut
+  per notch, and the blocking check's text. The profile is counter-clockwise, inside the box
+  and cut to the notch; `cradleSolidAt` is shorter through a notch. `cradleGeometry.test.ts`:
+  the 3D solid fills the member box, centred, and is cut to the notch bottom.
+  `printable.test.ts`: floor cradles in "Load the parts" with the notch size, stacking cradles
+  and end stops in "Blocking and separators", pieces and screws still add up, and both
+  sections draw the cradles (Section B–B cut down to the notch).
 - Every member has an assembly, a face and a label, and each face sits on the correct side of the
   interior.
 - The cut list has the finer labels, every member links to exactly one line, and line quantities
@@ -1781,7 +1979,7 @@ lower max gross gives more crates; a layout pick applies to its crate type; spli
 a caution; 200 parts plan fast; the shipment cut list multiplies, merges and groups pieces, and
 its CSV has the plan header.
 
-**`src/domain/structure.test.ts`** checks structural sizing (§7.14, #7): each formula (skid
+**`src/domain/structure.test.ts`** checks structural sizing (§7.15, #7): each formula (skid
 bending, shear and bearing; floor bending, falling with the span squared; joist bending, shear
 and bearing) against a hand calculation; the load shares (half on two skids, `1 / (n − 1)` on an
 inner skid); the worked example step by step; the skid section kept exactly at its limit and
@@ -1801,6 +1999,23 @@ rejects a load factor under 1, a zero or NaN stress, a negative stacking load, a
 spacing and a paper-thin joist, shows weaker plywood lowering the rating and weak stock turning
 the check into a caution, and loads a standards file saved before #7 (its `baseRatingKg` is
 dropped).
+
+**`src/domain/handling.test.ts`** checks the centre of gravity and handling (#8, §7.14): the
+mass-weighted mean; boards weighed by volume × density at their centres; parts at their box
+centres; a symmetric crate (PART-001 × 4, PART-003 × 8, PART-002 × 2) with its CoG on both centre
+lines; the combined CoG as the tare- and payload-weighted mean of the two groups; an offset load
+(the same crate with its last part left out) moving the CoG toward the left end and the front by
+exactly the missing moment; the frame (height above the bottom of the skids). Fork openings read
+from the skid members (three skids, two openings; a board hung under the floor lowers one), and
+the design's one opening as wide as the crate less two skids and as tall as a skid. Tine
+placement: both tines in one opening, refused under the smallest spread, one per opening across a
+middle skid, refused when the CoG can't be between them. The checks: the default crate's texts and
+levels (pallet jack info), their order after `base-rating`, the offset threshold at 10% (and a
+looser standard), the 30° tip threshold and the tip angle to the nearest base edge, a pallet jack
+needing 90 mm against 89 mm skids (caution: "Pallet jack: enters from the ends, 89 mm clear under
+the floor, needs 90 mm."), both devices passing PART-003 × 8's middle skid, both cautions for the
+narrow single shaft, and heavy 4×6 skids giving 140 mm. `offsetText` wording. The standards'
+defaults and the spread validation.
 
 **`src/domain/cost.test.ts`** checks cost, labour and freight (#17, §7.12): the labour sum (cuts by
 material, set-ups once per size across assemblies, screws, steps, handling) and the labour
@@ -1925,8 +2140,10 @@ other JSON still read as a catalog, and plain messages for a bad design or bad J
 **`src/lib/printable.test.ts`** checks the export document (#26, §7.11):
 
 - For PART-001 × 4: the spec rows; the imperial outside size with the metric size under it;
-  the dimensional weight and the lb/ft³ density; no freight class until a design carries one
-  (then it shows, and so does a centre of gravity); why the layout won and the runner-up.
+  the dimensional weight and the lb/ft³ density; the design's freight class; the label's
+  centre of gravity equal to the design's, on the end view mid-width and above the bottom of
+  the skids, and none for a non-finite CoG (#8); the fork-arrow openings exactly between the
+  skids; why the layout won and the runner-up.
 - Every check is listed with Pass / Caution; a 10 mm gap puts the blocking caution first.
 - The cut list is grouped once per stock, with piece counts that match the cut list and ft /
   ft² totals.
@@ -2074,6 +2291,14 @@ HTML report as `playwright-report`.
     +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
     shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
     `09-header-*`.
+  - `25-handling` (#8): the Checks tab lists "Centre of gravity near the middle" (on both
+    centre lines), "Low centre of gravity", "Forklift fits from the ends" with its 89 mm / 75 mm
+    text and "Forklift only: too narrow for a pallet jack", still with no badge; the test hook's
+    `cog.mm` is on the interior centre lines, the 3D marker sits there and there are 2 arrows
+    (one opening, both ends), in closed and exploded modes; Size labels off hides the marks but
+    not the CoG; the print tab's shipping label has the "Centre of gravity" mark centred on the
+    crate end, the FORKS arrow and FORK ENTRY FROM THE ENDS. Saves `25-handling-checks`,
+    `25-handling-3d`, `25-handling-3d-exploded` and `25-handling-label`.
   - `22-dimension-pulse` (#65, motion on): a pulse fires within 12 s of load; photons are on
     screen past the first split (≥ 7) and all fade afterwards; again in exploded mode; none fire
     with size labels off or with reduced motion (12 s each). Saves `22-pulse-closed` and
@@ -2108,6 +2333,14 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
+  - `23-cradles` (#6): the shaft (PART-002 × 4, open view) has Cradle, Stacking cradle and End
+    stop rows in the cut list and no Bearer, Layer separator or Blocking post rows; hovering
+    and pinning the Cradle row lights it in 3D ("Showing 4 × cradle", pin key ending
+    "|2 notches"). PART-002 × 1 says "4 cradles" in the Overview and names the cradles and end
+    stops in the blocking check. Shop standards has a Cradles group. The print build sheet's
+    Section A–A and B–B titles name the cradles, and its cut list and assembly list them with
+    "Cradles to floor". Screenshots `23-cradles-pinned`, `23-cradles-cutlist`,
+    `23-cradles-build-drawings`, `23-cradles-build-cutlist`.
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one
@@ -2179,7 +2412,12 @@ HTML report as `playwright-report`.
 | Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists; the stock fields are actual sizes, which map to nominal names for display | An imperial user converts by hand |
 | Imperial by default, with nominal lumber names and a CSV in the selected units (#15) | The shop floor is domestic US: crews think in inches, pounds, 2x4s and 3/4″ ply, and the cut list is what they saw to | Two CSV formats; a custom stock size not in `NOMINAL_LUMBER` shows as fractional inches |
 | A split is N identical crates plus at most one remainder, chosen fewest crates → least volume (3% tie) → most even (#25) | Identical crates are faster to build from one cut list; a PM thinks in crate counts first, then truck space; an even split balances the crates when volume doesn't care | A mixed plan (e.g. 4 + 3 + 3) is never offered; bisection assumes fit falls as the part count grows |
-| Per-crate limits reuse the trailer door and floor for size; only gross and part count are new standards | The door check already holds the handling size limit; two sources would drift | Forklift-specific size limits wait for #8 |
+| Per-crate limits reuse the trailer door and floor for size; only gross and part count are new standards | The door check already holds the handling size limit; two sources would drift | Forklift and pallet-jack fit is checked separately (§7.14), not as a size limit |
+| Handling is a pure read of the finished members, in its own module, hooked into `designCrate` after the boards are built (#8) | Skid count and spacing, under-floor members and dunnage belong to the construction rules (#6, #7, #16); reading the members means any change there is handled without touching this code | Handling can only report, never fix: a crate too narrow for forks is a caution, not a re-design |
+| A part's CoG is its bounding-box centre | There is no mesh mass analysis, and the catalog gives only mass and box | A part with its mass off-centre in its box moves the true CoG by up to half the box |
+| Devices are two tines with a spread range that must straddle the CoG, not a single opening-width rule | One rule covers two skids (both tines in one opening) and a middle skid (one per opening), and catches a lift with the load hanging off one side | A shop with unusual equipment has to describe it as tines and a spread |
+| A pallet jack that is only too narrow is info while a forklift fits | A crate needs one way to be lifted; small crates are simply too narrow for a jack, and a caution on every small crate would bury the real ones | A dock with only a pallet jack must read the info lines; too little height is always a caution |
+| The CoG and fork marks go with the Size labels switch, not a new switch | They are measurement overlays like the size lines, and one switch keeps the View popover short | They can't be shown without the size labels |
 | Freight as class and weights, not dollars (#17) | LTL prices depend on the lane, carrier and the shipper's negotiated tariff; invented rates would mislead. Class, density and dim weight are what a booker quotes from | No "freight $" on screen; the PM gets quotes with these terms |
 | Class from the NMFC 13-sub density scale, outside inches rounded up | It is the density-based scale in force since July 2025, and carriers measure to the next inch | An estimate: commodity-specific items and re-classing on inspection aren't modelled |
 | Labour from counted work (cuts, set-ups, screws, steps, handling) at editable minutes (#17) | Every count already exists in the design, so the model explains itself and a shop can calibrate it by timing a few crates | Placeholder minutes; no learning curve or batch effect for many identical crates |
@@ -2189,7 +2427,10 @@ HTML report as `playwright-report`.
 | The Export pill's PDF is drawn with jsPDF from `PrintableDesign`, drawings included, without svg2pdf (#51) | One model for print and PDF; the drawings are only rectangles and lines, so drawing them directly keeps the code DOM-free and unit-testable in Node, with one dependency | Built-in Helvetica only (non-WinAnsi characters are spelled out); the PDF's page layout is its own, not `/print`'s |
 | The Export pill keeps the separate downloads (#51) | Someone who wants one file (an engineer wanting only the GLB) and the print-to-paper path stay one click away | Two ways to get each file |
 | The print route gets the design as a design file in the URL hash, not through `sessionStorage` | Works on reload and when opened directly, never leaves the browser, and reuses the #28 format a share link can use | It uses the printing browser's saved shop standards, not the opener's in-memory ones (in the same browser these are the same) |
-| Structural sizing by allowable-stress hand formulas, SPF No. 2, with a 1.5 load factor (#7, §7.14) | A shop can follow and check every number, change the species in the standards, and the rules fit in one pure module; the base rating replaces a fixed 1,000 kg | No deflection, joint or point-load checks; the end-supported skid is conservative for a crate sitting flat |
+| Slender parts (longest ÷ middle ≥ 3) sit in notched cradles instead of bearers and side posts; `isSlender` reads the part's own sides, not the layout (#6) | A round shaft on flat bearers can roll and bow; real shaft crates use saddles. One predicate on the part lets the general blocking (#16) skip exactly the parts cradles own | The bounding box can't tell a round bar from a square one: a section within 10% of square gets a round seat |
+| Stacked slender layers stack their cradles (notched under and over) and drop the separator (#6) | The layout and outside size stay exactly the packer's, the part gap and the separator's thickness become the wood between notches, and each layer is clamped by the one above | Load passes part → stacking cradle → part; no separator sheet protects the lower layer's finish |
+| A cradle is a `Member` box plus an optional notch profile (#6) | BOM, weight, screws, drawings and highlighting keep working on boxes; only the 3D view and GLB extrude the profile | Tare and wood cost count the full box (the stock cut), not the notched solid |
+| Structural sizing by allowable-stress hand formulas, SPF No. 2, with a 1.5 load factor (#7, §7.15) | A shop can follow and check every number, change the species in the standards, and the rules fit in one pure module; the base rating replaces a fixed 1,000 kg | No deflection, joint or point-load checks; the end-supported skid is conservative for a crate sitting flat |
 | The base is sized per layout, inside the packer's allowance (#7) | The base height depends on the spans, so each layout's outside size must include its own skids and joists, or the boards' bounds wouldn't equal `layout.external` | The packer calls `planStructure` for every candidate (cheap arithmetic, no members), and the dead load is an estimate from the layout |
 | Floor joists across the skids, under the floor, rather than more skids or joists between them (#7) | Fork tines enter from the ends between the skids, so the gaps must stay open; joists on top of the skids leave the openings clear and give the tines something to lift | The base gets 89 mm taller when it has joists |
 | Joists are a new member kind, `joist`, not `bearer` (#7) | `bearer` is the dunnage under each part, inside the crate, with its own screws, drawings and labour step; a structural member in the base needs different handling | One more kind in every switch over kinds |
@@ -2207,9 +2448,9 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #3 | Upload a custom GLB part, with user-entered name, mass and material. Loading and mass entry landed with #20; name and material entry followed |
 | #4 | Capture and export LLM logs (a deliverable) |
 | #5 | Architecture and decision notes for the on-site walkthrough |
-| #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |
-| #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds (§7.14) |
-| #8 | Centre of gravity and forklift handling |
+| #6 | Cradles for long or cylindrical parts (§7.5a): notched saddles at ≤ 600 mm, stacking cradles between layers, end stops |
+| #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds (§7.15) |
+| #8 | Centre of gravity and forklift / pallet-jack handling (§7.14): combined CoG, off-centre and tip checks, fork-entry checks, the 3D marks and the label's CoG mark. A part's own CoG is assumed to be its box centre |
 | #9 | Printable shop-floor build sheet (superseded by #26) |
 | #26 | Export bundle: the crate spec, build sheet and shipping label as a printable PDF (§7.11). A one-click PDF file is #51 |
 | #51 | Export pill: one-click .zip with the GLB(s), a PDF file, the cut list(s), the design file and a README (§7.13) |
@@ -2227,7 +2468,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 Other known gaps:
 
 - Batch splitting (#25, §7.10) offers only N identical crates plus one remainder.
-- Structural sizing (#7, §7.14) checks strength only: no deflection, joint, point-load or racking
+- Structural sizing (#7, §7.15) checks strength only: no deflection, joint, point-load or racking
   checks, and the lid is sized only when a stacking load is entered.
 - The GLB download and the view bar name the file by the batch quantity, not the crate type on
   screen.

@@ -30,7 +30,7 @@ const design = (part: DesignPart, patch: Partial<CrateSettings> = {}, standards 
 
 const STD = { wide: 89, tall: 89 };
 const HEAVY = { wide: 89, tall: 140 };
-/** The worked example in spec §7.14. */
+/** The worked example in spec §7.15. */
 const EXAMPLE: BaseInput = {
   extL: 1200,
   extW: 1000,
@@ -42,7 +42,7 @@ const EXAMPLE: BaseInput = {
 };
 const capacity = (checks: { payloadKg: number }[]) => Math.min(...checks.map((c) => c.payloadKg));
 
-describe("the formulas (spec §7.14)", () => {
+describe("the formulas (spec §7.15)", () => {
   it("rates a skid in bending, shear and bearing", () => {
     // 4×6 on edge, S = 89 × 140² / 6; 3 skids, so an inner skid carries half; span 1200.
     const [bending, shear, bearing] = skidChecks(HEAVY, 3, 1200, 0);

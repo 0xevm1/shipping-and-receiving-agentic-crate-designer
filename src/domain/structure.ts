@@ -1,7 +1,7 @@
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * Structural sizing (#7, spec §7.14): how many skids, of which section, whether the floor
+ * Structural sizing (#7, spec §7.15): how many skids, of which section, whether the floor
  * needs joists, and how the lid is framed, from the load and the spans.
  *
  * Simple, conservative timber rules, in N and mm (so stresses are MPa = N/mm²). `f` is

@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { crate, openApp, openTab, panel, pollCrate, shot } from "./helpers";
 
 /**
- * Structural sizing (#7, spec §7.14): a heavy batch gets skids, floor joists and a base rating
+ * Structural sizing (#7, spec §7.15): a heavy batch gets skids, floor joists and a base rating
  * computed from its spans. 30 brackets is 645 kg of payload, one crate under the 1,000 kg limit,
  * over the 450 kg joist threshold: 3 × 4x6 skids and 7 2x4 floor joists.
  */

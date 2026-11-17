@@ -24,6 +24,17 @@ const SectionSchema = z.object({
   wide: mm(19, 400),
 });
 
+/**
+ * A lifting device that enters between the skids from the ends (#8): two tines (forks) of
+ * `tineWidthMm`, whose outside-to-outside spread can be anywhere in `spreadMm`, needing
+ * `minClearMm` of height under the floor.
+ */
+const LiftDeviceSchema = z.object({
+  minClearMm: mm(20, 400),
+  tineWidthMm: mm(25, 400),
+  spreadMm: z.object({ min: mm(50, 3000), max: mm(50, 3000) }),
+});
+
 const SkidSchema = z.object({
   wide: mm(38, 400),
   tall: mm(38, 400),
@@ -136,7 +147,7 @@ export const ShopStandardsSchema = z
       handlingMin: minutes(0, 480),
     }),
     /**
-     * Structural sizing (#7, spec §7.14): allowable stresses, the load factor and the base and
+     * Structural sizing (#7, spec §7.15): allowable stresses, the load factor and the base and
      * lid rules. Defaults are SPF No. 2 lumber and sheathing plywood, deliberately conservative.
      */
     structure: z.object({
@@ -166,6 +177,32 @@ export const ShopStandardsSchema = z
       /** Dimensional-weight divisor, cubic inches per lb (139 is the common domestic divisor). */
       dimDivisorIn3PerLb: z.number().finite().min(50).max(500),
     }),
+    /** Centre of gravity and handling (#8, spec §7.14). */
+    handling: z.object({
+      /** Forklift tines, entering between the skids from the ends. */
+      forklift: LiftDeviceSchema,
+      /** Pallet-jack forks; the spread range covers narrow and standard jacks. */
+      palletJack: LiftDeviceSchema,
+      /** CoG further from the footprint centre than this share of the length (or width) is off-centre. */
+      cogOffsetRatio: z.number().finite().min(0.01).max(0.5),
+      /** Static tip angle (CoG to the nearest base edge) below this, in degrees, is top-heavy. */
+      minTipAngleDeg: z.number().finite().min(1).max(80),
+    }),
+    /** Cradles for long, slender parts (#6, spec §7.5a). */
+    cradle: z.object({
+      /** A part is slender when its longest side ÷ its middle side is at least this. */
+      slenderRatio: z.number().finite().min(1.5).max(50),
+      /** Cradles along a slender part at most this far apart, centre to centre. */
+      maxSpacingMm: mm(100, 5000),
+      /** The end cradles' centre lines this far in from each end of the part. */
+      endOffsetMm: mm(0, 2000),
+      /** Notch depth as a fraction of the part's height. */
+      notchDepth: z.number().finite().min(0.05).max(0.45),
+      /** Cross-section sides within this fraction count as round: a circular seat instead of a flat pocket. */
+      roundTolerance: z.number().finite().min(0).max(0.5),
+      /** Cradle board thickness along the part (lumber). */
+      thickMm: mm(19, 300),
+    }),
   })
   .superRefine((s, ctx) => {
     const p = s.stock.panelPlywoodMm;
@@ -182,6 +219,18 @@ export const ShopStandardsSchema = z
     if (s.stock.blockWidthMm > minInteriorMm(s)) {
       // A bearer wider than the smallest interior would poke through the side walls.
       ctx.addIssue({ code: "custom", path: ["stock", "blockWidthMm"], message: "Blocking can't be wider than two cleats" });
+    }
+    for (const key of ["forklift", "palletJack"] as const) {
+      const d = s.handling[key];
+      if (d.spreadMm.min > d.spreadMm.max) {
+        ctx.addIssue({ code: "custom", path: ["handling", key, "spreadMm"], message: "The smallest spread can't be above the largest" });
+      }
+      if (d.spreadMm.min < 2 * d.tineWidthMm) {
+        ctx.addIssue({ code: "custom", path: ["handling", key, "spreadMm"], message: "The spread can't be less than two tines wide" });
+      }
+    }
+    if (s.cradle.endOffsetMm > s.cradle.maxSpacingMm) {
+      ctx.addIssue({ code: "custom", path: ["cradle", "endOffsetMm"], message: "The end cradle offset can't be more than the cradle spacing" });
     }
     const t = s.limits.trailerMm;
     if (t.doorWidth > t.interiorWidth || t.doorHeight > t.interiorHeight) {
@@ -265,7 +314,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     handlingMin: 15,
   },
   /**
-   * Structural sizing (#7, spec §7.14). Allowable stresses are the NDS Supplement (2018) Table 4A
+   * Structural sizing (#7, spec §7.15). Allowable stresses are the NDS Supplement (2018) Table 4A
    * reference design values for Spruce-Pine-Fir No. 2 (Fb 875 psi, Fv 135 psi, Fc⊥ 425 psi), with
    * no size, repetitive-member or load-duration increases, which keeps them conservative. The
    * plywood value (6 MPa, about 870 psi on the gross section) is a conservative figure for
@@ -289,6 +338,31 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
    * shipments (parcel daily rates and many LTL tariffs that apply dim weight).
    */
   freight: { dimDivisorIn3PerLb: 139 },
+  /**
+   * Handling (#8, spec §7.14). Typical published equipment sizes; a shop should enter its own.
+   * - Forklift: Class II carriage tines are about 4″ (100 mm) wide and 1.5–2″ thick; 75 mm (3″)
+   *   clear under the floor leaves room for a tine that is not quite level. The tines slide on
+   *   the carriage, from about 10″ (250 mm) to 43″ (1100 mm) outside to outside.
+   * - Pallet jack: forks are about 7″ (180 mm) wide and 2.9–3.2″ (75–82 mm) high when lowered,
+   *   so 85 mm clear. The outside spread is fixed per jack: 20.5″ (520 mm) narrow to 27″
+   *   (690 mm) standard; either will do.
+   * - Off-centre: mark the centre of gravity (the ISO 7000-0627 / MIL-STD-129 centre-of-balance
+   *   mark) once it is more than 10% of the length or width from the middle.
+   * - Top-heavy: under 30° static tip angle the crate tips at less than 0.58 g sideways, close
+   *   to the 0.5 g lateral that US cargo securement (49 CFR 393.102) designs for.
+   */
+  handling: {
+    forklift: { minClearMm: 75, tineWidthMm: 100, spreadMm: { min: 250, max: 1100 } },
+    palletJack: { minClearMm: 85, tineWidthMm: 180, spreadMm: { min: 520, max: 690 } },
+    cogOffsetRatio: 0.1,
+    minTipAngleDeg: 30,
+  },
+  /**
+   * Cradles (#6): a slender part (longest ÷ middle ≥ 3) sits in notched saddles of 2× lumber
+   * (38 mm thick) at most 600 mm apart, the end ones 150 mm in from each end, with notches a
+   * quarter of the part's height deep. Sections within 10% of square are taken as round.
+   */
+  cradle: { slenderRatio: 3, maxSpacingMm: 600, endOffsetMm: 150, notchDepth: 0.25, roundTolerance: 0.1, thickMm: 38 },
 });
 
 /** Smallest interior on any axis: room for the top and bottom rails of a wall without overlap. */

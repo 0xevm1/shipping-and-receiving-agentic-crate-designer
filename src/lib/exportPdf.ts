@@ -488,10 +488,8 @@ function endMarks(w: Writer, l: PrintableLabel, x0: number, y0: number, boxW: nu
   pdf.rect(x, y, W, H - skidH, "S");
   pdf.setFillColor(0, 0, 0);
   for (const k of l.skids) pdf.rect(x + k.y * s, y + H - skidH, k.w * s, skidH, "F");
-  const gaps = l.skids
-    .slice(0, -1)
-    .map((k, i) => ({ from: (k.y + k.w) * s, to: l.skids[i + 1].y * s }))
-    .filter((g) => g.to - g.from > 4);
+  // The openings the handling checks measured (#8), so the arrows match them.
+  const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   for (const g of gaps) {
     const cx = x + (g.from + g.to) / 2;
     pdf.setFillColor(0, 0, 0);

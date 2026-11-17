@@ -18,6 +18,7 @@ export const WOOD: Record<MemberKind, string> = {
   bearer: "#85522b",
   blocking: "#85522b",
   joist: "#a87a48",
+  cradle: "#7a4a26",
 };
 export const EDGE = new Color("#291a0a");
 /** Selection: Hadrian sky blue. */

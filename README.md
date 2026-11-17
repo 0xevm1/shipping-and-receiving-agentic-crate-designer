@@ -110,7 +110,9 @@ tab at a time.
    **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
    cost or freight; Volume is the default.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
-   labels. The real part models sit in each slot. Left alone for 5 s, the crate slowly turns and
+   labels. The real part models sit in each slot. With the size labels come the **centre of
+   gravity** (a black-and-white quartered ball with a drop line to the ground) and gold
+   **fork-entry arrows** at both ends, one per opening between the skids. Left alone for 5 s, the crate slowly turns and
    cycles through the modes.
 5. **Read off the build data:**
    - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost
@@ -121,9 +123,10 @@ tab at a time.
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
-     tip-over, blocking, stack load, the base rating, LTL length surcharge, and a hint when a
-     cardboard box may be enough). The **base rating** is computed from the skids, floor and
-     joists (#7): "Base rated 859 kg; this crate's payload is 645 kg (75%)"
+     tip-over, blocking, stack load, base rating, centre of gravity, forklift and pallet-jack
+     entry, LTL length surcharge, and a hint when a cardboard box may be enough). The **base
+     rating** is computed from the skids, floor and joists (#7): "Base rated 859 kg; this
+     crate's payload is 645 kg (75%)"
 6. **Switch units** between in / lb (the default, for a US shop floor) and mm / kg; the choice is
    remembered in this browser. **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
@@ -134,11 +137,12 @@ tab at a time.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
-   stack and per-crate limits, the **structural rules** (allowable lumber and plywood stresses,
-   load factor, minimum fork opening, floor-joist threshold and spacing, a stacking load for the
-   lid), densities, material costs, screw spacing and screw price,
+   stack and per-crate limits, the cradle rules for long parts, the **structural rules**
+   (allowable lumber and plywood stresses, load factor, minimum fork opening, floor-joist
+   threshold and spacing, a stacking load for the lid), densities, material costs, screw spacing and screw price,
    the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
-   crate), and the dimensional-weight divisor. A change
+   crate), the dimensional-weight divisor, and **handling** (forklift and pallet-jack tine width,
+   spread and clearance under the floor, the off-centre limit and the smallest tip angle). A change
    re-designs the crate at once (for example, a higher plywood cost raises the Overview's
    "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
@@ -156,8 +160,8 @@ tab at a time.
       drawn from the design's boards; the cut list grouped by stock with totals; a fastener
       schedule; and the assembly order (base → walls → load parts → blocking and separators →
       lid).
-    - **Shipping label** for the dock: part number, quantity, gross weight, THIS SIDE UP and
-      the fork-entry marks.
+    - **Shipping label** for the dock: part number, quantity, gross weight, THIS SIDE UP, the
+      fork-entry arrows in the openings between the skids, and the centre-of-gravity mark.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
@@ -204,9 +208,21 @@ tab at a time.
 ### The crate it designs
 
 - **Base:** a plywood floor on lumber skids. Forklift entry is from the ends.
+- **Handling (#8):** the combined centre of gravity of the crate and the parts (each part
+  assumed to have its CoG at its bounding-box centre) is checked for being off-centre (over 10%
+  of the length or width: mark it) or top-heavy (static tip angle under 30°), and the openings
+  between the skids are checked for a forklift (75 mm clear, 100 mm tines) and a pallet jack
+  (85 mm clear, 180 mm forks at a 520–690 mm spread), with the load between the tines. All of
+  these are shop standards. Spec §7.14.
 - **Walls and lid:** plywood panels, each stiffened by a frame of 1×4 cleats.
 - **Inside:** wood holds the parts in place. Bearers lift the bottom layer, a plywood separator
   sits between layers, and blocking posts fill every gap.
+- **Long parts sit in cradles** (#6, spec §7.5a): a slender part (longest side at least 3× its
+  middle side, like the 1.53 m shaft) rests in notched wooden saddles across its length, one
+  150 mm in from each end and at most 600 mm apart, with a round seat a quarter of the part's
+  height deep (a flat pocket for a non-round section). Stacked layers get stacking cradles,
+  notched under and over, instead of a separator, and end stops hold each part along its axis.
+  The cradles show notched in 3D and are in the cut list, screws, labour and build sheet.
 - **Fasteners:** wood screws only.
 - **Sizing:** board sizes go up with payload mass.
 
@@ -284,7 +300,7 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Per-crate limits:** at most 1,000 kg gross (a handling limit) and within the crate's
   computed base rating, and the 53' dry van door and floor; no part-count limit. None of the
   sample parts splits at its suggested quantities.
-- **Structural sizing** (#7, spec §7.14): skids, floor joists and the lid are sized by simple
+- **Structural sizing** (#7, spec §7.15): skids, floor joists and the lid are sized by simple
   allowable-stress formulas for **SPF No. 2** lumber (Fb 875 psi × 1.3, Fv 135 psi, Fc⊥ 425 psi)
   and sheathing plywood (about 870 psi), with a **1.5 load factor**, the skids taken as supported
   only at their ends. The smallest skid section that passes is used, then more skids (never
@@ -299,6 +315,10 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
   - panel joints: one every 200 mm
   - skids: one every 300 mm
   - blocking: 2 per block
+  - cradles: 4 per cradle
+- **Cradles** (Shop standards → Cradles): slender at longest ÷ middle ≥ 3, cradles at most
+  600 mm apart and 150 mm in from the ends, notches 25% of the part's height deep, sections
+  within 10% of square taken as round, 38 mm (2×) boards.
 
 All of these live in one zod-validated object, `ShopStandards` (`src/domain/standards.ts`, spec
 §6.4), which `computeDesign` takes as its last argument. There are no rule constants left in

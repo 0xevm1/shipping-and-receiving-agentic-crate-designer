@@ -99,6 +99,14 @@ describe("computeDesign", () => {
  * Captured from the pre-redesign domain (commit 842ee77) for every part ×
  * suggested quantity × keepUpright. The UI redesign must not change any of these.
  * Columns: part, qty, upright, external mm, gross kg, screws, members, layouts, BOM qty.
+ *
+ * #6 changed the PART-002 rows on purpose: the shaft now sits in notched cradles with end
+ * stops instead of bearers, a separator and side blocking (spec §7.5a). Same outside size and
+ * layouts; lighter, a few more screws. Before → after:
+ *   × 1: 76.25 kg, 200 screws, 40 members → 70.61 kg, 208 screws, 40 members
+ *   × 2: 120.44 kg, 226 screws, 45 members → 109.30 kg, 228 screws, 42 members
+ *   × 4: 193.08 kg, 268 screws, 53 members → 180.15 kg, 272 screws, 46 members
+ * PART-001 and PART-003 are not slender and are unchanged.
  */
 const BASELINE: [string, number, boolean, Vec3, number, number, number, number, number][] = [
   ["PART-001", 1, true, [522, 382, 497], 42.29, 118, 34, 1, 34],
@@ -107,12 +115,12 @@ const BASELINE: [string, number, boolean, Vec3, number, number, number, number, 
   ["PART-001", 4, false, [728, 652, 599], 132.68, 194, 53, 15, 53],
   ["PART-001", 8, true, [938, 658, 823], 248.51, 258, 66, 8, 66],
   ["PART-001", 8, false, [938, 734, 747], 247.07, 251, 66, 24, 66],
-  ["PART-002", 1, true, [1692, 334, 411], 76.25, 200, 40, 1, 40],
-  ["PART-002", 1, false, [1692, 334, 411], 76.25, 200, 40, 2, 40],
-  ["PART-002", 2, true, [1692, 556, 411], 120.44, 226, 45, 3, 45],
-  ["PART-002", 2, false, [1692, 556, 411], 120.44, 226, 45, 5, 45],
-  ["PART-002", 4, true, [1692, 556, 645], 193.08, 268, 53, 5, 53],
-  ["PART-002", 4, false, [1692, 556, 645], 193.08, 268, 53, 8, 53],
+  ["PART-002", 1, true, [1692, 334, 411], 70.61, 208, 40, 1, 40],
+  ["PART-002", 1, false, [1692, 334, 411], 70.61, 208, 40, 2, 40],
+  ["PART-002", 2, true, [1692, 556, 411], 109.3, 228, 42, 3, 42],
+  ["PART-002", 2, false, [1692, 556, 411], 109.3, 228, 42, 5, 42],
+  ["PART-002", 4, true, [1692, 556, 645], 180.15, 272, 46, 5, 46],
+  ["PART-002", 4, false, [1692, 556, 645], 180.15, 272, 46, 8, 46],
   ["PART-003", 1, true, [607, 597, 493], 39.43, 132, 34, 1, 34],
   ["PART-003", 1, false, [607, 597, 493], 39.43, 132, 34, 3, 34],
   ["PART-003", 4, true, [1082, 607, 809], 112.13, 238, 52, 5, 52],
