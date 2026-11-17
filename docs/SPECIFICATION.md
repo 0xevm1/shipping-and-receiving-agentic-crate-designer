@@ -825,11 +825,11 @@ hadrian.co**, read from its live CSS:
 - **App icons (#58):** the mark is a navy gear with an isometric crate cut out of it and a gold
   `#D9A938` lid. The supplied artwork is used as is; regenerate it from the master SVG rather
   than editing the rasters.
-  - `src/app/icon.svg` is the master (64 × 64 viewBox). Navy `#0C2548` on light tab bars; an
-    inline `@media (prefers-color-scheme: dark)` switches it to blue `#6C9BE0` on dark ones.
+  - `src/app/icon.svg` is the master (64 × 64 viewBox), navy `#0C2548` with no dark-mode
+    variant, so on very dark tab bars the gold lid carries the mark.
   - The rasters (`src/app/favicon.ico` at 16/32/48, `icon1.png` at 96, `apple-icon.png` at 180
-    and the manifest's 192 and 512 PNGs) are rendered in the blue variant, which reads on both
-    light and dark backgrounds. They are transparent and fill the canvas edge to edge.
+    and the manifest's 192 and 512 PNGs) are rendered in the same navy, so browsers that fall
+    back to the ICO match the SVG. They are transparent and fill the canvas edge to edge.
   - Next's metadata file conventions generate the `<link rel="icon">` and
     `<link rel="apple-touch-icon">` tags; don't add them by hand.
   - `public/site.webmanifest` ("Crate Designer", short name "Crates", navy theme and
