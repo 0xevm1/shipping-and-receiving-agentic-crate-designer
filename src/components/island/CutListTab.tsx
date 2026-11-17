@@ -3,7 +3,9 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import { ASSEMBLY_NAMES, bomToCsv, downloadText } from "@/domain/export";
+import { serializeDesign } from "@/domain/designFile";
 import { cutText, stockText } from "@/lib/format";
+import { designFilePart } from "@/lib/loadPart";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 
@@ -124,6 +126,29 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           }}
         >
           Copy cut list
+        </button>
+        <button
+          type="button"
+          className="btn"
+          title="Save the part, rules and layout to open again with Load a part"
+          onClick={() => {
+            const { settings } = useDesigner.getState();
+            try {
+              const text = serializeDesign({
+                part: designFilePart(part),
+                settings,
+                layoutKey: design.layout.key,
+                design,
+                savedAt: new Date().toISOString(),
+              });
+              downloadText(`crate-design-${part.id}-x${quantity}.json`, text, "application/json");
+              setStatus("Design downloaded.");
+            } catch {
+              setStatus("Download is blocked here.");
+            }
+          }}
+        >
+          Download design (.json)
         </button>
         <span className="status" role="status">
           {status}

@@ -133,6 +133,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
+| `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign`, `parseDesignFile` (version check and migrations), `restoreDesign` |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
@@ -140,9 +141,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
+| `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
 | `src/lib/changes.ts` | A design diff as screen text: "Gross 16 → 20 kg" or "No change to the crate" |
-| `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
@@ -152,7 +153,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
-| `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
+| `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design |
 | `src/components/shell/StandardsLoader.tsx` | Applies the saved shop standards once the app has mounted |
 | `src/components/island/*.tsx` | The island and its five tabs |
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`shopStandards.css`) |
@@ -361,6 +362,67 @@ A changed field is tinted and says its default. A **Customised** tag shows when 
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
 standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUtilization`).
 
+### 6.5 Design file (`DesignFileSchema`, #28)
+
+A saved design is a JSON file, downloaded from the Cut list tab with **Download design
+(.json)** as `crate-design-{part id}-x{quantity}.json`, and opened again through **Load a part**
+or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and reads it
+(`parseDesignFile`); both are pure and unit-tested. It is the base for a design library (#14)
+and share links.
+
+```jsonc
+{
+  "kind": "crate-design",          // tells it apart from a parts.json catalog
+  "schemaVersion": 1,              // DESIGN_SCHEMA_VERSION
+  "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
+  "savedAt": "2026-11-16T12:00:00.000Z",
+  "part": {
+    "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
+    "id": "PART-001",
+    "name": "Machined steel bracket",
+    "material": "4140 steel",      // optional
+    "mass_kg": 21.5,
+    "massAssumed": true,           // optional; only written when the 10 kg stand-in is in use
+    "dimensions_mm": [360, 220, 258],
+    "model": "PART-001-machined-steel-bracket.glb"
+  },
+  "settings": { "quantity": 4, "keepUpright": true, "maxLayers": 2,
+                "partGapMm": 50, "wallClearanceMm": 50, "panelThickness": "auto" },
+  "layoutKey": "u:870x590x358:221", // Layout.key of the layout on screen
+  "summary": {                     // for people, and to check a reopened design
+    "quantity": 4,
+    "layout": "2 × 2 × 1, As modeled",
+    "outsideMm": [932, 652, 497],  // rounded
+    "grossKg": 134.9               // one decimal
+  }
+}
+```
+
+- **Source.** A part is `catalog` when the bundled catalog has the same id and model, even if
+  its GLB was loaded from disk. Anything else, including entries from a dropped `parts.json`, is
+  `custom`.
+- **Validation.** `parseDesignFile` never throws. It checks, in order: the text is JSON; `kind`
+  is `"crate-design"`; `schemaVersion` is a whole number from 1 up to the app's version; then the
+  zod schema. `settings` must already pass `CrateSettingsSchema` (out-of-range values are
+  rejected, not clamped). Unknown extra keys are dropped. Each failure is one plain sentence,
+  naming the field when there is one (`part.mass_kg: …`).
+- **Versions.** A file from a newer format is refused ("saved by a newer version of the app").
+  An older one runs through `MIGRATIONS` one version at a time before validation. There are
+  none yet; a breaking change bumps `DESIGN_SCHEMA_VERSION` and adds one.
+- **Restoring** (`loadDesign` in `loadPart.ts`, then `restoreDesign`):
+  - A `catalog` part is rebuilt from the bundled catalog entry and its `/public/parts` model.
+  - A `custom` part (or a catalog id this app doesn't have) needs its GLB in the same pick or
+    drop. The file named `model` is used, or the only GLB if there is one. The saved name,
+    material, mass and stand-in flag are restored and stay editable. The saved size is kept
+    when the measured model is within 0.5 mm of it per axis; otherwise the crate is sized to
+    the file and the message says so. Without a GLB nothing changes, and the message names the
+    file to add.
+  - Settings are restored as saved. The saved layout key is restored if that layout still
+    exists; otherwise the recommended layout is used and the message says so.
+  - The rebuilt crate is compared with `summary`. If the outside size or gross differs (for
+    example, a catalog mass or a shop rule changed), the message gives the new and the saved
+    values.
+  - The load message starts "Design loaded: {quantity} × {name}." and adds any of those notes.
 ## 7. Algorithms
 
 ### 7.1 Orientations
@@ -771,6 +833,9 @@ open question for the user (see #20).
 - **Load a part** (file picker) or a drop anywhere loads a new part; a full-page veil shows while
   dragging.
 - Dropping a `parts.json` alongside the GLB merges its valid entries into the lookup first.
+- **A design file** (JSON with `"kind": "crate-design"`, §6.5) restores its part, rules and
+  layout instead. A custom part's GLB goes in the same pick or drop; without it, the message
+  says which file to add.
 - **A known GLB** (file name equals a catalog `model`) takes that entry's mass, material and
   quantities, and gets the model check.
 - **An unknown GLB** gets a name from its file name, no material, and a 10 kg stand-in mass. The
@@ -844,6 +909,7 @@ version or an invalid value falls back to the defaults with a `console.warn`, an
 is missing or throws (server, private mode, quota) is treated as empty. The version is in the
 key, so an incompatible future format starts fresh rather than misreading old data.
 
+A design can be saved to and reopened from a JSON file (§6.5), but isn't stored in the app.
 Everything else lives in memory. The plan for designs is SQLite WASM with the `opfs-sahpool`
 VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema.sql`; shop
 standards could move there (one row per shop) when accounts exist.
@@ -934,8 +1000,23 @@ tidied, a blank material clears it, a blank or overlong name, an overlong materi
 that isn't a positive number are rejected, `partFinish` maps "alum" text to aluminum and
 everything else to steel, and the CSV header carries the entered name, material and mass.
 
+**`src/domain/designFile.test.ts`** checks the design file (§6.5, #28):
+
+- The written file has the kind, version, app, part, settings, layout key and summary
+  (PART-001 × 4: 932 × 652 × 497 mm), is pretty-printed, and round-trips byte for byte.
+- `parseDesignFile` rejects bad JSON, a non-design, a newer or missing version, a bad field
+  (named in the message), out-of-range settings, a non-GLB model and an unknown source, and
+  drops unknown keys.
+- **Reproduction:** for every catalog part × suggested quantity × keep-upright, with the
+  recommended and the runner-up layout, save → parse → restore gives no notes, the same layout,
+  outside size and gross, and a byte-identical CSV cut list. A custom part does the same.
+- A layout key that no longer exists falls back to the recommended layout with a note; a
+  heavier catalog part or a changed summary gives a note with the new and saved values.
+
 **`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
 changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
+flag, invalid input changes nothing, and catalog parts are read-only. `loadDesign` keeps the
+given settings and layout pick (unlike `setPart`).
 flag, invalid input changes nothing, and catalog parts are read-only. It also checks
 `lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
@@ -954,7 +1035,9 @@ crate" when the changes round away).
 
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions. **`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
-names, and filtering a `parts.json`.
+names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
+design restored from the bundled catalog, a custom design without its GLB naming the file,
+other JSON still read as a catalog, and plain messages for a bad design or bad JSON.
 
 **`src/lib/exportGlb.test.ts`** round-trips the GLB export (#27) for each sample part: export
 with `GLTFExporter`, re-load with `GLTFLoader`, and check that the boards' bounds (parts
@@ -1013,6 +1096,12 @@ HTML report as `playwright-report`.
     shows the over-20 m problem.
   - `08-layout`: at 1440 × 900 the document doesn't scroll and the island panel does; at
     900 px the layout stacks with no horizontal scroll on any tab.
+  - `11-design-json`: Download design (.json) gives `crate-design-PART-001-x4.json` with the
+    expected part, settings and summary (932 × 652 × 497); a catalog design (PART-002 × 8, a
+    picked layout) reopens on a fresh page with the same quantity, outside size and cut list,
+    and saving it again gives the same file; a stale layout key falls back with a message; a
+    custom design without its GLB names `widget_v2.glb` and changes nothing, and with it
+    restores the entered name, material and mass; a newer `schemaVersion` is refused.
   - `09-part-header` (#40, #39): a catalog part reads as the same sentence with no fields; each
     field edited by keyboard in Tab order, with the stand-in (dashed) showing and clearing, no
     box, the sky focus underline and ↑ / Shift+↓ steps; an invalid mass shows its reason (gold,

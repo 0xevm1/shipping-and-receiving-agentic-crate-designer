@@ -13,6 +13,8 @@ import { loadStandards, saveStandards } from "./standardsStorage";
 /** The part being crated: catalog metadata or a GLB loaded at runtime. */
 export interface LoadedPart extends DesignPart {
   modelUrl: string;
+  /** The GLB's file name (the catalog `model`, or the loaded file's name); saved in design files. */
+  model?: string;
   /** Millimetres per model unit: 1000 for metre files, 1 for files read as millimetres. */
   mmPerUnit: number;
   suggested_quantities: number[];
@@ -114,6 +116,8 @@ export interface DesignerState {
   lastChange: LastChange | null;
 
   setPart: (part: LoadedPart) => void;
+  /** Opens a saved design: the part with its own settings and layout (null = recommended). */
+  loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null) => void;
   setMeasured: (size: Vec3) => void;
   /**
    * Name, material and mass for a part loaded without catalog data. Validated;
@@ -155,6 +159,7 @@ export function catalogPart(p: Part, url = modelUrl(p)): LoadedPart {
   return {
     id: p.id,
     name: p.name,
+    model: p.model,
     material: p.material,
     mass_kg: p.mass_kg,
     dimensions_mm: p.dimensions_mm,
@@ -253,6 +258,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         layoutKey: null,
         settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
       }),
+    loadDesign: (part, settings, layoutKey) =>
+      recompute({ part, measured: null, pin: null, layoutKey, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
     setMeasured: (measured) => set({ measured }),
     setPartDetails: (input) => {
       const current = get().part;

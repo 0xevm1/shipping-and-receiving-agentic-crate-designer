@@ -1,0 +1,219 @@
+import { describe, expect, it } from "vitest";
+import { parts } from "./catalog";
+import { computeDesign, DEFAULT_SETTINGS } from "./design";
+import { bomToCsv } from "./export";
+import {
+  APP_VERSION,
+  DESIGN_FILE_KIND,
+  DESIGN_SCHEMA_VERSION,
+  isDesignFileJson,
+  parseDesignFile,
+  restoreDesign,
+  serializeDesign,
+  type DesignFile,
+  type DesignFilePart,
+} from "./designFile";
+import type { CrateSettings } from "./schema";
+
+const SAVED_AT = "2026-11-16T12:00:00.000Z";
+
+function catalogFilePart(id: string): DesignFilePart {
+  const p = parts.find((x) => x.id === id)!;
+  return {
+    source: "catalog",
+    id: p.id,
+    name: p.name,
+    material: p.material,
+    mass_kg: p.mass_kg,
+    dimensions_mm: p.dimensions_mm,
+    model: p.model,
+  };
+}
+
+const widget: DesignFilePart = {
+  source: "custom",
+  id: "widget_v2",
+  name: "Gear housing",
+  material: "6061-T6 aluminum",
+  mass_kg: 12.5,
+  dimensions_mm: [412.3, 288.1, 140.6],
+  model: "widget_v2.glb",
+};
+
+function save(part: DesignFilePart, settings: CrateSettings, layoutKey?: string | null) {
+  const result = computeDesign(part, settings, layoutKey);
+  const text = serializeDesign({ part, settings, layoutKey: result.design!.layout.key, design: result.design!, savedAt: SAVED_AT });
+  return { text, result };
+}
+
+describe("serializeDesign", () => {
+  it("writes a versioned file with the part, settings, layout and a summary", () => {
+    const part = catalogFilePart("PART-001");
+    const { text, result } = save(part, DEFAULT_SETTINGS);
+    const json = JSON.parse(text);
+    expect(json.kind).toBe(DESIGN_FILE_KIND);
+    expect(json.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(json.app).toEqual({ name: "crate-designer", version: APP_VERSION });
+    expect(json.savedAt).toBe(SAVED_AT);
+    expect(json.part).toEqual(part);
+    expect(json.settings).toEqual(DEFAULT_SETTINGS);
+    expect(json.layoutKey).toBe(result.design!.layout.key);
+    expect(json.summary).toEqual({
+      quantity: 4,
+      layout: "2 × 2 × 1, As modeled",
+      outsideMm: [932, 652, 497],
+      grossKg: Math.round(result.design!.grossKg * 10) / 10,
+    });
+  });
+
+  it("is readable: pretty-printed, ending in a newline", () => {
+    const { text } = save(catalogFilePart("PART-001"), DEFAULT_SETTINGS);
+    expect(text).toContain('\n  "kind": "crate-design"');
+    expect(text.endsWith("\n")).toBe(true);
+  });
+
+  it("round-trips through parseDesignFile", () => {
+    const { text } = save(widget, { ...DEFAULT_SETTINGS, quantity: 6, keepUpright: false, panelThickness: 15 });
+    const r = parseDesignFile(text);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(serializeDesign(fromFile(r.file))).toBe(text);
+  });
+
+  it("keeps the stand-in flag for a custom part without a real mass", () => {
+    const { text } = save({ ...widget, mass_kg: 10, massAssumed: true }, DEFAULT_SETTINGS);
+    const r = parseDesignFile(text);
+    expect(r.ok && r.file.part.massAssumed).toBe(true);
+  });
+});
+
+function fromFile(f: DesignFile) {
+  const design = computeDesign(f.part, f.settings, f.layoutKey).design!;
+  return { part: f.part, settings: f.settings, layoutKey: f.layoutKey, design, savedAt: f.savedAt };
+}
+
+describe("isDesignFileJson", () => {
+  it("tells a design file from a parts.json catalog", () => {
+    expect(isDesignFileJson({ kind: "crate-design" })).toBe(true);
+    expect(isDesignFileJson({ schema_version: "1.0", parts: [] })).toBe(false);
+    expect(isDesignFileJson(null)).toBe(false);
+    expect(isDesignFileJson([1, 2])).toBe(false);
+  });
+});
+
+describe("parseDesignFile", () => {
+  const valid = () => JSON.parse(save(catalogFilePart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 2 }).text);
+
+  it("rejects text that is not JSON", () => {
+    expect(parseDesignFile("{nope")).toEqual({ ok: false, error: expect.stringMatching(/not valid JSON/) });
+  });
+
+  it("rejects JSON that is not a design file", () => {
+    expect(parseDesignFile(JSON.stringify({ parts: [] }))).toEqual({ ok: false, error: expect.stringMatching(/not a crate design/) });
+  });
+
+  it("rejects a design saved by a newer app", () => {
+    const r = parseDesignFile(JSON.stringify({ ...valid(), schemaVersion: DESIGN_SCHEMA_VERSION + 1 }));
+    expect(r).toEqual({ ok: false, error: expect.stringMatching(/newer version/) });
+  });
+
+  it("rejects a missing or unknown version", () => {
+    const noVersion = valid();
+    delete noVersion.schemaVersion;
+    expect(parseDesignFile(JSON.stringify(noVersion)).ok).toBe(false);
+    expect(parseDesignFile(JSON.stringify({ ...valid(), schemaVersion: 0 })).ok).toBe(false);
+    expect(parseDesignFile(JSON.stringify({ ...valid(), schemaVersion: "1" })).ok).toBe(false);
+  });
+
+  it("names the field that is wrong", () => {
+    const bad = valid();
+    bad.part.mass_kg = -3;
+    const r = parseDesignFile(JSON.stringify(bad));
+    expect(r).toEqual({ ok: false, error: expect.stringMatching(/part\.mass_kg/) });
+  });
+
+  it("rejects settings outside the schema rather than guessing", () => {
+    const bad = valid();
+    bad.settings.quantity = 500;
+    expect(parseDesignFile(JSON.stringify(bad)).ok).toBe(false);
+    const nan = valid();
+    nan.settings.panelThickness = 13;
+    expect(parseDesignFile(JSON.stringify(nan)).ok).toBe(false);
+  });
+
+  it("rejects a model that is not a .glb and an unknown part source", () => {
+    const a = valid();
+    a.part.model = "bracket.gltf";
+    expect(parseDesignFile(JSON.stringify(a)).ok).toBe(false);
+    const b = valid();
+    b.part.source = "cloud";
+    expect(parseDesignFile(JSON.stringify(b)).ok).toBe(false);
+  });
+
+  it("ignores unknown extra keys, so later minor additions still open", () => {
+    const r = parseDesignFile(JSON.stringify({ ...valid(), note: "for the March order" }));
+    expect(r.ok).toBe(true);
+    expect(r.ok && "note" in r.file).toBe(false);
+  });
+});
+
+describe("restoreDesign", () => {
+  it("reproduces the same outside size and cut list for every catalog part × suggested quantity", () => {
+    for (const p of parts) {
+      for (const quantity of p.suggested_quantities) {
+        for (const keepUpright of [true, false]) {
+          const settings = { ...DEFAULT_SETTINGS, quantity, keepUpright };
+          const original = computeDesign(p, settings).design!;
+          // Save the runner-up layout when there is one, so the pick matters.
+          const layouts = computeDesign(p, settings).layouts;
+          const pick = layouts[1] ?? layouts[0];
+          const picked = computeDesign(p, settings, pick.key).design!;
+          for (const design of [original, picked]) {
+            const filePart = catalogFilePart(p.id);
+            const text = serializeDesign({ part: filePart, settings, layoutKey: design.layout.key, design, savedAt: SAVED_AT });
+            const r = parseDesignFile(text);
+            if (!r.ok) throw new Error(r.error);
+            const restored = restoreDesign(r.file, p);
+            expect(restored.notes).toEqual([]);
+            expect(restored.layoutKey).toBe(design.layout.key);
+            const again = computeDesign(p, restored.settings, restored.layoutKey).design!;
+            expect(again.layout.external).toEqual(design.layout.external);
+            expect(again.grossKg).toBeCloseTo(design.grossKg, 6);
+            expect(bomToCsv(p, again)).toBe(bomToCsv(p, design));
+          }
+        }
+      }
+    }
+  });
+
+  it("reproduces a custom part's crate from the saved size and mass", () => {
+    const settings = { ...DEFAULT_SETTINGS, quantity: 6, partGapMm: 30, maxLayers: 3 };
+    const { text, result } = save(widget, settings);
+    const r = parseDesignFile(text);
+    if (!r.ok) throw new Error(r.error);
+    const restored = restoreDesign(r.file, r.file.part);
+    expect(restored.notes).toEqual([]);
+    const again = computeDesign(r.file.part, restored.settings, restored.layoutKey).design!;
+    expect(again.layout.external).toEqual(result.design!.layout.external);
+    expect(again.bom).toEqual(result.design!.bom);
+  });
+
+  it("falls back to the recommended layout when the saved one no longer exists, and says so", () => {
+    const { text } = save(catalogFilePart("PART-001"), DEFAULT_SETTINGS);
+    const file = (parseDesignFile(text) as { ok: true; file: DesignFile }).file;
+    const stale = { ...file, layoutKey: "u:1x1x1:999" };
+    const restored = restoreDesign(stale, parts[0]);
+    expect(restored.layoutKey).toBeNull();
+    expect(restored.notes.join(" ")).toMatch(/saved layout .* recommended layout/i);
+  });
+
+  it("says so when the crate comes out different from the saved summary", () => {
+    const { text } = save(catalogFilePart("PART-001"), DEFAULT_SETTINGS);
+    const file = (parseDesignFile(text) as { ok: true; file: DesignFile }).file;
+    // The catalog entry changed since the design was saved: a heavier part.
+    const heavier = { ...parts[0], mass_kg: parts[0].mass_kg * 2 };
+    const restored = restoreDesign(file, heavier);
+    expect(restored.notes.join(" ")).toMatch(/gross/i);
+    const tampered = { ...file, summary: { ...file.summary, outsideMm: [1000, 652, 497] as [number, number, number] } };
+    expect(restoreDesign(tampered, parts[0]).notes.join(" ")).toMatch(/932 × 652 × 497 mm.*1000 × 652 × 497 mm/);
+  });
+});

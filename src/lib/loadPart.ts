@@ -1,6 +1,8 @@
 import { Box3, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { PartSchema, type Part, type Vec3 } from "@/domain/schema";
+import { catalog } from "@/domain/catalog";
+import { isDesignFileJson, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
+import { PartSchema, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { catalogPart, type LoadedPart } from "@/state/store";
 
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
@@ -40,8 +42,12 @@ export function nameFromFile(fileName: string): string {
 
 /** Entries from a dropped parts.json that pass the catalog schema. */
 export function partsFromJson(text: string): Part[] {
-  const json = JSON.parse(text);
-  const list: unknown[] = Array.isArray(json?.parts) ? json.parts : [];
+  return catalogEntries(JSON.parse(text));
+}
+
+function catalogEntries(json: unknown): Part[] {
+  const parts = (json as { parts?: unknown } | null)?.parts;
+  const list: unknown[] = Array.isArray(parts) ? parts : [];
   return list.flatMap((p) => {
     const r = PartSchema.safeParse(p);
     return r.success ? [r.data] : [];
@@ -55,25 +61,65 @@ async function measure(buffer: ArrayBuffer): Promise<Vec3> {
   return [size.x, size.y, size.z];
 }
 
+interface ReadGlb {
+  url: string;
+  sizeMm: Vec3;
+  mmPerUnit: number;
+  readAsMm: boolean;
+}
+
+/** Validates and measures a GLB, then makes an object URL for it. A string is a problem message. */
+async function readGlb(glb: File): Promise<ReadGlb | string> {
+  const buffer = await glb.arrayBuffer();
+  const problem = glbProblem(buffer);
+  if (problem) return problem;
+  const sizeUnits = await measure(buffer);
+  const readAsMm = Math.max(...sizeUnits) > MM_FILE_THRESHOLD;
+  const mmPerUnit = readAsMm ? 1 : 1000;
+  const sizeMm = sizeUnits.map((v) => v * mmPerUnit) as Vec3;
+  const url = URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" }));
+  return { url, sizeMm, mmPerUnit, readAsMm };
+}
+
 export interface LoadOutcome {
   part?: LoadedPart;
+  /** Settings and layout to restore with `part`, when a design file was loaded. */
+  design?: { settings: CrateSettings; layoutKey: string | null };
   catalogAdditions: Part[];
   message: string;
 }
 
 /**
- * Turns dropped or picked files into a part. A parts.json adds catalog entries
- * first; a .glb whose file name matches a catalog `model` takes that entry's
- * mass, material and quantities. Anything else gets a stand-in mass.
+ * Turns dropped or picked files into a part. A JSON file is either a saved design (by its
+ * `kind`, spec §6.4) or a parts.json catalog.
+ * - A design restores its part, rules and layout (`loadDesign`).
+ * - Otherwise a parts.json adds catalog entries first, and a .glb whose file name matches a
+ *   catalog `model` takes that entry's mass, material and quantities. Anything else gets a
+ *   stand-in mass.
  */
-export async function loadPartFiles(files: File[], known: Part[]): Promise<LoadOutcome> {
+export async function loadPartFiles(files: File[], known: Part[], bundled: Part[] = catalog.parts): Promise<LoadOutcome> {
   const catalogAdditions: Part[] = [];
+  let designText: string | null = null;
   for (const f of files.filter((f) => /\.json$/i.test(f.name))) {
-    catalogAdditions.push(...partsFromJson(await f.text()));
+    const text = await f.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      return { catalogAdditions, message: `${f.name} is not valid JSON.` };
+    }
+    if (isDesignFileJson(json)) designText ??= text;
+    else catalogAdditions.push(...catalogEntries(json));
   }
-  const lookup = [...known, ...catalogAdditions];
+  const glbs = files.filter((f) => /\.glb$/i.test(f.name));
 
-  const glb = files.find((f) => /\.glb$/i.test(f.name));
+  if (designText !== null) {
+    const parsed = parseDesignFile(designText);
+    if (!parsed.ok) return { catalogAdditions, message: parsed.error };
+    return { catalogAdditions, ...(await loadDesign(parsed.file, glbs, bundled)) };
+  }
+
+  const glb = glbs[0];
   if (!glb) {
     const message = catalogAdditions.length
       ? "Part details loaded. Now add the .glb file."
@@ -83,27 +129,21 @@ export async function loadPartFiles(files: File[], known: Part[]): Promise<LoadO
     return { catalogAdditions, message };
   }
 
-  const buffer = await glb.arrayBuffer();
-  const problem = glbProblem(buffer);
-  if (problem) return { catalogAdditions, message: problem };
+  const read = await readGlb(glb);
+  if (typeof read === "string") return { catalogAdditions, message: read };
+  const { url, sizeMm, mmPerUnit, readAsMm } = read;
 
-  const sizeUnits = await measure(buffer);
-  const readAsMm = Math.max(...sizeUnits) > MM_FILE_THRESHOLD;
-  const mmPerUnit = readAsMm ? 1 : 1000;
-  const sizeMm = sizeUnits.map((v) => v * mmPerUnit) as Vec3;
-  const url = URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" }));
-
-  const match = lookup.find((p) => p.model === glb.name);
+  const match = [...known, ...catalogAdditions].find((p) => p.model === glb.name);
   if (match) {
     return { catalogAdditions, message: "", part: { ...catalogPart(match, url), mmPerUnit, readAsMm } };
   }
-  const name = nameFromFile(glb.name);
   return {
     catalogAdditions,
     message: "",
     part: {
       id: glb.name.replace(/\.glb$/i, ""),
-      name,
+      name: nameFromFile(glb.name),
+      model: glb.name,
       mass_kg: STAND_IN_MASS_KG,
       dimensions_mm: sizeMm,
       suggested_quantities: DEFAULT_QUANTITIES,
@@ -112,5 +152,79 @@ export async function loadPartFiles(files: File[], known: Part[]): Promise<LoadO
       massAssumed: true,
       readAsMm,
     },
+  };
+}
+
+/** A measured size this close (mm, per axis) to the saved one is the same model; the saved size is kept. */
+const SAME_SIZE_MM = 0.5;
+
+/**
+ * A saved design → part, settings and layout (spec §6.4).
+ * - A catalog part comes from the bundled catalog and /public/parts.
+ * - A custom part (or a catalog id this app doesn't have) needs its GLB, picked or dropped
+ *   together with the design file. Without it nothing changes and the message names the file.
+ */
+async function loadDesign(file: DesignFile, glbs: File[], bundled: Part[]): Promise<Omit<LoadOutcome, "catalogAdditions">> {
+  const saved = file.part;
+  const entry = saved.source === "catalog" ? bundled.find((p) => p.id === saved.id) : undefined;
+  const notes: string[] = [];
+  let part: LoadedPart;
+
+  if (entry) {
+    part = catalogPart(entry);
+  } else {
+    const glb = glbs.find((f) => f.name === saved.model) ?? (glbs.length === 1 ? glbs[0] : undefined);
+    if (!glb) {
+      const why =
+        saved.source === "catalog"
+          ? `This design uses ${saved.id}, which is not in this app's catalog.`
+          : `This design uses a custom model.`;
+      return { message: `${why} Add ${saved.model} together with the design file: pick or drop both at once.` };
+    }
+    const read = await readGlb(glb);
+    if (typeof read === "string") return { message: `${glb.name}: ${read}` };
+    if (glb.name !== saved.model) notes.push(`Used ${glb.name} for the saved model ${saved.model}.`);
+    const same = read.sizeMm.every((v, i) => Math.abs(v - saved.dimensions_mm[i]) < SAME_SIZE_MM);
+    if (!same) notes.push(`${glb.name} is a different size from the saved part, so the crate is sized to the file.`);
+    part = {
+      id: saved.id,
+      name: saved.name,
+      material: saved.material,
+      model: glb.name,
+      mass_kg: saved.mass_kg,
+      dimensions_mm: same ? saved.dimensions_mm : read.sizeMm,
+      suggested_quantities: DEFAULT_QUANTITIES,
+      modelUrl: read.url,
+      mmPerUnit: read.mmPerUnit,
+      massAssumed: saved.massAssumed ?? false,
+      readAsMm: read.readAsMm,
+    };
+  }
+
+  const restored = restoreDesign(file, part);
+  notes.push(...restored.notes);
+  return {
+    part,
+    design: { settings: restored.settings, layoutKey: restored.layoutKey },
+    message: [`Design loaded: ${file.settings.quantity} × ${part.name}.`, ...notes].join(" "),
+  };
+}
+
+/**
+ * The current part as it is written to a design file (spec §6.4). It is a catalog part when
+ * the bundled catalog has it (even if its GLB was loaded from disk); anything else, including
+ * entries from a dropped parts.json, is custom and needs its GLB to reopen.
+ */
+export function designFilePart(part: LoadedPart, bundled: Part[] = catalog.parts): DesignFilePart {
+  const model = part.model ?? `${part.id}.glb`;
+  return {
+    source: bundled.some((p) => p.id === part.id && p.model === model) ? "catalog" : "custom",
+    id: part.id,
+    name: part.name,
+    ...(part.material ? { material: part.material } : {}),
+    mass_kg: part.mass_kg,
+    ...(part.massAssumed ? { massAssumed: true } : {}),
+    dimensions_mm: part.dimensions_mm,
+    model,
   };
 }

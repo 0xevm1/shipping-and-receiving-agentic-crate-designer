@@ -128,6 +128,9 @@ tab at a time.
    "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
    standards** / **Load standards** move them between machines as a JSON file.
+9. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
+   through **Load a part** or a drop. It restores the part, rules and layout; for a custom
+   part, add its `.glb` in the same pick or drop. The format is in spec §6.5.
 
 ### The crate it designs
 
@@ -152,7 +155,7 @@ tab at a time.
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
 - **Persistence and accounts.** Only the shop standards are saved (in the browser's
-  `localStorage`); designs are not. The plan for the rest is in
+  `localStorage`); a design can be downloaded as a JSON file and reopened. The plan for the rest is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
