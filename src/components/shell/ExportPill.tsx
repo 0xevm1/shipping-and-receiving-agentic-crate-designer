@@ -11,7 +11,7 @@ const CAUTION_NOTE_ID = "export-caution";
 /**
  * The Export pill, under the part header: one click downloads `crate-<part>-x<qty>.zip` with the
  * GLB, the PDF, the cut list, the design file and a README, all made in the browser
- * (`src/lib/exportBundle.ts`). The bundle code and jsPDF load only on the first click.
+ * (`src/lib/exportBundle.ts`, built by the engine's `buildBundleZip`). The bundle code, jsPDF and the GLB exporter load only on the first click.
  *
  * Idle → busy ("Exporting…" with a spinner, held for at least 1.5 s; with reduced motion, no
  * spin and no hold) → "Downloaded crate-PART-001-x4.zip", or a plain error. The note is a

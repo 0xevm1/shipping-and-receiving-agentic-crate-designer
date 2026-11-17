@@ -11,6 +11,8 @@ docs/screenshots
 playwright-report
 test-results
 e2e/screenshots
+# Test baselines vitest writes byte for byte (the engine parity baseline).
+src/**/__snapshots__
 
 # Prose keeps its hand-set tables and wrapping.
 *.md

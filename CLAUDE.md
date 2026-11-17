@@ -13,8 +13,11 @@
 - **Conventions:**
   - The domain (`src/domain/`) is pure TypeScript in mm/kg, Z-up, and holds all business rules.
   - **Layers point down only:** `src/domain` imports nothing above it (and no three, react, zustand or
-    DOM globals); `src/lib` (edge code) may import domain; `src/state` (zustand, persistence) may import
-    lib and domain; `src/components` and `src/app` may import everything. `bun run lint` enforces this,
+    DOM globals); `src/lib` (edge code) may import domain; `src/engine` (the shared crate engine, runs
+    in the page, a Web Worker and Node; no DOM globals or Node built-ins) may import lib and domain;
+    `src/state` (zustand, persistence, the engine worker client) may import engine, lib and domain;
+    `src/server` (server-only: Postgres, blob storage, events) may import engine, lib and domain and
+    is imported only by `src/app`; `src/components` and `src/app` may import everything else. `bun run lint` enforces this,
     type-only imports and tests included (the one three.js exception is
     `src/domain/orientations.parity.test.ts`). If two layers need a thing, move it to the lower one.
   - The Z-up mm to Y-up metres conversion is defined once, in `viewer/scene.ts` (`MM_TO_M`, `domainToWorld`),

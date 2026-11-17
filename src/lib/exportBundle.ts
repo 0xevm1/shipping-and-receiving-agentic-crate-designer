@@ -183,18 +183,3 @@ export function zipBundle(files: BundleFile[], at: Date): Uint8Array {
   for (const f of files) entries[f.name] = [f.data, { mtime: at }];
   return zipSync(entries, { level: 6 });
 }
-
-/**
- * The real makers, for the browser: GLBs through `exportCrateGlb` with the part model (loaded
- * once, usually from the viewer's cache), and the PDF through a lazily loaded jsPDF.
- */
-export async function browserMakers(part: LoadedPart): Promise<BundleMakers> {
-  const { exportCrateGlb, loadPartScene } = await import("./exportGlb");
-  return {
-    glb: async (design) => {
-      const scene = await loadPartScene(part.modelUrl);
-      return exportCrateGlb(design, { scene, mmPerUnit: part.mmPerUnit, material: part.material });
-    },
-    pdf: async (doc) => (await import("./exportPdf")).printableToPdf(doc),
-  };
-}

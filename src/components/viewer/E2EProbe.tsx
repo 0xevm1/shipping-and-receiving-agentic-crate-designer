@@ -48,6 +48,7 @@ export interface CrateSnapshot {
   panelsHidden: boolean;
   /** Narrow screens: the island drawer is open. */
   drawerOpen: boolean;
+  /** The batch the design on screen was made for (`designedFrom`, like `partId` and `massAssumed`). */
   quantity: number;
   /** The shipment plan's crate types: one for a single crate. */
   crateTypes: { label: string; count: number; quantity: number }[];
@@ -129,6 +130,9 @@ function snapshot(): CrateSnapshot {
     cameraAngles = { theta: sph.theta, phi: sph.phi };
   }
   const external = s.result.design?.layout.external;
+  // The inputs the design on screen was made from: an edit's design lands a few ms after the
+  // edit (the engine runs in a Web Worker), so waiting on these waits for the design too.
+  const designed = s.designedFrom;
   const { handling } = probeStats;
   return {
     mode: currentMode(s.view),
@@ -148,12 +152,12 @@ function snapshot(): CrateSnapshot {
     units: s.units,
     panelsHidden: s.panelsHidden,
     drawerOpen: s.drawerOpen,
-    quantity: s.settings.quantity,
+    quantity: designed.settings.quantity,
     crateTypes: s.plan.crates.map(({ label, count, quantity }) => ({ label, count, quantity })),
     crateIndex: s.crateIndex,
     crateParts: s.result.design?.layout.slots.length ?? null,
-    partId: s.part.id,
-    massAssumed: s.part.massAssumed,
+    partId: designed.part.id,
+    massAssumed: designed.part.massAssumed,
     crateScreen: projectCrate(three),
     frames,
     pulses: probeStats.pulsesFired,

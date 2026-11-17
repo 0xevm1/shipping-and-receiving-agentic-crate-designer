@@ -202,7 +202,8 @@ tab at a time.
     - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
       split batch: `…-crate-A.glb`, `…-crate-B.glb`);
     - `crate-PART-001-x4.pdf`, a real PDF file with the crate spec, build sheet and shipping
-      label of step 10, for every crate type (drawn with jsPDF, loaded only when you export);
+      label of step 10, for every crate type (drawn with jsPDF; the PDF, ZIP and GLB code
+      loads only when you export);
     - `cut-list.csv` in the selected units (a split batch: one per crate type plus
       `shipment-cut-list.csv`);
     - `design.json`, which reopens with **Load a part**;
@@ -371,17 +372,21 @@ src/domain/        pure TypeScript (mm, kg, Z-up), no React, three.js or DOM; al
 src/lib/           edge code, may import domain: display units, cut-list formatting, part-file
                    loading, part analysis for shaped blocking, the checks the UI shows, the
                    export document, the Export pill's .zip and PDF (tested)
-src/state/         may import lib and domain: zustand stores, persistence, loading flows,
-                   per-frame animation values
-src/server/        server-only (Postgres via drizzle, #46), may import lib and domain; only
-                   src/app/ may import it
+src/engine/        the crate engine, may import lib and domain: one API (design, cut list,
+                   Export .zip) that runs the same in the page, a Web Worker and Node, every
+                   output stamped with engineVersion and inputHash (spec §5.1)
+src/state/         may import engine, lib and domain: zustand stores, persistence, loading
+                   flows, the engine's Web Worker and its client, per-frame animation values
+src/server/        server-only (Postgres via drizzle, #46), may import engine, lib and domain;
+                   only src/app/ may import it
 src/components/    may import everything below except src/server/: shell/ (overlays), island/
                    (tabs), viewer/ (three.js via react-three-fiber); src/app/ is the same layer
 ```
 
-Imports point down only (components and app, then state, then lib, then domain; src/server/
-beside state, used only by src/app/). ESLint enforces
-it (`eslint.config.mjs`, `bun run lint`), including for type-only imports and tests.
+Imports point down only (components and app, then state, then engine, then lib, then domain;
+src/server/ beside state, used only by src/app/). ESLint enforces it (`eslint.config.mjs`,
+`bun run lint`), including for type-only imports and tests. The page designs in a Web Worker,
+so typing and dragging never wait for the crate.
 
 ```
 src/data/          parts.json catalog
