@@ -399,10 +399,9 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
     `cost` (`CrateCost`: `woodUsd`, `fastenersUsd`, `materialUsd`, `labourUsd`, `totalUsd`) and
     `freight` (`FreightTerms`: `grossLb`, `outsideIn`, `volumeFt3`, `dimWeightLb`,
     `dimDivisorIn3PerLb`, `densityLbFt3`, `freightClass`) (#17, §7.12)
-  - `freightClass`, `densityLbFt3` and `dimWeightLb`: the same freight values at the top level,
-    for exports and the build sheet (#26)
-  - `centerOfGravityMm` (crate-interior frame) and `handling` (`Handling`: the CoG offset,
-    height and tip angle, the fork openings and the device fits) (#8, §7.14)
+  - `handling` (`Handling`: the centre of gravity `cogMm` in the crate-interior frame, its
+    height and tip angle, the fork openings and the device fits) (#8, §7.14). The freight class,
+    density, dimensional weight and CoG each live in one place (`freight.*`, `handling.cogMm`)
   - `checks[]`
   - `shapedBlocking?`: `{ shaped, boundingBox, blocks }`, set only when blocking was shaped to a
     part profile (§7.5b): the restraint of this crate's blocking, of bounding-box blocking for the
@@ -1399,7 +1398,7 @@ cautions still exports (no confirm dialog), but the pill carries an amber dot, a
 `designCrate` built and the part placements (`layout.slots`). It never changes the
 construction, so it follows whatever skids, bearers, blocking or cradles the construction rules
 produce (#6, #7, #16). `designCrate` stores the result as `design.handling` and
-`design.centerOfGravityMm`, and appends `handlingChecks` to the checks after `base-rating`.
+`design.handling.cogMm`, and appends `handlingChecks` to the checks after `base-rating`.
 
 **Frame.** Everything is in the crate-interior frame of `Member` (§4): origin at the interior min
 corner on top of the floor, Z up, X along the length. The ground is the bottom of the skids
@@ -1819,7 +1818,7 @@ open question for the user (see #20).
   - **CoG, only when it matters (#87):** shown only when the `cog-offset` or `cog-tip` check is a
     caution; a centred, low CoG gets no 3D marker (the label and Checks still give it). It is
     drawn as a real crate marking: a flat ISO 7000-0627 quartered circle stencilled on each of
-    the four outside faces, at `design.centerOfGravityMm` projected onto that face (along the
+    the four outside faces, at `design.handling.cogMm` projected onto that face (along the
     face and at the CoG's height), 3 mm off the boards. The stencils are depth-tested, so only
     the faces turned to the camera show them, and each moves out with its wall when exploded.
   - **Fork entry:** a flat gold arrow on the ground at each end (−X and +X) for every opening

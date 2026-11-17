@@ -91,7 +91,7 @@ export function rankByObjective(
   });
   // Whole cents and whole lb: smaller differences are rounding, not a better crate.
   const objective = (d: CrateDesign) =>
-    ranking === "cost" ? [Math.round(d.cost.totalUsd * 100)] : [d.freightClass, Math.round(d.freight.grossLb)];
+    ranking === "cost" ? [Math.round(d.cost.totalUsd * 100)] : [d.freight.freightClass, Math.round(d.freight.grossLb)];
   scored.sort((x, y) => {
     for (let i = 0; i < x.hard.length; i++) if (x.hard[i] !== y.hard[i]) return x.hard[i] - y.hard[i];
     const [ox, oy] = [objective(x.d), objective(y.d)];
@@ -120,7 +120,7 @@ export function scoreLayouts(
   for (const l of layouts) {
     if (out.has(l.key)) continue;
     const d = designCrate(part, settings, l, standards);
-    out.set(l.key, { costUsd: d.cost.totalUsd, labourHours: d.labour.hours, freightClass: d.freightClass, densityLbFt3: d.densityLbFt3 });
+    out.set(l.key, { costUsd: d.cost.totalUsd, labourHours: d.labour.hours, freightClass: d.freight.freightClass, densityLbFt3: d.freight.densityLbFt3 });
   }
   return out;
 }

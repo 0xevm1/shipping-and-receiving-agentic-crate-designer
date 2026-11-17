@@ -43,12 +43,12 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         </div>
         <div>
           <dt>Freight class</dt>
-          <dd className={styles.value}>{design.freightClass}</dd>
-          <dd>est., {densityText(design.densityLbFt3, units)}</dd>
+          <dd className={styles.value}>{design.freight.freightClass}</dd>
+          <dd>est., {densityText(design.freight.densityLbFt3, units)}</dd>
         </div>
         <div>
           <dt>Dim weight</dt>
-          <dd className={styles.value}>{lb(design.dimWeightLb)}</dd>
+          <dd className={styles.value}>{lb(design.freight.dimWeightLb)}</dd>
           <dd>
             ÷ {freight.dimDivisorIn3PerLb} in³/lb, gross {lb(freight.grossLb)}
           </dd>

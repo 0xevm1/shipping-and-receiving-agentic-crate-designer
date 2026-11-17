@@ -54,11 +54,11 @@ describe("centre of gravity", () => {
     for (const [id, q] of [["PART-001", 4], ["PART-003", 8], ["PART-002", 2]] as const) {
       const d = design(id, { quantity: q });
       const [L, W] = d.layout.interior;
-      expect(d.centerOfGravityMm[0]).toBeCloseTo(L / 2, 6);
-      expect(d.centerOfGravityMm[1]).toBeCloseTo(W / 2, 6);
+      expect(d.handling.cogMm[0]).toBeCloseTo(L / 2, 6);
+      expect(d.handling.cogMm[1]).toBeCloseTo(W / 2, 6);
       expect(d.handling.offsetMm[0]).toBeCloseTo(0, 6);
       expect(d.handling.offsetMm[1]).toBeCloseTo(0, 6);
-      expect(d.centerOfGravityMm).toBe(d.handling.cogMm);
+      expect(d.handling.cogMm).toBe(d.handling.cogMm);
     }
   });
 
@@ -66,11 +66,11 @@ describe("centre of gravity", () => {
     const d = design("PART-001", { quantity: 4 });
     const crate = centreOfGravity(memberMasses(d.members))[2];
     const payload = centreOfGravity(partMasses(d.layout, 21.5))[2];
-    expect(d.centerOfGravityMm[2]).toBeGreaterThan(Math.min(crate, payload));
-    expect(d.centerOfGravityMm[2]).toBeLessThan(Math.max(crate, payload));
+    expect(d.handling.cogMm[2]).toBeGreaterThan(Math.min(crate, payload));
+    expect(d.handling.cogMm[2]).toBeLessThan(Math.max(crate, payload));
     // Total moment check: the weighted mean of the two groups.
     const z = (crate * d.tareKg + payload * d.payloadKg) / d.grossKg;
-    expect(d.centerOfGravityMm[2]).toBeCloseTo(z, 6);
+    expect(d.handling.cogMm[2]).toBeCloseTo(z, 6);
   });
 
   it("moves toward an offset load: the same crate with its last part (+X, +Y) left out", () => {
@@ -88,7 +88,7 @@ describe("centre of gravity", () => {
     const d = design("PART-001", { quantity: 4 });
     const { floorMm, skid } = d.construction;
     expect(d.handling.groundZ).toBe(-floorMm - skid.tall);
-    expect(d.handling.heightMm).toBeCloseTo(d.centerOfGravityMm[2] + floorMm + skid.tall, 6);
+    expect(d.handling.heightMm).toBeCloseTo(d.handling.cogMm[2] + floorMm + skid.tall, 6);
   });
 });
 

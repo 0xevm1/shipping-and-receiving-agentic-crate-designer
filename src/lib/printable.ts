@@ -335,7 +335,7 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
   const {
     min: [, y0, z0],
   } = memberBounds(members);
-  const cog = design.centerOfGravityMm;
+  const cog = design.handling.cogMm;
   return {
     partId: part.id,
     partName: part.name,

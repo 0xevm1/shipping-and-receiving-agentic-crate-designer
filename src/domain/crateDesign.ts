@@ -6,7 +6,6 @@ import type { Handling } from "./handling";
 import type { Assembly, Member } from "./members";
 import type { Layout } from "./packing";
 import type { Restraint } from "./profile";
-import type { Vec3 } from "./schema";
 import type { StructurePlan } from "./structure";
 
 /** A designed crate: the boards, the cut list, weights, cost, handling and every check's result. */
@@ -31,20 +30,13 @@ export interface CrateDesign {
   cost: CrateCost;
   /** Domestic LTL terms: gross lb, volume, dimensional weight, density and estimated class. */
   freight: FreightTerms;
-  /** `freight.freightClass`, at the top level for exports and the build sheet. */
-  freightClass: number;
-  /** `freight.densityLbFt3`. */
-  densityLbFt3: number;
-  /** `freight.dimWeightLb`. */
-  dimWeightLb: number;
   /** Structural sizing (spec §7.15): the base and lid plan, the dead load and the base rating. */
   structure: StructurePlan;
   /**
-   * Combined centre of gravity of the crate and the parts (spec §7.14), in the crate-interior
-   * frame of `members` (origin at the interior min corner, on top of the floor; Z up).
+   * Centre of gravity (`cogMm`, spec §7.14: the crate and the parts, in the crate-interior frame
+   * of `members`, origin at the interior min corner on top of the floor, Z up), tip angle and
+   * fork openings (`handling.ts`).
    */
-  centerOfGravityMm: Vec3;
-  /** Centre of gravity, tip angle and fork openings (`handling.ts`). */
   handling: Handling;
   /** Every rule, passed or not, in a fixed order. */
   checks: Check[];

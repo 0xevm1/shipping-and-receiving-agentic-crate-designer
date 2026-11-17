@@ -92,11 +92,7 @@ export function designCrate(
     labour,
     cost: crateCost(materialCostUsd, screws, labour.costUsd, standards),
     freight,
-    freightClass: freight.freightClass,
-    densityLbFt3: freight.densityLbFt3,
-    dimWeightLb: freight.dimWeightLb,
     structure,
-    centerOfGravityMm: handling.cogMm,
     handling,
     checks: [],
   };
