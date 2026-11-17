@@ -396,6 +396,9 @@ docs/              SPECIFICATION.md, DATA_STORE.md, schema.sql, design-handoff/
 - [`docs/DATA_STORE.md`](docs/DATA_STORE.md): the client-side persistence plan (SQLite WASM on
   OPFS).
 - [`docs/schema.sql`](docs/schema.sql): the proposed tables.
+- [`docs/demo-cheat-sheet.md`](docs/demo-cheat-sheet.md): one page for the live demo: what the app does
+  with each unusual input or requirement, which rule decides it, and what is out of scope. Its test
+  files are built by `bun run fixtures` (see [`fixtures/scenarios/README.md`](fixtures/scenarios/README.md)).
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 
