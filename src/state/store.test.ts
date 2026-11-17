@@ -115,7 +115,7 @@ describe("lastChange", () => {
   });
 });
 
-describe("loadDesign (#28)", () => {
+describe("loadDesign", () => {
   beforeEach(() => useDesigner.setState(initial, true));
 
   it("keeps the saved settings and layout instead of resetting them like setPart", () => {
@@ -132,7 +132,7 @@ describe("loadDesign (#28)", () => {
   });
 });
 
-describe("setPartProfile (#16)", () => {
+describe("setPartProfile", () => {
   beforeEach(() => {
     useDesigner.setState(initial, true);
     s().setPart(unknownPart);
@@ -178,6 +178,22 @@ describe("setPartProfile (#16)", () => {
     s().setPartProfile("blob:widget", null);
     expect(s().part.profile).toBeUndefined();
     expect(s().result.design!.shapedBlocking).toBeUndefined();
+  });
+
+  it("drops a pin or hover on a cut-list line the shaped design no longer has, and keeps one it still has", () => {
+    const kept = s().result.design!.bom[0].key;
+    s().setPin(kept);
+    s().setHover({ key: kept, source: "list" });
+    s().setPartProfile("blob:widget", profile());
+    expect(s().pin).toBe(kept);
+    expect(s().hover?.key).toBe(kept);
+
+    s().setPin("no-such-line");
+    s().setHover({ key: "no-such-line", source: "list" });
+    useDesigner.setState({ part: { ...s().part, profile: undefined } });
+    s().setPartProfile("blob:widget", profile());
+    expect(s().pin).toBeNull();
+    expect(s().hover).toBeNull();
   });
 
   it("keeps the profile through a mass edit, and drops it with a new part", () => {

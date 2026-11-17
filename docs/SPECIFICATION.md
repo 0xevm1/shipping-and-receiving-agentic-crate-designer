@@ -195,9 +195,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill (#51; #77 briefly shared it with a View popover button, removed in #62) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
-| `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
-| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and the saved units in `localStorage` (§9) |
-| `src/state/libraryStorage.ts` | Loads and saves the design library in `localStorage` (§9) |
+| `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
+| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
+| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
+| `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
@@ -1871,6 +1872,13 @@ version or an invalid value falls back to the defaults with a `console.warn`, an
 is missing or throws (server, private mode, quota) is treated as empty. The version is in the
 key, so an incompatible future format starts fresh rather than misreading old data.
 
+All four saved items (standards, units, library, last design) go through `src/state/persist.ts`
+with one contract: a save never throws and returns `true` only if the value is stored, so a
+missing store (server, blocked) is a failed save. Standards and units save inside their
+`useDesigner` actions, the library inside `useLibrary`, and the last design from a debounced
+subscriber in `lastDesignLoader.ts`. The library shows the "browser refused to store it"
+message when a save, rename, delete (`remove(...).saveError`) or undo fails to store.
+
 **Display units** (#15) are saved under `crate-designer.units.v1` (`src/state/unitsStorage.ts`)
 as `"imperial"` or `"metric"` on every `setUnits`. Either choice is saved, so a later change of
 default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
@@ -2214,9 +2222,22 @@ without `#`), a custom part with non-ASCII text too; `shareUrl` keeps the query 
 design in the hash; a hash without a design is ignored; damaged, truncated and tampered links
 (out-of-range quantity, wrong kind, newer version, not an object) are refused.
 
+**`src/state/persist.test.ts`** checks `readJson` (missing, no store or throwing store give the
+fallback silently; a rejected or throwing parser warns), `writeJson` (store, remove for null,
+false for no store or a throwing store) and that all four save functions return false for null
+and throwing storage. Its fixtures (`src/state/fixtures/*.json`) are the stored text of the
+shop standards, library and last design, and the bare units word, under the four unchanged keys:
+they must keep loading (the standards fixture must also write back byte for byte).
+
+**`src/state/checks.test.ts`** checks `modelMatchesCatalog` (null without a size or measurement;
+the 1 mm tolerance per axis) and `allChecks` (model ok / caution / info notes, the stand-in mass
+caution, cautions-first sorting, domain checks left untouched).
+
 **`src/state/library.store.test.ts`** checks the library's storage (versioned key; empty when
 nothing is saved and nothing stored when empty; unreadable JSON, another kind or a newer version
-fall back to empty with one warning; good entries survive bad ones; throwing storage) and
+fall back to empty with one warning; good entries survive bad ones; throwing storage; a failed
+save with null or throwing storage) and the store reporting the storage-failed message from
+save, rename, remove and undo, and
 `useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
 each time, export and import with duplicates and bad entries counted).
 
@@ -2253,7 +2274,8 @@ given settings and layout pick (unlike `setPart`). It also checks
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
 record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
 `setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
-a profile for another model or a failed analysis, survives a mass edit and is dropped with a new
+a profile for another model or a failed analysis, drops a pin or hover on a cut-list line that is
+gone, survives a mass edit and is dropped with a new
 part.
 
 **`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5b) with synthetic profiles: the
