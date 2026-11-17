@@ -9,7 +9,7 @@ import type { Message } from "./message";
 type CrateCheckId = "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "lid" | "utilization" | "cardboard";
 
 /** Produced by `handling.ts`. */
-export type HandlingCheckId = "cog-offset" | "cog-tip" | "forklift" | "pallet-jack";
+export type HandlingCheckId = "cog-offset" | "cog-tip" | "hand-carry" | "forklift" | "pallet-jack";
 
 /** Produced by `shipment.ts`, only for a crate in a shipment plan. */
 type ShipmentCheckId = "crate-limit";
