@@ -191,7 +191,9 @@ for the same request, units and date.
   default), dated with the configuration's `createdAt` in UTC, so the same inputs and engine always
   give the same bytes.
 - **First request:** built on the engine's worker threads (never the request thread), stored at
-  `artifactKey(org, inputHash, engineVersion, file)` (`org/<orgId>/artifacts/<inputHash>/<engineVersion with + as _>/<file>`,
+  `artifactKey(org, inputHash, engineVersion, file, modelSha256)` (`org/<orgId>/artifacts/<inputHash>/<engineVersion with + as _>/<file>`;
+  `crate.glb` under one more segment, the part model's sha256 or `no-model`, because the GLB embeds
+  the mesh and `inputHash` doesn't hash it, [BLOB_STORAGE.md](BLOB_STORAGE.md#object-keys);
   tagged `retention=ephemeral`), recorded as an `artifact` row (`built_by = server`, unique per
   object key), and `artifact.ready` is emitted on the job (`{ artifactId, configurationId, kind, file }`).
 - **Later requests:** the row and the object are there, so nothing is built (`cached: true`). A row
@@ -216,8 +218,9 @@ CSV), `manifest.json` and `comparison.pdf`, exactly `buildMultiBundleZip` (spec 
 - `configs`: configuration ids of the job, comma-separated or repeated, in the order wanted
   (duplicates and equal inputs once; at most 50). Absent: every configuration of the job, in the
   order they joined it. An id that isn't one of the job's: `404`. A job with none: `422`.
-- **Key:** `bundleKey(org, "<bundleHash>-<engineVersion>")`, where `bundleHash` is the manifest's
-  (SHA-256 of the input hashes joined by newlines). An `artifact` row of kind `zip` names it (its
+- **Key:** `bundleKey(org, "<bundleHash>-<modelSha256>-<engineVersion>")` (the bundle id), where
+  `bundleHash` is the manifest's (SHA-256 of the input hashes joined by newlines) and `modelSha256`
+  is the part model's (`no-model` without one), since the bundle's GLBs embed the mesh. An `artifact` row of kind `zip` names it (its
   `configuration_id` is the first configuration), so orphan cleanup keeps the object and the job's
   snapshot lists it. Dated with the newest configuration's `createdAt`.
 - **Built during the request or queued (the choice):** up to **8** configurations

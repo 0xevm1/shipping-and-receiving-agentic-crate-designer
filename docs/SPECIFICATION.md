@@ -224,6 +224,9 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
   - `v` is bumped if the hashed shape changes, so old and new hashes never collide. The engine
     version is not in the hash: equal inputs hash the same across versions, and a server compares
     both before trusting a result.
+  - The part's mesh is not hashed either. A file that embeds it (the crate GLB, a bundle) is
+    therefore not named by `inputHash` alone: the server's object keys add the part model's
+    sha256 (§7.17, [BLOB_STORAGE.md](BLOB_STORAGE.md#object-keys)).
   - File outputs (`cutList`, `buildBundleZip`, `buildArtifact`) carry their design's stamp; their
     own options (units, scope, crate type, time) are not hashed. The stamp is also written
     **inside** every file the engine builds (§7.17): the GLB's scene `extras`, the PDF's keywords
@@ -1890,6 +1893,11 @@ model from blob storage. To make the bytes a function of the inputs alone (conte
 keys, one object per key however many requests race), the server writes imperial units, UTC, and
 the configuration's own save time as `generatedAt` (a bundle: its newest configuration's). Files
 are built on the first request and served from blob storage after; see docs/API.md "Artifacts".
+**Rule:** the key of a file that embeds the part's mesh (the crate GLB; a bundle, whose id is
+`<bundleHash>-<modelSha256>-<engineVersion>`) names the part model's sha256 (`no-model` without
+one), because `inputHash` hashes the part's design fields only (§5.1): two parts with equal fields
+and different meshes never share a GLB. The PDF and CSV are keyed by `inputHash` and engine version
+alone. Test: `artifacts.integration.test.ts` "files that embed the part model", `keys.test.ts`.
 
 **Download all (browser).** Beside the Export pill (§8.2), an outlined pill **Download all**
 builds this ZIP in the page (`useDownloadAll`, `src/state/downloadAll.ts`): `run(configs?)` takes

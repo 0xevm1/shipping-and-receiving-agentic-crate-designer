@@ -62,11 +62,16 @@ bare hash can't be stored or fetched by mistake.
 | Object | Key |
 |---|---|
 | Part GLB | `org/<orgId>/models/<sha256>.glb` |
-| Generated file | `org/<orgId>/artifacts/<inputHash>/<engineVersion>/{crate.glb,spec.pdf,cutlist.csv}` (the engine version's `+` written as `_`, which S3 treats specially) |
-| Bundle | `org/<orgId>/bundles/<id>.zip` (`<id>` = `<bundleHash>-<engineVersion>`) |
+| Generated file | `org/<orgId>/artifacts/<inputHash>/<engineVersion>/{spec.pdf,cutlist.csv}` (the engine version's `+` written as `_`, which S3 treats specially) |
+| Crate GLB | `org/<orgId>/artifacts/<inputHash>/<engineVersion>/<modelSha256>/crate.glb` (`no-model` for a part without one) |
+| Bundle | `org/<orgId>/bundles/<id>.zip` (`<id>` = `<bundleHash>-<modelSha256>-<engineVersion>`) |
 
 Keys are content-addressed (sha256 or the engine's `inputHash`), so the same bytes are stored once
-per org. They are per org, never global, and nothing is looked up by hash alone: the API finds a
+per org. The crate GLB and a bundle embed the part's mesh, which `inputHash` doesn't hash (it
+covers the part's design fields only, [spec §5.1](SPECIFICATION.md#51-the-crate-engine-srcengine-46)),
+so their keys also name the part model's sha256 (`modelSegment` in `keys.ts`; a catalog part's is
+the sha256 of its bundled sample GLB). Two parts with equal design fields and different meshes
+get two GLBs, never each other's; the PDF and CSV don't show the mesh and stay shared. They are per org, never global, and nothing is looked up by hash alone: the API finds a
 model through its part, inside the caller's org.
 
 ## Uploading a part: `POST /api/v1/parts`

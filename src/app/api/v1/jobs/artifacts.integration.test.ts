@@ -1,6 +1,7 @@
 // Server-built artifacts end to end (#46 slice 6, docs/API.md "Artifacts"): the Route Handlers for
 // a configuration's files and the job's bundle.zip, against a scratch Postgres database, the blob
 // emulator's test bucket and the engine's worker threads. `bun run test:integration`.
+import { readFileSync } from "node:fs";
 import { GetObjectTaggingCommand, S3Client } from "@aws-sdk/client-s3";
 import { unzipSync } from "fflate";
 import { Box3, Vector3 } from "three";
@@ -15,7 +16,7 @@ import type { DesignRequest } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
 import { ArtifactUrlResponseSchema, BundleResponseSchema } from "@/lib/api/artifacts";
 import { CreateJobResponseSchema, JobSnapshotSchema, SaveConfigurationResponseSchema } from "@/lib/api/jobs";
-import { ApiErrorSchema } from "@/lib/api/parts";
+import { ApiErrorSchema, CreatePartResponseSchema } from "@/lib/api/parts";
 import { CRATE_NODE, PARTS_NODE } from "@/lib/exportGlb";
 import { createBundleHandler, jobBundle } from "@/server/artifacts/service";
 import { storeOnce } from "@/server/artifacts/store";
@@ -37,6 +38,7 @@ import { POST as saveConfig } from "./[id]/configs/route";
 import { GET as fileGET } from "./[id]/configs/[cid]/[file]/route";
 import { GET as snapshotGET } from "./[id]/route";
 import { POST as createJob } from "./route";
+import { POST as uploadPart } from "../parts/route";
 
 const BASE = "http://localhost/api/v1";
 const PART = catalog.parts[0]!;
@@ -242,6 +244,57 @@ describe("GET /jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}", () => {
     await expect404(await getFile(jobId, "not-a-uuid", "spec.pdf"));
     await expect404(await getFile(jobId, config.id, "secrets.txt"));
     await expect404(await getBundle(foreign.id));
+  });
+});
+
+describe("files that embed the part model", () => {
+  // Two parts with the same design fields (so the same inputHash for the same request) but
+  // different meshes: one is the catalog part, the other an upload of another sample's GLB.
+  let catalogJob: string;
+  let uploadJob: string;
+  let catalogConfig: { id: string; inputHash: string };
+  let uploadConfig: { id: string; inputHash: string };
+  let uploadSha: string;
+
+  beforeAll(async () => {
+    catalogJob = await newJob();
+    catalogConfig = await saveQuantity(catalogJob, 3);
+    const other = catalog.parts.find((p) => p.model !== PART.model)!;
+    const form = new FormData();
+    form.set("mass", String(PART.mass_kg));
+    form.set("file", new File([readFileSync(`public/parts/${other.model}`)], "look-alike.glb"));
+    const up = await uploadPart(new Request(`${BASE}/parts`, { method: "POST", body: form }));
+    expect(up.status).toBe(201);
+    const created = CreatePartResponseSchema.parse(await up.json());
+    uploadSha = created.model.sha256;
+    const res = await createJob(json("POST", "/jobs", { partId: created.part.id }));
+    expect(res.status).toBe(201);
+    uploadJob = CreateJobResponseSchema.parse(await res.json()).job.id;
+    uploadConfig = await saveQuantity(uploadJob, 3);
+  });
+
+  it("get their own crate GLB and bundle, not each other's, though the inputHash is the same", async () => {
+    expect(uploadConfig.inputHash).toBe(catalogConfig.inputHash);
+    const a = ArtifactUrlResponseSchema.parse(await body(await getFile(catalogJob, catalogConfig.id, "crate.glb")));
+    const b = ArtifactUrlResponseSchema.parse(await body(await getFile(uploadJob, uploadConfig.id, "crate.glb")));
+    expect(b.cached).toBe(false);
+    expect(b.artifactId).not.toBe(a.artifactId);
+    expect(b.sha256).not.toBe(a.sha256);
+    const uploadKey = artifactKey(DEFAULT_ORG, uploadConfig.inputHash, ENGINE_VERSION, "crate.glb", uploadSha);
+    expect(await artifactRows(uploadKey)).toEqual([expect.objectContaining({ id: b.artifactId, sha256: b.sha256 })]);
+    // The files that don't embed the mesh are shared: one object for the equal inputs.
+    const pa = ArtifactUrlResponseSchema.parse(await body(await getFile(catalogJob, catalogConfig.id, "cutlist.csv")));
+    const pb = ArtifactUrlResponseSchema.parse(await body(await getFile(uploadJob, uploadConfig.id, "cutlist.csv")));
+    expect(pb).toMatchObject({ artifactId: pa.artifactId, cached: true });
+
+    const ba = BundleResponseSchema.parse(await body(await getBundle(catalogJob, `?configs=${catalogConfig.id}`)));
+    const bb = BundleResponseSchema.parse(await body(await getBundle(uploadJob, `?configs=${uploadConfig.id}`)));
+    expect(bb.bundleId).not.toBe(ba.bundleId);
+    expect(bb.bundleId).toContain(uploadSha);
+    if (ba.status !== "ready" || bb.status !== "ready") throw new Error("expected ready bundles");
+    expect(bb.artifactId).not.toBe(ba.artifactId);
+    // Both manifests still carry the same bundleHash: it hashes the configurations, as the browser's does.
+    expect(bb.inputHash).toBe(ba.inputHash);
   });
 });
 

@@ -11,8 +11,22 @@ describe("object keys", () => {
     expect(artifactKey(DEFAULT_ORG, "f00d", "0.4.1", "spec.pdf")).toBe(`org/${DEFAULT_ORG_ID}/artifacts/f00d/0.4.1/spec.pdf`);
     expect(bundleKey(DEFAULT_ORG, "b-1")).toBe(`org/${DEFAULT_ORG_ID}/bundles/b-1.zip`);
     // The engine's "+" is written as "_" (S3 treats "+" specially).
-    expect(artifactKey(DEFAULT_ORG, "f00d", "0.1.0+engine.3", "crate.glb")).toBe(`org/${DEFAULT_ORG_ID}/artifacts/f00d/0.1.0_engine.3/crate.glb`);
+    expect(artifactKey(DEFAULT_ORG, "f00d", "0.1.0+engine.3", "cutlist.csv")).toBe(`org/${DEFAULT_ORG_ID}/artifacts/f00d/0.1.0_engine.3/cutlist.csv`);
     expect(orgKeyPrefix(DEFAULT_ORG)).toBe(`org/${DEFAULT_ORG_ID}/`);
+  });
+
+  it("name the part model in the crate GLB's key: inputHash hashes the part's design fields, not its mesh", () => {
+    const other = "b".repeat(64);
+    expect(artifactKey(DEFAULT_ORG, "f00d", "0.1.0+engine.3", "crate.glb", SHA)).toBe(`org/${DEFAULT_ORG_ID}/artifacts/f00d/0.1.0_engine.3/${SHA}/crate.glb`);
+    expect(artifactKey(DEFAULT_ORG, "f00d", "0.1.0+engine.3", "crate.glb", null)).toBe(
+      `org/${DEFAULT_ORG_ID}/artifacts/f00d/0.1.0_engine.3/no-model/crate.glb`,
+    );
+    expect(artifactKey(DEFAULT_ORG, "f00d", "1", "crate.glb", SHA)).not.toBe(artifactKey(DEFAULT_ORG, "f00d", "1", "crate.glb", other));
+    // The files that don't embed the model share one key whatever the mesh.
+    expect(artifactKey(DEFAULT_ORG, "f00d", "1", "spec.pdf", SHA)).toBe(artifactKey(DEFAULT_ORG, "f00d", "1", "spec.pdf", other));
+    // Forgetting the model for a GLB is an error, not a shared key.
+    expect(() => (artifactKey as (...a: unknown[]) => string)(DEFAULT_ORG, "f00d", "1", "crate.glb")).toThrow(/model/);
+    expect(() => artifactKey(DEFAULT_ORG, "f00d", "1", "crate.glb", "../x")).toThrow();
   });
 
   it("need an OrgContext", () => {
@@ -23,10 +37,10 @@ describe("object keys", () => {
   it("refuse anything that could escape its segment", () => {
     expect(() => modelKey(DEFAULT_ORG, "ABC")).toThrow();
     expect(() => modelKey(DEFAULT_ORG, `../${SHA}`)).toThrow();
-    expect(() => artifactKey(DEFAULT_ORG, "../x", "1", "crate.glb")).toThrow();
-    expect(() => artifactKey(DEFAULT_ORG, "h", "..", "crate.glb")).toThrow();
+    expect(() => artifactKey(DEFAULT_ORG, "../x", "1", "crate.glb", null)).toThrow();
+    expect(() => artifactKey(DEFAULT_ORG, "h", "..", "crate.glb", null)).toThrow();
     // @ts-expect-error: only the three artifact files.
-    expect(() => artifactKey(DEFAULT_ORG, "h", "1", "evil.exe")).toThrow();
+    expect(() => artifactKey(DEFAULT_ORG, "h", "1", "evil.exe", null)).toThrow();
     expect(() => bundleKey(DEFAULT_ORG, "a/b")).toThrow();
   });
 
