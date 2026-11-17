@@ -3,7 +3,7 @@ import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 
 /**
- * Shaped blocking (#16, spec §7.5b): blocking that touches the part's real surfaces instead of
+ * Shaped blocking (spec §7.5b): blocking that touches the part's real surfaces instead of
  * its bounding box.
  *
  * The browser measures a **part profile** once per model (`src/lib/partProfile.ts`): for each of
@@ -63,7 +63,7 @@ const PROFILE_SIZE_TOLERANCE_MM = 1;
 
 /**
  * The profile to shape blocking with, or null: none measured, or measured on another size.
- * Layouts that use cradles (`usesCradles`, #6) have no blocking posts, so `designCrate` doesn't ask.
+ * Layouts that use cradles (`usesCradles`) have no blocking posts, so `designCrate` doesn't ask.
  */
 export function usableProfile(part: { dimensions_mm: Vec3; profile?: PartProfile | null }): PartProfile | null {
   const p = part.profile;

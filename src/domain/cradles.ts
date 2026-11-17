@@ -5,15 +5,15 @@ import type { CrateSettings, Vec3 } from "./schema";
 import type { ShopStandards } from "./standards";
 
 /**
- * Cradles for long, slender parts (#6, spec §7.5a).
+ * Cradles for long, slender parts (spec §7.5a).
  *
  * A shaft resting on two bearers and blocked with side posts can roll and bow. Real shaft
  * crates sit the part in **notched wooden saddles** across its length instead. This module
  * owns that path: when the part is slender (`isSlender`) and lies with its long axis
  * horizontal, `designCrate` calls `addCradleDunnage` in place of the general blocking.
  *
- * Ownership: slender parts are #6's, every other part is the general blocking's (#16). Both
- * use `isSlender` so exactly one path handles any part.
+ * Ownership: slender parts are the cradles', every other part is the general blocking's
+ * (`dunnage.ts`). Both use `isSlender` so exactly one path handles any part.
  */
 
 export type { CradleProfile, Notch, NotchShape } from "./members";
@@ -22,7 +22,7 @@ export type { CradleProfile, Notch, NotchShape } from "./members";
  * True when a part is long and slender: its longest side ÷ its middle side is at least
  * `cradle.slenderRatio` (3 by default). PART-002 (1530 × 172 × 172, ratio 8.9) is; PART-001
  * (1.4) and PART-003 (1.02) are not. The rule reads the part's own dimensions, so it doesn't
- * depend on the layout: the general blocking (#16) skips exactly these parts.
+ * depend on the layout: the general blocking skips exactly these parts.
  */
 export function isSlender(dims: Readonly<Vec3>, standards: Pick<ShopStandards, "cradle">): boolean {
   const [longest, middle] = sortDesc(dims);

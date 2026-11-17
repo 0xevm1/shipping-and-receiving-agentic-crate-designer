@@ -106,11 +106,13 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
   const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
   const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a;
   const joists = count("joist");
+  const joistCrossings = joists * count("skid") * SCREWS_PER_JOIST_CROSSING;
+  const crossingRule = `${SCREWS_PER_JOIST_CROSSING} where each joist crosses a skid`;
   const alongPlusOne = "along each cleat, plus 1";
   const eachEnd = "2 at each end of each cradle"; // SCREWS_PER_CRADLE is 4: two at each end
   const lines: ScrewLine[] = [
     joists > 0
-      ? line("skids", "base", "Floor joists to skids", null, `${SCREWS_PER_JOIST_CROSSING} where each joist crosses a skid`, joists * count("skid") * SCREWS_PER_JOIST_CROSSING)
+      ? line("skids", "base", "Floor joists to skids", null, crossingRule, joistCrossings)
       : line("skids", "base", "Floor to skids", every.skid, "along each skid, plus 1", along((m) => m.kind === "skid", every.skid)),
     line("joists", "base", "Floor to joists", every.skid, "along each joist, plus 1", along((m) => m.kind === "joist", every.skid)),
     line("side-cleats", "sides", "Side wall cleats to panels", every.cleat, alongPlusOne, along(cleatOf("sides"), every.cleat)),

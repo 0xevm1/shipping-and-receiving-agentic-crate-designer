@@ -114,17 +114,12 @@ describe("computeDesign", () => {
 });
 
 /**
- * Captured from the pre-redesign domain (commit 842ee77) for every part ×
- * suggested quantity × keepUpright. The UI redesign must not change any of these.
+ * Baseline for every part × suggested quantity × keepUpright: a change that is not meant to
+ * alter designs must not alter any of these.
  * Columns: part, qty, upright, external mm, gross kg, screws, members, layouts, BOM qty.
  *
- * #6 changed the PART-002 rows on purpose: the shaft now sits in notched cradles with end
- * stops instead of bearers, a separator and side blocking (spec §7.5a). Same outside size and
- * layouts; lighter, a few more screws. Before → after:
- *   × 1: 76.25 kg, 200 screws, 40 members → 70.61 kg, 208 screws, 40 members
- *   × 2: 120.44 kg, 226 screws, 45 members → 109.30 kg, 228 screws, 42 members
- *   × 4: 193.08 kg, 268 screws, 53 members → 180.15 kg, 272 screws, 46 members
- * PART-001 and PART-003 are not slender and are unchanged.
+ * The PART-002 rows are a slender shaft: it sits in notched cradles with end stops rather than
+ * on bearers with a separator and side blocking (spec §7.5a).
  */
 const BASELINE: [string, number, boolean, Vec3, number, number, number, number, number][] = [
   ["PART-001", 1, true, [522, 382, 497], 42.29, 118, 34, 1, 34],
@@ -250,7 +245,7 @@ describe("trailer limits", () => {
     computeDesign({ id: "custom", name: "Big part", mass_kg: 50, dimensions_mm: dims }, settings).design!;
   /** A single part sized so the crate's external size on `axis` is exactly `target` mm. */
   const crateWith = (axis: number, target: number) => {
-    // The structure's allowance depends on the crate (#7: a tall crate is heavier, so its skids
+    // The structure's allowance depends on the crate (a tall crate is heavier, so its skids
     // may be deeper), so re-measure it at the new size until it settles.
     const dims = [...probe] as Vec3;
     let d = run(dims);

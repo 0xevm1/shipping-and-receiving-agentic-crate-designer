@@ -2,12 +2,10 @@ import { z } from "zod";
 import { CrateSettingsSchema } from "./schema";
 
 /**
- * Shop standards: the house rules every crate is designed to (#19).
+ * Shop standards: the house rules every crate is designed to.
  *
- * These used to be constants scattered through `crate.ts` and `packing.ts`. They are
- * one validated object now, so a PM can see and change them, and every design is
- * built from the same rules. `DEFAULT_STANDARDS` holds the values the app shipped
- * with; with them, every design is exactly what it was before.
+ * One validated object, so a PM can see and change every size, limit and rate, and every
+ * design is built from the same rules. `DEFAULT_STANDARDS` holds the values the app ships with.
  *
  * Units are fixed and in the field names' comments: mm, kg, kg/m³, USD/m³, minutes, USD/h, in³/lb.
  * Values that are geometry rather than house rules (the 0.5 mm smallest board, bearer
@@ -25,7 +23,7 @@ const SectionSchema = z.object({
 });
 
 /**
- * A lifting device that enters between the skids from the ends (#8): two tines (forks) of
+ * A lifting device that enters between the skids from the ends: two tines (forks) of
  * `tineWidthMm`, whose outside-to-outside spread can be anywhere in `spreadMm`, needing
  * `minClearMm` of height under the floor.
  */
@@ -47,7 +45,7 @@ export const ShopStandardsSchema = z
       /** Cleat lumber for the wall and lid frames. Its width also sets the smallest interior (two cleats). */
       cleatMm: SectionSchema,
       /**
-       * Skid lumber, smallest first (#7): structural sizing takes `standard` when it passes, else
+       * Skid lumber, smallest first: structural sizing takes `standard` when it passes, else
        * `heavy`; `heavy` is also the minimum above `construction.heavySkidOverKg`.
        */
       skidMm: z.object({ standard: SkidSchema, heavy: SkidSchema }),
@@ -58,7 +56,7 @@ export const ShopStandardsSchema = z
       /** Width of blocking posts and bearers. */
       blockWidthMm: mm(19, 300),
       /**
-       * Floor joist lumber (#7), set on edge across the skids: `thick` along the crate, `wide`
+       * Floor joist lumber, set on edge across the skids: `thick` along the crate, `wide`
        * tall. Also the lid joists when crates are stacked.
        */
       joistMm: SectionSchema,
@@ -77,7 +75,7 @@ export const ShopStandardsSchema = z
       panelLightMaxKg: kg(0, 100000),
       /** Auto panel: payload up to this → `medium` plywood; above it, `heavy`. */
       panelMediumMaxKg: kg(0, 100000),
-      /** Payload above this gets `heavy` skids at least (structural sizing may pick them sooner, #7). */
+      /** Payload above this gets `heavy` skids at least (structural sizing may pick them sooner). */
       heavySkidOverKg: kg(0, 100000),
       /** At most this much crate width per skid gap: at least max(2, ceil(width / spacing) + 1) skids. */
       skidSpacingMm: mm(200, 5000),
@@ -107,11 +105,11 @@ export const ShopStandardsSchema = z
       /** Below this share of the interior filled, say it is mostly air. */
       lowUtilization: z.number().finite().min(0).max(1),
       /**
-       * Per-crate limits for splitting a batch across crates (#25). A crate must also fit the
+       * Per-crate limits for splitting a batch across crates. A crate must also fit the
        * trailer door and floor (`trailerMm`), so there is no separate size limit.
        */
       perCrate: z.object({
-        /** Most gross weight one crate may have (a handling limit); a heavier batch is split. The base rating (#7) also applies. */
+        /** Most gross weight one crate may have (a handling limit); a heavier batch is split. The base rating also applies. */
         maxGrossKg: kg(1, 100000),
         /** Most parts in one crate; 0 means no limit. */
         maxParts: z.number().int().min(0).max(200),
@@ -123,11 +121,11 @@ export const ShopStandardsSchema = z
       costUsdPerM3: z.object({ plywood: z.number().finite().min(0).max(100000), lumber: z.number().finite().min(0).max(100000) }),
       /** One screw every this many mm along each board. */
       screwSpacingMm: z.object({ cleat: mm(25, 2000), skid: mm(25, 2000), panelJoint: mm(25, 2000) }),
-      /** Wood screws, USD per 100 (#17). Part of the material cost. */
+      /** Wood screws, USD per 100. Part of the material cost. */
       screwCostUsdPer100: z.number().finite().min(0).max(1000),
     }),
     /**
-     * Shop labour (#17, spec §7.12): the hourly rate and the minutes each step of building a
+     * Shop labour (spec §7.12): the hourly rate and the minutes each step of building a
      * crate takes. Build time = cuts + set-ups + screws + assembly steps + handling.
      */
     labour: z.object({
@@ -147,7 +145,7 @@ export const ShopStandardsSchema = z
       handlingMin: minutes(0, 480),
     }),
     /**
-     * Structural sizing (#7, spec §7.15): allowable stresses, the load factor and the base and
+     * Structural sizing (spec §7.15): allowable stresses, the load factor and the base and
      * lid rules. Defaults are SPF No. 2 lumber and sheathing plywood, deliberately conservative.
      */
     structure: z.object({
@@ -172,12 +170,12 @@ export const ShopStandardsSchema = z
       /** Weight stacked on the lid the lid is sized for; 0 means crates aren't stacked (nominal lid). */
       lidStackKg: kg(0, 100000),
     }),
-    /** Freight terms for domestic LTL (#17, spec §7.12). */
+    /** Freight terms for domestic LTL (spec §7.12). */
     freight: z.object({
       /** Dimensional-weight divisor, cubic inches per lb (139 is the common domestic divisor). */
       dimDivisorIn3PerLb: z.number().finite().min(50).max(500),
     }),
-    /** Centre of gravity and handling (#8, spec §7.14). */
+    /** Centre of gravity and handling (spec §7.14). */
     handling: z.object({
       /** Forklift tines, entering between the skids from the ends. */
       forklift: LiftDeviceSchema,
@@ -188,7 +186,7 @@ export const ShopStandardsSchema = z
       /** Static tip angle (CoG to the nearest base edge) below this, in degrees, is top-heavy. */
       minTipAngleDeg: z.number().finite().min(1).max(80),
     }),
-    /** Cradles for long, slender parts (#6, spec §7.5a). */
+    /** Cradles for long, slender parts (spec §7.5a). */
     cradle: z.object({
       /** A part is slender when its longest side ÷ its middle side is at least this. */
       slenderRatio: z.number().finite().min(1.5).max(50),
@@ -240,7 +238,7 @@ export const ShopStandardsSchema = z
 
 export type ShopStandards = z.infer<typeof ShopStandardsSchema>;
 
-/** The values the app ships with. Designs made with these match the pre-#19 designs exactly. */
+/** The values the app ships with. */
 export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
   stock: {
     cleatMm: { thick: 19, wide: 89 }, // 1×4
@@ -286,8 +284,8 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     stableHeightRatio: 1.5,
     lowUtilization: 0.25,
     /**
-     * 1,000 kg gross per crate (the old fixed base rating, kept as a handling limit); a crate is
-     * also held to its computed base rating (#7). No part-count limit. No sample part splits at
+     * 1,000 kg gross per crate (a handling limit); a crate is
+     * also held to its computed base rating. No part-count limit. No sample part splits at
      * its suggested quantities.
      */
     perCrate: { maxGrossKg: 1000, maxParts: 0 },
@@ -301,7 +299,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     screwCostUsdPer100: 8,
   },
   /**
-   * Placeholder shop times and rate (#17), for comparing designs, not quoting. A shop should
+   * Placeholder shop times and rate, for comparing designs, not quoting. A shop should
    * time a few crates and enter its own. Worked example in spec §7.12.
    */
   labour: {
@@ -314,12 +312,12 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     handlingMin: 15,
   },
   /**
-   * Structural sizing (#7, spec §7.15). Allowable stresses are the NDS Supplement (2018) Table 4A
+   * Structural sizing (spec §7.15). Allowable stresses are the NDS Supplement (2018) Table 4A
    * reference design values for Spruce-Pine-Fir No. 2 (Fb 875 psi, Fv 135 psi, Fc⊥ 425 psi), with
    * no size, repetitive-member or load-duration increases, which keeps them conservative. The
    * plywood value (6 MPa, about 870 psi on the gross section) is a conservative figure for
    * sheathing-grade plywood bent across its supports; check it against your supplier's panel
-   * design values. The 2.0 load factor covers drops, rough handling and uneven support.
+   * design values. The 1.5 load factor covers drops, rough handling and uneven support.
    */
   structure: {
     lumberBendingMPa: 7.8,
@@ -339,7 +337,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
    */
   freight: { dimDivisorIn3PerLb: 139 },
   /**
-   * Handling (#8, spec §7.14). Typical published equipment sizes; a shop should enter its own.
+   * Handling (spec §7.14). Typical published equipment sizes; a shop should enter its own.
    * - Forklift: Class II carriage tines are about 4″ (100 mm) wide and 1.5–2″ thick; 75 mm (3″)
    *   clear under the floor leaves room for a tine that is not quite level. The tines slide on
    *   the carriage, from about 10″ (250 mm) to 43″ (1100 mm) outside to outside.
@@ -358,7 +356,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     minTipAngleDeg: 30,
   },
   /**
-   * Cradles (#6): a slender part (longest ÷ middle ≥ 3) sits in notched saddles of 2× lumber
+   * Cradles: a slender part (longest ÷ middle ≥ 3) sits in notched saddles of 2× lumber
    * (38 mm thick) at most 600 mm apart, the end ones 150 mm in from each end, with notches a
    * quarter of the part's height deep. Sections within 10% of square are taken as round.
    */

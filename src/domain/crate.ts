@@ -30,7 +30,7 @@ import { planStructure } from "./structure";
  * crate's length (skids run along X, forklift entry from the ends).
  */
 
-// Everything that used to live here is still importable from this path.
+// The crate's public types and entry points, importable from this one path.
 export { ASSEMBLIES } from "./members";
 export type { Assembly, Face, Member, MemberKind } from "./members";
 export type { BomLine, ScrewLine } from "./bom";

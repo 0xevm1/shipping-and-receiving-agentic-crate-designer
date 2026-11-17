@@ -7,7 +7,7 @@ import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * Centre of gravity, forklift and pallet-jack handling (#8, spec §7.14). Pure: it reads the
+ * Centre of gravity, forklift and pallet-jack handling (spec §7.14). Pure: it reads the
  * finished crate's members and part placements and never changes the construction, so it
  * follows whatever skids, bearers or blocking `designCrate` builds.
  *

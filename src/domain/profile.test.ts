@@ -63,7 +63,7 @@ describe("profile rotation", () => {
   });
 });
 
-describe("shaped blocking (#16)", () => {
+describe("shaped blocking", () => {
   const size: Vec3 = [400, 300, 200];
 
   it("a box-shaped profile reproduces the bounding-box blocking exactly", () => {
@@ -153,7 +153,7 @@ describe("shaped blocking (#16)", () => {
 
   });
 
-  it("leaves a cradled slender part to cradles (#6), but shapes its blocking stood on end", () => {
+  it("leaves a cradled slender part to cradles, but shapes its blocking stood on end", () => {
     const shaft = parts.find((p) => p.id === "PART-002")!;
     const profile = profileOf(shaft.dimensions_mm, { "-y": (_x, z) => (z > 86 ? 20 : 0), "+y": (_x, z) => (z > 86 ? 20 : 0) }, 10);
     // Lying flat: cradles, so the profile changes nothing.

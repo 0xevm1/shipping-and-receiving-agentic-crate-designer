@@ -28,7 +28,7 @@ describe("ShopStandardsSchema", () => {
     expect(ShopStandardsSchema.safeParse(DEFAULT_STANDARDS).success).toBe(true);
   });
 
-  it("holds the values the domain used before #19", () => {
+  it("holds the shipped default values", () => {
     const s = DEFAULT_STANDARDS;
     expect(s.stock.cleatMm).toEqual({ thick: 19, wide: 89 });
     expect(s.stock.skidMm).toEqual({ standard: { wide: 89, tall: 89 }, heavy: { wide: 89, tall: 140 } });
@@ -50,9 +50,9 @@ describe("ShopStandardsSchema", () => {
       densityKgM3: { plywood: 600, lumber: 480 },
       costUsdPerM3: { plywood: 1100, lumber: 650 },
       screwSpacingMm: { cleat: 150, skid: 300, panelJoint: 200 },
-      screwCostUsdPer100: 8, // #17
+      screwCostUsdPer100: 8,
     });
-    // #17: labour and freight terms.
+    // Labour and freight terms.
     expect(s.labour).toEqual({
       rateUsdPerHour: 35,
       lumberCutMin: 0.75,
@@ -63,7 +63,7 @@ describe("ShopStandardsSchema", () => {
       handlingMin: 15,
     });
     expect(s.freight).toEqual({ dimDivisorIn3PerLb: 139 });
-    // #7: structural sizing, SPF No. 2 allowable stresses.
+    // Structural sizing, SPF No. 2 allowable stresses.
     expect(s.stock.joistMm).toEqual({ thick: 38, wide: 89 });
     expect(s.structure).toEqual({
       lumberBendingMPa: 7.8,
@@ -77,7 +77,7 @@ describe("ShopStandardsSchema", () => {
       maxJoistSpacingMm: 400,
       lidStackKg: 0,
     });
-    // The fixed 1,000 kg base rating is gone: the base is rated from its members (#7).
+    // The fixed 1,000 kg base rating is gone: the base is rated from its members.
     expect("baseRatingKg" in s.limits).toBe(false);
   });
 
@@ -186,7 +186,7 @@ describe("computeDesign with custom standards", () => {
     expect(d.tareKgByAssembly.inside).toBeCloseTo(base.tareKgByAssembly.inside * 2, 6); // all-lumber dunnage at 1 layer
   });
 
-  it("weaker lumber lowers the computed base rating, down to a caution (#7)", () => {
+  it("weaker lumber lowers the computed base rating, down to a caution", () => {
     const base = design("PART-001", DEFAULT_STANDARDS);
     expect(check(base, "base-rating")!.level).toBe("ok");
     const weaker = design("PART-001", custom({ structure: { plywoodBendingMPa: 3 } }));
@@ -280,7 +280,7 @@ describe("standards JSON", () => {
     expect(r.ok && r.standards.rates).toEqual(DEFAULT_STANDARDS.rates);
   });
 
-  it("still loads a file saved before #7: the old base rating is dropped, the structure filled in", () => {
+  it("still loads a file saved with the old fixed base rating: the old base rating is dropped, the structure filled in", () => {
     const r = standardsFromJson(JSON.stringify({ limits: { baseRatingKg: 1200, stackKg: 80 } }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;

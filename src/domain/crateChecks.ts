@@ -11,6 +11,8 @@ import { MM_PER_FT } from "./units";
 
 /** The rules a designed crate is held to (spec §7.7), each reported whether it passes or not. */
 
+const STILL_HERE = "The crate design is still here if you want one.";
+
 /** "4x6" for standard US lumber, otherwise the actual size in mm. */
 function sectionName(a: number, b: number): Message {
   const name = nominalLumber(a, b);
@@ -137,13 +139,14 @@ export function evaluateChecks(d: CrateDesign, part: DesignPart, settings: Crate
   const tightest = smallestSideGap(d.layout, settings.partGapMm);
   const betweenParts = tightest.where === "between parts";
   const gapText = msg`${shopMm(tightest.mm)} ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
+  const widen = betweenParts ? "the gap between parts" : "the clearance to walls";
   checks.push(
     tightest.mm < minBlockingGap
       ? {
           id: "blocking",
           level: "caution",
           title: "Parts are not restrained",
-          detail: msg`The ${gapText} is under the ${shopMm(minBlockingGap)} that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.`,
+          detail: msg`The ${gapText} is under the ${shopMm(minBlockingGap)} that blocking needs. Widen ${widen}.`,
         }
       : {
           id: "blocking",
@@ -203,7 +206,7 @@ export function evaluateChecks(d: CrateDesign, part: DesignPart, settings: Crate
       id: "cardboard",
       level: "info",
       title: "A cardboard box may be enough",
-      detail: msg`${kg(d.payloadKg)} in a ${dimsMessage([iL, iW, iH])} space is within the shop's carton limits (${within}). The crate design is still here if you want one.`,
+      detail: msg`${kg(d.payloadKg)} in a ${dimsMessage([iL, iW, iH])} space is within the shop's carton limits (${within}). ${STILL_HERE}`,
     });
   }
   return checks;

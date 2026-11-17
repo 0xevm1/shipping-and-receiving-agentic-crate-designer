@@ -22,7 +22,7 @@ interface PackingInput {
   separatorMm: number;
   /**
    * Amount the crate structure adds to the interior on each axis (walls, cleats, skids, lid).
-   * A function sizes it per layout from the interior and grid (#7: the base is sized for its spans).
+   * A function sizes it per layout from the interior and grid (the base is sized for its spans).
    */
   structureAllowance: Vec3 | ((grid: Pick<Layout, "interior" | "cellSize" | "counts" | "clearance">) => Vec3);
   /**

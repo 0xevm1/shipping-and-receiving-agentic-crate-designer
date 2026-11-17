@@ -1,7 +1,7 @@
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * Structural sizing (#7, spec §7.15): how many skids, of which section, whether the floor
+ * Structural sizing (spec §7.15): how many skids, of which section, whether the floor
  * needs joists, and how the lid is framed, from the load and the spans.
  *
  * Simple, conservative timber rules, in N and mm (so stresses are MPa = N/mm²). `f` is
@@ -281,7 +281,7 @@ function lidChecks(member: LaidSection, p: number, lidL: number, lidW: number, t
 
 /**
  * Sizes the lid. With `structure.lidStackKg` 0 (the default: crates aren't stacked) it is the
- * nominal frame, as before #7: cleats laid flat at `nominalCount`. Otherwise it tries flat
+ * nominal frame: cleats laid flat at `nominalCount`. Otherwise it tries flat
  * cleats down to half the nominal spacing, then joist stock on edge from the nominal count up
  * (keeping a member's width clear between members) until the members and the plywood between
  * them carry the stacked load.
@@ -384,7 +384,7 @@ function estimateDeadLoad(
   return { allKg: contentsKg + (shellPly * rho.plywood + (wallFrame + lidFrame) * rho.lumber) / 1e9, contentsKg };
 }
 
-/** Sizes the base and lid for a layout (#7). Pure; the packer and `designCrate` both call it. */
+/** Sizes the base and lid for a layout. Pure; the packer and `designCrate` both call it. */
 export function planStructure(
   grid: StructureGrid,
   m: StructureMaterials,

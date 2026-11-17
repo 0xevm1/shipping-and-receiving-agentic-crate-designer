@@ -155,7 +155,7 @@ describe("the design's cost, labour and freight (spec §7.12 worked example)", (
     expect(design("PART-001", { quantity: 8 }).labour.counts.steps).toBe(FIXED_ASSEMBLY_STEPS + 2);
   });
 
-  it("standards saved before #17 load with the labour and freight defaults", () => {
+  it("standards saved without labour and freight load with the labour and freight defaults", () => {
     const old = { ...JSON.parse(JSON.stringify(DEFAULT_STANDARDS)) };
     delete old.labour;
     delete old.freight;

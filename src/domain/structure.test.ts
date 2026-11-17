@@ -211,7 +211,7 @@ describe("designCrate with structural sizing", () => {
     for (const s of skids) expect(s.min[2]).toBe(-248);
   });
 
-  it("keeps the fork openings as tall as the skids: the joists sit on top of them (#8)", () => {
+  it("keeps the fork openings as tall as the skids: the joists sit on top of them", () => {
     const openings = heavy.handling.openings;
     expect(openings).toHaveLength(2);
     for (const o of openings) {
@@ -276,7 +276,7 @@ describe("designCrate with structural sizing", () => {
   });
 });
 
-describe("shipment planning on the computed rating (#25 with #7)", () => {
+describe("shipment planning on the computed rating", () => {
   const settings = (patch: Partial<CrateSettings>) => ({ ...DEFAULT_SETTINGS, ...patch });
 
   it("limits a crate to the smaller of the per-crate gross and the base rating", () => {
