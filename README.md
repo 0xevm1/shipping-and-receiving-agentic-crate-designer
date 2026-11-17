@@ -38,6 +38,7 @@ bun run dev          # → http://localhost:3000
 | `bun run build && bun run start` | Production build and serve |
 | `bun run test` | Domain unit tests (vitest) |
 | `bun run lint` | ESLint |
+| `bun run typecheck` | `next typegen` (route types), then `tsc --noEmit` |
 
 - **This project uses [Bun](https://bun.sh)** (1.3+) to install packages and run every script;
   the lockfile is `bun.lock`. Next.js itself runs on Node 20+. Verified on Bun 1.3.5, Node 24,
@@ -49,6 +50,11 @@ bun run dev          # → http://localhost:3000
 - **Pinned versions:** `package.json` lists exact versions only (#23), and `bunfig.toml` makes
   `bun add` save exact versions too. To upgrade, bump a version deliberately
   (`bun add three@0.188.0`), then run the tests, lint and build.
+- **Pre-commit hook:** `bun install` installs a git pre-commit hook
+  ([simple-git-hooks](https://github.com/toplenboren/simple-git-hooks), via `prepare`). Every
+  commit runs ESLint on the staged files, `bun run typecheck` and `bun run test` (4-6 s), and
+  the output names the step that failed. It works in `git worktree`s too. In an emergency, skip it
+  with `git commit --no-verify`; CI still runs every check.
 - Nothing else is needed: no environment variables, backend or database. The sample GLBs are
   bundled in `public/parts/`.
 

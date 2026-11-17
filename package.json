@@ -7,8 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "preinstall": "node scripts/require-bun.mjs"
+    "preinstall": "node scripts/require-bun.mjs",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "if [ -f scripts/pre-commit.mjs ]; then exec bun scripts/pre-commit.mjs; fi"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",
@@ -28,6 +33,7 @@
     "@types/three": "0.187.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.6",
+    "simple-git-hooks": "2.14.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "5.1.0"

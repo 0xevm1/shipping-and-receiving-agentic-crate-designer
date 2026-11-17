@@ -7,6 +7,9 @@
   rules, algorithms and invariants before changing behaviour.
 - **Package manager:** Bun. Use `bun run test`, never `bun test`, because the tests are vitest.
   Also `bun run lint` and `bun run build`.
+- **Pre-commit hook:** every commit runs ESLint on the staged files, `bun run typecheck`
+  (`next typegen` + `tsc --noEmit`) and `bun run test`. Fix failures rather than using
+  `--no-verify`.
 - **Conventions:**
   - The domain (`src/domain/`) is pure TypeScript in mm/kg, Z-up, and holds all business rules.
   - Only `CrateViewer.tsx` converts to three.js's Y-up metres.
