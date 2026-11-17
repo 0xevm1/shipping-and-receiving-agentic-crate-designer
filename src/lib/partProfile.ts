@@ -17,11 +17,20 @@ export function profileCellMm(sizeMm: Vec3): number {
   return Math.max(2, Math.ceil((Math.max(...sizeMm) / 100) * 2) / 2);
 }
 
+/**
+ * A cell centre this close (in cells) to a triangle's edge counts as on it. Models drawn on round
+ * numbers have edges exactly on cell centres, and a file's float32 rounding (a model in inches, or
+ * one far from its origin) puts them a hair either side: the same part must give the same outline.
+ */
+const TIE = 1e-2;
+
 /** Analysis that runs longer than this is abandoned, and blocking stays on the bounding box. */
 const PROFILE_BUDGET_MS = 1000;
 
 /**
- * Builds the profile of a loaded model. `mmPerUnit` is 1000 for metre files. Throws if the model
+ * Builds the profile of a loaded model, which is already Z up (`framedScene`); `mmPerUnit` turns its
+ * units into mm (1000 for metre files). It is measured from the box's own corner, so a model far
+ * from its origin gives the same profile as a centred one. Throws if the model
  * has no triangles or analysis runs past `budgetMs`.
  */
 export function buildPartProfile(scene: Object3D, mmPerUnit: number, budgetMs = PROFILE_BUDGET_MS): PartProfile {
@@ -29,7 +38,13 @@ export function buildPartProfile(scene: Object3D, mmPerUnit: number, budgetMs = 
   scene.updateMatrixWorld(true);
   const box = new Box3().setFromObject(scene);
   const min = box.min.clone().multiplyScalar(mmPerUnit);
-  const sizeMm = box.getSize(new Vector3()).multiplyScalar(mmPerUnit).toArray() as Vec3;
+  // To 0.01 mm: float noise from the file's own precision (a model in inches, or one far from its
+  // origin, is off by a few thousandths of a mm) must not tip the grid size (258 / 4 = 64.5 cells).
+  const sizeMm = box
+    .getSize(new Vector3())
+    .multiplyScalar(mmPerUnit)
+    .toArray()
+    .map((v) => Math.round(v * 100) / 100) as Vec3;
   if (!sizeMm.every((v) => v > 0)) throw new Error("The model has no solid geometry.");
 
   // Every triangle, in mm from the bounding box's min corner.
@@ -81,11 +96,11 @@ export function buildPartProfile(scene: Object3D, mmPerUnit: number, budgetMs = 
       ];
       const area = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
       if (Math.abs(area) < 1e-9) continue; // edge-on to this axis
-      const cMin = Math.max(0, Math.ceil(Math.min(u0, u1, u2) / su - 0.5));
-      const cMax = Math.min(cols - 1, Math.floor(Math.max(u0, u1, u2) / su - 0.5));
-      const rMin = Math.max(0, Math.ceil(Math.min(v0, v1, v2) / sv - 0.5));
-      const rMax = Math.min(rows - 1, Math.floor(Math.max(v0, v1, v2) / sv - 0.5));
-      const eps = -1e-7 * Math.abs(area);
+      const cMin = Math.max(0, Math.ceil(Math.min(u0, u1, u2) / su - 0.5 - TIE));
+      const cMax = Math.min(cols - 1, Math.floor(Math.max(u0, u1, u2) / su - 0.5 + TIE));
+      const rMin = Math.max(0, Math.ceil(Math.min(v0, v1, v2) / sv - 0.5 - TIE));
+      const rMax = Math.min(rows - 1, Math.floor(Math.max(v0, v1, v2) / sv - 0.5 + TIE));
+      const eps = -1e-4 * Math.abs(area);
       for (let r = rMin; r <= rMax; r++) {
         const pv = (r + 0.5) * sv;
         for (let c = cMin; c <= cMax; c++) {
@@ -108,14 +123,14 @@ export function buildPartProfile(scene: Object3D, mmPerUnit: number, budgetMs = 
     faces[`-${name}` as FaceId] = { cols, rows, depth: depth(near, false) };
     faces[`+${name}` as FaceId] = { cols, rows, depth: depth(far, true) };
   }
-  return { version: 1, sizeMm: sizeMm.map((s) => Math.round(s * 1000) / 1000) as Vec3, cellMm, faces };
+  return { version: 1, sizeMm, cellMm, faces };
 }
 
 function now(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-/** Profiles by model URL, so a part analysed once is not analysed again in this session. */
+/** Profiles by model URL and frame, so a part analysed once is not analysed again in this session. */
 const profiles = new Map<string, PartProfile | null>();
 
 let lastMs: number | null = null;
@@ -126,11 +141,19 @@ export const lastProfileMs = (): number | null => lastMs;
 /**
  * Analyses the model off the critical path (when the browser is idle, after the crate has
  * rendered) and hands the profile to `onDone`, or null if analysis failed or ran out of time.
- * Cached per model URL. Returns a cancel function.
+ * Cached per model URL and `frame` (the units and up axis it was measured in, say "in/y"; the
+ * same file read another way is another part). Returns a cancel function.
  */
-export function scheduleProfile(url: string, scene: Object3D, mmPerUnit: number, onDone: (url: string, profile: PartProfile | null) => void): () => void {
-  if (profiles.has(url)) {
-    onDone(url, profiles.get(url)!);
+export function scheduleProfile(
+  url: string,
+  scene: Object3D,
+  mmPerUnit: number,
+  onDone: (url: string, profile: PartProfile | null) => void,
+  frame = "",
+): () => void {
+  const cacheKey = `${url}|${frame}`;
+  if (profiles.has(cacheKey)) {
+    onDone(url, profiles.get(cacheKey)!);
     return () => {};
   }
   let cancelled = false;
@@ -144,7 +167,7 @@ export function scheduleProfile(url: string, scene: Object3D, mmPerUnit: number,
       console.warn("Part analysis failed; blocking follows the bounding box.", e);
     }
     lastMs = now() - started;
-    profiles.set(url, profile);
+    profiles.set(cacheKey, profile);
     onDone(url, profile);
   };
   const w = globalThis as typeof globalThis & {
