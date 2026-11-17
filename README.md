@@ -21,6 +21,16 @@ machined parts. Pick a part and a quantity. The app packs the parts as compactly
 builds a crate around them from plywood, lumber and wood screws, and shows the result in 3D. It
 also gives a cut list, weights and handling warnings.
 
+![The crate pulled apart in 3D: four brackets held by blocking, with the size, checks, cost, build time and freight class beside it](docs/screenshots/readme/exploded.png)
+
+| | |
+|---|---|
+| ![200 parts split across seven crates of two types, with a picker for each type](docs/screenshots/readme/shipment-200.png) **A batch too big for one crate** is split into crate types, each with its own size, cost and cut list. | ![Layout options as small top and side drawings, ranked by shipping volume](docs/screenshots/readme/layouts.png) **Layouts** are ranked by volume, crate cost or freight class, with the reason the winner won. |
+| ![A cut-list row pinned, with its two side panels lit in a ghosted crate](docs/screenshots/readme/cut-list-pinned.png) **Cut list**: pin a row to see where those boards go. | ![A crate with no gap between parts: the Overview says one caution and links to Checks](docs/screenshots/readme/caution-overview.png) **Cautions** show under the size and on the Export button, not only in the Checks tab. |
+| ![The printed build sheet: outside views and sections with dimensions in fractional inches](docs/screenshots/readme/print-build-sheet.png) **Build sheet** for the shop, from Export specs or Print / save PDF. | ![The shipping label: part number, quantity, gross weight, This side up, fork entry and centre of gravity](docs/screenshots/readme/print-label.png) **Shipping label** with fork entry and the centre of gravity. |
+
+<p align="center"><img alt="The app on a phone: the crate with its size labels, and the outside size and gross weight in a bar at the bottom" src="docs/screenshots/readme/mobile.png" width="320"></p>
+
 Built for Hadrian's Shipping Crate Designer exercise. The full behaviour (algorithms, rules,
 invariants) is in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 
