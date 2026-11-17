@@ -1,14 +1,35 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo, Geist_Mono, Inter_Tight, Mrs_Saint_Delafield } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/*
+ * Type roles follow hadrian.co, which uses Klim's Söhne family. Söhne is
+ * licensed, so these are the closest open substitutes; see globals.css.
+ */
+
+/** Söhne → Inter Tight: display and body text. */
+const sans = Inter_Tight({
+  variable: "--font-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+/** Söhne Breit → Archivo, whose width axis covers both wide eyebrows (125%) and narrow labels (62%). */
+const wide = Archivo({
+  variable: "--font-wide",
+  subsets: ["latin"],
+  axes: ["wdth"],
+});
+
+/** Söhne Mono → Geist Mono: measured values, labels and buttons. */
+const mono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+/** The credit signature. */
+const signature = Mrs_Saint_Delafield({
+  variable: "--font-signature",
+  weight: "400",
   subsets: ["latin"],
 });
 
@@ -19,11 +40,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={`${sans.variable} ${wide.variable} ${mono.variable} ${signature.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

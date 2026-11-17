@@ -1,139 +1,88 @@
 "use client";
 
-import { ContactShadows, Grid, OrbitControls, useProgress } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
-import { Suspense, useEffect } from "react";
-import { MathUtils, PerspectiveCamera, Vector3 } from "three";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import type { CrateDesign } from "@/domain/crate";
-import type { Part, Vec3 } from "@/domain/schema";
-import { CrateModel, type ViewMode } from "./CrateModel";
+import { OrbitControls, useProgress } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+import { Suspense, useRef } from "react";
+import type { Vec3 } from "@/domain/schema";
+import { useDesigner } from "@/state/store";
+import { CrateModel } from "./CrateModel";
+import { DimensionLines } from "./DimensionLines";
+import { Director, FOV_DEG } from "./Director";
+import { Floor } from "./Floor";
 import { PartInstances } from "./PartInstances";
 
 const MM_TO_M = 0.001;
-const FOV_DEG = 40;
-/** Viewing direction for the default three-quarter view (three.js Y-up). */
-const VIEW_DIRECTION = new Vector3(1, 0.8, 1.3).normalize();
-
-export interface CrateViewerProps {
-  design: CrateDesign;
-  part: Part;
-  modelUrl: string;
-  mode: ViewMode;
-  onMeasured?: (sizeMm: Vec3) => void;
-}
+const CLICK_SLOP_PX = 5;
 
 /**
- * The 3D scene. three.js is Y-up; the domain is Z-up in mm. A single root group
- * rotates Z-up → Y-up and scales mm → m, so everything inside it uses domain
- * coordinates directly.
+ * The 3D scene. three.js is Y-up in metres; the domain is Z-up in mm. One root
+ * group rotates Z-up → Y-up and scales mm → m, so everything inside it uses
+ * domain coordinates directly. The canvas is transparent: the page gradient
+ * is the background.
  */
-export default function CrateViewer({
-  design,
-  part,
-  modelUrl,
-  mode,
-  onMeasured,
-}: CrateViewerProps) {
+export default function CrateViewer() {
+  const design = useDesigner((s) => s.result.design);
+  const part = useDesigner((s) => s.part);
+  const units = useDesigner((s) => s.units);
+  const view = useDesigner((s) => s.view);
+  const down = useRef<[number, number] | null>(null);
+
+  if (!design) return <div className="stage-msg">No layout fits these packing rules.</div>;
+
   const [L, W] = design.layout.interior;
   const { floorMm, skid } = design.construction;
-  // Center the crate on the origin, with the bottom of the skids on the ground.
+  // Centre the footprint on the origin, with the bottom of the skids on the ground.
   const origin: Vec3 = [-L / 2, -W / 2, floorMm + skid.tall];
+
+  const clearHover = () => {
+    const s = useDesigner.getState();
+    if (s.hover?.source === "3d") s.setHover(null);
+    s.setTooltip(null);
+  };
 
   return (
     <>
       <Canvas
-        shadows
-        camera={{ position: [2, 1.6, 2.4], fov: FOV_DEG, near: 0.01, far: 100 }}
+        camera={{ position: [2.4, 1.8, 2.8], fov: FOV_DEG, near: 0.02, far: 200 }}
         dpr={[1, 2]}
+        gl={{ alpha: true, antialias: true }}
+        onPointerDown={(e) => void (down.current = [e.clientX, e.clientY])}
+        onPointerLeave={clearHover}
+        onPointerMissed={(e) => {
+          const d = down.current;
+          if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) > CLICK_SLOP_PX) return;
+          useDesigner.getState().setPin(null);
+          clearHover();
+        }}
       >
-        <color attach="background" args={["#eef0f2"]} />
-        <hemisphereLight args={["#ffffff", "#b9a88f", 1.1]} />
-        <directionalLight
-          position={[3, 6, 4]}
-          intensity={2.2}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-4}
-          shadow-camera-right={4}
-          shadow-camera-top={4}
-          shadow-camera-bottom={-4}
-        />
+        <hemisphereLight args={["#e9edf2", "#2a3f57", 1.35]} />
+        <directionalLight position={[3, 6, 4]} intensity={1.7} color="#fff1dc" />
+        <directionalLight position={[-4, 3, -2]} intensity={0.35} color="#cfe3ff" />
 
-        <Suspense fallback={null}>
+        <Floor external={design.layout.external} units={units} />
         <group rotation={[-Math.PI / 2, 0, 0]} scale={MM_TO_M}>
-            <group position={origin}>
-              <CrateModel design={design} mode={mode} />
-              <PartInstances
-                part={part}
-                url={modelUrl}
-                layout={design.layout}
-                onMeasured={onMeasured}
-              />
-            </group>
+          <group position={origin}>
+            <CrateModel design={design} />
+            {view.parts && (
+              <Suspense fallback={null}>
+                <PartInstances part={part} layout={design.layout} />
+              </Suspense>
+            )}
+            {view.dims && <DimensionLines design={design} units={units} showParts={view.parts} />}
           </group>
-        </Suspense>
-        <CameraRig external={design.layout.external} exploded={mode === "exploded"} />
+        </group>
 
-        <ContactShadows
-          position={[0, 0.001, 0]}
-          opacity={0.35}
-          scale={8}
-          blur={2.5}
-          far={3}
-        />
-        <Grid
-          args={[20, 20]}
-          cellSize={0.1}
-          sectionSize={1}
-          cellColor="#cfd4da"
-          sectionColor="#a9b1ba"
-          fadeDistance={14}
-          infiniteGrid
-        />
-        <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} />
+        <Director />
+        <OrbitControls makeDefault enableDamping={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.3} maxDistance={60} />
       </Canvas>
       <LoadingOverlay />
     </>
   );
 }
 
-/**
- * Frames the crate whenever its size changes: fit the crate's bounding sphere in
- * the field of view, looking at its centre. Computed from the known external
- * dimensions rather than measuring the scene, so it is deterministic.
- */
-function CameraRig({ external, exploded }: { external: Vec3; exploded: boolean }) {
-  const camera = useThree((s) => s.camera) as PerspectiveCamera;
-  const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
-  const aspect = useThree((s) => s.size.width / s.size.height);
-  const [L, W, H] = external;
-
-  useEffect(() => {
-    const radius = 0.5 * Math.hypot(L, W, H) * MM_TO_M + (exploded ? 0.35 : 0);
-    // The tighter of the vertical and horizontal half-angles limits the fit.
-    const halfV = MathUtils.degToRad(FOV_DEG / 2);
-    const halfH = Math.atan(Math.tan(halfV) * aspect);
-    const distance = (radius / Math.sin(Math.min(halfV, halfH))) * 1.05;
-    const target = new Vector3(0, (H * MM_TO_M) / 2, 0);
-    camera.position.copy(target).addScaledVector(VIEW_DIRECTION, distance);
-    camera.lookAt(target);
-    if (controls) {
-      controls.target.copy(target);
-      controls.update();
-    }
-  }, [camera, controls, aspect, L, W, H, exploded]);
-
-  return null;
-}
-
-/** DOM overlay (outside the Canvas) while GLBs download. */
+/** DOM overlay while a GLB downloads. Never use drei <Html> as a Suspense fallback (unmount race). */
 function LoadingOverlay() {
   const { active } = useProgress();
   if (!active) return null;
-  return (
-    <div className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-slate-500">
-      Loading model…
-    </div>
-  );
+  return <div className="stage-msg">Loading model…</div>;
 }

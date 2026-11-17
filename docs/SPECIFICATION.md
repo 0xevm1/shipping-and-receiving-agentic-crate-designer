@@ -4,7 +4,7 @@
 > written so that a new contributor, or a new AI session with no prior context, can change the
 > code safely. If code and spec disagree, fix one of them in the same PR.
 >
-> **Status:** v1 prototype. Last updated 2026-11-16.
+> **Status:** v1 prototype with the #20 UI redesign. Last updated 2026-11-16.
 
 ---
 
@@ -67,7 +67,12 @@ buildable crate design and cut list in under a minute, without needing CAD.
   These match `dimensions_mm` in `parts.json`.
 - **Rendering:** three.js is Y up and in metres. Exactly **one** transform does the conversion:
   the root `<group rotation={[-π/2,0,0]} scale={0.001}>` in `CrateViewer.tsx`. Everything inside
-  it uses domain coordinates.
+  it uses domain coordinates. Domain front (−Y) faces world +Z; domain +X stays world +X.
+- **Loaded GLBs** are read as metres, Z up, like the samples. A file more than **20 units**
+  across is read as millimetres instead (`MM_FILE_THRESHOLD` in `src/lib/loadPart.ts`), and the
+  UI says so ("file read as millimetres", plus an info check).
+- **Units in the UI:** the metric / imperial toggle is display-only (`src/lib/units.ts`). The
+  domain, the CSV and the mass input stay metric.
 - **Rotations** are XYZ-order Euler angles in multiples of π/2. Packing and rendering both use
   three.js `Euler`/`Matrix4` (`orientations.ts`), so packed bounding boxes always match the
   rendered models.
@@ -75,48 +80,76 @@ buildable crate design and cut list in under a minute, without needing CAD.
 ## 5. Architecture
 
 ```
-parts.json ──zod──▶ catalog.ts
-                         │
-CrateSettings ──▶ design.ts: computeDesign(settings, layoutKey?)
+parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPart.ts (validate, measure, match catalog)
+                         │                              │
+                         ▼                              ▼
+                 state/store.ts (zustand): part, settings, layoutKey, view, hover, pin, …
+                         │  recompute() on every input change
+                         ▼
+          domain/design.ts: computeDesign(part, settings, layoutKey?)
                          │
            ┌─────────────┼───────────────────┐
            ▼             ▼                   ▼
    resolveConstruction  enumerateLayouts     designCrate
-   (board sizes from    (packing.ts:         (crate.ts: members, BOM,
-    payload mass)        ranked Layout[])     weights, screws, warnings)
+   (board sizes from    (packing.ts:         (crate.ts: tagged members, BOM,
+    payload mass)        ranked Layout[])     weights, screws, checks)
                          │
                          ▼
-                   DesignResult { part, layouts, design }
+               DesignResult { layouts, design }
                          │
-          React (CrateDesigner, useMemo) ──▶ panels + CrateViewer (three.js)
+     ┌───────────────────┴─────────────────────┐
+     ▼                                         ▼
+ DOM overlays (shell/, island/)        3D scene (viewer/, react-three-fiber)
+                                       reads `motion.ts` for per-frame values
 ```
 
 - **The domain layer is pure and synchronous.** It has no React, DOM or I/O, and it is fully
-  unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the UI
-  re-runs it on every input change.
-- **The UI holds only:** `settings`, `layoutKey` (null means use the best), `mode` (the view
-  mode) and `measured` (the GLB bounds). Changing any setting resets `layoutKey` to null.
-- **The viewer is client-only.** It is loaded with `next/dynamic` and `{ ssr: false }` inside a
-  client component, because WebGL doesn't exist on the server.
+  unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the
+  store re-runs it on every input change.
+- **One store, two kinds of state.**
+  - `src/state/store.ts` (zustand) holds everything the UI renders from: the part, settings,
+    the design result, units, tab, view targets, hover / pin, tooltip, size labels, panel
+    visibility, the free-area insets, and a `fit` request counter for the camera. Any change to
+    the part, settings or layout key goes through `recompute()`, which also drops a pin whose
+    cut-list line no longer exists.
+  - `src/state/motion.ts` holds values that change every frame (eased explode distance, lid and
+    front-wall opacity, idle auto-play bookkeeping, last-input time). They live outside React on
+    purpose, so animation never re-renders the UI.
+- **The viewer is client-only.** Both canvases are loaded with `next/dynamic` and
+  `{ ssr: false }` inside client components, because WebGL doesn't exist on the server.
 
 ### File map
 
 | File | Responsibility |
 |---|---|
-| `src/domain/schema.ts` | zod schemas and types: `Part`, `PartsCatalog`, `CrateSettings`, `Vec3` |
+| `src/domain/schema.ts` | zod schemas and types: `Part`, `PartsCatalog`, `CrateSettings`, `DesignPart`, `Vec3` |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart` and `modelUrl` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotatedSize()` |
-| `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
-| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, warnings |
-| `src/domain/design.ts` | `computeDesign()`, `DEFAULT_SETTINGS` |
-| `src/domain/export.ts` | `bomToCsv()`, `downloadText()` |
-| `src/domain/domain.test.ts` | Invariant tests (§10) |
-| `src/components/CrateDesigner.tsx` | Page shell and state |
-| `src/components/ControlsPanel.tsx` | Inputs |
-| `src/components/SummaryPanel.tsx` | Stats, warnings, alternatives table, cut list |
-| `src/components/viewer/CrateViewer.tsx` | Canvas, lights, `CameraRig`, loading overlay |
-| `src/components/viewer/CrateModel.tsx` | One box mesh per `Member`; cutaway and exploded logic |
-| `src/components/viewer/PartInstances.tsx` | Loads the GLB once, clones it per slot, re-centres it, measures bounds |
+| `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()`, `STABLE_HEIGHT_RATIO` |
+| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES` |
+| `src/domain/design.ts` | `computeDesign()`, `explainLayout()`, `DEFAULT_SETTINGS` |
+| `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
+| `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
+| `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
+| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
+| `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging |
+| `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()` |
+| `src/state/motion.ts` | Per-frame animation values and idle timing constants |
+| `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
+| `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
+| `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata, mass input for unknown parts |
+| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover, Hide panels |
+| `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
+| `src/components/island/*.tsx` | The island and its five tabs |
+| `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
+| `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
+| `src/components/viewer/CrateModel.tsx` | One box per `Member`; explode, fades, highlight, ghosting, picking |
+| `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
+| `src/components/viewer/DimensionLines.tsx` | Crate and part size lines; positions the DOM labels each frame |
+| `src/components/viewer/SizeLabels.tsx` | The DOM elements for the size labels |
+| `src/components/viewer/Floor.tsx` | Grid and warm light pool |
+| `src/components/viewer/PartView.tsx` | The island's turntable canvas |
+| `src/components/viewer/scene.ts` | Colours, explode offsets, opacity rules, highlight rules, part material |
 
 ## 6. Data model
 
@@ -141,7 +174,6 @@ The catalog-level field `model_units` must be the literal `"meters"`.
 
 | Field | Type / range | Default | Effect |
 |---|---|---|---|
-| `partId` | catalog id | `PART-001` | Selecting a part also resets `quantity` to its first suggested quantity |
 | `quantity` | int 1–200 | 4 | Number of parts |
 | `keepUpright` | bool | true | Allow only the 2 orientations that keep model Z vertical |
 | `maxLayers` | int 1–6 (UI offers 1–4) | 2 | Upper limit on `nz` |
@@ -149,20 +181,47 @@ The catalog-level field `model_units` must be the literal `"meters"`.
 | `wallClearanceMm` | 0–300 | 50 | Gap to the walls, floor and lid |
 | `panelThickness` | `"auto"` \| 12 \| 15 \| 19 | auto | Plywood for walls, lid and separators |
 
+The part is not a setting. It is passed to `computeDesign` separately, and loading a new part
+resets `quantity` to that part's first suggested quantity.
+
+### 6.2a The part being designed
+
+`computeDesign` takes a **`DesignPart`**: `id`, `name`, `mass_kg`, `dimensions_mm`, and an
+optional `material`. Catalog parts satisfy it. So does a GLB loaded at runtime, which has
+measured dimensions and possibly no material.
+
+The UI wraps it in a **`LoadedPart`** (`src/state/store.ts`), which adds:
+
+- `modelUrl` (a `/parts/…` path or a `blob:` URL)
+- `mmPerUnit` (1000 for metre files, 1 for files read as millimetres)
+- `suggested_quantities`
+- `catalogDims`, the catalog size used for the model check (absent for unknown files)
+- `massAssumed`, true when a 10 kg stand-in is in use (`STAND_IN_MASS_KG`)
+- `readAsMm`
+
+Mass is never inferred from the mesh.
 ### 6.3 Derived types
 
 - **`Layout`:** `key`, `orientation`, `cellSize` (rotated bbox), `counts [nx,ny,nz]`,
   `interior`, `external`, `externalVolumeM3`, `utilization`, `stable`, and `slots[]`. Each slot
   has `index [i,j,k]` and `min` (slot min corner).
-- **`Member`:** `{ kind, material: "plywood"|"lumber", min: Vec3, size: Vec3 }`. `kind` is one
-  of `skid`, `floor`, `side`, `end`, `lid`, `cleat`, `lid-cleat`, `separator`, `bearer`,
-  `blocking`.
+- **`Member`:** `{ kind, material, assembly, face, label, bomKey, min, size }`.
+  - `kind` is one of `skid`, `floor`, `side`, `end`, `lid`, `cleat`, `lid-cleat`, `separator`,
+    `bearer`, `blocking`.
+  - `assembly` is one of `base`, `sides`, `ends`, `lid`, `inside` (`ASSEMBLIES`, in build order).
+  - `face` is one of `base`, `side-` (the front wall), `side+`, `end-`, `end+`, `lid`, `inside`.
+    The viewer moves boards by face when exploded and fades the `lid` and `side-` faces.
+  - `label` is the shop name of the piece (§7.4). `bomKey` links the board to its cut-list line.
+- **`BomLine`:** `{ key, assembly, label, kind, material, stock, cut, stockMm, cutMm, qty }`.
+  `stockMm` and `cutMm` are numbers so the UI can format them in either unit system.
+- **`Check`:** `{ id, level: "ok" | "caution" | "info", title, detail }` (§7.7).
 - **`CrateDesign`:**
   - `layout` and `construction` (`panelMm`, `floorMm`, `skid {wide, tall}`, `skidCount`)
   - `members[]` and `bom[]`
-  - `payloadKg`, `tareKg`, `grossKg`
+  - `payloadKg`, `tareKg`, `tareKgByAssembly`, `grossKg`
   - `plywoodM2`, `lumberM`, `screws`, `materialCostUsd`
-  - `warnings[]`
+  - `checks[]`
+- **`LayoutExplanation`** (from `explainLayout`, §7.8).
 
 ## 7. Algorithms
 
@@ -171,14 +230,14 @@ The catalog-level field `model_units` must be the literal `"meters"`.
 There are six axis-aligned rotations, one per permutation of the bbox axes. Mirror images are
 excluded.
 
-| id | Euler (XYZ) | upright |
+| id and label | Euler (XYZ) | upright |
 |---|---|---|
-| `as-modeled` | (0, 0, 0) | ✓ |
-| `turned` | (0, 0, π/2) | ✓ |
-| `on-side-x` | (π/2, 0, 0) | |
-| `on-side-x-turned` | (π/2, 0, π/2) | |
-| `on-end-y` | (0, π/2, 0) | |
-| `on-end-y-turned` | (0, π/2, π/2) | |
+| `as-modeled` "As modeled" | (0, 0, 0) | ✓ |
+| `turned` "Turned 90°" | (0, 0, π/2) | ✓ |
+| `on-side-x` "On its side" | (π/2, 0, 0) | |
+| `on-side-x-turned` "On its side, turned 90°" | (π/2, 0, π/2) | |
+| `on-end-y` "On end" | (0, π/2, 0) | |
+| `on-end-y-turned` "On end, turned 90°" | (0, π/2, π/2) | |
 
 `rotatedSize(size, o)` rotates a centred box with three.js and returns its new AABB size,
 rounded to 0.001 mm.
@@ -251,6 +310,16 @@ All coordinates are relative to the interior origin, with `cw = 89` (cleat width
 | End cleats | Outside each end panel. They span the full external width, so they wrap the corners over the side cleats |
 | Lid | Panel over x ∈ [−t, L+t], y ∈ [−t, W+t] at z = H. Two long edge cleats on top, plus cross-cleats at ≤ 600 mm |
 
+Each member is tagged where it is created:
+
+| Assembly | Face | Labels |
+|---|---|---|
+| `base` | `base` | Floor, Skid |
+| `sides` | `side-` (front) / `side+` (back) | Side panel, Side rail (top and bottom cleats), Side upright (vertical cleats) |
+| `ends` | `end-` / `end+` | End panel, End rail, End upright |
+| `lid` | `lid` | Lid panel, Lid edge cleat, Lid cross cleat |
+| `inside` | `inside` | Bearer, Layer separator, Blocking post |
+
 **Invariant:** the bounding box of all members equals `layout.external`, which is tested.
 
 ### 7.5 Dunnage (inside the crate)
@@ -274,6 +343,7 @@ All coordinates are relative to the interior origin, with `cw = 89` (cleat width
   - `payloadKg = mass_kg × quantity`
   - `tareKg = Σ volume × density`, with plywood at 600 kg/m³ and lumber at 480 kg/m³
   - `grossKg = payloadKg + tareKg`
+  - `tareKgByAssembly` splits `tareKg` by assembly (for the Overview's weight bars)
 - **Material totals:** plywood area is the sum of each sheet's two largest dimensions multiplied
   together. Lumber length is the sum of each board's longest dimension.
 - **Cost:** `Σ volume × rate`, with plywood at $1,100/m³ and lumber at $650/m³. These are
@@ -284,48 +354,193 @@ All coordinates are relative to the interior origin, with `cw = 89` (cleat width
   - each block or bearer: 2
   - walls-to-floor plus lid-to-walls: `2·ceil(2(L+W)/200)`
   - corners: `4·ceil(H/200)`
-- **BOM:** members are grouped by `(kind, stock, cut)`.
+- **BOM:** members are grouped by `(assembly, label, stock, cut)`; that string is the line's
+  `key` and each member's `bomKey`.
   - **Plywood:** stock is `"{thickness} mm"` and cut is `"{largest} × {second}"`.
   - **Lumber:** stock is `"{smallest} × {middle}"` and cut is `"{length}"`.
-- **CSV:** header comments, then `component,material,stock,cut_mm,qty`, then a final
+  - Regrouping by label instead of kind changes how many lines there are, not the total quantity.
+- **CSV** (always metric): three `#` header lines (part, external size and gross, layout), then
+  `component,material,stock,cut_mm,qty` with component as `"{Assembly}: {label}"`, then a final
   wood-screws line.
 
-### 7.7 Warnings
+### 7.7 Checks
 
-| Condition | Level | Message intent |
-|---|---|---|
-| external W or H > 2440 mm | caution | Trailer or container door clearance |
-| external L > 3000 mm | info | Oversize freight |
-| min(partGap, wallClearance) < 19 mm | caution | Too tight for blocking, so parts are unrestrained |
-| mass × (nz − 1) > 100 kg | caution | Heavy stack on the bottom-layer positions |
-| layout not stable | caution | Tip-over risk |
-| gross > 1000 kg | caution | Heavier skids and floor joists needed |
-| utilization < 25% | info | Bounding-box packing limitation |
-| always | info | Use ISPM-15 heat-treated lumber for export |
+`designCrate` returns every rule, passed or not, in a fixed order. The UI sorts cautions first,
+then passes, then info.
+
+| id | Pass (`ok`) | Problem | Rule |
+|---|---|---|---|
+| `door` | Fits a standard trailer door | caution: Too big for a standard trailer door | external W and H ≤ 2440 mm |
+| `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side) |
+| `blocking` | Every part is blocked in | caution: Parts are not restrained | min(partGap, wallClearance) ≥ 19 mm |
+| `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg; only reported when nz > 1 |
+| `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg |
+| `oversize` | — | info: Oversize freight | external L > 3000 mm |
+| `utilization` | — | info: Mostly empty space | utilization < 25% |
+| `export` | — | info: Export shipments (ISPM-15) | always |
+
+The UI adds two checks that depend on the loaded file (`src/state/checks.ts`):
+
+- **`model`:** ok when the measured GLB is within ±1 mm of the catalog size; caution when it
+  isn't; info ("Size comes from the model file") for parts with no catalog entry.
+- **`mass`:** a caution while a stand-in mass is in use.
+
+The Checks tab badge counts cautions.
+
+### 7.8 Why this layout (`explainLayout`)
+
+This compares the layout on screen with the recommendation (`layouts[0]`) and the runner-up
+(`layouts[1]`):
+
+| kind | When |
+|---|---|
+| `only` | One layout fits |
+| `picked` | The user chose a non-recommended layout. Carries `morePct`, its extra volume over the recommendation |
+| `stable` | Recommended, and the runner-up would tip |
+| `smaller` | Recommended, and the runner-up ships `nextMorePct` ≥ 3% more volume |
+| `tie` | Recommended, and the volumes are within 3%, so the lower crate won |
 
 ## 8. UI
 
-A three-column, full-viewport layout:
+The design source of truth is `docs/design-handoff/` (`HANDOFF.md` and a runnable prototype).
+This section describes what the app implements.
 
-- **Left: controls.** Part cards, quantity (number input plus suggested-quantity buttons),
-  packing options and plywood selection.
-- **Centre: 3D viewer.**
-  - **View modes:**
-    - **Cutaway** (default) hides the lid, plus the front (−Y) side panel and its cleats.
-    - **Assembled** shows everything.
-    - **Exploded** moves the walls out by 250 mm and the lid up by 375 mm.
-  - **GLB check badge:** shows the measured bounds and "✓ matches catalog" when they are within
-    ±1 mm of `dimensions_mm`.
-  - **Camera:** `CameraRig` frames the crate whenever its external size or view mode changes. It
-    fits the bounding sphere to the tighter of the horizontal and vertical FOV (40° vertical),
-    looking at the crate centre. It replaced drei's `<Bounds>`, which zoomed into empty space
-    after layout changes.
-  - **Loading:** a DOM overlay driven by `useProgress`. drei's `<Html>` must not be used as a
-    Suspense fallback, because it causes React unmount-race errors.
-  - **Part materials:** overridden to a neutral metal (metalness 0.35). There's no environment
-    map, and fully metallic surfaces render black without one.
-- **Right: results.** External size, a stats grid, a build summary, warnings, the alternatives
-  table (top 6, clickable, tagged `best` or `tall`), and the cut list with CSV download.
+**Who it's for:** the project manager who owns shipping and receiving, deciding how to crate
+parts as they are dropped off. The screen answers "what crate do I build for this?" at a glance,
+with the 3D view as the main element and detail one click away.
+
+### 8.1 Visual system
+
+Layout, glass and behaviour come from the design handoff. **Colours and type come from
+hadrian.co**, read from its live CSS:
+
+- **Colours:**
+  - **Ground:** Hadrian navy `#002548`, lifted toward `#13497D` behind the crate, with a vignette.
+  - **Text:** white, with soft and muted variants.
+  - **Gold `#F3A000`** marks the answer, warnings, the tagline and the cut-list group headers.
+  - **Sky blue `#70B8FD`** marks selection (highlighted boards, pinned rows, part dimension
+    lines). It is also the floor grid colour, echoing Hadrian's blueprint line art.
+  - **Green `#7BD88F`** marks passed checks.
+- **Glass:** the island, pills and popover use a navy-tinted translucent gradient,
+  `blur(16px) saturate(170%)`, a 1 px border, an inset highlight and a drop shadow. Islands
+  have a 30 px radius; pills are fully round. The translucency is deliberate; don't make it more
+  opaque.
+- **Type:** Hadrian uses Klim's **Söhne** family, which is a licensed typeface. The app uses the
+  closest open fonts, all through `next/font/google`:
+
+  | Hadrian | Role | Here |
+  |---|---|---|
+  | Söhne | Display and body; headings at weight 400 with −0.03em tracking | **Inter Tight** |
+  | Söhne Breit | Wide uppercase eyebrows (tagline, cut-list groups, the HADRIAN credit) | **Archivo** at `font-stretch: 125%` |
+  | Söhne Mono | Measured values, and uppercase button labels | **Geist Mono** |
+  | — | Narrow label under the signature | **Archivo** at `font-stretch: 62%` |
+  | — | Credit signature | **Mrs Saint Delafield** |
+
+  To use real Söhne, license it and point `--font-sans`, `--font-wide` and the mono variable at
+  `next/font/local` in `src/app/layout.tsx`.
+- All values are in `src/app/globals.css`.
+
+### 8.2 Layout
+
+The canvas fills the window. Four regions float above it:
+
+| Region | Contents |
+|---|---|
+| Top left (no glass) | "Crate Designer", the tagline, then two mono lines: id · material · mass each; measured size · model check. Unknown parts get an editable mass field and a stand-in warning |
+| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
+| Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a cursive signature drawn in fine horizontal lines (`Credit.tsx`: the text is a clip path over hairlines, plus a faint solid underlay so the thin script stays legible) and "Interview Candidate" in narrow Archivo beneath. Above it, "Drop a .glb file anywhere" and any load message |
+| Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb), View popover, Hide panels |
+
+- **Crate centring:** the crate is centred in the area the overlays leave free, not in the
+  window. `DesignerShell` measures the island and sets the insets. `Director` shifts the projection with `camera.setViewOffset` and
+  fits the bounding sphere into the free rectangle (insets: left 40, top 96, right = island width
+  + 56, bottom 130 px). Hide panels fades out everything except the "Show panels" pill and the
+  credit, and keeps only the bottom inset so the crate clears the credit.
+- **Narrow screens:** below 980 px the layout stacks: header, canvas (54 vh), load row, view
+  bar, island. Insets are zero and Hide panels is hidden.
+
+### 8.3 Tabs
+
+| Tab | Contents |
+|---|---|
+| **Overview** (default) | "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D |
+| **Layouts** | The `explainLayout` sentence. Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
+| **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV) |
+| **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Checks** | Every check, cautions first, with a count badge on the tab when there are cautions |
+
+Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
+open question for the user (see #20).
+
+### 8.4 3D behaviour
+
+- **Modes:**
+  - **closed:** everything on.
+  - **open:** the lid and front wall fade out.
+  - **exploded:** walls move out 320 mm, the lid moves up 420 mm.
+  - The mode icon steps closed → open → exploded. The View popover has camera presets (3D, Top,
+    Front, End), switches for lid, front wall, blocking, parts and size labels, and a
+    continuous Pull apart slider. A mix that matches no mode shows the "custom" icon.
+- **Framing per mode:** each mode has its own camera distance, as a fraction of the distance
+  that just fits the whole scene (`MODE_ZOOM` in `Director.tsx`): closed 0.68, open 0.8,
+  exploded 1.0. Hide panels moves in a further ×0.82. Mode changes re-frame, so idle auto-play
+  glides in and out with the modes.
+- **Continuous transitions:** `Director` eases `anim.explode`, `anim.lidAlpha` and
+  `anim.frontAlpha` toward the store's targets: rate 10 /s for user changes, 1.5 /s during idle
+  auto-play. `CrateModel` writes position and opacity each frame.
+- **Opacity:** `setOpacity` (`scene.ts`) moves a material between the opaque and transparent
+  passes and recompiles it, because three bakes an `OPAQUE` define into opaque shaders.
+- **Idle auto-play:**
+  - After **6 s** with no pointer, wheel, key or touch input anywhere, the camera turns at
+    **0.18 rad/s** (slowed from the handoff's 0.3 at the user's request) and steps closed → exploded → open → exploded → …, half a turn per mode. The
+    next mode starts 0.12 turn early so it lands as the half-turn completes.
+  - Any input stops it at once. It holds while a row is pinned or anything is hovered, and
+    resumes from the mode on screen. It runs on first load.
+  - With `prefers-reduced-motion` it never runs, and mode changes and camera moves are instant.
+- **Size lines:**
+  - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
+    the back right corner. Their groups slide out with the walls when exploded; the numbers stay
+    the assembled size.
+  - **Part:** one part (top layer, front row, rightmost) carries ice-blue dimensions in open and
+    exploded modes only.
+  - Lines are drei `<Line>` without depth testing.
+  - **Labels** are plain DOM (`SizeLabels`), positioned each frame by projecting their anchors.
+    drei `<Html>` is not used anywhere: each `<Html>` mounts its own React root, and unmounting
+    those during a render raced in React 19.
+- **Picking and highlight:**
+  - **Hover a board:** a glass tooltip (piece, stock, cut, quantity) and an ice-blue highlight
+    of its cut-list group. Boards under 50% opacity can't be picked; the pointer passes through
+    to what is behind.
+  - **Click a board:** pins its group, opens Cut list and scrolls to the row. A pin bar
+    ("Showing N × piece", "Show everything") appears.
+  - **Clear the pin:** Escape, clicking empty space, or "Show everything".
+  - **Focus:** while a row is pinned, or a row or weight bar is hovered, everything else draws at
+    7% (boards) or 10% (parts) opacity.
+- **Part view:** a second `<Canvas>` in the island turns the part at 0.25 rad/s (slowed from
+  the handoff's 0.45 and reversed, at the user's request). The turn is driven from frame time in
+  `useFrame`, not OrbitControls' `autoRotate`, which steps per frame and runs double speed at
+  120 Hz. Dragging stops
+  it; it resumes from the same angle after the shared 6 s idle. Double-click resets tilt and
+  zoom.
+- **Floor:** a line grid of 500 mm squares (1 ft in imperial) reaching at least 5 m (or 3× the
+  crate's longest side) from the crate, fading with distance from the crate rather than the
+  camera, so it stays visible at every zoom and angle. drei's `<Grid>` was dropped because it
+  fades by camera distance and vanished once the camera framed the crate. A warm light pool
+  (a small shader) sits under the crate.
+
+### 8.5 Loading a part
+
+- PART-001 is preloaded at quantity 4. There is no part switcher.
+- **Load a part** (file picker) or a drop anywhere loads a new part; a full-page veil shows while
+  dragging.
+- Dropping a `parts.json` alongside the GLB merges its valid entries into the lookup first.
+- **A known GLB** (file name equals a catalog `model`) takes that entry's mass, material and
+  quantities, and gets the model check.
+- **An unknown GLB** gets a 10 kg stand-in mass, an editable mass field and a caution until a
+  real mass is entered.
+- **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data, each
+  with a plain message.
+- Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
 
 ## 9. Persistence
 
@@ -334,7 +549,9 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
 
 ## 10. Invariants and tests
 
-`bun run test` runs `src/domain/domain.test.ts`, which checks:
+`bun run test` runs vitest over `src/**/*.test.ts`.
+
+**`src/domain/domain.test.ts`** checks:
 
 - `parts.json` parses, and its ids are stable.
 - The 6 orientations give 6 distinct permutations, and upright ones keep Z.
@@ -346,6 +563,22 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
 - The shaft lies along X (cell X = 1530), with `L ≥ W` and a stable result.
 - The bounding box of all members equals `layout.external`.
 - `maxLayers: 1` produces only single-layer layouts.
+- A part that isn't in the catalog can be designed.
+- **Regression baseline:** 18 part × quantity × keepUpright cases. For each, the external size,
+  gross, screws, member count, layout count and total BOM quantity must equal the values captured
+  before the #20 redesign. For example, PART-003 × 8 is 1102 × 1082 × 809 mm with 308 screws.
+- Every member has an assembly, a face and a label, and each face sits on the correct side of the
+  interior.
+- The cut list has the finer labels, every member links to exactly one line, and line quantities
+  match.
+- Tare by assembly sums to tare.
+- Checks report passes as well as cautions, and the stack check appears only for stacked
+  layouts.
+- `explainLayout` covers `only`, the recommended layout and a user pick.
+
+**`src/lib/units.test.ts`** checks formatting and 1/16″ fractions. **`src/lib/loadPart.test.ts`**
+checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
+names, and filtering a `parts.json`.
 
 When you change packing or construction rules, keep these passing. If a rule change
 deliberately changes an expected value, update the test and this spec in the same PR.
@@ -359,7 +592,13 @@ deliberately changes an expected value, update the test and this spec in the sam
 | Domain in Z-up mm, a single render transform | Matches the source data; one place to get conversions right | Readers must know three.js is Y-up |
 | Orientation math through three.js `Euler` in the domain | Packing and render can't disagree | The domain depends on `three`, which is pure math and fine in Node |
 | Each board as an explicit `Member` box | One list drives the 3D view, BOM, weight and screws | No joinery detail (rabbets, overlaps) |
-| `useState` + `useMemo`, no state library | Derived state is cheap and pure | Revisit when persistence arrives |
+| zustand store, plus a separate per-frame `motion.ts` | DOM panels and the 3D scene share hover, pin and view state; per-frame values stay out of React so animation doesn't re-render | Two places to look for state |
+| Assembly, face and label tagged on members in the domain | The cut list groups by assembly and the viewer fades or moves by face; inferring this from geometry in the UI was fragile | More fields on `Member` |
+| Checks report passes, not only problems | The Checks tab shows what was verified, not just what failed | More strings in the domain |
+| Size labels as DOM, not drei `<Html>` | `<Html>` mounts a React root per label, and unmounting those during a render raced in React 19 | Positions are projected manually each frame |
+| Camera framing via `setViewOffset` toward the free area | The crate stays centred beside the island; picking and projection still use one camera | Insets are measured from the DOM |
+| GLBs over 20 units across are read as millimetres | Catches the common "exported in mm" mistake; the UI says when it happened | A real 20 m+ part would be misread (none are expected) |
+| No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
 
@@ -371,7 +610,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 |---|---|
 | #1 | Commit the prototype as a baseline |
 | #2 | README and this spec |
-| #3 | Upload a custom GLB part, with user-entered mass and material |
+| #3 | Upload a custom GLB part, with user-entered mass and material. Loading and mass entry landed with #20; entering a material is still open |
 | #4 | Capture and export LLM logs (a deliverable) |
 | #5 | Architecture and decision notes for the on-site walkthrough |
 | #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |
@@ -379,12 +618,13 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #8 | Centre of gravity and forklift handling |
 | #9 | Printable shop-floor build sheet |
 | #10 | Edge-case and input hardening |
-| #11 | Explain why a layout was chosen |
+| #11 | Explain why a layout was chosen (closed; `explainLayout` landed with #20) |
 | #12 | Flag when a wooden crate is overkill (for example, light aluminum that a carton would do) |
 | #13 | Shipping-mode constraints (LTL, container, air) |
 | #14 | Shareable design via URL |
-| #15 | Imperial / metric units toggle |
+| #15 | Imperial / metric units toggle (landed with #20) |
 | #16 | Geometry-aware blocking for irregular parts |
+| #20 | UX redesign: full-bleed scene, glass island, tabbed detail |
 
 Other known gaps:
 
@@ -400,8 +640,16 @@ Other known gaps:
 - Business rules belong in `src/domain/` (pure, tested), not in components.
 - Add a new rule as a named constant at the top of `crate.ts` or `packing.ts`, and add it to
   §7 of this spec.
-- Adding a part means:
+- Adding a catalog part means:
   1. put the GLB in `public/parts/`
   2. add an entry to `src/data/parts.json`
-  3. check that the viewer's bounds badge reads "✓ matches catalog"
+  3. load it and check that the part line reads "model matches catalog"
+- Never derive values in components that the domain should own. If the UI needs a number,
+  add it to `CrateDesign` with a test.
+- Inside the 3D scene, read the store with `useDesigner.getState()` in `useFrame` and write
+  three.js objects directly. Subscribe with hooks only for things that change rarely.
+- Don't use drei `<Html>`; use the `SizeLabels` pattern for DOM over the canvas.
+- **Dev server gotcha:** the scaffold's `@tailwindcss/turbopack` loader rule in `next.config.ts`
+  doesn't always pick up edits to `globals.css`. If a style change doesn't show, restart
+  `bun run dev` (and delete `.next/` if needed). Production builds are unaffected.
 - Before you push, run `bun run test`, `bun run lint` and `bun run build`.

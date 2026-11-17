@@ -1,57 +1,68 @@
 "use client";
 
 import { useGLTF } from "@react-three/drei";
-import { useEffect, useMemo } from "react";
-import { Box3, Mesh, MeshStandardMaterial, Vector3, type Object3D } from "three";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import { Box3, Vector3 } from "three";
 import type { Layout } from "@/domain/packing";
-import type { Part, Vec3 } from "@/domain/schema";
-
-const METERS_TO_MM = 1000;
+import type { Vec3 } from "@/domain/schema";
+import { partWeight } from "@/lib/units";
+import { useDesigner, type LoadedPart } from "@/state/store";
+import { cloneWithMaterial, GHOST_PART, highlightOf, partMaterial, setOpacity } from "./scene";
 
 /**
- * Loads a part GLB once and places one copy in every filled slot of the layout.
+ * Loads the part GLB once and places a copy in every filled slot.
  *
- * The GLBs are Z-up and in meters, matching the crate frame, so no axis swap is
- * needed here — only a ×1000 scale and recentering on the bounding box (the
- * source models are not centered on their origin).
+ * GLBs are Z-up like the crate frame, so only a scale (model units → mm) and a
+ * re-centre on the bounding box are needed — the source models are not
+ * centred on their origin.
  */
-export function PartInstances({
-  part,
-  url,
-  layout,
-  onMeasured,
-}: {
-  part: Part;
-  url: string;
-  layout: Layout;
-  onMeasured?: (sizeMm: Vec3) => void;
-}) {
-  const { scene } = useGLTF(url);
+export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layout }) {
+  const { scene } = useGLTF(part.modelUrl);
+  const setMeasured = useDesigner((s) => s.setMeasured);
 
-  const { center, sizeMm, material } = useMemo(() => {
+  const { center, sizeMm } = useMemo(() => {
     const box = new Box3().setFromObject(scene);
-    const size = box.getSize(new Vector3()).multiplyScalar(METERS_TO_MM);
-    const isAluminum = part.material.toLowerCase().includes("alum");
-    return {
-      center: box.getCenter(new Vector3()),
-      sizeMm: [size.x, size.y, size.z] as Vec3,
-      material: new MeshStandardMaterial({
-        // Moderate metalness: there's no environment map to reflect, and fully
-        // metallic surfaces render near-black without one.
-        color: isAluminum ? "#c4cad3" : "#8a929b",
-        metalness: 0.35,
-        roughness: isAluminum ? 0.35 : 0.45,
-      }),
-    };
-  }, [scene, part.material]);
+    const size = box.getSize(new Vector3()).multiplyScalar(part.mmPerUnit);
+    return { center: box.getCenter(new Vector3()), sizeMm: [size.x, size.y, size.z] as Vec3 };
+  }, [scene, part.mmPerUnit]);
+  useEffect(() => {
+    setMeasured(sizeMm);
+  }, [sizeMm, setMeasured]);
 
-  useEffect(() => onMeasured?.(sizeMm), [sizeMm, onMeasured]);
+  const material = useMemo(() => partMaterial(part.material), [part.material]);
+  // useFrame updates the material in place through a ref (three.js objects are mutable by design).
+  const materialRef = useRef(material);
+  useEffect(() => {
+    materialRef.current = material;
+    return () => material.dispose();
+  }, [material]);
 
   const count = layout.slots.length;
   const copies = useMemo(
     () => Array.from({ length: count }, () => cloneWithMaterial(scene, material)),
     [scene, material, count],
   );
+
+  useFrame(() => {
+    const s = useDesigner.getState();
+    const opacity = highlightOf(s).focus ? GHOST_PART : 1;
+    setOpacity(materialRef.current, opacity);
+  });
+
+  const onMove = (i: number) => (e: ThreeEvent<PointerEvent>) => {
+    if (highlightOf(useDesigner.getState()).focus) return;
+    e.stopPropagation();
+    const s = useDesigner.getState();
+    s.setHover(null);
+    s.setTooltip({
+      x: e.nativeEvent.clientX,
+      y: e.nativeEvent.clientY,
+      title: part.name,
+      detail: `Part ${i + 1} of ${count}. ${part.material ?? "Material not given"}, ${partWeight(part.mass_kg, s.units)}`,
+    });
+  };
+  const onOut = () => useDesigner.getState().setTooltip(null);
 
   const [a, b, c] = layout.cellSize;
   return (
@@ -62,24 +73,11 @@ export function PartInstances({
           position={[slot.min[0] + a / 2, slot.min[1] + b / 2, slot.min[2] + c / 2]}
           rotation={layout.orientation.euler}
         >
-          <group scale={METERS_TO_MM}>
-            <primitive object={copies[i]} position={center.clone().negate()} />
+          <group scale={part.mmPerUnit}>
+            <primitive object={copies[i]} position={center.clone().negate()} onPointerMove={onMove(i)} onPointerOut={onOut} />
           </group>
         </group>
       ))}
     </group>
   );
-}
-
-/** Each slot needs its own Object3D; geometry buffers stay shared. */
-function cloneWithMaterial(scene: Object3D, material: MeshStandardMaterial): Object3D {
-  const copy = scene.clone(true);
-  copy.traverse((o) => {
-    if (o instanceof Mesh) {
-      o.material = material;
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
-  });
-  return copy;
 }

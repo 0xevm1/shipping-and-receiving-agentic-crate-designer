@@ -37,9 +37,17 @@ export const PartsCatalogSchema = z.object({
 });
 export type PartsCatalog = z.infer<typeof PartsCatalogSchema>;
 
-/** User-editable inputs that drive a crate design. */
+/**
+ * The minimum a crate design needs to know about a part. Catalog parts satisfy
+ * it; so does a GLB loaded at runtime, which has measured dimensions and a
+ * user-entered mass but may have no material or density.
+ */
+export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm"> & {
+  material?: string;
+};
+
+/** User-editable inputs that drive a crate design. The part itself is passed separately. */
 export const CrateSettingsSchema = z.object({
-  partId: z.string(),
   quantity: z.number().int().min(1).max(200),
   /** Restrict to rotations about Z, so the part's modeled "up" stays up. */
   keepUpright: z.boolean(),

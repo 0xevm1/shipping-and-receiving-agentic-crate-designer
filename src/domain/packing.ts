@@ -47,7 +47,7 @@ export interface Layout {
   slots: Slot[];
 }
 
-const STABLE_HEIGHT_RATIO = 1.5;
+export const STABLE_HEIGHT_RATIO = 1.5;
 /** Volumes within this fraction are treated as equal, so the lower crate wins. */
 const VOLUME_TOLERANCE = 0.03;
 
