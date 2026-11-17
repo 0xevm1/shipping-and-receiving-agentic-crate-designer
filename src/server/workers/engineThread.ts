@@ -6,6 +6,7 @@
  * file with `@/` imports in a thread on its own. See docs/QUEUE.md "Worker threads".
  */
 import { parentPort } from "node:worker_threads";
+import { buildArtifact, buildMultiBundleZip } from "@/engine/artifacts";
 import { designShipment } from "@/engine/engine";
 import { buildBundleZip } from "@/engine/files";
 import { bytesModelReader } from "@/engine/glb";
@@ -22,6 +23,10 @@ async function run(msg: EngineTaskMessage): Promise<unknown> {
       return designShipment(msg.input);
     case "bundle":
       return buildBundleZip(msg.input.bundle, bytesModelReader(msg.input.glb));
+    case "artifact":
+      return buildArtifact(msg.input.kind, msg.input.request, msg.input.glb ? bytesModelReader(msg.input.glb) : null);
+    case "multiBundle":
+      return buildMultiBundleZip(msg.input.configs, msg.input.glb ? bytesModelReader(msg.input.glb) : null, msg.input.options);
   }
 }
 
@@ -30,7 +35,7 @@ parentPort!.on("message", async (msg: EngineTaskMessage) => {
   try {
     reply = { id: msg.id, ok: true, output: await run(msg) };
   } catch (e) {
-    reply = { id: msg.id, ok: false, error: e instanceof Error ? e.message : String(e) };
+    reply = { id: msg.id, ok: false, error: e instanceof Error ? e.message : String(e), name: e instanceof Error ? e.name : undefined };
   }
   parentPort!.postMessage(reply);
 });

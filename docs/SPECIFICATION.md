@@ -351,7 +351,10 @@ bump `ENGINE_REVISION`.
 | `src/engine/artifacts.ts` | `buildArtifact` (one stamped GLB, PDF or CSV), `buildMultiBundleZip` (Download all), `sweepFor`, the manifest types (§7.17) |
 | `src/engine/artifactCases.ts` | The artifact parity cases: each sample part at its recommended quantity, and the CSV baseline text (`__snapshots__/artifacts-csv.txt`) |
 | `src/lib/comparison.ts`, `comparisonPdf.ts` | The multi-configuration comparison summary (`buildComparison`, pure) and its one-sheet PDF (`comparisonToPdf`, jsPDF through `exportPdf.ts`'s `Writer`) |
-| `src/state/downloadAll.ts` | `useDownloadAll`: the Download all run beside the Export pill (`run(configs?)`; default: the design on screen plus the sweep's shortlist, `shortlistConfigs`) |
+| `src/state/downloadAll.ts` | `useDownloadAll`: the Download all run beside the Export pill (`run(configs?)`; default `defaultConfigs`: the design on screen plus the job's saved configurations (`savedConfigRequests`), else the sweep's shortlist (`shortlistConfigs`)) |
+| `src/server/artifacts/` | Server-built files (#46 slice 6): `configurationArtifact`, `jobBundle`, `createBundleHandler` (`service.ts`), build-once storage (`store.ts` `storeOnce`: single flight, advisory lock, object then row then `artifact.ready`), the part model from blob storage (`model.ts`) |
+| `src/lib/api/artifacts.ts` | Artifact and bundle response schemas, `artifactHref` / `bundleHref` / `parseConfigsParam` (client-safe) |
+| `src/components/island/SharedJobFiles.tsx` | The Shared job's server file links per configuration and its whole-job downloads |
 | `src/engine/parityCases.ts` | The browser / Node parity cases and the baseline text (`__snapshots__/parity.json`) |
 | `src/state/engineClient.ts` | `engine`: the page's engine client, a Web Worker with an in-thread fallback, latest-wins (`createEngineClient`) |
 | `src/state/engine.worker.ts` | The engine's Web Worker entry (designs and sweeps, `engine/run.ts`) |
@@ -1880,11 +1883,22 @@ constraint that stopped a larger crate. It always says freight is not priced, an
 are placeholders. **No freight dollar figure appears** in the PDFs or the manifest: the sweep is run
 without rates (`costBasis: "crate-only"`).
 
+**On the server (#46 slice 6).** `GET /api/v1/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`
+and `GET /api/v1/jobs/:id/bundle.zip` call these same builders on the engine's worker threads
+(pool tasks `artifact` and `multiBundle`) with the configuration's stored request and the part's
+model from blob storage. To make the bytes a function of the inputs alone (content-addressed
+keys, one object per key however many requests race), the server writes imperial units, UTC, and
+the configuration's own save time as `generatedAt` (a bundle: its newest configuration's). Files
+are built on the first request and served from blob storage after; see docs/API.md "Artifacts".
+
 **Download all (browser).** Beside the Export pill (§8.2), an outlined pill **Download all**
 builds this ZIP in the page (`useDownloadAll`, `src/state/downloadAll.ts`): `run(configs?)` takes
-any plain array of `DesignRequest`s, so a job's saved configurations can feed it; without one it
-bundles the design on screen and the sweep's shortlist (`shortlistConfigs(current, sweepFor(current))`,
-each shortlist quantity at its layout with the same rules). The sweep, PDF, ZIP and GLB code load
+any plain array of `DesignRequest`s; without one it bundles the design on screen, then the shared
+job's saved configurations when it has any (`defaultConfigs`, `savedConfigRequests`: each saved
+request's settings, layout, ranking, standards and part design fields on the part on screen, so
+each folder keeps the saved `inputHash`), else the sweep's shortlist (`shortlistConfigs(current,
+sweepFor(current))`, each shortlist quantity at its layout with the same rules). The Shared job
+section's **Download all saved** bundles only the job's configurations. The sweep, PDF, ZIP and GLB code load
 with `import()` on the first click; nothing goes to a server. States and timings are the Export
 pill's: "Bundling…" with a spinner (at least 1.5 s unless reduced motion), then "Downloaded
 crates-PART-001-6-configs.zip" in its own `role="status"` note, or one plain error sentence.

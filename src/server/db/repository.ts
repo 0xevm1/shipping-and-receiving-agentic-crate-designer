@@ -26,6 +26,7 @@ export type NewConfiguration = Omit<typeof configuration.$inferInsert, "orgId" |
 /** A configuration as a job sees it: the content-addressed row plus how it joined this job. */
 export type JobConfiguration = Configuration & { origin: ConfigurationOrigin; addedAt: Date };
 export type Artifact = typeof artifact.$inferSelect;
+export type NewArtifact = Omit<typeof artifact.$inferInsert, "orgId" | "id" | "createdAt">;
 export type IdempotencyRecord = typeof idempotencyKey.$inferSelect;
 export type CrateEvent = typeof event.$inferSelect;
 export type NewCrateEvent = Pick<typeof event.$inferInsert, "jobId" | "type" | "payload">;
@@ -250,6 +251,40 @@ export function createRepository(db: Executor) {
     },
 
     artifacts: {
+      /** The row naming `objectKey` (content-addressed: one row per object). */
+      async getByKey(ctx: OrgContext, objectKey: string): Promise<Artifact | undefined> {
+        const orgId = requireOrg(ctx);
+        const [row] = await db
+          .select()
+          .from(artifact)
+          .where(and(eq(artifact.orgId, orgId), eq(artifact.objectKey, objectKey)));
+        return row;
+      },
+      /**
+       * Records a stored object. The key is the identity: storing it again (a rebuild after the
+       * object expired, a concurrent first build) updates the one row and keeps its id.
+       */
+      async put(ctx: OrgContext, input: NewArtifact): Promise<Artifact> {
+        const orgId = requireOrg(ctx);
+        return one(
+          await db
+            .insert(artifact)
+            .values({ ...input, orgId })
+            .onConflictDoUpdate({
+              target: [artifact.orgId, artifact.objectKey],
+              set: { sha256: input.sha256, sizeBytes: input.sizeBytes, builtBy: input.builtBy, createdAt: sql`now()` },
+            })
+            .returning(),
+        );
+      },
+      /**
+       * A transaction-level advisory lock on an object key within the org, so one process at a
+       * time builds a missing artifact. Only meaningful inside a transaction.
+       */
+      async lock(ctx: OrgContext, objectKey: string): Promise<void> {
+        const orgId = requireOrg(ctx);
+        await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:artifact:${objectKey}`}, 0))`);
+      },
       /** Generated files of every configuration linked to the job. */
       async listForJob(ctx: OrgContext, jobId: string): Promise<Artifact[]> {
         const orgId = requireOrg(ctx);

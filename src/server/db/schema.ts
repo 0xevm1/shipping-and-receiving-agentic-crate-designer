@@ -208,7 +208,13 @@ export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 export const ARTIFACT_BUILDERS = ["browser", "server"] as const;
 export type ArtifactBuilder = (typeof ARTIFACT_BUILDERS)[number];
 
-/** A generated file for a configuration. Bytes in blob storage; this row holds the key. */
+/**
+ * A generated file. Bytes in blob storage; this row holds the key, which is content-addressed
+ * (`org/<orgId>/artifacts/<inputHash>/<engineVersion>/<file>`, `org/<orgId>/bundles/<id>.zip`), so
+ * the key is the identity: one row per object, whichever engine version or bundle made it (#46
+ * slice 6, docs/API.md "Artifacts"). A bundle (`zip`) spans several configurations; its row names
+ * the first one, so a job's snapshot lists it and orphan cleanup keeps its object.
+ */
 export const artifact = pgTable(
   "artifact",
   {
@@ -223,7 +229,8 @@ export const artifact = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    unique("artifact_configuration_kind_key").on(t.orgId, t.configurationId, t.kind),
+    unique("artifact_org_object_key_key").on(t.orgId, t.objectKey),
+    index("artifact_org_configuration_idx").on(t.orgId, t.configurationId),
     foreignKey({
       name: "artifact_configuration_fk",
       columns: [t.orgId, t.configurationId],

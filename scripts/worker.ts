@@ -9,6 +9,9 @@
 // SIGINT / SIGTERM: claims nothing new and lets running jobs finish.
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { createBundleHandler } from "../src/server/artifacts/service";
+import { blobConfig } from "../src/server/blob/config";
+import { createS3BlobStore } from "../src/server/blob/s3";
 import { databaseUrl } from "../src/server/db/config";
 import { createQueueStore } from "../src/server/db/queue";
 import * as schema from "../src/server/db/schema";
@@ -25,7 +28,7 @@ const db = drizzle({ client: sql, schema });
 const pool = createEnginePool();
 const runner = createQueueRunner({
   store: createQueueStore(db),
-  handlers: createJobHandlers({ db, pool }),
+  handlers: createJobHandlers({ db, pool, bundle: createBundleHandler({ db, blob: createS3BlobStore(blobConfig()), pool: () => pool }) }),
   onDead: createOnDead(db),
   listen: pgQueueListen(url),
   concurrency: num(process.env.QUEUE_CONCURRENCY, 2),

@@ -76,8 +76,12 @@ export const ConfigurationSchema = z.object({
   origin: z.enum(CONFIGURATION_ORIGINS),
   /** The engine's `DesignSummary` (validate with `DesignSummarySchema`). */
   summary: json.nullable(),
-  /** What to put back on screen: the request's settings, layout pick and ranking (not the part or standards). */
-  design: z.object({ settings: json, layoutKey: z.string().nullable(), ranking: z.string() }),
+  /**
+   * What to put back on screen: the request's settings, layout pick and ranking. `part` (its
+   * design fields) and `standards` complete the request, so a client can rebuild the files of
+   * a saved configuration with the same `inputHash` (Download all of a job, #46 slice 6).
+   */
+  design: z.object({ settings: json, layoutKey: z.string().nullable(), ranking: z.string(), part: json.optional(), standards: json.optional() }),
   createdAt: datetime,
   /** When it joined this job. */
   addedAt: datetime,

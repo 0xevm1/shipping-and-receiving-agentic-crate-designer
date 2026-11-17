@@ -2,6 +2,8 @@
 // claims, NOTIFY wake-up and the polling fallback, leases of crashed workers, retries and the dead
 // letter, and the sweep job end to end on the engine pool. Needs `bun run infra:up`.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { designShipment } from "@/engine/engine";
+import { DesignRequestSchema, DesignSummarySchema } from "@/engine/schemas";
 import { DEFAULT_ORG } from "../db/org";
 import { createQueueStore, type QueueJob, type QueueStore } from "../db/queue";
 import { inTransaction } from "../db/repository";
@@ -224,6 +226,12 @@ describe("the sweep job", () => {
     expect(configs.length).toBe(result.count);
     expect(configs.length).toBeGreaterThan(0);
     expect(configs.every((c) => c.origin === "precomputed" && c.engineVersion === result.engineVersion)).toBe(true);
+    // Stored like a browser save: the whole DesignRequest (it hashes to the row's inputHash) and its DesignSummary.
+    for (const c of configs) {
+      const req = DesignRequestSchema.parse(c.settings);
+      expect(designShipment(req).inputHash).toBe(c.inputHash);
+      expect(DesignSummarySchema.parse(c.resultSummary).totals.crates).toBe(1);
+    }
     expect(result.curve).toHaveLength(200);
     expect(result.total).toMatchObject({ total: 40 });
 
@@ -277,7 +285,7 @@ describe("the sweep job", () => {
     expect(String(events[0]!.payload.message)).not.toContain("engine thread died");
   });
 
-  it("a bundle job dead-letters until the artifacts slice provides its handler", async () => {
+  it("a bundle job dead-letters when no bundle handler is given", async () => {
     const job = await designJob();
     const queued = (await store.enqueue(DEFAULT_ORG, { kind: "bundle", payload: { jobId: job.id, configurationIds: [] } })).job;
     const r = runner(createJobHandlers({ db: t.db, pool }));

@@ -83,8 +83,9 @@ describe("rankConfigurations: the headless answer", () => {
       const again = designShipment(sweepDesignRequest(req, c.quantityPerCrate, c.layoutKey));
       expect(again.inputHash).toBe(c.inputHash);
       expect(again.summary.totals.crates).toBe(c.crates);
-      // The sweep's layout, unless the shipment planner split the batch (docs/QUEUE.md "Known gaps").
-      if (c.crates === 1) expect(again.summary.crates[0]!.layoutKey).toBe(c.layoutKey);
+      // The planner keeps a batch whole on the sweep's layout (spec §7.10, §7.16): one crate, that layout.
+      expect(c.crates).toBe(1);
+      expect(again.summary.crates[0]!.layoutKey).toBe(c.layoutKey);
       expect(c.settings.quantity).toBe(c.quantityPerCrate);
     }
   });

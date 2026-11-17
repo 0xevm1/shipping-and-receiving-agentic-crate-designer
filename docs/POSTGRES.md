@@ -119,7 +119,7 @@ The schema is `src/server/db/schema.ts`; `db/migrations/` is generated from it.
 | `design_job` | One per part being crated: part, optional total quantity, created by, status (`open`, `running`, `ready`, `error`, `archived`), selected configuration, notes, and a `version` for optimistic concurrency |
 | `configuration` | Content-addressed by the engine's `input_hash`, **unique per `(org_id, input_hash)`**: quantity per crate, layout, the whole `DesignRequest` as `settings` JSON (validated with `DesignRequestSchema` on read), result summary, score (crate cost per part, USD), engine version. Never updated. Not owned by a job: jobs that reach the same inputs share the row |
 | `job_configuration` | Which configurations a job has: `(org_id, job_id, configuration_id)` and how it got there, `origin` (`precomputed` by a sweep, or saved by a `user`). A job's `selected_configuration_id` references this table, so a job can only select one of its own |
-| `artifact` | A generated file for a configuration: kind (`glb`, `pdf`, `csv`, `zip`), sha256, size, object key, built by (`browser` or `server`). One per `(configuration, kind)` |
+| `artifact` | A generated file for a configuration: kind (`glb`, `pdf`, `csv`, `zip`), sha256, size, object key, built by (`browser` or `server`). One per object key (`(org, object_key)` unique): the key is content-addressed, so a configuration has one row per file and engine version; a bundle (`zip`) row names its first configuration |
 | `event` | Append-only outbox: `bigserial` id (the SSE replay cursor), job, type, small payload |
 | `shop_standard` | Rates and limits (#19) as JSON, versioned per org |
 | `idempotency_key` | Client-generated ids of changes already applied, with the request hash and the stored response, so an offline replay (slice 7a) applies a change once |
@@ -227,7 +227,7 @@ receives every org's notifications and filters them in memory.
 | `configs.ready` | yes | `count`: the sweep finished; shortlist and curve are saved |
 | `config.added` | yes | `configurationId`, `inputHash`: a user saved a configuration |
 | `recommendation.changed` | yes | `configurationId` (null when cleared) |
-| `artifact.ready` | yes | `artifactId`, `configurationId`, `kind` |
+| `artifact.ready` | yes | `artifactId`, `configurationId`, `kind`, plus `file` or `bundleId`: a server-built file is stored (docs/API.md "Artifacts") |
 | `job.error` | yes | `message` (safe to show) |
 | `engine.updated` | no (org-wide) | `engineVersion`: open tabs should reload |
 

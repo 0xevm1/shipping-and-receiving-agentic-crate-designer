@@ -15,7 +15,15 @@ export type BlobInfo = {
   metadata?: Record<string, string>;
 };
 
-type PutOptions = { contentType?: string; metadata?: Record<string, string> };
+type PutOptions = {
+  contentType?: string;
+  metadata?: Record<string, string>;
+  /** Object tags (`x-amz-tagging`), e.g. `EPHEMERAL_TAGS` on generated files a lifecycle rule may expire. */
+  tags?: Record<string, string>;
+};
+
+/** Tags of a generated file that can be rebuilt (docs/BLOB_STORAGE.md "Lifecycle of generated files"). */
+export const EPHEMERAL_TAGS: Readonly<Record<string, string>> = { retention: "ephemeral" };
 
 type PresignOptions = {
   /** Lifetime in seconds; default `PRESIGN_SECONDS`. */

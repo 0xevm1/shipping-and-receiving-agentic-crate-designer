@@ -57,6 +57,7 @@ export function createS3BlobStore(config: BlobConfig): BlobStore {
           ContentLength: body.byteLength,
           ContentType: options.contentType ?? "application/octet-stream",
           Metadata: options.metadata,
+          Tagging: options.tags ? new URLSearchParams(options.tags).toString() : undefined,
         }),
       );
     },

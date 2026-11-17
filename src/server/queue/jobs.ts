@@ -5,12 +5,12 @@
  * - `sweep`: for a design job, run the quantity sweep on the engine pool, save the shortlist as
  *   `precomputed` configurations, select the recommendation, and emit `configs.ready`, all in one
  *   transaction. Dead-lettered: the job goes to `error` and `job.error` is emitted.
- * - `bundle`: the server-built `bundle.zip` (slice 6, artifacts). Only the payload and the enqueue
- *   call are fixed here; the artifacts slice passes its handler to `createJobHandlers`.
+ * - `bundle`: the server-built `bundle.zip` (slice 6). Its handler is `createBundleHandler` in
+ *   src/server/artifacts, passed in as `createJobHandlers({ …, bundle })` (it needs blob storage).
  */
 import { z } from "zod";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
-import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
+import { DEFAULT_SWEEP_RULES, sweepDesignRequest, type SweepRequest } from "@/engine/sweep";
 import { emitEvent } from "../events/emit";
 import { type OrgContext, orgContext } from "../db/org";
 import type { QueueJob } from "../db/queue";
@@ -49,18 +49,21 @@ export async function enqueueSweep(ctx: OrgContext, jobId: string, repo: Reposit
   return job;
 }
 
-/** Queues a server-built bundle for design job `jobId`. */
-export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, repo: Repository): Promise<QueueJob> {
+/**
+ * Queues a server-built bundle for design job `jobId`. With a `dedupeKey` (the bundle id, see
+ * src/server/artifacts), a bundle already queued or running under that key is returned, not doubled.
+ */
+export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, repo: Repository, { dedupeKey }: { dedupeKey?: string } = {}): Promise<QueueJob> {
   const payload = BundleJobPayloadSchema.parse(input);
   await requireJob(repo, ctx, payload.jobId);
-  const { job } = await repo.queue.enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3 });
+  const { job } = await repo.queue.enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3, dedupeKey });
   return job;
 }
 
 export interface JobHandlerDeps {
   db: Database;
   pool: EnginePool;
-  /** The artifacts slice's bundle builder. Until then a bundle job dead-letters with "not built yet". */
+  /** `createBundleHandler` (src/server/artifacts). Without it a bundle job dead-letters with "not available". */
   bundle?: JobHandler;
 }
 
@@ -98,17 +101,21 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
       total: job.totalQuantity,
     };
     const report = await pool.run("designs", req);
+    // Stored like a configuration saved from the browser (docs/API.md): the whole DesignRequest, so
+    // the server can rebuild it (artifacts, "Use"), and the engine's DesignSummary of it.
+    const requests = report.configurations.map((c) => sweepDesignRequest(req, c.quantityPerCrate, c.layoutKey));
+    const designs = await Promise.all(requests.map((r) => pool.run("design", r)));
     signal.throwIfAborted();
 
     return inTransaction(db, async (tx) => {
       const ids: string[] = [];
-      for (const c of report.configurations) {
+      for (const [i, c] of report.configurations.entries()) {
         const { row } = await tx.configurations.save(org, {
           inputHash: c.inputHash,
           quantityPerCrate: c.quantityPerCrate,
           layout: c.layoutKey,
-          settings: c.settings,
-          resultSummary: { ...c, settings: undefined, sweepInputHash: report.inputHash },
+          settings: requests[i],
+          resultSummary: designs[i]!.summary,
           score: c.scoreUsdPerPart,
           engineVersion: report.engineVersion,
         });

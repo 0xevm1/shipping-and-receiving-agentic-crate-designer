@@ -10,6 +10,8 @@ describe("object keys", () => {
     expect(modelKey(DEFAULT_ORG, SHA)).toBe(`org/${DEFAULT_ORG_ID}/models/${SHA}.glb`);
     expect(artifactKey(DEFAULT_ORG, "f00d", "0.4.1", "spec.pdf")).toBe(`org/${DEFAULT_ORG_ID}/artifacts/f00d/0.4.1/spec.pdf`);
     expect(bundleKey(DEFAULT_ORG, "b-1")).toBe(`org/${DEFAULT_ORG_ID}/bundles/b-1.zip`);
+    // The engine's "+" is written as "_" (S3 treats "+" specially).
+    expect(artifactKey(DEFAULT_ORG, "f00d", "0.1.0+engine.3", "crate.glb")).toBe(`org/${DEFAULT_ORG_ID}/artifacts/f00d/0.1.0_engine.3/crate.glb`);
     expect(orgKeyPrefix(DEFAULT_ORG)).toBe(`org/${DEFAULT_ORG_ID}/`);
   });
 

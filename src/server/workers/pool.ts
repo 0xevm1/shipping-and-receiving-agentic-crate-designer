@@ -80,7 +80,7 @@ export function createWorkerPool({ spawn, size = 2, timeoutMs = 120_000 }: Worke
       if (slot.task?.id !== res.id) return;
       const task = finish(slot)!;
       if (res.ok) task.resolve(res.output);
-      else task.reject(new Error(res.error));
+      else task.reject(Object.assign(new Error(res.error), res.name ? { name: res.name } : {}));
       pump();
     });
     slot.worker.on("error", (e) => retire(slot, e instanceof Error ? e : new Error(String(e))));

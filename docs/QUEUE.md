@@ -102,8 +102,8 @@ running jobs finish). Run one next to `bun run dev`, or several on several machi
 
 | Kind | Payload | Does |
 |---|---|---|
-| `sweep` | `{ jobId }` | For a `design_job`: `rankConfigurations` on the pool (the part's size and mass, the app's default rules and standards, the job's `total_quantity`). Then, in one transaction: each shortlisted configuration saved (`origin = precomputed`, content-addressed by `inputHash`), the job set to `ready` with the recommendation as `selected_configuration_id`, and `configs.ready` emitted (`{ count, recommendedConfigurationId, inputHash }`). The queue row's `result` holds the curve (200 points) and the total plan. Dead-lettered: the job goes to `error` and `job.error` is emitted with a generic message |
-| `bundle` | `{ jobId, configurationIds }` | Server-built `bundle.zip`. **Stub:** the payload, `enqueueBundle` and the pool's `bundle` task (`buildBundleZip` from GLB bytes) exist; the artifacts slice passes its handler as `createJobHandlers({ …, bundle })`. Until then a bundle job dead-letters with "Server-built bundles aren't available yet." |
+| `sweep` | `{ jobId }` | For a `design_job`: `rankConfigurations` on the pool (the part's size and mass, the app's default rules and standards, the job's `total_quantity`). Then, in one transaction: each shortlisted configuration saved (`origin = precomputed`, content-addressed by `inputHash`, stored like a browser save: the whole `DesignRequest` and its `DesignSummary`, so the server can rebuild its files and the UI can show and use it), the job set to `ready` with the recommendation as `selected_configuration_id`, and `configs.ready` emitted (`{ count, recommendedConfigurationId, inputHash }`). The queue row's `result` holds the curve (200 points) and the total plan. Dead-lettered: the job goes to `error` and `job.error` is emitted with a generic message |
+| `bundle` | `{ jobId, configurationIds }` | Server-built `bundle.zip` ([API.md](API.md#artifacts)): `GET /jobs/:id/bundle.zip` queues one (deduplicated by bundle id) when it holds more than 8 configurations. `createBundleHandler` (`src/server/artifacts`), passed to `createJobHandlers({ …, bundle })` by `bun run worker`, builds it on the pool (`multiBundle` task), stores it and emits `artifact.ready`; the queue row's `result` is `{ artifactId, bundleId, cached }`. Without a handler a bundle job dead-letters with "Server-built bundles aren't available yet." A missing job or configuration dead-letters at once |
 
 **Every new design job queues its sweep by itself:** `src/server/queue/register.ts` registers an
 `onJobCreated` hook (`src/server/jobs/hooks.ts`, imported by `src/server/jobs/index.ts`), which
@@ -201,11 +201,6 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 
 ## Known gaps
 
-- **Sweep vs. shipment planner.** The sweep's hard checks pass some quantities that
-  `planShipment` then splits into two crates, because the planner caps a crate's gross by its
-  computed base rating more strictly than the sweep's `base-rating` check (PART-001 at 33–34 per
-  crate, PART-002 at 24). Each configuration reports `crates` (from the full design) so this is
-  visible; reconciling the two rules belongs in the domain (§7.10 / §7.16).
 - Fair scheduling, per-org concurrency caps and quotas: deferred until a second org (#60).
 - Jobs use the app's default rules and standards; per-job rules and the `shop_standard` table come
   with the jobs and standards slices.

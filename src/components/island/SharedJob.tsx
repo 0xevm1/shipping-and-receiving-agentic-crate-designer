@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { DesignSummarySchema } from "@/engine/schemas";
+import { ShopStandardsSchema } from "@/domain/standards";
+import { DesignPartSchema, DesignSummarySchema } from "@/engine/schemas";
 import { savedDateText, usd } from "@/lib/format";
 import { dims, lengthUnit } from "@/lib/units";
 import {
@@ -23,6 +24,7 @@ import { useDesigner } from "@/state/store";
 import { CrateSettingsSchema } from "@/domain/schema";
 import { RANKINGS, type Ranking } from "@/domain/design";
 import styles from "./SharedJob.module.css";
+import { SavedConfigFiles, SharedJobDownloads } from "./SharedJobFiles";
 
 const TITLE_ID = "shared-job-title";
 
@@ -40,7 +42,7 @@ type Row = { config: SavedConfig; pending: PendingConfig | null };
 /** A queued configuration shown like a saved one (the server will store exactly this). */
 function pendingRow(c: PendingConfig): Row {
   const summary = DesignSummarySchema.safeParse(c.body.summary);
-  const req = c.body.request as { settings?: unknown; layoutKey?: unknown; ranking?: unknown };
+  const req = c.body.request as { settings?: unknown; layoutKey?: unknown; ranking?: unknown; part?: unknown; standards?: unknown };
   const settings = CrateSettingsSchema.safeParse(req.settings);
   const ranking = (RANKINGS as readonly unknown[]).includes(req.ranking) ? (req.ranking as Ranking) : "volume";
   const s = summary.success ? summary.data : null;
@@ -55,9 +57,21 @@ function pendingRow(c: PendingConfig): Row {
       origin: "user",
       addedAt: c.createdAt,
       summary: s,
-      design: { settings: settings.success ? settings.data : null, layoutKey: typeof req.layoutKey === "string" ? req.layoutKey : null, ranking },
+      design: {
+        settings: settings.success ? settings.data : null,
+        layoutKey: typeof req.layoutKey === "string" ? req.layoutKey : null,
+        ranking,
+        ...pendingRequestParts(req),
+      },
     },
   };
+}
+
+/** The queued request's part and standards, as a saved configuration carries them. */
+function pendingRequestParts(req: { part?: unknown; standards?: unknown }): Pick<SavedConfig["design"], "part" | "standards"> {
+  const part = DesignPartSchema.safeParse(req.part);
+  const standards = ShopStandardsSchema.safeParse(req.standards);
+  return { part: part.success ? part.data : null, standards: standards.success ? standards.data : null };
 }
 
 const isSelected = (sel: Selection | undefined, c: SavedConfig) =>
@@ -131,6 +145,8 @@ export function SharedJob() {
   const savedAlready = rows.some((r) => r.config.inputHash === inputHash);
   const canSave = Boolean(partKey) && !reloadNeeded && hasCrate && !savedAlready && status !== "unavailable";
   const canChangeJob = Boolean(job) && !reloadNeeded;
+  // Server-built files (#46 slice 6) only while the server answers.
+  const live = status === "live";
 
   // The notes as typed, while the field has focus; otherwise the job's (another tab, a sync).
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
@@ -276,6 +292,7 @@ export function SharedJob() {
                     {recommended ? "Clear recommendation" : "Recommend"}
                   </button>
                 </div>
+                {job && live && !row.pending && <SavedConfigFiles jobId={job.id} config={c} />}
               </li>
             );
           })}
@@ -303,6 +320,7 @@ export function SharedJob() {
           {savedAlready ? "Saved to job" : "Save to job"}
         </button>
       </div>
+      {job && <SharedJobDownloads jobId={job.id} configs={configs} live={live} />}
       <div className={styles.status} role="status">
         {message}
       </div>
