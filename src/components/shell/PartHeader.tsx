@@ -10,6 +10,7 @@ import { useDesigner, type ChangeSource } from "@/state/store";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";
 import { LoadToast } from "./LoadToast";
+import styles from "./PartHeader.module.css";
 
 /** Edits from the header's own fields; their change note shows under the header. */
 const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
@@ -32,12 +33,12 @@ export function PartHeader() {
   const match = modelMatchesCatalog(part, measured);
 
   return (
-    <header className="tl" data-testid="part-header">
-      <div className="brandrow">
-        <h1 className="brand">Crate Designer</h1>
-        <span className="tagline">Shipping and receiving</span>
+    <header className={styles.header} data-testid="part-header">
+      <div className={styles.brandRow}>
+        <h1 className={styles.brand}>Crate Designer</h1>
+        <span className={`eyebrow-label ${styles.tagline}`}>Shipping and receiving</span>
       </div>
-      <div className="partmeta" data-testid="part-meta">
+      <div className={styles.partMeta} data-testid="part-meta">
         {part.catalogDims ? (
           <>
             <div>
@@ -54,10 +55,10 @@ export function PartHeader() {
         )}
         {measured && (
           <div>
-            {dims(measured, units)} {lengthUnit(units)} · <span className={match === false ? "warn" : ""}>{modelNote(match, part.readAsMm)}</span>
+            {dims(measured, units)} {lengthUnit(units)} · <span className={match === false ? styles.warn : ""}>{modelNote(match, part.readAsMm)}</span>
           </div>
         )}
-        <ChangeNote sources={PART_SOURCES} />
+        <ChangeNote sources={PART_SOURCES} variant="header" />
       </div>
       <ExportPill />
       <LoadToast />
@@ -85,7 +86,7 @@ function Gross() {
       {" "}
       {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}·{" "}
       <span className="nw" data-testid="crate-gross">
-        <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units, true)}</Flash>
+        <span className={styles.crateWord}>crate </span>gross <Flash on={["gross"]}>{weight(gross, units, true)}</Flash>
       </span>
     </>
   );
@@ -186,7 +187,7 @@ function PartDetailsFields() {
         {unit} each
         {part.massAssumed && " "}
         {part.massAssumed && (
-          <span className="pf-tag" title={STAND_IN_HINT}>
+          <span className={styles.standinTag} title={STAND_IN_HINT}>
             stand-in
           </span>
         )}
@@ -201,7 +202,7 @@ function PartDetailsFields() {
       {(["name", "material", "mass"] as const).map(
         (f) =>
           errors[f] && (
-            <div key={f} id={errorId(f)} className="pf-error">
+            <div key={f} id={errorId(f)} className={styles.error}>
               {errors[f]}
             </div>
           ),
@@ -235,7 +236,7 @@ interface InlineFieldProps {
 }
 
 /**
- * An input styled as text with an underline (`.pf`, globals.css), sized to its content.
+ * An input styled as text with an underline (`.field`, PartHeader.module.css), sized to its content.
  * `draft` is the text being typed; null means "show the stored value".
  */
 function InlineField(p: InlineFieldProps) {
@@ -262,7 +263,7 @@ function InlineField(p: InlineFieldProps) {
   };
 
   const describedBy = [p.error ? errorId(p.field) : null, p.describedBy].filter(Boolean).join(" ") || undefined;
-  const className = ["pf", p.standIn && draft === null ? "standin" : "", p.error ? "bad" : ""].filter(Boolean).join(" ");
+  const className = [styles.field, p.standIn && draft === null ? styles.standin : "", p.error ? styles.bad : ""].filter(Boolean).join(" ");
 
   return (
     <input
@@ -278,7 +279,7 @@ function InlineField(p: InlineFieldProps) {
       inputMode={p.inputMode}
       spellCheck={false}
       autoComplete="off"
-      // Per-field widths, as custom properties the `.pf` rule reads (values computed from the text).
+      // Per-field widths, as custom properties the `.field` rule reads (values computed from the text).
       style={{ "--pf-ch": fieldWidthCh(text, p.placeholder, p.size[0], p.size[1]), "--pf-min": p.size[0], "--pf-max": p.size[1] } as CSSProperties}
       onChange={(e) => {
         setDraft(e.target.value);

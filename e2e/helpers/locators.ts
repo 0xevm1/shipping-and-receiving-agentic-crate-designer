@@ -167,8 +167,7 @@ export const checks = (page: Page, level?: "ok" | "caution" | "info") =>
 /** The crate's length, width and height labels. */
 export const crateLabels = (page: Page) => page.getByTestId("size-label");
 /** The part's one pill with its three sizes (open and exploded views). */
-export const partLabel = (page: Page) => page.getByTestId("size-label-part");
-export const allLabels = (page: Page) => page.getByTestId(/^size-label(-part)?$/);
+const partLabel = (page: Page) => page.getByTestId("size-label-part");
 
 /** Screen boxes of the visible labels, so a spec can compare them with the island or each other. */
 export async function visibleLabels(page: Page) {

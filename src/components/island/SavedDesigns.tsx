@@ -119,7 +119,7 @@ function PartLibrary({ part, partKey: key }: { part: LoadedPart; partKey: string
 
   return (
     <section className={styles.root} aria-labelledby={TITLE_ID}>
-      <h3 id={TITLE_ID} tabIndex={-1}>
+      <h3 className="subhead" id={TITLE_ID} tabIndex={-1}>
         Saved designs
       </h3>
       <p className={styles.sub}>

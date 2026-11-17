@@ -6,15 +6,17 @@ import { allChecks, cautionCount } from "@/lib/checks";
 import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import { useLoadFiles } from "../shell/useLoadFiles";
+import { PartViewSlot } from "../viewer/PartViewSlot";
 import { ChecksTab } from "./ChecksTab";
 import { CutListTab } from "./CutListTab";
 import { LayoutsTab } from "./LayoutsTab";
 import { OverviewTab } from "./OverviewTab";
 import { RulesTab } from "./RulesTab";
+import styles from "./Island.module.css";
 
 const PartView = dynamic(() => import("../viewer/PartView"), {
   ssr: false,
-  loading: () => <div className="partview" />,
+  loading: () => <PartViewSlot />,
 });
 
 const TABS: { id: Tab; label: string }[] = [
@@ -75,14 +77,14 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   return (
     <aside
       id={ISLAND_ID}
-      className="glass card island"
+      className={`glass card ${styles.island}`}
       ref={ref}
-      {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open })}
+      {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open, "data-open": drawer.open || undefined })}
     >
-      <div className="parthead">
-        <div className="partbar">
+      <div className={styles.parthead}>
+        <div className={styles.partbar}>
           <h2>{part.name}</h2>
-          <button type="button" className="pillbtn small" onClick={() => fileInput.current?.click()}>
+          <button type="button" className={`pillbtn small ${styles.load}`} onClick={() => fileInput.current?.click()}>
             Load a part
           </button>
           <input
@@ -97,7 +99,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             }}
           />
           {drawer && (
-            <button type="button" className="iconbtn drawer-close" aria-label="Close the panel" onClick={drawer.onClose}>
+            <button type="button" className={`iconbtn ${styles.close}`} aria-label="Close the panel" onClick={drawer.onClose}>
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
@@ -108,8 +110,8 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           <PartView />
         </div>
         {/* What a rules or layout edit moved, over the foot of the part view. */}
-        <ChangeNote sources={ISLAND_SOURCES} className="island-note" />
-        <div className="seg tabs" role="tablist" aria-label="Sections" onKeyDown={onTabKey}>
+        <ChangeNote sources={ISLAND_SOURCES} variant="island" className={styles.note} />
+        <div className={`seg ${styles.tabs}`} role="tablist" aria-label="Sections" onKeyDown={onTabKey}>
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -126,13 +128,13 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             >
               {t.label}
               {t.id === "checks" && cautions > 0 && (
-                <span className="count" data-testid="caution-count">
+                <span className={styles.count} data-testid="caution-count">
                   {cautions}
                   <span className="sr-only"> {cautions === 1 ? "caution" : "cautions"}</span>
                 </span>
               )}
               {t.id === "checks" && notes > 0 && (
-                <span className="count info" data-testid="note-count">
+                <span className={`${styles.count} ${styles.info}`} data-testid="note-count">
                   {notes}
                   <span className="sr-only"> {notes === 1 ? "note" : "notes"}</span>
                 </span>
@@ -142,7 +144,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         </div>
       </div>
       <div
-        className="panel"
+        className={styles.panel}
         role="tabpanel"
         id={PANEL_ID}
         aria-labelledby={tabId(tab)}
@@ -173,7 +175,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           <ChecksTab checks={checks} />
         )}
       </div>
-      {footer && <div className="island-foot">{footer}</div>}
+      {footer && <div className={styles.foot}>{footer}</div>}
     </aside>
   );
 }

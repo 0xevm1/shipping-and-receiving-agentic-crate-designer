@@ -17,12 +17,12 @@ export const PULSE_PERIOD_S = 10;
 /** Seconds from the photons emerging to the last fade. */
 export const PULSE_DURATION_S = 1.35;
 /** Tail length as a share of the dimension line. */
-export const PULSE_TAIL = 0.1;
+const PULSE_TAIL = 0.1;
 /** Largest frame step the clock accepts, s; as `Director`, so a long gap never jumps ahead. */
 const MAX_DT = 0.1;
 
 /** One photon's run along one stretch between two graph nodes. */
-export interface PhotonLeg {
+interface PhotonLeg {
   from: Vec3;
   to: Vec3;
   /** Path distance from the anchor at `from` and `to`, mm. */

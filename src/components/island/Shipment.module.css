@@ -1,7 +1,6 @@
 /*
- * Shipment planning: the "Ships as …" block at the top of the Overview, the crate type
- * picker shared by the Overview, Layouts, Cut list and Checks, and the cut list scope toggle.
- * A CSS module; the picker also carries the global `.seg` pill style from globals.css.
+ * Shipment planning: the "Ships as …" block at the top of the Overview. A CSS module (the crate
+ * type picker inside it is `CrateTypePicker`).
  */
 
 .ship {
@@ -10,12 +9,13 @@
   border-bottom: 1px solid var(--hair);
 }
 
+/* On the `eyebrow-label` primitive (stretch, caps, gold): longhands, because `font` would reset the stretch. */
 .eyebrow {
-  font: 500 11px/1.2 var(--wide);
-  font-stretch: 125%;
+  font-family: var(--wide);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
   letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold);
   margin-bottom: 6px;
 }
 
@@ -36,42 +36,4 @@
 }
 .warn {
   color: var(--gold);
-}
-
-.each {
-  display: block;
-  margin-top: 3px;
-  font: 400 12.5px/1.2 var(--mono);
-  color: var(--muted);
-  letter-spacing: 0;
-}
-
-.picker {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 12px 0 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--hair);
-}
-.ship .picker {
-  margin-bottom: 0;
-}
-.picker button {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 6px 14px;
-}
-.picker button small {
-  font: 400 11.5px/1.2 var(--mono);
-  color: var(--muted);
-}
-.picker button[aria-pressed="true"] small {
-  color: var(--soft);
-}
-
-.cutScope {
-  margin: 0 0 10px;
 }

@@ -18,7 +18,7 @@ export interface LoadedPart extends DesignPart {
 }
 
 /** Where the bundled GLB for a catalog part is served from. The domain's catalog is data only. */
-export function modelUrl(part: Pick<Part, "model">): string {
+function modelUrl(part: Pick<Part, "model">): string {
   return `/parts/${part.model}`;
 }
 

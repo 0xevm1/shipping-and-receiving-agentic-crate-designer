@@ -1,0 +1,31 @@
+/*
+ * The designer's page: a dark, full-window ground that never scrolls (the scene fills it and only
+ * the island's panel scrolls). Loaded by `(designer)/layout.tsx` only, so the print route keeps
+ * its own white pages (`print/print.css`).
+ */
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+body {
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 42% 52%, rgba(19, 73, 125, 0.55) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 48%, transparent 45%, rgba(0, 12, 26, 0.55) 100%), var(--navy);
+  overflow: hidden;
+}
+
+/* Narrow (the drawer layout, `max-width: 980px`): exactly the viewport, and no rubber-banding. */
+@media (max-width: 980px) {
+  html,
+  body {
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}

@@ -9,7 +9,7 @@ import { fraction, length, weight, type Units } from "./units";
  * to one decimal ("98.0 in"), shop measurements to the nearest 1/16" ("3 1/2″"), masses by
  * the app's one mass rule (`weight`).
  */
-export function renderQuantity(q: Quantity, u: Units): string {
+function renderQuantity(q: Quantity, u: Units): string {
   if (q.kind === "mass") return weight(q.kg, u, true);
   if (u === "metric") return `${Math.round(q.mm).toLocaleString("en-US")} mm`;
   return q.fine ? fraction(q.mm) : `${Number(length(q.mm, u)).toLocaleString("en-US", { minimumFractionDigits: 1 })} in`;

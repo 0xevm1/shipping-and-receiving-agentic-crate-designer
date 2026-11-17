@@ -16,7 +16,7 @@ import type { ShopStandards } from "./standards";
  * (`dunnage.ts`). Both use `isSlender` so exactly one path handles any part.
  */
 
-export type { CradleProfile, Notch, NotchShape } from "./members";
+export type { Notch } from "./members";
 
 /**
  * True when a part is long and slender: its longest side ÷ its middle side is at least

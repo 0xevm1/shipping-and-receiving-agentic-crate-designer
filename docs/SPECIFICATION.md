@@ -179,7 +179,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/cradles.ts` | Cradles for slender parts (#6, §7.5a): `isSlender`, `usesCradles`, `cradleStations`, `notchFor`, `addCradleDunnage`, and the notch outline (`cradleProfile`, `cradleSolidAt`) |
 | `src/lib/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB (`components/viewer/cradleGeometry.ts` re-exports it) |
 | `src/lib/sceneMaterials.ts` | The wood colours and part material the viewer and the GLB share (`components/viewer/scene.ts` re-exports them), so `lib` imports nothing from `components` |
-| `src/domain/crate.ts` | `designCrate`: wires the steps below into a `CrateDesign`, and re-exports the crate's public types and entry points (`Member`, `BomLine`, `Check`, `CrateDesign`, `ASSEMBLIES`, `SHAPED_BLOCK`, `screwSchedule`, `resolveConstruction`, ...) so importers keep one path |
+| `src/domain/crate.ts` | `designCrate`: wires the steps below into a `CrateDesign`, and re-exports the crate's public types and entry points (`Member`, `BomLine`, `Check`, `CrateDesign`, `ASSEMBLIES`, `SHAPED_BLOCK`, `screwSchedule`, ...) so importers keep one path |
 | `src/domain/members.ts` | The boards: `Member`, `MemberKind`, `MemberVariant` (shaped blocks and stacking cradles, found by variant not label), `Assembly`, `Face`, `ASSEMBLIES` and `ASSEMBLY_NAMES` (how each assembly is named for people), the cradle `Notch` types, `memberBounds()`, `sortDesc()` |
 | `src/domain/check.ts` | `Check` and its id groups, each owned by the module that produces it (`crateChecks.ts`, `handling.ts`, `shipment.ts`) |
 | `src/domain/construction.ts` | `resolveConstruction` (§7.3: panel, floor, cleat and the smallest skid from the payload), `structureMaterials`, `structureAllowance`, `constructionFor` |
@@ -227,7 +227,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/printable.ts` | The export document's model (#26, §7.11): `buildPrintable` (plan → `PrintableDesign`), `printableFromDesignFile`, freight terms, the cut list by stock, fasteners, assembly steps (`stepOfMember`) and the label |
 | `src/lib/drawings.ts` | `crateDrawings`: top, front and end views and two sections projected from the members, as data in mm |
 | `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url (the share link's encoding), plus the units (`printHash`, `readPrintHash`) |
-| `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles |
+| `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles. The route sits outside the `(designer)` group, so it loads `globals.css` and `print.css` only |
+| `src/app/globals.css` | Global CSS, loaded on every route: the design tokens (custom properties, including the `--z-*` stacking scale), the `@layer` order, the base element rules, and the one list of breakpoints |
+| `src/app/ui.css` | The shared UI primitives in `@layer ui`: `glass`, `card`, `seg`, `pillbtn`, `btn`, `linkbtn`, `iconbtn`, `switch`, `lede`, `subhead`, `line`, `actions`, `mono`, `muted`, `nw`, `nominal`, `tight`, `sr-only`, `eyebrow-label`, `hint-mouse` / `hint-touch`. Used as plain string class names; everything else is a module (§13) |
+| `src/app/(designer)/layout.tsx`, `designer.css`, `page.tsx` | The route group (no URL segment) for `/`: it loads `ui.css` and `designer.css` (the dark, full-window, never-scrolling page) |
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
 | `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
 | `src/lib/exportPdf.ts` | `printableToPdf`: the `PrintableDesign` as a vector PDF with jsPDF (#51); loaded only with `import()` |
@@ -260,11 +263,16 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/island/*.tsx` | The island and its five tabs. `Island.tsx` owns the WAI-ARIA tabs (§8.3a) and computes `allChecks` once for the tab badges, the Overview verdict and the Checks tab |
 | `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
 | `src/components/island/Scorecard.tsx` | The Overview's design scorecard (#17): crate cost, build time, freight class and density, dimensional weight, the time to design in the heading row (`Scorecard.module.css`) |
+| `src/components/island/CrateTypePicker.tsx` | `CrateTypePicker` (which crate type of a split batch is on screen; Overview, Layouts, Cut list, Checks) and `CutScopeToggle` (the Cut list's This crate / Whole shipment); one module for both |
+| `src/components/island/rule.module.css` | One rule row (title, control, note), shared by the Rules tab and Shop standards (`.compact`), with the touch-sized sliders and switches |
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab; its inputs render only while the section is open (`ShopStandards.module.css`) |
 | `src/components/island/standardsFields.ts` | The typed table of editable standards (`StandardPath` is every numeric path in `ShopStandards`, so a typo fails to compile), `readStandard`, `standardPatch`; `standardsFields.test.ts` checks every path resolves and no hint carries ticket numbers |
 | `src/lib/fileNames.ts` | File names of the cut list CSV and the design file |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
+| `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
+| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…", why there is no crate); shared by the shell and the viewer |
+| `src/components/shell/Tooltip.tsx` | The hover tooltip over the 3D view |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
 | `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), keeping a panned crate in the free area (`keepCrateInFreeArea`) |
 | `src/components/viewer/CrateModel.tsx` | One box per `Member` (a notched solid for cradles, #6); explode, fades, highlight, ghosting, picking |
@@ -1267,7 +1275,7 @@ none, as when reopening it). It renders the document, waits for the fonts and ca
 Without a design, or with a damaged one, the page says how to open it. Any reopen notes (a
 changed plan or size under other standards) show above the document, on screen only.
 
-**Print CSS** (`src/app/print/print.css`, imported only by the route and scoped to
+**Print CSS** (`src/app/print/print.css`, imported only by the route, which loads no designer CSS, and scoped to
 `.print-doc`): `@page { size: letter; margin: 0.5in }`, `break-after: page` per sheet, and
 `break-inside: avoid` on spec sections, cut-list groups, steps and figures. It is black on
 white; the label's crate-type bar is the only filled block (`print-color-adjust: exact`). On
@@ -1629,7 +1637,7 @@ hadrian.co**, read from its live CSS:
 
   To use real Söhne, license it and point `--font-sans`, `--font-wide` and the mono variable at
   `next/font/local` in `src/app/layout.tsx`.
-- All values are in `src/app/globals.css`.
+- The values (tokens) are in `src/app/globals.css`; the rest of the look is in each component's CSS module.
 - **App icons (#58):** the mark is a white gear with an isometric crate in it: navy `#0C2548`
   sides and a gold `#D9A938` lid. The supplied artwork is used as is; regenerate it from the
   master SVG rather than editing the rasters.
@@ -1666,9 +1674,9 @@ The canvas fills the window. Four regions float above it:
 - **981–1180 px:** as desktop, with the tagline hidden and a 420 px island.
 - **Narrow screens (below 980 px, #42):** the scene stays full-bleed and the island becomes a
   drawer. `DesignerShell` switches on `matchMedia("(max-width: 980px)")`; the CSS is the
-  matching block in `globals.css`.
+  matching `max-width: 980px` block in each module and in `designer.css` (`globals.css` lists every breakpoint).
   - **Scene:** the canvas fills the screen; `html` and `body` are `100dvh` with `overflow: hidden`,
-    so the page never scrolls. The viewport is `viewport-fit=cover` (`layout.tsx`) and the
+    so the page never scrolls (`designer.css`). The viewport is `viewport-fit=cover` (`layout.tsx`) and the
     overlays keep clear of notches with `env(safe-area-inset-*)`.
   - **Header** (top left): the title at 24 px without the tagline, and the part sentence at
     11.5 px. Lines wrap between phrases, not inside a value: "crate gross 304 lb" is one
@@ -2823,9 +2831,32 @@ Other known gaps:
   `@tailwindcss/turbopack` loader rule is gone (#54): it ran on every `*.css` file, turned
   `*.module.css` into global CSS (empty class names), and hot-reloaded `globals.css` one edit
   late. Don't add a `turbopack.rules` entry for CSS.
-- **CSS modules work.** Give a component its own `Name.module.css` and import it as `styles`
-  (see `ShopStandards.module.css`). Wrap the shared classes from `globals.css` in `:global()`
-  (`:global(.rule)`), and use the design tokens (`var(--…)`) from `globals.css`.
+- **Where styles live.** Global CSS is three things: the design tokens and base element rules
+  (`src/app/globals.css`, on every route), the shared UI primitives (`src/app/ui.css`, in
+  `@layer ui`), and the designer's page (`src/app/(designer)/designer.css`). Everything else is a
+  CSS module next to its component: `Name.module.css`, imported as `styles` (`styles.root`).
+  - **A class that more than one component needs** is either a primitive (`ui.css`: a plain string
+    in TSX, `className="btn"`) or a small component with its own module (`StageMessage`,
+    `CrateTypePicker`, `PartViewSlot`, the shared `rule.module.css`). A component never imports
+    another component's module.
+  - **Primitives rank below modules.** The `ui` layer (declared in `globals.css`: `theme, base, ui,
+    components, utilities`) is below unlayered CSS, so a module adjusts a primitive by setting the
+    property on its own class and never has to out-specify it. Two cautions: the `font` shorthand
+    resets `font-stretch`, so a module on `eyebrow-label` writes `font-family`, `font-size`,
+    `font-weight` and `line-height` instead; and a module may restyle a primitive in context by
+    name with `:global(.btn)` (the rows of Saved designs, the panel's `.seg`), nothing else uses
+    `:global`.
+  - **Hide panels and the drawer.** The shell sets `data-panels-hidden` on its root, and each
+    overlay's module fades itself (`:global([data-panels-hidden]) .header`). The island's drawer
+    state is its own `data-open`. Neither is a class another component has to know.
+  - **Breakpoints** are written out in the modules (a media query can't read a custom property);
+    `globals.css` lists them, and `NARROW` in `DesignerShell.tsx` must match the 980 px one. The
+    cut list's row stacking is an unnamed `@container` query, which finds the island's panel
+    (`container-type: inline-size` in `Island.module.css`), so no container name has to be shared between modules.
+  - **Print.** `/print` is outside the `(designer)` route group, so it gets `globals.css` and
+    `print.css` only. Keep designer styles out of those two files.
+  - **Tests and scripts never select by class** (§10), and no class is a behaviour hook: state is
+    in attributes (`aria-*`, `data-*`).
 - Before you push, run `bun run test`, `bun run lint`, `bun run format:check` and `bun run build`. The e2e suite (§10)
   is opt-in: it runs from the manually triggered `E2E` workflow or `bun run e2e`, not in CI.
 - Prefer roles and accessible names for anything the e2e tests need to find. Add a

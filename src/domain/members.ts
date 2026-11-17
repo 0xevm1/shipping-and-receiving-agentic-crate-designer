@@ -46,10 +46,10 @@ export const ASSEMBLY_NAMES: Record<Assembly, string> = {
  * Which face of the crate a board belongs to, so the viewer can move it when
  * exploded or fade it when opened. `side-` is the front (−Y) wall.
  */
-export type Face = "base" | "side-" | "side+" | "end-" | "end+" | "lid" | "inside";
+type Face = "base" | "side-" | "side+" | "end-" | "end+" | "lid" | "inside";
 
 /** The shape of a notch: a circular seat for a round part, or a square-sided pocket. */
-export type NotchShape = "round" | "flat";
+type NotchShape = "round" | "flat";
 
 /** A cut-out in a cradle, across the board's length. */
 export interface Notch {
@@ -68,7 +68,7 @@ export interface Notch {
 }
 
 /** What makes a cradle more than a box: the axis it spans and its notches. */
-export interface CradleProfile {
+interface CradleProfile {
   /** The board's length axis (across the part): 1 = Y when the part lies along X. */
   axis: 0 | 1;
   notches: Notch[];

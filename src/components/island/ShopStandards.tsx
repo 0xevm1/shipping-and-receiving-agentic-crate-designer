@@ -6,6 +6,7 @@ import { downloadText } from "@/lib/download";
 import { groupDigits } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { STANDARD_GROUPS, readStandard, standardPatch, type Field } from "./standardsFields";
+import rule from "./rule.module.css";
 import styles from "./ShopStandards.module.css";
 
 /** " mm", "%", "×" or nothing, after a number. */
@@ -56,7 +57,7 @@ export function ShopStandards() {
         <span className={styles.sub}>· house rules for every crate</span>
         {customised && <span className={styles.badge}>Customised</span>}
       </summary>
-      <p className="lede">
+      <p className={`lede ${styles.intro}`}>
         The stock, thresholds, limits, rates and shop times every crate is designed to and costed with. Changes apply at once and are saved in this browser.
         Sizes are in mm, weights in kg and times in minutes.
       </p>
@@ -132,7 +133,7 @@ function StandardInput({
   };
 
   return (
-    <div className={changed ? `rule ${styles.changed}` : "rule"}>
+    <div className={changed ? `${rule.rule} ${rule.compact} ${styles.changed}` : `${rule.rule} ${rule.compact}`}>
       <b>
         <label htmlFor={id}>{f.label}</label>
       </b>
@@ -154,7 +155,7 @@ function StandardInput({
         <span className={styles.unit}>{f.unit}</span>
       </span>
       {error ? (
-        <small id={`${id}-error`} className={styles.error} role="alert">
+        <small id={`${id}-error`} className={rule.error} role="alert">
           {error}
         </small>
       ) : (

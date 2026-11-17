@@ -14,7 +14,7 @@ export type HandlingCheckId = "cog-offset" | "cog-tip" | "forklift" | "pallet-ja
 /** Produced by `shipment.ts`, only for a crate in a shipment plan. */
 type ShipmentCheckId = "crate-limit";
 
-export type CheckId = CrateCheckId | HandlingCheckId | ShipmentCheckId;
+type CheckId = CrateCheckId | HandlingCheckId | ShipmentCheckId;
 
 export interface Check<Id extends CheckId = CheckId> {
   id: Id;

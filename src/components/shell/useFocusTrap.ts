@@ -5,7 +5,7 @@ export const FOCUSABLE =
   'button, [href], input:not([type="hidden"]), select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])';
 
 /** The tabbable elements inside `root`, in DOM order; disabled, hidden and collapsed ones are left out. */
-export function tabbables(root: HTMLElement): HTMLElement[] {
+function tabbables(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.matches(":disabled") && !el.hidden && el.getClientRects().length > 0);
 }
 

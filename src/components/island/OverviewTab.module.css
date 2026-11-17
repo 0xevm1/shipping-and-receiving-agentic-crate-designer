@@ -1,0 +1,176 @@
+/*
+ * The Overview tab: the outside size, the checks' verdict, the build chain and the weight bars.
+ * (The shipment summary, scorecard and saved designs are components with their own modules.)
+ */
+
+/* "Crate A: 64 × part" and under it how many of these there are. */
+.each {
+  display: block;
+  margin-top: 3px;
+  font: 400 12.5px/1.2 var(--mono);
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.big {
+  font: 400 40px/1.05 var(--sans);
+  color: var(--gold);
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  margin: -4px 0 8px;
+}
+.big small {
+  font: 400 14px/1 var(--mono);
+  color: var(--muted);
+  margin-left: 8px;
+  letter-spacing: 0;
+}
+
+/* The checks' verdict under the outside size: green when clear, a link to Checks when not. */
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 400 13px/1.4 var(--sans);
+  color: var(--soft);
+  text-align: left;
+  min-width: 0;
+}
+.verdict i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.verdict.caution {
+  width: 100%;
+  cursor: pointer;
+  color: var(--text);
+}
+.verdict.caution i {
+  background: var(--gold);
+  box-shadow: 0 0 8px var(--gold);
+}
+.verdict > span:first-of-type {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.verdict .go {
+  flex: none;
+  margin-left: auto;
+  color: var(--gold);
+  font: 500 12px/1 var(--mono);
+}
+.verdict.caution:hover .go,
+.verdict.caution:focus-visible .go {
+  text-decoration: underline;
+}
+
+/* How it is built: a vertical line of steps, the last one (gross weight) in gold. */
+.chain {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--hair);
+  position: relative;
+}
+.chain::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 30px;
+  bottom: 26px;
+  width: 1px;
+  background: var(--hair);
+}
+.chain li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 12px;
+  padding: 0 0 13px 26px;
+  position: relative;
+}
+.chain li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(214, 228, 242, 0.7);
+  box-shadow: 0 0 0 3px var(--navy-ring);
+}
+.chain li.end::before {
+  background: var(--gold);
+  box-shadow:
+    0 0 0 3px var(--navy-ring),
+    0 0 10px var(--gold);
+}
+.chain b {
+  font-weight: 500;
+  font-size: 15px;
+}
+.chain .v {
+  font: 400 14.5px/1.5 var(--mono);
+  text-align: right;
+  white-space: nowrap;
+}
+.chain small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.chain li.end .v {
+  color: var(--gold);
+}
+
+/* Crate weight by assembly. */
+.bars {
+  display: grid;
+  gap: 9px;
+}
+.barrow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  font-size: 13.5px;
+  cursor: default;
+  border-radius: 6px;
+}
+.barrow .v {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.barrow .track {
+  grid-column: 1 / -1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.barrow .track i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--gold);
+}
+.barrow:hover .track i,
+.barrow:focus .track i {
+  background: var(--sky);
+}
+
+/* The drawer (`max-width: 980px`): a smaller outside size, allowed to wrap. */
+@media (max-width: 980px) {
+  .big {
+    font-size: 30px;
+    white-space: normal;
+  }
+}

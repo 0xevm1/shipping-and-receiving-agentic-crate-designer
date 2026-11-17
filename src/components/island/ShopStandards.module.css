@@ -1,6 +1,6 @@
 /*
- * Shop standards: a collapsible section at the bottom of the Rules tab. A CSS module;
- * the shared classes it reuses from globals.css (`.panel`, `.rule`, `.lede`, `.btn`) are `:global`.
+ * Shop standards: a collapsible section at the bottom of the Rules tab. A CSS module; its rows are
+ * `rule.module.css` (compact), and the `.lede`, `.actions` and `.btn` primitives come from ui.css.
  */
 
 .root {
@@ -46,12 +46,11 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-:global(.panel) .root p:global(.lede) {
+.intro {
   margin: 4px 0 6px;
 }
 
-/* `.panel` prefix to win over `.panel h3` in globals.css. */
-:global(.panel) .root .group {
+.group {
   margin: 18px 0 0;
   padding: 0;
   border: 0;
@@ -60,13 +59,6 @@
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-.root :global(.rule) {
-  padding: 9px 0;
-}
-.root :global(.rule) b {
-  font-size: 13.5px;
-}
-
 .field {
   display: inline-flex;
   align-items: center;
@@ -93,9 +85,6 @@
   min-width: 40px;
   color: var(--muted);
   font: 400 11.5px/1 var(--mono);
-}
-.root :global(.rule) small.error {
-  color: var(--gold);
 }
 .actions {
   margin-top: 16px;
