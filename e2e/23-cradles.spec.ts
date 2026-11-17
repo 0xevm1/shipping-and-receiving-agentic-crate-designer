@@ -37,7 +37,7 @@ test("the shaft's cut list has cradle rows, and pinning one lights the cradles i
   await cradle.hover();
   await pollCrate(page, (s) => s.hoverKey).toMatch(/^inside\|Cradle\|/);
   await cradle.click();
-  await expect(cradle).toHaveAttribute("aria-pressed", "true");
+  await expect(cradle.getByRole("button")).toHaveAttribute("aria-pressed", "true");
   const { pin } = await crate(page);
   expect(pin).toMatch(/^inside\|Cradle\|.*\|2 notches$/); // two shafts side by side in each layer
   await expect(page.getByText("Showing 4 × cradle")).toBeVisible();

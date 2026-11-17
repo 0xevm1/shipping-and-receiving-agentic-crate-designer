@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { ASSEMBLIES } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
-import { ASSEMBLY_NAMES } from "@/domain/export";
+import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
 import { glbProblem } from "./loadPart";
 import { buildCrateScene, crateCentreMm, CRATE_NODE, exportCrateGlb, PARTS_NODE, type PartModel } from "./exportGlb";
 

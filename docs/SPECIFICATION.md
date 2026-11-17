@@ -180,7 +180,6 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/assemblyNames.ts` | `ASSEMBLY_NAMES`: how each assembly is named for people (belongs beside `ASSEMBLIES` in the domain core) |
-| `src/domain/export.ts` | Compatibility re-exports only (`bomToCsv`, `shipmentToCsv`, `downloadText`, `downloadBytes` now live in `src/lib/csv.ts` and `download.ts`); delete once the last importers move |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file and the library |
 | `src/domain/profileCodec.ts` | `encodeProfile` / `decodeProfile`: a part profile packed losslessly for the design file (§6.5) |
 | `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign` (app name and version passed in), `parseDesignFile` (version check and migrations), `fileProfile`, `restoreDesign` (its notes are typed `Message`s) |

@@ -2,10 +2,13 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ASSEMBLIES, type BomLine, type CrateDesign } from "@/domain/crate";
-import { ASSEMBLY_NAMES, bomToCsv, downloadText, shipmentToCsv } from "@/domain/export";
+import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
 import { describeShipment, shipmentBom } from "@/domain/shipment";
-import { cutText, stockText } from "@/lib/format";
 import { currentDesignText } from "@/lib/currentDesign";
+import { bomToCsv, shipmentToCsv } from "@/lib/csv";
+import { downloadText } from "@/lib/download";
+import { cutListFileName, designFileName } from "@/lib/fileNames";
+import { cutText, stockText } from "@/lib/format";
 import { PRINT_PATH, printHash } from "@/lib/printLink";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -14,7 +17,7 @@ import { CrateTypePicker, shipmentStyles } from "./Shipment";
 /**
  * Cut list grouped by assembly. Hovering a row lights those boards in 3D and
  * fades the rest; clicking pins it (Escape or "Show everything" clears).
- * For a split batch (#25) it shows the crate type on screen, or the whole shipment.
+ * For a split batch it shows the crate type on screen, or the whole shipment.
  */
 export function CutListTab({ design }: { design: CrateDesign }) {
   const part = useDesigner((s) => s.part);
@@ -40,13 +43,20 @@ export function CutListTab({ design }: { design: CrateDesign }) {
   const lines: BomLine[] = all ? all.lines : design.bom;
   const totals = all ?? design;
   const csv = () => (whole ? shipmentToCsv(part, plan, units) : bomToCsv(part, design, units));
-  const csvName = !plan.split
-    ? `crate-${part.id}-x${quantity}.csv`
-    : whole
-      ? `crate-${part.id}-x${quantity}-shipment.csv`
-      : `crate-${part.id}-x${quantity}-crate-${crateType.label}.csv`;
+  const csvName = cutListFileName({ partId: part.id, quantity, split: plan.split, whole, crateLabel: crateType.label });
   /** The design file (§6.5) for the design on screen: the download, and the print link. */
   const designText = () => currentDesignText(useDesigner.getState()) ?? "";
+
+  /** Runs one download or copy, says how it went, and counts a success as the design's first export. */
+  const runExport = async (action: () => void | Promise<void>, okMessage: string, failMessage: string) => {
+    try {
+      await action();
+      setStatus(okMessage);
+      useDesigner.getState().markExported();
+    } catch {
+      setStatus(failMessage);
+    }
+  };
 
   return (
     <>
@@ -69,8 +79,8 @@ export function CutListTab({ design }: { design: CrateDesign }) {
         <>
           {plan.split && <CrateTypePicker />}
           <p className="lede">
-            {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}Point at a row to see where those boards go.
-            Click it to keep them lit.
+            {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}Point at a row to see where those boards go. Click it to
+            keep them lit.
           </p>
         </>
       )}
@@ -95,7 +105,16 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                 {group.map((l) => {
                   const cells = (
                     <>
-                      <td>{l.label}</td>
+                      <td>
+                        {whole ? (
+                          l.label
+                        ) : (
+                          // The row's click is the mouse shortcut; this button is the keyboard and screen-reader control.
+                          <button type="button" className="pick" aria-pressed={pin === l.key}>
+                            {l.label}
+                          </button>
+                        )}
+                      </td>
                       <td className="nominal">{stockText(l, units)}</td>
                       <td>
                         {cutText(l, units)
@@ -120,19 +139,11 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                       key={l.key}
                       ref={pin === l.key ? pinnedRow : undefined}
                       className={`row${hoverKey === l.key ? " hl" : ""}${pin === l.key ? " pin" : ""}`}
-                      tabIndex={0}
-                      aria-pressed={pin === l.key}
                       onMouseEnter={enter}
                       onMouseLeave={leave}
                       onFocus={enter}
                       onBlur={leave}
                       onClick={toggle}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          toggle();
-                        }
-                      }}
                     >
                       {cells}
                     </tr>
@@ -158,30 +169,14 @@ export function CutListTab({ design }: { design: CrateDesign }) {
         <button
           type="button"
           className="btn"
-          onClick={() => {
-            try {
-              downloadText(csvName, csv());
-              setStatus("Cut list downloaded.");
-              useDesigner.getState().markExported();
-            } catch {
-              setStatus("Download is blocked here. Use Copy cut list.");
-            }
-          }}
+          onClick={() => runExport(() => downloadText(csvName, csv()), "Cut list downloaded.", "Download is blocked here. Use Copy cut list.")}
         >
           Download cut list
         </button>
         <button
           type="button"
           className="btn"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(csv());
-              setStatus("Cut list copied.");
-              useDesigner.getState().markExported();
-            } catch {
-              setStatus("Copy is blocked here.");
-            }
-          }}
+          onClick={() => runExport(() => navigator.clipboard.writeText(csv()), "Cut list copied.", "Copy is blocked here.")}
         >
           Copy cut list
         </button>
@@ -189,15 +184,13 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           type="button"
           className="btn"
           title="Save the part, rules and layout to open again with Load a part"
-          onClick={() => {
-            try {
-              downloadText(`crate-design-${part.id}-x${quantity}.json`, designText(), "application/json");
-              setStatus("Design downloaded.");
-              useDesigner.getState().markExported();
-            } catch {
-              setStatus("Download is blocked here.");
-            }
-          }}
+          onClick={() =>
+            runExport(
+              () => downloadText(designFileName(part.id, quantity), designText(), "application/json"),
+              "Design downloaded.",
+              "Download is blocked here.",
+            )
+          }
         >
           Download design (.json)
         </button>

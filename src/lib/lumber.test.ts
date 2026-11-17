@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { lumberText, nominalLumber, NOMINAL_LUMBER, plywoodText, sectionText } from "./lumber";
+import { NOMINAL_LUMBER, nominalLumber } from "@/domain/lumber";
+import { lumberText, plywoodLabel, plywoodText, sectionLabel, sectionText } from "./lumber";
 
 describe("nominal lumber names", () => {
   it.each([
@@ -55,6 +56,18 @@ describe("plywood thickness", () => {
   it("takes another inch mark, for the CSV", () => {
     expect(plywoodText(12, " in")).toBe("1/2 in");
     expect(plywoodText(25, " in")).toBe("1 in");
+  });
+});
+
+describe("the labels the island shows", () => {
+  it("names plywood by its sold thickness in imperial and in mm in metric", () => {
+    expect(plywoodLabel(12, "imperial")).toBe("1/2″");
+    expect(plywoodLabel(12, "metric")).toBe("12 mm");
+  });
+
+  it("names a section by shop name in imperial and by size in metric", () => {
+    expect(sectionLabel(38, 89, "imperial")).toBe("2x4");
+    expect(sectionLabel(38, 89, "metric")).toBe("38 × 89");
   });
 });
 

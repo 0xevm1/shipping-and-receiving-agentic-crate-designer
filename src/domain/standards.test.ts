@@ -126,6 +126,15 @@ describe("ShopStandardsSchema", () => {
     if (!r.ok) expect(r.error).toMatch(/\w+: /);
   });
 
+  it("splits a failure into the field path and the plain message", () => {
+    const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, { stock: { joistMm: { thick: 1 } } }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.path).toBe("stock.joistMm.thick");
+    expect(r.error).toBe(`${r.path}: ${r.message}`);
+    expect(r.message).not.toMatch(/stock\./);
+  });
+
   it("merges a patch deeply without touching the base", () => {
     const merged = mergeStandards(DEFAULT_STANDARDS, { rates: { costUsdPerM3: { plywood: 2000 } } }) as ShopStandards;
     expect(merged.rates.costUsdPerM3).toEqual({ plywood: 2000, lumber: 650 });

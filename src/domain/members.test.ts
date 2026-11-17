@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
-import { NOMINAL_LUMBER as LIB_NOMINAL_LUMBER, nominalLumber as libNominalLumber } from "@/lib/lumber";
 import { getPart } from "./catalog";
-import { NOMINAL_LUMBER, nominalLumber } from "./lumber";
-import { memberBounds, sortDesc } from "./members";
+import { nominalLumber } from "./lumber";
+import { countKind, memberBounds, sortDesc } from "./members";
 import type { Vec3 } from "./schema";
 import { designOf } from "./testFixtures";
+
+describe("countKind", () => {
+  it("counts the boards of one kind", () => {
+    const boards = [{ kind: "bearer" }, { kind: "blocking" }, { kind: "bearer" }] as const;
+    expect(countKind(boards, "bearer")).toBe(2);
+    expect(countKind(boards, "cradle")).toBe(0);
+  });
+});
 
 describe("memberBounds", () => {
   it("spans the smallest and largest corners of the boards", () => {
@@ -44,10 +51,6 @@ describe("lumber names", () => {
     expect(nominalLumber(30, 100)).toBeNull();
   });
 
-  it("agree with the cut list's table in lib", () => {
-    expect(NOMINAL_LUMBER).toEqual(LIB_NOMINAL_LUMBER);
-    for (const n of NOMINAL_LUMBER) expect(nominalLumber(...n.mm)).toBe(libNominalLumber(...n.mm));
-  });
 
   it("are used with a plain x in the base-rating check", () => {
     const d = designOf(getPart("PART-001"), { quantity: 40 });

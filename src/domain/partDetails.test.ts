@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
-import { bomToCsv } from "./export";
+import { bomToCsv } from "@/lib/csv";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX, partFinish } from "./partDetails";
 import type { DesignPart } from "./schema";
 

@@ -27,7 +27,7 @@ export const NOMINAL_LUMBER: readonly { name: string; mm: readonly [number, numb
 ];
 
 /** A millimetre either way: sizes are rounded to whole mm, and 1x4 is really 19.05 × 88.9. */
-const TOLERANCE_MM = 1;
+export const TOLERANCE_MM = 1;
 
 /** "2x4" for a 38 × 89 section (either order), or null when it isn't stock. */
 export function nominalLumber(a: number, b: number): string | null {

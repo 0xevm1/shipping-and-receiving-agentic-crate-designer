@@ -9,7 +9,7 @@ import styles from "./Shipment.module.css";
 export { styles as shipmentStyles };
 
 /**
- * Which crate type of a split batch is on screen (#25). The 3D view, Layouts, Cut list and
+ * Which crate type of a split batch is on screen. The 3D view, Layouts, Cut list and
  * Checks all follow it. Renders nothing for a single crate.
  */
 export function CrateTypePicker() {

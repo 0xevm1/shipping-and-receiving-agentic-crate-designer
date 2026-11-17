@@ -1,32 +1,11 @@
 /**
  * US shop names for stock: nominal lumber ("2x4") and plywood by its sold thickness
- * ("3/4″"). Display and export only; the domain keeps sections in mm (spec §4).
+ * ("3/4″"). Display and export only; the domain keeps sections in mm (spec §4) and owns the
+ * nominal-lumber table (`domain/lumber.ts`), which this file only formats.
  */
 import type { MemberKind } from "@/domain/crate";
-import { fraction } from "./units";
-
-/** Surfaced (S4S) lumber: nominal name and actual size in mm, thinner side first. */
-export const NOMINAL_LUMBER: readonly { name: string; mm: readonly [number, number] }[] = [
-  { name: "1x2", mm: [19, 38] },
-  { name: "1x3", mm: [19, 64] },
-  { name: "1x4", mm: [19, 89] },
-  { name: "1x6", mm: [19, 140] },
-  { name: "1x8", mm: [19, 184] },
-  { name: "1x10", mm: [19, 235] },
-  { name: "1x12", mm: [19, 286] },
-  { name: "2x2", mm: [38, 38] },
-  { name: "2x3", mm: [38, 64] },
-  { name: "2x4", mm: [38, 89] },
-  { name: "2x6", mm: [38, 140] },
-  { name: "2x8", mm: [38, 184] },
-  { name: "2x10", mm: [38, 235] },
-  { name: "2x12", mm: [38, 286] },
-  { name: "4x4", mm: [89, 89] },
-  { name: "4x6", mm: [89, 140] },
-  { name: "4x8", mm: [89, 184] },
-  { name: "6x6", mm: [140, 140] },
-  { name: "6x8", mm: [140, 184] },
-];
+import { NOMINAL_LUMBER, nominalLumber, TOLERANCE_MM } from "@/domain/lumber";
+import { fraction, type Units } from "./units";
 
 /** Plywood as sold in the US: the nominal fraction for each metric thickness. */
 const NOMINAL_PLYWOOD: Readonly<Record<number, string>> = {
@@ -40,17 +19,7 @@ const NOMINAL_PLYWOOD: Readonly<Record<number, string>> = {
   25: "1",
 };
 
-/** A millimetre either way: sizes are rounded to whole mm, and 1x4 is really 19.05 × 88.9. */
-const TOLERANCE_MM = 1;
-
 const sorted = (a: number, b: number): [number, number] => (a <= b ? [a, b] : [b, a]);
-
-/** "2x4" for a 38 × 89 section (either order), or null when it isn't stock. */
-export function nominalLumber(a: number, b: number): string | null {
-  const [t, w] = sorted(a, b);
-  const hit = NOMINAL_LUMBER.find((n) => Math.abs(n.mm[0] - t) <= TOLERANCE_MM && Math.abs(n.mm[1] - w) <= TOLERANCE_MM);
-  return hit?.name ?? null;
-}
 
 /** The smallest stock section a piece of this size can be ripped from, or null. */
 function sourceStock(a: number, b: number): string | null {
@@ -65,6 +34,12 @@ export function plywoodText(mm: number, mark = "″"): string {
   const nominal = NOMINAL_PLYWOOD[Math.round(mm)];
   return nominal ? `${nominal}${mark}` : fraction(mm, mark);
 }
+
+/** Plywood by the thickness it is sold as ("1/2″" in imperial) or in mm ("12 mm"): the one label the app shows. */
+export const plywoodLabel = (mm: number, u: Units): string => (u === "imperial" ? plywoodText(mm) : `${mm} mm`);
+
+/** A lumber section by shop name in imperial ("2x4", else fractional inches), "38 × 89" in metric. */
+export const sectionLabel = (a: number, b: number, u: Units): string => (u === "imperial" ? sectionText(a, b) : `${a} × ${b}`);
 
 /** A section in fractional inches: "1″ × 3 15/16″" (or "1 in x 3 15/16 in" in the CSV). */
 function inches(a: number, b: number, mark: string): string {

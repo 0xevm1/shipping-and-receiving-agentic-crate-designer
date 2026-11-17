@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cut, dims, dimsOther, fraction, length, partWeight, volume, weight } from "./units";
+import { cut, dims, dimsOther, fraction, groupDigits, length, partWeight, volume, weight, weightFromLb, weightWhole } from "./units";
 
 describe("units", () => {
   it("formats overall sizes", () => {
@@ -43,7 +43,14 @@ describe("units", () => {
     expect(volume(1, "imperial")).toBe("35.3 ft³");
   });
 
-  it("shows every mass by one rule: one decimal under 100, whole from 100 (#62)", () => {
+  it("groups thousands for a quantity beside its unit, and for whole-unit masses", () => {
+    expect(groupDigits(30000)).toBe("30,000");
+    expect(groupDigits(950)).toBe("950");
+    expect(weightWhole(6131.6, "imperial")).toBe("13,518 lb");
+    expect(weightWhole(16.4, "metric")).toBe("16 kg");
+  });
+
+  it("shows every mass by one rule: one decimal under 100, whole from 100 ", () => {
     expect(weight(21.5, "metric")).toBe("21.5 kg");
     expect(weight(21.5, "imperial")).toBe("47.4 lb");
     expect(partWeight(21.5, "imperial")).toBe("47.4 lb");
@@ -52,7 +59,10 @@ describe("units", () => {
     expect(weight(99.96, "metric")).toBe("100 kg"); // rounds up across the boundary: whole
     expect(weight(45.36, "imperial")).toBe("100 lb");
     expect(weight(135.2, "metric")).toBe("135 kg");
-    expect(weight(1240.4, "metric")).toBe("1240 kg");
-    expect(weight(1240.4, "metric", true)).toBe("1,240 kg");
+    expect(weight(1240.4, "metric")).toBe("1,240 kg"); // grouped by default
+    expect(weight(1240.4, "metric", false)).toBe("1240 kg");
+    expect(weight(6131.6, "imperial")).toBe("13,518 lb");
+    expect(weightFromLb(13518, "imperial")).toBe("13,518 lb");
+    expect(weightFromLb(100, "metric")).toBe("45.4 kg");
   });
 });
