@@ -131,7 +131,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
-| `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
+| `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
+| `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
 | `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign`, `parseDesignFile` (version check and migrations), `restoreDesign` |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
@@ -328,6 +329,8 @@ Units are fixed per field (mm, kg, kg/m³, USD/m³), whatever the display units.
 | `baseRatingKg` | 1000 | `base-rating` |
 | `stableHeightRatio` | 1.5 | `Layout.stable`, ranking and the `stable` check |
 | `lowUtilization` | 0.25 | `utilization` |
+| `perCrate.maxGrossKg` | 1000 (the base rating) | Shipment planning (§7.10): a heavier crate is split |
+| `perCrate.maxParts` | 0 (no limit) | Shipment planning: most parts in one crate |
 | **`rates`** — material properties, prices and fastening (§7.6) | | |
 | `densityKgM3 {plywood, lumber}` | 600, 480 | Tare weight |
 | `costUsdPerM3 {plywood, lumber}` | 1100, 650 | `materialCostUsd` (placeholders) |
@@ -401,6 +404,9 @@ and share links.
     "layout": "2 × 2 × 1, As modeled",
     "outsideMm": [932, 652, 497],  // rounded
     "grossKg": 134.9               // one decimal
+    // "shipment": [{ "count": 6, "quantity": 30 }, { "count": 1, "quantity": 20 }]
+    //   only for a batch split across crates (#25, §7.10); the summary above then
+    //   describes the crate type that was on screen
   }
 }
 ```
@@ -429,6 +435,11 @@ and share links.
   - The rebuilt crate is compared with `summary`. If the outside size or gross differs (for
     example, a catalog mass or a shop rule changed), the message gives the new and the saved
     values.
+  - **A split batch (#25):** the design is rebuilt with this browser's shop standards and
+    re-planned (§7.10). The crate type on screen when it was saved (the one whose part count is
+    `summary.quantity`) is shown again. If the plan differs from `summary.shipment` (for
+    example, a different max gross per crate), the message says "The batch now ships as …
+    (saved: …)". A single-crate file has no `shipment` and is byte-identical to before.
   - The load message starts "Design loaded: {quantity} × {name}." and adds any of those notes.
 ## 7. Algorithms
 
@@ -612,6 +623,7 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% (`limits.lowUtilization`) |
 | `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`) |
+| `crate-limit` | Within the per-crate limits | caution: Over the per-crate limit | Only on a split batch (§7.10), added by `planShipment` to each crate type: ok names the plan and the limits; caution when one part alone is over them |
 
 The figures in this table are the defaults. `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and
 `CARDBOARD_LIMITS` in `crate.ts` are read-only views of them, kept for tests; the checks read
@@ -682,6 +694,65 @@ Very small parts (down to sub-millimetre) get the minimum 178 mm interior (§7.2
 up to 20 m get a normal design, with the `oversize` and `door` checks as they apply. The 3D view
 pushes the camera's far plane and orbit limit out for crates too large for the defaults (200 m
 and 60 m).
+
+### 7.10 Shipment planning (`planShipment`, #25)
+
+A large batch can't always go in one crate: 200 brackets is over 4,300 kg of payload. A PM
+needs "this batch ships as N crates", each buildable, handleable and within limits.
+
+**Limits per crate** (shop standards, §6.4):
+
+- gross ≤ `limits.perCrate.maxGrossKg` (1,000 kg, the standard base rating, until structural
+  sizing #7 replaces it);
+- outside L ≤ `trailerMm.interiorLength`, W ≤ `doorWidth`, H ≤ `doorHeight` (the `door` check's
+  limits, `withinOutsideLimits`);
+- parts ≤ `limits.perCrate.maxParts`, when it is above 0.
+
+With the defaults, no sample part splits at its suggested quantities.
+
+**`planShipment(part, settings, layoutKey?, standards)`** returns `{ split, crates, totals,
+unmet, problem }`. `crates` holds one or two **crate types** (`{ label, count, quantity,
+result }`, where `result` is a full `DesignResult` for `quantity` parts: layouts, design, cut
+list and checks). `totals` sums crates, parts, payload, tare, gross, outside volume and cost.
+
+1. **One crate when it fits.** If the crate for the whole batch is within every limit, the plan
+   is that crate: `computeDesign`'s own result, value for value (tested on every sample part ×
+   suggested quantity × keep-upright, so the 18-case baseline can't move). A single part is
+   never split (Q = 1 stays as today, with its `door` or `base-rating` cautions).
+2. **Layouts that fit the trailer first.** For any part count, if the recommended layout is over
+   the trailer limits but others aren't, the ones that fit are ranked ahead (each in its usual
+   order) and the best of them is recommended.
+3. **Largest crate:** `kMax`, the most parts that fit one crate, by bisection over
+   `1 … min(Q − 1, maxParts, floor(maxGross / part mass))` (fit is taken to fall as k grows).
+4. **Fewest crates:** `N = ceil(Q / kMax)`. Every k from `ceil(Q / N)` to `kMax` ships in N
+   crates, as `floor(Q / k)` identical crates of k plus at most one remainder crate of
+   `r = Q − floor(Q / k)·k < k` parts.
+5. **Then least outside volume, then the most even split.** The candidates' total outside
+   volume comes from the layouts alone (`rankLayouts`, no crate designed). Volumes within
+   `defaults.volumeTolerance` (3%) of the least feasible volume tie; among those the smallest
+   `k − r` wins (0 when there is no remainder), then the smaller volume, then the larger k. Only
+   front-runners are designed, to confirm they fit. Example: PART-001 × 200 ships as
+   6 × crate A (30 each) + 1 × crate B (20), 7 crates; PART-003 × 10 with at most 4 per crate is
+   2 × 4 + 1 × 2.
+6. **When even one part is over the limits,** every part ships in its own crate, `unmet` says
+   why, and each crate's `crate-limit` check is a caution.
+7. **Layout picks:** `layoutKey` applies to the first crate type that has that layout; the
+   split itself always uses the recommended layouts.
+
+On a split, every crate type gets the `crate-limit` check (§7.7). `shipmentBom(plan)` merges the
+cut lists for the whole shipment (each type's quantities × its count; equal pieces merged by
+`BomLine.key`, each piece's sizes kept together), with summed plywood, lumber and screws;
+`shipmentToCsv` writes it with a "# Shipment of …" header. `describeShipment` gives
+"6 × crate A (30 each) + 1 × crate B (20)".
+
+**Speed:** at quantity 200, a split takes about 5–15 ms for the sample parts; a pathological
+case (a tiny part with only a part-count limit, where about 100 candidate k tie on crate count)
+takes about 150 ms. The tests fail above 200 ms and 500 ms.
+
+**In the store:** `plan`, `crateIndex` (the crate type on screen) and `result`, which is always
+`plan.crates[crateIndex].result`, so the 3D view, Layouts, Cut list and Checks follow the
+selected type unchanged. `setCrateIndex(i)` switches type (clears the pin and hover, re-frames,
+records no change note). An edit keeps the type while the new plan has it, else shows A.
 
 ## 8. UI
 
@@ -762,7 +833,8 @@ The canvas fills the window. Four regions float above it:
     the tabs, the panel (the only thing that scrolls), then the credit at half size (hidden on
     short screens). `drawerOpen` in the store is separate from `panelsHidden`.
   - **Foot:** the load message (when there is one), the **summary chip** (outside size and gross
-    weight in amber; tapping it opens the drawer on Overview; it flashes with the Overview on an
+    weight in amber; for a split batch, "Crate A outside" with the shown type's size and
+    "Gross, 7 crates" with the shipment's gross; tapping it opens the drawer on Overview; it flashes with the Overview on an
     edit), then the compact view bar: mode icon, units and View; no Hide panels. From 600 px
     wide (tablets, phones in landscape) the chip and the bar share one row. The View popover
     opens upward from the right edge, is at most `100vw − 24px` wide and scrolls inside when
@@ -784,9 +856,9 @@ The canvas fills the window. Four regions float above it:
 
 | Tab | Contents |
 |---|---|
-| **Overview** (default) | "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D |
+| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D |
 | **Layouts** | The `explainLayout` sentence. Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
-| **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV) |
+| **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV). For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
 | **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a count badge on the tab when there are cautions |
 
@@ -1050,6 +1122,23 @@ tidied, a blank material clears it, a blank or overlong name, an overlong materi
 that isn't a positive number are rejected, `partFinish` maps "alum" text to aluminum and
 everything else to steel, and the CSV header carries the entered name, material and mass.
 
+**`src/domain/shipment.test.ts`** checks shipment planning (§7.10, #25): every sample part ×
+suggested quantity × keep-upright is one crate equal to `computeDesign` (and keeps a layout
+pick); a problem passes through; 200 brackets split within 1,000 kg with at most one smaller
+remainder and correct totals; one crate fewer would be over a limit for every sample part; a
+part-count limit splits evenly (8 → 2 × 4) or with a remainder (10 → 2 × 4 + 1 × 2); volumes that
+tie prefer the even split; a batch too big for a smaller trailer splits with every crate
+passing `door`; a layout that fits the door is recommended over a smaller one that doesn't; a
+lower max gross gives more crates; a layout pick applies to its crate type; split crates get the
+`crate-limit` check and single crates don't; a part over the limit alone ships one per crate with
+a caution; 200 parts plan fast; the shipment cut list multiplies, merges and groups pieces, and
+its CSV has the plan header.
+
+**`src/state/shipment.store.test.ts`** checks the store: one crate at start, 200 brackets show
+crate A, `setCrateIndex` switches `result` (clearing the pin, re-framing, no change note, out of
+range ignored), the type is kept across edits while it exists, a lower max gross re-plans, and
+`loadDesign` opens the saved type.
+
 **`src/domain/designFile.test.ts`** checks the design file (§6.5, #28):
 
 - The written file has the kind, version, app, part, settings, layout key and summary
@@ -1060,6 +1149,8 @@ everything else to steel, and the CSV header carries the entered name, material 
 - **Reproduction:** for every catalog part × suggested quantity × keep-upright, with the
   recommended and the runner-up layout, save → parse → restore gives no notes, the same layout,
   outside size and gross, and a byte-identical CSV cut list. A custom part does the same.
+- A split batch records `summary.shipment` (single-crate files are unchanged), re-opens to the
+  same plan and crate type with no notes, and with other standards notes the changed plan.
 - A layout key that no longer exists falls back to the recommended layout with a note; a
   heavier catalog part or a changed summary gives a note with the new and saved values.
 
@@ -1183,6 +1274,13 @@ HTML report as `playwright-report`.
     "$ of wood", which survives a reload; Reset to defaults restores the cost (also after a
     reload); a light-panel threshold of 50 kg switches the Overview to 15 mm ply; a negative
     density is flagged and reverts on blur.
+  - `13-batch-split` (#25): PART-001 × 8 is one crate with no Shipment block; × 200 splits into
+    two crate types totalling 200 with "Ships as … crate A (k each) + 1 × crate B (r)"; picking
+    Crate B changes the crate on screen (outside size, parts), the heading and the Checks
+    ("Within the per-crate limits"); the cut list follows the type and "Whole shipment" lists
+    every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
+    defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
+    summary chip reads "Crate A outside" and "Gross, N crates".
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 
@@ -1210,6 +1308,8 @@ HTML report as `playwright-report`.
 | House rules are one zod-validated `ShopStandards` object passed into `computeDesign`, defaulting to `DEFAULT_STANDARDS` (#19) | Makes the PM's tribal knowledge explicit and editable; the domain stays pure (no store or storage access), and every existing call and test works unchanged with the defaults | Every domain function takes one more argument; a few exports remain as views of the defaults for tests |
 | Shop standards persist in `localStorage` under a versioned key, loaded after mount | No backend yet; a PM's house rules should survive reloads. Loading after mount avoids a hydration mismatch, and invalid data falls back to the defaults with a warning | Per browser, not per shop: share them with Download / Load standards until there are accounts (§9) |
 | Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists that are usually metric here | An imperial user converts by hand |
+| A split is N identical crates plus at most one remainder, chosen fewest crates → least volume (3% tie) → most even (#25) | Identical crates are faster to build from one cut list; a PM thinks in crate counts first, then truck space; an even split balances the crates when volume doesn't care | A mixed plan (e.g. 4 + 3 + 3) is never offered; bisection assumes fit falls as the part count grows |
+| Per-crate limits reuse the trailer door and floor for size; only gross and part count are new standards | The door check already holds the handling size limit; two sources would drift | Forklift-specific size limits wait for #8 |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
 
 ## 12. Known limitations and roadmap
@@ -1239,8 +1339,10 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 
 Other known gaps:
 
-- No limit on maximum crate size or weight beyond the 20 m part limit (§7.9), and no splitting a
-  batch across several crates.
+- Batch splitting (#25, §7.10) offers only N identical crates plus one remainder, and the
+  per-crate gross limit is the flat 1,000 kg base rating until structural sizing (#7).
+- The GLB download and the view bar name the file by the batch quantity, not the crate type on
+  screen.
 - No top hold-down blocking under the lid.
 - Separators are full-interior sheets, with no cut-outs for parts that are taller than their
   neighbours.

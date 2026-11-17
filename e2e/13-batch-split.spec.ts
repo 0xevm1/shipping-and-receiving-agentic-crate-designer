@@ -45,7 +45,7 @@ test("200 brackets split into crates within the 1,000 kg limit, and switching cr
   await expect(summary).toContainText("200 parts");
   await expect(panel(page).getByRole("heading", { level: 2 })).toContainText(`Crate A: ${a.quantity} × machined steel bracket`);
   // Every crate type passes the base rating and the per-crate limit.
-  await shot(page, "12-split-overview-a");
+  await shot(page, "13-split-overview-a");
 
   const outsideA = s.outside;
   await picker(page).getByRole("button", { name: /^Crate B/ }).click();
@@ -54,7 +54,7 @@ test("200 brackets split into crates within the 1,000 kg limit, and switching cr
   expect(sb.crateParts).toBe(b.quantity);
   expect(sb.outside).not.toEqual(outsideA);
   await expect(panel(page).getByRole("heading", { level: 2 })).toContainText(`Crate B: ${b.quantity} × machined steel bracket`);
-  await shot(page, "12-split-overview-b");
+  await shot(page, "13-split-overview-b");
 
   // The Checks follow the crate on screen and include the per-crate limit.
   await openTab(page, "Checks");
@@ -69,13 +69,13 @@ test("200 brackets split into crates within the 1,000 kg limit, and switching cr
   await expect(panel(page).getByRole("heading", { level: 2 })).toHaveText("Cut list for crate A");
   await expect.poll(() => rowQty(page, "Blocking post")).not.toBe(blocksB);
   const skidsA = await rowQty(page, "Skid");
-  await shot(page, "12-split-cutlist-crate");
+  await shot(page, "13-split-cutlist-crate");
 
   await panel(page).getByRole("button", { name: "Whole shipment" }).click();
   await expect(panel(page).getByRole("heading", { level: 2 })).toHaveText("Cut list for the whole shipment");
   await expect(panel(page)).toContainText(`Quantities are for all ${a.count + 1} crates`);
   expect(await rowQty(page, "Skid")).toBeGreaterThanOrEqual(skidsA * a.count);
-  await shot(page, "12-split-cutlist-shipment");
+  await shot(page, "13-split-cutlist-shipment");
 });
 
 test("a lower max gross per crate in Shop standards changes the split", async ({ page }) => {
@@ -88,13 +88,13 @@ test("a lower max gross per crate in Shop standards changes the split", async ({
   await field.fill("500");
   await field.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await expect.poll(async () => (await crate(page)).crateTypes.reduce((n, c) => n + c.count, 0)).toBeGreaterThan(before);
-  await shot(page, "12-split-standards-500kg");
+  await shot(page, "13-split-standards-500kg");
 
   const after = (await crate(page)).crateTypes;
   await openTab(page, "Overview");
   const total = after.reduce((n, c) => n + c.count, 0);
   await expect(panel(page).getByRole("region", { name: "Shipment" })).toContainText(`Shipment · ${total} crates`);
-  await shot(page, "12-split-overview-500kg");
+  await shot(page, "13-split-overview-500kg");
 
   await openTab(page, "Rules");
   await standards(page).getByText("Shop standards", { exact: true }).click();

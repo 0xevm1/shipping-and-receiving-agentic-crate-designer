@@ -69,7 +69,14 @@ function Gross() {
   const crates = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   if (gross === undefined) return null;
   // A split batch (#25): the shipment, not one crate.
-  if (crates) return <> · {crates.crates} crates, {weight(crates.grossKg, units)} gross in all</>;
+  if (crates) {
+    return (
+      <>
+        {" "}
+        · <span>{crates.crates} crates,</span> <span>{weight(crates.grossKg, units)} gross in all</span>
+      </>
+    );
+  }
   return (
     <>
       {" "}
