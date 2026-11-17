@@ -64,10 +64,10 @@ function designRequest(config: JobConfiguration): DesignRequest {
   return parsed.data;
 }
 
-/** The request with the part's model scale (metres unless the upload was read as mm); not hashed. */
+/** The request with how the part's model is read (its scale and up axis, spec §4); not hashed. */
 const withScale = (req: DesignRequest, model: PartModelBytes | null): DesignRequest => ({
   ...req,
-  part: { ...req.part, ...(model ? { mmPerUnit: model.mmPerUnit } : {}) },
+  part: { ...req.part, ...(model ? { mmPerUnit: model.mmPerUnit, upAxis: model.upAxis } : {}) },
 });
 
 async function loadModel(repo: Repository, blob: BlobStore, org: OrgContext, job: DesignJob): Promise<PartModelBytes | null> {

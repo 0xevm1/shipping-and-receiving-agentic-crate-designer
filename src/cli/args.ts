@@ -3,6 +3,7 @@
  * options or a usage error out, so it is unit-tested without a process.
  */
 import { parseArgs } from "node:util";
+import type { ModelUnits, UpAxis } from "@/domain/partFrame";
 import { type DesignsFields, DesignsFieldsSchema } from "@/lib/api/designs";
 
 export const USAGE = `Usage: bun run crate -- <part.glb> --mass <kg> [options]
@@ -16,6 +17,8 @@ Options:
   --material <text>       part material
   --density <kg/m3>       part density
   --name <text>           part name (default: from the file name)
+  --units <m|mm|in>       what the file's numbers are in (default: guessed from its size)
+  --up <z|y>              which axis of the file points up (default: z)
   --freight-rates <json>  LTL rates, JSON or @file: {"usdPerCwtByClass": {"70": 41.5}, "minimumUsd": 95}
   --out <dir>             where to write the files (default ./crate-out)
   --offline               run the engine in this process; also writes the crate GLB, PDF and cut list
@@ -30,6 +33,9 @@ export interface CliOptions {
   material: string | null;
   density: number | null;
   name: string | null;
+  /** How the file is read (spec §4); null: guessed from its size, and Z up. */
+  units: ModelUnits | null;
+  up: UpAxis | null;
   freightRates: NonNullable<DesignsFields["freightRates"]> | null;
   /** The raw text of the fields, as the API receives them. */
   fields: Record<string, string>;
@@ -54,6 +60,8 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
         material: { type: "string" },
         density: { type: "string" },
         name: { type: "string" },
+        units: { type: "string" },
+        up: { type: "string" },
         "freight-rates": { type: "string" },
         out: { type: "string" },
         offline: { type: "boolean" },
@@ -83,6 +91,8 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
     ...(values.material !== undefined ? { material: values.material } : {}),
     ...(values.density !== undefined ? { density: values.density } : {}),
     ...(values.name !== undefined ? { name: values.name } : {}),
+    ...(values.units !== undefined ? { units: values.units } : {}),
+    ...(values.up !== undefined ? { up: values.up } : {}),
     ...(values.total !== undefined ? { total: values.total } : {}),
     ...(rates ? { freightRates: rates } : {}),
   };
@@ -101,6 +111,8 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
       material: f.material ?? null,
       density: f.density ?? null,
       name: f.name ?? null,
+      units: f.units ?? null,
+      up: f.up ?? null,
       freightRates: f.freightRates ?? null,
       fields,
       out: values.out ?? "./crate-out",

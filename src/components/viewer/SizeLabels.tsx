@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./SizeLabels.module.css";
 import { buildLines, hiddenAxis, labelText } from "./sizeLines";
 
@@ -18,11 +19,11 @@ export const labelElements: (HTMLDivElement | null)[] = [];
  */
 export function SizeLabels() {
   const design = useDesigner((s) => s.result.design);
-  const units = useDesigner((s) => s.units);
-  const dims = useDesigner((s) => s.view.dims);
-  const parts = useDesigner((s) => s.view.parts);
-  const camera = useDesigner((s) => s.view.camera);
-  const restoring = useDesigner((s) => s.restoring);
+  const units = useView((s) => s.units);
+  const dims = useView((s) => s.view.dims);
+  const parts = useView((s) => s.view.parts);
+  const camera = useView((s) => s.view.camera);
+  const restoring = useView((s) => s.restoring);
   const labels = useMemo(
     () => (design && dims && !restoring ? buildLines(design, parts, hiddenAxis(camera)).labels : []),
     [design, dims, parts, camera, restoring],

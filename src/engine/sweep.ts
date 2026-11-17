@@ -138,6 +138,6 @@ export function rankConfigurations(req: SweepRequest, swept: SweepResponse = run
         }
       : null,
     curve: sweep.curve.map((p) => ({ quantity: p.quantity, ok: p.ok, binding: p.binding, scoreUsdPerPart: p.crate?.scoreUsdPerPart ?? null })),
-    problem: sweep.problem ? { id: sweep.problem.id, title: sweep.problem.title, detail: sweep.problem.detail } : null,
+    problem: sweep.problem ? { id: sweep.problem.id, title: sweep.problem.title, detail: metricText(sweep.problem.detail) } : null,
   };
 }

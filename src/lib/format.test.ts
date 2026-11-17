@@ -96,7 +96,8 @@ describe("modelNote", () => {
   it("says what the measurement was compared with", () => {
     expect(modelNote(true, false)).toBe("model matches catalog");
     expect(modelNote(false, true)).toBe("model does not match catalog");
-    expect(modelNote(null, true)).toBe("file read as millimetres");
+    expect(modelNote(null, true)).toBe("units guessed from the size");
+    expect(modelNote(null, false)).toBe("size measured from the file");
     expect(modelNote(null, undefined)).toBe("size measured from the file");
   });
 });

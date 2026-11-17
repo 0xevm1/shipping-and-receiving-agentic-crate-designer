@@ -14,12 +14,6 @@ const CHUNK_HEADER_BYTES = 8;
 /** The largest GLB the API accepts (and the browser caches, `MAX_CACHED_GLB_BYTES`). */
 export const MAX_GLB_BYTES = 50 * 1024 * 1024;
 
-/**
- * Files are expected in metres (spec §4). A part more than this many units across was almost
- * certainly modelled in millimetres, so it is read that way and the UI says so.
- */
-const MM_FILE_THRESHOLD = 20;
-
 /** What the user is told about a file that can't be used. One wording, browser and API. */
 export const GLB_MESSAGES = {
   notGlb: "That isn't a .glb file. Choose a .glb or a design .json.",
@@ -209,11 +203,4 @@ export function glbSizeUnits(buffer: Bytes): Vec3 | null {
   const size = [0, 1, 2].map((i) => max[i]! - min[i]!);
   if (size.some((v) => !Number.isFinite(v)) || size.every((v) => v === 0)) return null;
   return size as Vec3;
-}
-
-/** Measured file units → mm, reading a part more than `MM_FILE_THRESHOLD` units across as mm. */
-export function unitsToMm(sizeUnits: Vec3): { sizeMm: Vec3; mmPerUnit: number; readAsMm: boolean } {
-  const readAsMm = Math.max(...sizeUnits) > MM_FILE_THRESHOLD;
-  const mmPerUnit = readAsMm ? 1 : 1000;
-  return { sizeMm: sizeUnits.map((v) => v * mmPerUnit) as Vec3, mmPerUnit, readAsMm };
 }

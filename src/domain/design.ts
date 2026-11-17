@@ -1,6 +1,7 @@
 import { resolveConstruction, structureAllowance, structureMaterials } from "./construction";
 import { designCrate } from "./crate";
 import type { CrateDesign } from "./crateDesign";
+import { longMm, msg, parts, type Message } from "./message";
 import { enumerateLayouts, type Layout } from "./packing";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, ShopStandardsSchema, type ShopStandards } from "./standards";
@@ -18,7 +19,8 @@ export const MAX_PART_MM = 20000;
 export interface DesignProblem {
   id: "part-size" | "part-too-large" | "part-mass" | "settings" | "standards" | "no-layout";
   title: string;
-  detail: string;
+  /** What is wrong and what to do, with its sizes as data so the units toggle reaches them (`renderMessage`). */
+  detail: Message;
 }
 
 export interface DesignResult {
@@ -152,7 +154,7 @@ export function rankLayouts(part: DesignPart, settings: CrateSettings, standards
 const NO_LAYOUT: DesignProblem = {
   id: "no-layout",
   title: "No layout fits these packing rules",
-  detail: "Try more layers, smaller gaps or turning off Keep parts upright.",
+  detail: parts("Try more layers, smaller gaps or turning off Keep parts upright."),
 };
 
 /** The first reason the part or settings can't be designed for, or null when they can. */
@@ -162,19 +164,19 @@ export function inputProblem(part: DesignPart, settings: CrateSettings, standard
     return {
       id: "part-size",
       title: "The part has no usable size",
-      detail: "Every side must be longer than zero. Check that the model has solid geometry on all three axes.",
+      detail: parts("Every side must be longer than zero. Check that the model has solid geometry on all three axes."),
     };
   }
   const longest = Math.max(...dims);
   if (longest > MAX_PART_MM) {
     return {
       id: "part-too-large",
-      title: `The part is over ${MAX_PART_MM / 1000} m long`,
-      detail: `Its longest side is ${Math.round(longest)} mm. Check the file's units: parts over ${MAX_PART_MM / 1000} m are not crated here.`,
+      title: "This part is too large to crate",
+      detail: msg`Its longest side is ${longMm(longest)} and the limit is ${longMm(MAX_PART_MM)}. If that is not the part's real size, check the file's units.`,
     };
   }
   if (!Number.isFinite(part.mass_kg) || part.mass_kg <= 0) {
-    return { id: "part-mass", title: "The part needs a mass", detail: "Enter a mass above zero for one part." };
+    return { id: "part-mass", title: "The part needs a mass", detail: parts("Enter a mass above zero for one part, in the part header.") };
   }
   const parsed = CrateSettingsSchema.safeParse(settings);
   if (!parsed.success) {
@@ -182,7 +184,7 @@ export function inputProblem(part: DesignPart, settings: CrateSettings, standard
     return {
       id: "settings",
       title: "A packing rule is out of range",
-      detail: `${issue.path.join(".") || "Settings"}: ${issue.message}. Reset the rules to continue.`,
+      detail: parts(`${issue.path.join(".") || "Settings"}: ${issue.message}. Reset the rules to continue.`),
     };
   }
   // Skip the parse for the shipped defaults: they are checked by a test, and this runs on every keystroke.
@@ -193,7 +195,7 @@ export function inputProblem(part: DesignPart, settings: CrateSettings, standard
       return {
         id: "standards",
         title: "A shop standard is out of range",
-        detail: `${issue.path.join(".") || "Standards"}: ${issue.message}. Reset the shop standards to continue.`,
+        detail: parts(`${issue.path.join(".") || "Standards"}: ${issue.message}. Reset the shop standards to continue.`),
       };
     }
   }

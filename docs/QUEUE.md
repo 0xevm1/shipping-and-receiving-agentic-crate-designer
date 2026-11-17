@@ -141,7 +141,7 @@ configurations out. **Nothing is saved.** The engine work runs on the worker poo
 |---|---|
 | `file` | The part's binary `.glb`; the same checks and messages as `POST /api/v1/parts` (text glTF 415, Draco / Meshopt or damaged 422, over 50 MB 413) |
 | `mass` | kg per part, required |
-| `material`, `density`, `name` | Optional, as for `/parts` |
+| `material`, `density`, `name`, `units`, `up` | Optional, as for `/parts` (`units` and `up`: how the file is read, spec §4) |
 | `total` | Optional: total parts to ship (1–10 000). Adds `total`, the even split |
 | `freightRates` | Optional JSON, `{"usdPerCwtByClass": {"70": 41.5}, "minimumUsd": 95}`. Without it no freight dollars appear |
 
@@ -156,7 +156,7 @@ The answer: `engineVersion`, `inputHash` (of the sweep's inputs), `part`, `basis
 `configurations` (the shortlist, best first; each with its own design `inputHash`, `settings`,
 cost per part, crate and freight cost, gross, outside size, screws and `crates`), `total`,
 `curve` (every quantity 1–200: `ok`, the binding rule, the score) and `problem`, plus `model`
-(sha256, size, `readAsMm`). Errors use the `/parts` shape: `{ error: { code, message, field? } }`.
+(sha256, size, `units`, `up`, `unitsGuessed`, `readAsMm`). Errors use the `/parts` shape: `{ error: { code, message, field? } }`.
 
 ## API keys
 
@@ -191,6 +191,9 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
   download package from `buildBundleZip` with the GLB's bytes: the crate GLB, the PDF, the cut list
   CSV(s), `design.json` and `README.txt`. With `--total` the package is for the whole batch (split
   evenly); without it, for one crate of the recommended quantity.
+- **`--units <m|mm|in>`, `--up <z|y>`:** how the file is read (spec §4), sent as the `units` and
+  `up` fields or applied offline with the same `readFrame`; guessed from the size, and Z up, when
+  absent. The offline crate GLB turns and scales the model by them.
 - Exit codes: 0 done, 1 failed (the API's or the app's message is printed), 2 bad arguments.
 
 ## Tests

@@ -9,6 +9,7 @@
  *   material      optional text
  *   density       optional kg/m³
  *   name          optional; defaults to one made from the file name
+ *   units, up     optional: how the file is read (m | mm | in, z | y), as for POST /api/v1/parts
  *   total         optional: the total number of parts to ship (adds `total`, an even split)
  *   freightRates  optional JSON: `{"usdPerCwtByClass": {"70": 41.5, ...}, "minimumUsd": 95}`.
  *                 Without it no freight dollars appear anywhere (spec §7.16)
@@ -16,6 +17,7 @@
  * Nothing is saved: the answer is the ranked shortlist, the recommendation and the curve.
  */
 import { z } from "zod";
+import { MODEL_UNITS, UP_AXES } from "@/domain/partFrame";
 import { CrateSettingsSchema, Vec3Schema } from "@/domain/schema";
 import { FreightRatesSchema, SWEEP_CONSTRAINTS } from "@/domain/sweep";
 import { CreatePartFieldsSchema } from "./parts";
@@ -129,6 +131,13 @@ export type DesignsResponse = z.infer<typeof DesignsResponseSchema>;
 
 /** What the API adds about the uploaded file (the engine never sees it). */
 export const DesignsApiResponseSchema = DesignsResponseSchema.extend({
-  model: z.object({ sha256: hash, sizeBytes: z.int().positive(), readAsMm: z.boolean() }),
+  model: z.object({
+    sha256: hash,
+    sizeBytes: z.int().positive(),
+    readAsMm: z.boolean(),
+    units: z.enum(MODEL_UNITS),
+    up: z.enum(UP_AXES),
+    unitsGuessed: z.boolean(),
+  }),
 });
 export type DesignsApiResponse = z.infer<typeof DesignsApiResponseSchema>;

@@ -10,7 +10,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
-import { GLB_MESSAGES, glbProblem, glbSizeUnits, idFromFile, looksLikeTextGltf, MAX_GLB_BYTES, nameFromFile, unitsToMm } from "@/domain/glb";
+import { GLB_MESSAGES, glbProblem, glbSizeUnits, idFromFile, looksLikeTextGltf, MAX_GLB_BYTES, nameFromFile } from "@/domain/glb";
+import { MM_PER_UNIT, readFrame } from "@/domain/partFrame";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { designShipment } from "@/engine/engine";
 import { buildBundleZip } from "@/engine/files";
@@ -49,7 +50,7 @@ export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new 
   checkGlb(bytes, fileName);
   const sizeUnits = glbSizeUnits(bytes);
   if (!sizeUnits) throw new CliError(GLB_MESSAGES.noGeometry);
-  const { sizeMm, readAsMm, mmPerUnit } = unitsToMm(sizeUnits);
+  const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units: opts.units ?? undefined, up: opts.up ?? undefined });
   const sha256 = sha256Hex(bytes);
   const req: SweepRequest = {
     part: {
@@ -64,7 +65,10 @@ export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new 
     freightRates: opts.freightRates,
     total: opts.total,
   };
-  const report: DesignsApiResponse = { ...rankConfigurations(req), model: { sha256, sizeBytes: bytes.byteLength, readAsMm } };
+  const report: DesignsApiResponse = {
+    ...rankConfigurations(req),
+    model: { sha256, sizeBytes: bytes.byteLength, readAsMm: frame.units === "mm", units: frame.units, up: frame.up, unitsGuessed: guessed },
+  };
   const files = await writeReport(opts.out, report);
 
   const best = report.configurations[0];
@@ -72,7 +76,18 @@ export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new 
     // With a total, the package is for the whole batch (split evenly, #25); otherwise one crate.
     const design = report.total ? sweepDesignRequest(req, report.total.total, null) : sweepDesignRequest(req, best.quantityPerCrate, best.layoutKey);
     const { plan } = designShipment(design);
-    const part: LoadedPart = { ...design.part, modelUrl: "", model: fileName, mmPerUnit, suggested_quantities: [], massAssumed: false, readAsMm };
+    const part: LoadedPart = {
+      ...design.part,
+      modelUrl: "",
+      model: fileName,
+      modelUnits: frame.units,
+      upAxis: frame.up,
+      unitsGuessed: guessed,
+      mmPerUnit: MM_PER_UNIT[frame.units],
+      rawSize: sizeUnits,
+      suggested_quantities: [],
+      massAssumed: false,
+    };
     const glb = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const bundle = await buildBundleZip({ ...design, part, plan, crateIndex: 0, units: "metric", generatedAt: now.toISOString() }, bytesModelReader(glb));
     for (const [name, data] of Object.entries(unzipSync(bundle.zip))) {

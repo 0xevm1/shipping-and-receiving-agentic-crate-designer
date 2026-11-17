@@ -71,6 +71,28 @@ describe("artifacts in Node", () => {
     expect(csv).toContain(`# Engine ${ENGINE_VERSION}, input ${inputHash}\n`);
   });
 
+  it("reads a part's model in its frame, as the browser does: a Y-up file's parts are the Z-up file's (#105)", async () => {
+    const fileBytes = (path: string) => {
+      const b = readFileSync(path);
+      return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+    };
+    const req = loaded(parityRequest("PART-001", 2));
+    const partsBox = async (bytes: ArrayBuffer, upAxis: "z" | "y") => {
+      // The part as the browser and the server hand it over: its design fields plus how its file is read.
+      const part: DesignRequest["part"] = { ...catalogPart(getPart("PART-001")), upAxis } as DesignRequest["part"];
+      const glb = await buildArtifact("glb", { ...req, part }, bytesModelReader(bytes));
+      const parts = (await parseGlb(ab(glb.bytes))).getObjectByName(PARTS_NODE)!;
+      return new Box3().setFromObject(parts);
+    };
+    const zUp = await partsBox(sampleBytes("PART-001"), "z");
+    const yUp = await partsBox(fileBytes("fixtures/units-axis/bracket-y-up.glb"), "y");
+    for (const k of ["min", "max"] as const) {
+      expect(yUp[k].x).toBeCloseTo(zUp[k].x, 3);
+      expect(yUp[k].y).toBeCloseTo(zUp[k].y, 3);
+      expect(yUp[k].z).toBeCloseTo(zUp[k].z, 3);
+    }
+  });
+
   it("gives the same PDF bytes for the same input and time", async () => {
     const req = { ...parityRequest("PART-002", 2), generatedAt: AT, timeZone: "UTC" };
     const [a, b] = await Promise.all([buildArtifact("pdf", req, null), buildArtifact("pdf", req, null)]);

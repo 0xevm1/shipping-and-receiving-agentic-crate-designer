@@ -1,6 +1,6 @@
 /*
  * The load message (an error, or a note about what a loaded design changed): a glass toast
- * hanging under the part header, out of the header's flow so the header doesn't move. Two live
+ * by the part header (under it on narrow screens), out of the header's flow so the header doesn't move. Two live
  * regions (`LoadToast`): one for a note, another for an error (gold edge). With no message
  * the row is clipped to nothing, not removed, so the regions stay announceable.
  */
@@ -59,6 +59,26 @@
 }
 .close:hover {
   background: rgba(255, 255, 255, 0.22);
+}
+
+/*
+ * Desktop: beside the header, level with the app name, not under it. Under it the toast hung over
+ * the part of the stage the crate is framed in and brushed the crate's top-left corner (1440 and
+ * 1180 px wide). Up there nothing but the header is, and the crate never rises above its free area.
+ * Its room runs from the header's right edge (`100%` is the header's width: about 400 px with the
+ * tagline, 345 without) to the island; a longer sentence wraps, it never runs under the island.
+ */
+@media (min-width: 981px) {
+  .row {
+    top: 0;
+    left: calc(100% + 18px);
+    max-width: max(140px, min(440px, calc(100vw - 420px - var(--pad) * 2 - 345px - 34px)));
+  }
+}
+@media (min-width: 1181px) {
+  .row {
+    max-width: min(440px, calc(100vw - 440px - var(--pad) * 2 - 400px - 34px));
+  }
 }
 
 /* Narrow: under the header, as wide as it (the hamburger keeps the right 72 px). */

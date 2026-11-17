@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { GLB_MESSAGES, glbProblem, glbSizeUnits, looksLikeTextGltf, unitsToMm } from "./glb";
+import { GLB_MESSAGES, glbProblem, glbSizeUnits, looksLikeTextGltf } from "./glb";
+import { readFrame } from "./partFrame";
 
 const sample = (name: string) => new Uint8Array(readFileSync(`public/parts/${name}`));
 
@@ -69,8 +70,11 @@ describe("glbSizeUnits", () => {
     expect(glbSizeUnits(new TextEncoder().encode("nope"))).toBeNull();
   });
 
-  it("reads parts over 20 units across as millimetres", () => {
-    expect(unitsToMm([0.3, 0.2, 0.1])).toEqual({ sizeMm: [300, 200, 100], mmPerUnit: 1000, readAsMm: false });
-    expect(unitsToMm([300, 200, 100])).toEqual({ sizeMm: [300, 200, 100], mmPerUnit: 1, readAsMm: true });
+  it("reads a measured size as the app does: units guessed from the size, Z up, unless chosen (spec §4)", () => {
+    expect(readFrame([0.3, 0.2, 0.1])).toEqual({ frame: { units: "m", up: "z" }, guessed: true, sizeMm: [300, 200, 100] });
+    expect(readFrame([12, 8, 4])).toEqual({ frame: { units: "in", up: "z" }, guessed: true, sizeMm: [304.8, 203.2, 101.6] });
+    expect(readFrame([300, 200, 100])).toEqual({ frame: { units: "mm", up: "z" }, guessed: true, sizeMm: [300, 200, 100] });
+    // Chosen: millimetres, Y up (the file's Y is the part's height).
+    expect(readFrame([300, 100, 200], { units: "mm", up: "y" })).toEqual({ frame: { units: "mm", up: "y" }, guessed: false, sizeMm: [300, 200, 100] });
   });
 });

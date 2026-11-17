@@ -390,7 +390,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   if (!design) return null;
   const { layout } = design;
   const schedule = screwSchedule(design.members, layout.interior, standards);
-  const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed, readAsMm: false }, null);
+  const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed }, null);
   const both = (kg: number): Row => ({ label: "", value: weight(kg, u), note: weight(kg, other(u)) });
   return {
     letter: type.label,
@@ -518,7 +518,7 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
       unmet: plan.unmet && renderMessage(plan.unmet, u),
     },
     crates,
-    problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,
+    problem: plan.problem ? `${plan.problem.title}. ${renderMessage(plan.problem.detail, u)}` : null,
     ...(input.sweep ? { quantity: quantitySection(plan, input.sweep, input.standards, u) } : {}),
     ...(input.stamp ? { stamp: { engineVersion: input.stamp.engineVersion, inputHash: input.stamp.inputHash }, createdAt: generatedAt } : {}),
   };

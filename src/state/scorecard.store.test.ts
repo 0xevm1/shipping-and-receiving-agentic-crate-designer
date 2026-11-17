@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getPart } from "@/domain/catalog";
 import { useDesigner } from "./store";
-import { catalogPart } from "@/lib/part";
 
 const initial = useDesigner.getState();
 const s = () => useDesigner.getState();
@@ -36,40 +34,5 @@ describe("ranking", () => {
     expect(after.labourUsd).toBeCloseTo(before.labourUsd * 2);
     expect(after.totalUsd).toBeGreaterThan(before.totalUsd);
     s().resetStandards();
-  });
-});
-
-describe("time to design", () => {
-  beforeEach(() => useDesigner.setState(initial, true));
-
-  it("runs from the clock start to the first export only", () => {
-    expect(s().designStartedAt).toBeNull();
-    s().markExported(5000); // before the clock starts: nothing to record
-    expect(s().designedInMs).toBeNull();
-    s().startDesignClock(1000);
-    s().startDesignClock(2000); // already running
-    expect(s().designStartedAt).toBe(1000);
-    s().markExported(73_000);
-    expect(s().designedInMs).toBe(72_000);
-    s().markExported(90_000); // later exports don't move it
-    expect(s().designedInMs).toBe(72_000);
-  });
-
-  it("is cleared by an edit, and the next export records the time to the edited design", () => {
-    s().startDesignClock(1000);
-    s().markExported(73_000);
-    expect(s().designedInMs).toBe(72_000);
-    s().setSettings({ quantity: 2 });
-    expect(s().designedInMs).toBeNull();
-    s().markExported(100_000);
-    expect(s().designedInMs).toBe(99_000);
-  });
-
-  it("restarts when a part is loaded", () => {
-    s().startDesignClock(1000);
-    s().markExported(2000);
-    s().setPart(catalogPart(getPart("PART-002")));
-    expect(s().designedInMs).toBeNull();
-    expect(s().designStartedAt).toBeGreaterThan(1000);
   });
 });

@@ -257,10 +257,16 @@ export function applySavedConfig(config: SavedConfig): boolean {
   return true;
 }
 
-/** How the server knows this part: a catalog id, or the loaded model (uploaded first). */
+/**
+ * How a loaded model is read (spec §4), as part of its identity: the same file read in other
+ * units or another up axis is another part to the server, with its own size and its own job.
+ */
+const frameKey = (part: Pick<LoadedPart, "modelUnits" | "upAxis">) => `${part.modelUnits}-${part.upAxis}`;
+
+/** How the server knows this part: a catalog id, or the loaded model in its frame (uploaded first). */
 export function partIdentity(part: LoadedPart): { key: string; catalogId?: string } {
   if (part.catalogDims && catalog.parts.some((p) => p.id === part.id)) return { key: `catalog:${part.id}`, catalogId: part.id };
-  return { key: `model:${part.modelUrl}` };
+  return { key: `model:${part.modelUrl}:${frameKey(part)}` };
 }
 
 async function sha256Hex(blob: Blob): Promise<string | null> {
@@ -283,7 +289,7 @@ async function partKeyOf(part: LoadedPart): Promise<{ key: string; blob?: Blob }
   try {
     const blob = await (await fetch(part.modelUrl)).blob();
     const hex = await sha256Hex(blob);
-    return { key: hex ? `model:sha256:${hex}` : identity.key, blob };
+    return { key: hex ? `model:sha256:${hex}:${frameKey(part)}` : identity.key, blob };
   } catch {
     return { key: identity.key };
   }
@@ -310,7 +316,7 @@ export const FLUSH_RETRY_MS = 2000;
 export function startJobSync(deps: JobSyncDeps = {}): () => void {
   const { api, EventSourceImpl, refreshDelayMs = REFRESH_DELAY_MS, flushRetryMs = FLUSH_RETRY_MS } = deps;
   const liveness = deps.liveness ?? createLiveness({ probe: () => probeHealth(api) });
-  /** Server part ids of uploaded models, by object URL, so a part is uploaded once per page. */
+  /** Server part ids of uploaded models, by object URL and frame (`partIdentity`), so a part is uploaded once per page. */
   const uploaded = new Map<string, string>();
   let generation = 0;
   let identityKey: string | null = null;
@@ -387,7 +393,8 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
     part: LoadedPart,
     known: Blob | undefined,
   ): Promise<{ ok: true; id: string } | { ok: false; kind: "offline" | "unavailable"; note?: string }> {
-    const already = uploaded.get(part.modelUrl);
+    const uploadKey = partIdentity(part).key;
+    const already = uploaded.get(uploadKey);
     if (already) return { ok: true, id: already };
     let blob = known;
     if (!blob) {
@@ -402,9 +409,12 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
     form.set("mass", String(part.mass_kg));
     form.set("name", part.name);
     if (part.material) form.set("material", part.material);
+    // Read on the server as it is read here (spec §4), so its size is the one designed from.
+    form.set("units", part.modelUnits);
+    form.set("up", part.upAxis);
     const r = await uploadPart(form, api);
     if (r.ok) {
-      uploaded.set(part.modelUrl, r.data.part.id);
+      uploaded.set(uploadKey, r.data.part.id);
       return { ok: true, id: r.data.part.id };
     }
     if (r.kind === "rejected") return { ok: false, kind: "unavailable", note: r.message };

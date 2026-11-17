@@ -4,7 +4,7 @@ import { designShipment, inputHash } from "@/engine/engine";
 import { DesignRequestSchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
 import type { ConfigurationResponse, JobResponse, JobSnapshot } from "@/lib/api/jobs";
-import { catalogPart } from "@/lib/part";
+import { catalogPart, framePart } from "@/lib/part";
 import { LIVENESS_MAX_DELAY_MS, LIVENESS_MIN_DELAY_MS } from "@/lib/liveness";
 import {
   configurationBody,
@@ -171,10 +171,12 @@ describe("configurationBody", () => {
 });
 
 describe("partIdentity", () => {
-  it("names a catalog part by its id and a loaded model by its URL", () => {
+  it("names a catalog part by its id and a loaded model by its URL and how it is read", () => {
     expect(partIdentity(catalogPart(getPart("PART-001")))).toEqual({ key: "catalog:PART-001", catalogId: "PART-001" });
     const custom = { ...catalogPart(getPart("PART-001")), catalogDims: undefined, id: "x", modelUrl: "blob:1" };
-    expect(partIdentity(custom)).toEqual({ key: "model:blob:1" });
+    expect(partIdentity(custom)).toEqual({ key: "model:blob:1:m-z" });
+    // The same file read in inches, Y up, is another part to the server (#105).
+    expect(partIdentity(framePart(custom, { units: "in", up: "y" }))).toEqual({ key: "model:blob:1:in-y" });
   });
 });
 

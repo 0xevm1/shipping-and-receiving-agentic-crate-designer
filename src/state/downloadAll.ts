@@ -5,6 +5,7 @@ import { downloadBytes } from "@/lib/download";
 import { type SavedConfig, useJobSync } from "./jobSync";
 import { DONE_NOTE_MS, ERROR_NOTE_MS, MIN_BUSY_MS, type ExportState } from "./exportRun";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 const ERROR_TEXT = "The bundle could not be made here. Try again, or use Export specs for the design on screen.";
 
@@ -78,7 +79,7 @@ export const useDownloadAll = create<{ state: ExportState; run: (configs?: Desig
       // The design as it is now, whatever is edited while the files are made.
       const current = currentRequest(s);
       const saved = useJobSync.getState().configs;
-      const units = s.units;
+      const { units } = useView.getState();
       const at = new Date().toISOString();
       try {
         const work = (async () => {
@@ -87,7 +88,7 @@ export const useDownloadAll = create<{ state: ExportState; run: (configs?: Desig
         })();
         const [{ name, zip }] = await Promise.all([work, reduce ? null : wait(MIN_BUSY_MS)]);
         downloadBytes(name, zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, "application/zip");
-        useDesigner.getState().markExported();
+        useView.getState().markExported();
         show({ kind: "done", name }, DONE_NOTE_MS);
       } catch (e) {
         console.error("Download all failed", e);

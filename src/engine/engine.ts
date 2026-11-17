@@ -2,6 +2,7 @@ import type { DesignPart } from "@/domain/schema";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { bomToCsv, shipmentToCsv } from "@/lib/csv";
 import { cutListFileName } from "@/lib/fileNames";
+import { metricText } from "@/lib/message";
 import { canonicalJson } from "./canonical";
 import type { CutListRequest, CutListResponse, DesignRequest, DesignResponse, DesignSummary, EngineStamp } from "./schemas";
 import { sha256Text } from "./sha256";
@@ -58,7 +59,8 @@ export function summarize(plan: ShipmentPlan): DesignSummary {
       costUsd: design?.cost.totalUsd ?? null,
     })),
     totals: { crates: totals.crates, parts: totals.parts, grossKg: totals.grossKg, tareKg: totals.tareKg, volumeM3: totals.volumeM3, costUsd: totals.costUsd },
-    problem: plan.problem ? { id: plan.problem.id, title: plan.problem.title, detail: plan.problem.detail } : null,
+    // The problem's detail carries its sizes as data (spec §7); the summary is mm and kg, like the API.
+    problem: plan.problem ? { id: plan.problem.id, title: plan.problem.title, detail: metricText(plan.problem.detail) } : null,
   };
 }
 

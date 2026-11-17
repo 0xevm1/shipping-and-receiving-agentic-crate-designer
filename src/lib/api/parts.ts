@@ -8,9 +8,12 @@
  *   material  optional text
  *   density   optional kg/m³
  *   name      optional; defaults to one made from the file name
+ *   units     optional: what the file's numbers are in, m | mm | in (spec §4); guessed from its size when absent
+ *   up        optional: which axis of the file points up, z | y; z when absent
  * GET /api/v1/parts/:id/model   a ~5 min presigned GET URL for the part's GLB (`?redirect=1`: 302 to it)
  */
 import { z } from "zod";
+import { MODEL_UNITS, UP_AXES } from "@/domain/partFrame";
 import { Vec3Schema } from "@/domain/schema";
 import { parseMass } from "../partFields";
 
@@ -46,6 +49,8 @@ export const CreatePartFieldsSchema = z.object({
     return value;
   }),
   name: optionalText("Name", 200),
+  units: field.pipe(z.enum(["", ...MODEL_UNITS], { error: "Units must be m, mm or in." })).transform((v) => v || undefined),
+  up: field.pipe(z.enum(["", ...UP_AXES], { error: "Up must be z or y." })).transform((v) => v || undefined),
 });
 export type CreatePartFields = z.infer<typeof CreatePartFieldsSchema>;
 
@@ -55,8 +60,11 @@ export const PartResponseSchema = z.object({
   material: z.string().nullable(),
   densityKgM3: z.number().nullable(),
   massKg: z.number().positive(),
-  /** Bounding box of the model in mm, [x, y, z], measured by the server. */
+  /** Bounding box of the model in mm, [x, y, z], Z up, measured by the server in the part's frame. */
   sizeMm: Vec3Schema,
+  /** How the model is read (spec §4): its units and up axis. Null for a part with no model, or one uploaded before they were recorded. */
+  units: z.enum(MODEL_UNITS).nullable().optional(),
+  up: z.enum(UP_AXES).nullable().optional(),
   modelSha256: z.string().nullable(),
   source: z.enum(["catalog", "upload"]),
   /** The catalog entry a `catalog` part was registered from; null for uploads. */
@@ -70,8 +78,13 @@ export const CreatePartResponseSchema = z.object({
   model: z.object({
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
     sizeBytes: z.number().int().positive(),
-    /** The file was more than 20 units across, so it was read as millimetres (spec §4). */
+    /** The file was read as millimetres (`units` is "mm"). Kept for older clients. */
     readAsMm: z.boolean(),
+    /** What the file's numbers were read as, and which axis was taken as up (spec §4). */
+    units: z.enum(MODEL_UNITS),
+    up: z.enum(UP_AXES),
+    /** True when `units` was guessed from the model's size (no `units` field was sent). */
+    unitsGuessed: z.boolean(),
     /** False when this org already had the same file: no second copy was stored. */
     created: z.boolean(),
   }),

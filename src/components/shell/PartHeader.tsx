@@ -1,19 +1,24 @@
 "use client";
 
-import { useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX } from "@/domain/partDetails";
 import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
-import { dims, lengthUnit, partWeight, weight } from "@/lib/units";
+import { canSetFrame } from "@/lib/part";
+import { UNITS_LABEL, UP_LABEL, type ModelUnits, type UpAxis } from "@/lib/partFrame";
+import { MODEL_UNITS, UP_AXES } from "@/domain/partFrame";
+import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
-import { useDesigner, type ChangeSource } from "@/state/store";
+import type { ChangeSource } from "@/state/designEvents";
+import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";
 import { LoadToast } from "./LoadToast";
 import styles from "./PartHeader.module.css";
 
 /** Edits from the header's own fields; their change note shows under the header. */
-const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
+const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass", "frame"];
 
 /**
  * Top left: app name, then what is shipping, read as a sentence:
@@ -29,8 +34,12 @@ const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
 export function PartHeader() {
   const part = useDesigner((s) => s.part);
   const measured = useDesigner((s) => s.measured);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const match = modelMatchesCatalog(part, measured);
+  // The file's units and axis are the user's to set on a file they loaded: always for an unknown one (even when its size
+  // leaves no crate to draw, which is when a wrong guess most needs fixing), and for a catalog-named one that doesn't match.
+  const showFrame = canSetFrame(part) && (!part.catalogDims || match === false);
+  const size = measured ?? (showFrame ? part.dimensions_mm : null);
 
   return (
     <header className={styles.header} data-testid="part-header">
@@ -53,9 +62,10 @@ export function PartHeader() {
           // Remount per loaded file so the fields start from that file's values.
           <PartDetailsFields key={part.modelUrl} />
         )}
-        {measured && (
+        {size && (
           <div>
-            {dims(measured, units)} {lengthUnit(units)} · <span className={match === false ? styles.warn : ""}>{modelNote(match, part.readAsMm)}</span>
+            {dims(size, units)} {lengthUnit(units)} · {showFrame && <FrameFields />}
+            <span className={match === false ? styles.warn : ""}>{modelNote(match, part.unitsGuessed)}</span>
           </div>
         )}
         <ChangeNote sources={PART_SOURCES} variant="header" />
@@ -66,10 +76,41 @@ export function PartHeader() {
   );
 }
 
+/**
+ * "file in [inches], [Y up] · ": what the loaded file's numbers are in and which axis points up
+ * (spec §4). Choosing re-measures the part and re-plans the crate straight away.
+ */
+function FrameFields() {
+  const units = useDesigner((s) => s.part.modelUnits);
+  const up = useDesigner((s) => s.part.upAxis);
+  const setPartFrame = useDesigner((s) => s.setPartFrame);
+  return (
+    <>
+      file in{" "}
+      <select className={styles.field} aria-label="File units" value={units} onChange={(e) => setPartFrame({ units: e.target.value as ModelUnits })}>
+        {MODEL_UNITS.map((u) => (
+          <option key={u} value={u}>
+            {UNITS_LABEL[u]}
+          </option>
+        ))}
+      </select>
+      ,{" "}
+      <select className={styles.field} aria-label="Up axis" value={up} onChange={(e) => setPartFrame({ up: e.target.value as UpAxis })}>
+        {UP_AXES.map((a) => (
+          <option key={a} value={a}>
+            {UP_LABEL[a]}
+          </option>
+        ))}
+      </select>{" "}
+      ·{" "}
+    </>
+  );
+}
+
 /** " · crate gross 20 kg", flashing when an edit moves it; nothing while there is no design. */
 function Gross() {
   const gross = useDesigner((s) => s.result.design?.grossKg);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const crates = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   if (gross === undefined) return null;
   // A split batch: the shipment, not one crate.
@@ -104,7 +145,7 @@ const STAND_IN_HINT = "Stand-in: no mass came with the file, so 10 kg is used. E
  */
 function PartDetailsFields() {
   const part = useDesigner((s) => s.part);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const setPartDetails = useDesigner((s) => s.setPartDetails);
   const [errors, setErrors] = useState<Record<FieldId, string | null>>({ name: null, material: null, mass: null });
   const onError = (f: FieldId) => (e: string | null) => setErrors((all) => (all[f] === e ? all : { ...all, [f]: e }));
@@ -170,6 +211,8 @@ function PartDetailsFields() {
           field="mass"
           label={`Mass of one part in ${units === "imperial" ? "pounds" : "kilograms"}`}
           value={formatMass(part.mass_kg, units)}
+          // Not being edited, it reads by the one mass rule like every other mass; while editing, the full value.
+          display={weightNumber(part.mass_kg, units, false)}
           placeholder="enter mass"
           inputMode="decimal"
           size={[3, 10]}
@@ -214,8 +257,10 @@ function PartDetailsFields() {
 interface InlineFieldProps {
   field: FieldId;
   label: string;
-  /** The stored value as text; shown whenever the field isn't being edited. */
+  /** The stored value as text; what the field holds while it is being edited. */
   value: string;
+  /** How the value reads when the field has no focus, if that differs (a rounded mass). */
+  display?: string;
   placeholder: string;
   /** Width in `ch` for browsers without `field-sizing: content`: [min, max]. */
   size: [number, number];
@@ -241,7 +286,14 @@ interface InlineFieldProps {
  */
 function InlineField(p: InlineFieldProps) {
   const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? p.value;
+  const [focused, setFocused] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  // Focus swaps a rounded display for the full value, which moves the caret: select it all, as a click into a field would expect.
+  useLayoutEffect(() => {
+    if (focused && p.display !== undefined && p.display !== p.value) input.current?.select();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
+  const text = draft ?? (focused ? p.value : (p.display ?? p.value));
 
   const finish = () => {
     setDraft(null);
@@ -267,6 +319,7 @@ function InlineField(p: InlineFieldProps) {
 
   return (
     <input
+      ref={input}
       type="text"
       className={className}
       value={text}
@@ -296,7 +349,9 @@ function InlineField(p: InlineFieldProps) {
         }
       }}
       // Blur keeps a valid edit and drops an invalid one, back to the last valid value.
+      onFocus={() => setFocused(true)}
       onBlur={() => {
+        setFocused(false);
         if (!save()) finish();
       }}
     />

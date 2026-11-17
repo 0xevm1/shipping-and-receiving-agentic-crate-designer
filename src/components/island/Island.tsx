@@ -1,9 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref, type UIEvent } from "react";
 import { allChecks, cautionCount } from "@/lib/checks";
-import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
+import type { ChangeSource } from "@/state/designEvents";
+import { useDesigner } from "@/state/store";
+import { useView, type Tab } from "@/state/viewStore";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import { useLoadFiles } from "../shell/useLoadFiles";
 import { PartViewSlot } from "../viewer/PartViewSlot";
@@ -11,6 +13,7 @@ import { ChecksTab } from "./ChecksTab";
 import { CutListTab } from "./CutListTab";
 import { LayoutsTab } from "./LayoutsTab";
 import { OverviewTab } from "./OverviewTab";
+import { ProblemCard } from "./ProblemCard";
 import { RulesTab } from "./RulesTab";
 import styles from "./Island.module.css";
 
@@ -50,21 +53,41 @@ export interface DrawerProps {
  */
 export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?: DrawerProps; footer?: ReactNode }) {
   const part = useDesigner((s) => s.part);
-  const tab = useDesigner((s) => s.tab);
+  const selected = useView((s) => s.tab);
   const design = useDesigner((s) => s.result.design);
   const problem = useDesigner((s) => s.result.problem);
   const measured = useDesigner((s) => s.measured);
-  const setTab = useDesigner((s) => s.setTab);
+  const setTab = useView((s) => s.setTab);
   const loadFiles = useLoadFiles();
   const fileInput = useRef<HTMLInputElement>(null);
   // One pass over the checks, shared by the tab badges, the Overview verdict and the Checks tab.
   const checks = useMemo(() => (design ? allChecks(design.checks, part, measured) : []), [design, part, measured]);
   const cautions = cautionCount(checks);
   const notes = checks.filter((c) => c.level === "info").length;
+  // No crate: the problem is the whole panel (Overview's slot) and the other tabs have nothing to show.
+  const tab: Tab = design ? selected : "overview";
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const headRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
+
+  // Scrolling the panel folds the part thumbnail away so the content gets its room; back at the top it returns.
+  // It folds only if the content overflows by more than the thumbnail's height: otherwise folding would
+  // leave nothing to scroll, the panel would jump back to the top, unfold, and flicker.
+  const onPanelScroll = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const scrolled = el.scrollTop > 2;
+    el.toggleAttribute("data-scrolled", scrolled);
+    const head = headRef.current;
+    if (!head) return;
+    if (!head.hasAttribute("data-folded")) {
+      const room = thumbRef.current?.offsetHeight ?? 0;
+      if (scrolled && el.scrollHeight - el.clientHeight > room + 8) head.setAttribute("data-folded", "");
+    } else if (!scrolled) head.removeAttribute("data-folded");
+  };
 
   // WAI-ARIA tabs with automatic activation: one tab stop, arrows move and select.
   const onTabKey = (e: KeyboardEvent) => {
+    if (!design) return;
     const i = TABS.findIndex((t) => t.id === tab);
     const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
     if (next === undefined) return;
@@ -81,7 +104,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
       ref={ref}
       {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open, "data-open": drawer.open || undefined })}
     >
-      <div className={styles.parthead}>
+      <div className={styles.parthead} ref={headRef} data-empty={!design || undefined}>
         <div className={styles.partbar}>
           <h2>{part.name}</h2>
           <button type="button" className={`pillbtn small ${styles.load}`} onClick={() => fileInput.current?.click()}>
@@ -106,8 +129,11 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             </button>
           )}
         </div>
-        <div role="group" aria-label="The part on its own. Drag to turn it, double-click to reset.">
-          <PartView />
+        {/* Folds to nothing when the panel is scrolled or the window is short (Island.module.css). */}
+        <div className={styles.thumb} ref={thumbRef} role="group" aria-label="The part on its own. Drag to turn it, double-click to reset.">
+          <div className={styles.thumbInner}>
+            <PartView />
+          </div>
         </div>
         {/* What a rules or layout edit moved, over the foot of the part view. */}
         <ChangeNote sources={ISLAND_SOURCES} variant="island" className={styles.note} />
@@ -123,6 +149,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
               id={tabId(t.id)}
               aria-selected={tab === t.id}
               aria-controls={PANEL_ID}
+              disabled={!design && t.id !== "overview"}
               tabIndex={tab === t.id ? 0 : -1}
               onClick={() => setTab(t.id)}
             >
@@ -149,20 +176,10 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         id={PANEL_ID}
         aria-labelledby={tabId(tab)}
         // Straight on the element, so scrolling doesn't re-render the island: CSS fades the top edge while scrolled.
-        onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 2)}
+        onScroll={onPanelScroll}
       >
         {!design ? (
-          <div role="alert">
-            <h2>{problem?.title ?? "No crate to show"}</h2>
-            <p className="lede">{problem?.detail}</p>
-            {(problem?.id === "settings" || problem?.id === "no-layout") && (
-              <div className="actions spaced">
-                <button type="button" className="btn" onClick={() => useDesigner.getState().resetRules()}>
-                  Reset rules
-                </button>
-              </div>
-            )}
-          </div>
+          problem && <ProblemCard problem={problem} onLoad={() => fileInput.current?.click()} />
         ) : tab === "overview" ? (
           <OverviewTab design={design} checks={checks} />
         ) : tab === "layouts" ? (
@@ -174,8 +191,9 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         ) : (
           <ChecksTab checks={checks} />
         )}
+        {/* The credit scrolls with the content: pinned, it cost a phone 69 px of a 505 px panel. */}
+        {footer && <div className={styles.foot}>{footer}</div>}
       </div>
-      {footer && <div className={styles.foot}>{footer}</div>}
     </aside>
   );
 }

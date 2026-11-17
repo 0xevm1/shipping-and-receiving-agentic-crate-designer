@@ -21,6 +21,16 @@ machined parts. Pick a part and a quantity. The app packs the parts as compactly
 builds a crate around them from plywood, lumber and wood screws, and shows the result in 3D. It
 also gives a cut list, weights and handling warnings.
 
+![The crate pulled apart in 3D: four brackets held by blocking, with the size, checks, cost, build time and freight class beside it](docs/screenshots/readme/exploded.png)
+
+| | |
+|---|---|
+| ![200 parts split across seven crates of two types, with a picker for each type](docs/screenshots/readme/shipment-200.png) **A batch too big for one crate** is split into crate types, each with its own size, cost and cut list. | ![Layout options as small top and side drawings, ranked by shipping volume](docs/screenshots/readme/layouts.png) **Layouts** are ranked by volume, crate cost or freight class, with the reason the winner won. |
+| ![A cut-list row pinned, with its two side panels lit in a ghosted crate](docs/screenshots/readme/cut-list-pinned.png) **Cut list**: pin a row to see where those boards go. | ![A crate with no gap between parts: the Overview says one caution and links to Checks](docs/screenshots/readme/caution-overview.png) **Cautions** show under the size and on the Export button, not only in the Checks tab. |
+| ![The printed build sheet: outside views and sections with dimensions in fractional inches](docs/screenshots/readme/print-build-sheet.png) **Build sheet** for the shop, from Export Packing Specs or Print / save PDF. | ![The shipping label: part number, quantity, gross weight, This side up, fork entry and centre of gravity](docs/screenshots/readme/print-label.png) **Shipping label** with fork entry and the centre of gravity. |
+
+<p align="center"><img alt="The app on a phone: the crate with its size labels, and the outside size and gross weight in a bar at the bottom" src="docs/screenshots/readme/mobile.png" width="320"></p>
+
 Built for Hadrian's Shipping Crate Designer exercise. The full behaviour (algorithms, rules,
 invariants) is in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 
@@ -139,6 +149,7 @@ bun run crate -- part.glb --mass 21.5 --total 40 --out ./out --offline   # no se
 | `--mass <kg>` | Mass of one part (required; never read from the mesh) |
 | `--total <n>` | Total parts to ship: adds the even split over crates |
 | `--material`, `--density`, `--name` | Part facts, as for an upload |
+| `--units <m\|mm\|in>`, `--up <z\|y>` | How the file is read, as the part header's choices (default: units guessed from its size, Z up) |
 | `--freight-rates <json or @file>` | LTL rates, `{"usdPerCwtByClass": {"70": 41.5}, "minimumUsd": 95}`; without them no freight dollars appear |
 | `--out <dir>` | Output directory (default `./crate-out`) |
 | `--offline` | Run the engine here; also writes the crate GLB, PDF, cut list, `design.json` and README |
@@ -240,8 +251,9 @@ tab at a time.
    remembered in this browser. Everything follows it: the Checks tab, the print spec and the PDF say "98.0 in" and "lb" in imperial, never "mm" or "kg". A mass shows one decimal under 100 and whole numbers from 100 ("47.4 lb", "297 lb"). **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
    sold as (1/2″, 5/8″, 3/4″) and cuts by fractional inches to the nearest 1/16″.
-7. **Download the crate as a 3D model**, inside the .zip from the **Export specs** pill: the assembled crate in metres, Z up, every board a named mesh
-   grouped by assembly, with the parts in their slots.
+7. **Download the crate as a 3D model**, inside the .zip from the **Export Packing Specs** pill: the assembled crate in metres, Z up, every board a named mesh
+   grouped by assembly, with the parts in their slots. The file's origin is the crate's centre of
+   gravity, so 3D tools turn it about its balance point.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
@@ -275,7 +287,7 @@ tab at a time.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
-11. **Export everything in one click** (#51): the green **Export specs** pill under the part lines
+11. **Export everything in one click** (#51): the green **Export Packing Specs** pill under the part lines
     downloads `crate-PART-001-x4.zip`, made in the browser (nothing is uploaded):
     - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
       split batch: `…-crate-A.glb`, `…-crate-B.glb`);
@@ -384,7 +396,7 @@ tab at a time.
 |---|---|
 | **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The app shows inches and pounds by default, with a metric toggle; units are converted only at the UI and export edges (`src/lib/units.ts`, `src/lib/lumber.ts`) |
 | **Axes** | Right-handed, **Z up**: the same frame as the source GLBs. X is the crate's long axis (the skids run along X) |
-| **GLB files** | Metres, Z up, not centred on their origin. The viewer scales by ×1000 and re-centres each part on its bounding box. A loaded file more than 20 units across is read as millimetres, and the UI says so |
+| **GLB files** | Metres and Z up by default, not centred on their origin (any distance from it). The viewer re-centres each part on its bounding box. A loaded file's units (metres, millimetres or inches) are guessed from its size and its up axis (Z or Y) starts as Z; both are choices in the part header, saved in the design file, and the header says what the file was read as. The API and the command line read a file the same way, with optional `units` and `up` fields (`--units`, `--up`) |
 | **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m; the few world-space users (camera framing, floor) convert with the helpers in `viewer/scene.ts` |
 | **Crate origin** | The interior min corner, on the top face of the floor |
 
@@ -398,7 +410,7 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
   nesting. Blocking, though, is shaped to the part's measured outline once the model has been
   analysed (#16).
 - **Units:** a domestic US shop floor, so the app opens in inches and pounds and names stock the
-  way a crew does. Metric is one toggle away. The shop standards are still entered in mm and kg.
+  way a crew does. Metric is one toggle away. The shop standards editor follows the units too (inches, lb, lb/ft³, $/ft³; stock by its nominal size, plywood as 1/2, 5/8, 3/4) and stores metric; minutes, rates, percentages and MPa stay as they are.
 - **Lumber sizes** are nominal US sizes, with actual dimensions in mm:
   - 1x4 cleats are 19 × 89
   - 4x4 skids are 89 × 89
@@ -515,6 +527,9 @@ docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, QUEUE
   `bun run crate` command line.
 - [`docs/LOAD_TEST.md`](docs/LOAD_TEST.md): the saves-and-live-events load test (`bun run load`),
   its measured limits, and when to move off LISTEN/NOTIFY.
+- [`docs/demo-cheat-sheet.md`](docs/demo-cheat-sheet.md): one page for the live demo: what the app does
+  with each unusual input or requirement, which rule decides it, and what is out of scope. Its test
+  files are built by `bun run fixtures` (see [`fixtures/scenarios/README.md`](fixtures/scenarios/README.md)).
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 

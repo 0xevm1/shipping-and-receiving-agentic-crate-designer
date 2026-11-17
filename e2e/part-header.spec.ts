@@ -138,8 +138,12 @@ test("imperial: mass is shown and entered in lb, stored in kg", async ({ page })
 
   const mass = massField(page);
   await expect(mass).toHaveAccessibleName("Mass of one part in pounds");
-  // The 10 kg stand-in, as pounds to two decimals.
+  // The 10 kg stand-in (22.05 lb) reads by the one mass rule, "22", until the field is edited: then it holds the full value.
+  await expect(mass).toHaveValue("22");
+  await mass.focus();
   await expect(mass).toHaveValue((10 * 2.20462).toFixed(2));
+  await mass.blur();
+  await expect(mass).toHaveValue("22");
   await expect(header(page)).toContainText(/lb each stand-in · crate gross [\d,]+ lb/);
 
   await mass.fill("30");
@@ -155,6 +159,8 @@ test("imperial: mass is shown and entered in lb, stored in kg", async ({ page })
 
   // Stored in kg: 30.1 lb is 13.653 kg.
   await setUnits(page, "metric");
+  await expect(massField(page)).toHaveValue("13.7");
+  await massField(page).focus();
   await expect(massField(page)).toHaveValue((30.1 / 2.20462).toFixed(3));
   await expect(massField(page)).toHaveAccessibleName("Mass of one part in kilograms");
 });

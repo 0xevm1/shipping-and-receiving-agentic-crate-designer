@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "coordinate_system": "right-handed; Z up",
+  "model_units": "meters",
+  "parts": [
+    {
+      "id": "SCN-900",
+      "name": "Part whose catalog entry has no mass",
+      "model": "missing-field.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "dimensions_mm": [
+        300,
+        200,
+        200
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-901",
+      "name": "Heavy block 1500 kg",
+      "model": "heavy-1500kg.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 1500,
+      "dimensions_mm": [
+        900,
+        700,
+        500
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    }
+  ]
+}

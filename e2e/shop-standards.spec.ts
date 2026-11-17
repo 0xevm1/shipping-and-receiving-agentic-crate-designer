@@ -104,3 +104,29 @@ test("a lower light-panel threshold switches the plywood; bad input is flagged a
   await expect(standards(page).getByRole("alert")).toBeVisible();
   await expect(standards(page).getByRole("alert")).not.toContainText(/stock\./);
 });
+
+test("in imperial the editor shows and accepts inches and lb, stores metric, and 0 reads as no limit", async ({ page }) => {
+  test.slow();
+  await setUnits(page, "imperial");
+  await openStandards(page);
+  const box = standards(page);
+  // Stock reads by its names; plywood as sold.
+  await expect(box.getByLabel("Cleat thickness")).toHaveValue("0.75");
+  await expect(box.getByLabel("Cleat width")).toHaveValue("3.5");
+  await expect(box.getByLabel("Floor plywood")).toHaveValue("0.75");
+  await expect(box).toContainText("The section is 1x4.");
+  await expect(box.getByLabel("Light panels up to")).toHaveValue("330.69");
+  // The empty box says what it means, and the stored value is still 0.
+  const maxParts = box.getByLabel("Max parts per crate");
+  await expect(maxParts).toHaveValue("");
+  await expect(maxParts).toHaveAttribute("placeholder", "no limit");
+  // A weight typed in lb is kept, and reads back the same after a reload.
+  await box.getByLabel("Max gross per crate").fill("1500");
+  await expect(box.getByText("Customised")).toBeVisible();
+  await expect(box).toContainText(/Default [\d,.]+ lb\./);
+  await reloadApp(page);
+  await openStandards(page);
+  await expect(standards(page).getByLabel("Max gross per crate")).toHaveValue("1500");
+  await setUnits(page, "metric");
+  await expect(standards(page).getByLabel("Max gross per crate")).toHaveValue(/^680\.38/);
+});

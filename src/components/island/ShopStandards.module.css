@@ -102,3 +102,9 @@
     align-items: center;
   }
 }
+
+/* An empty box that means "no limit" or "none": the placeholder has to pass AA like other muted text. */
+.field input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}

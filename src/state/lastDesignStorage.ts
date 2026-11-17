@@ -3,7 +3,7 @@ import { parseDesignFile, type DesignFile } from "@/domain/designFile";
 import { readEnvelope } from "@/domain/envelope";
 import { readShareHash } from "@/domain/shareLink";
 import { browserStorage, readJson, writeJson, type KeyValueStore } from "./persist";
-import type { Tab } from "./store";
+import type { Tab } from "./viewStore";
 
 /**
  * The last-opened crate (spec §9): the design on screen, saved so a reload or a reopened

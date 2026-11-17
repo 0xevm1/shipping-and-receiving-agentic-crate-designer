@@ -6,7 +6,8 @@
  * (`readOrgStandards`), the shipped defaults when not given.
  */
 import { createHash } from "node:crypto";
-import { GLB_MESSAGES, glbSizeUnits, idFromFile, nameFromFile, unitsToMm } from "@/domain/glb";
+import { GLB_MESSAGES, glbSizeUnits, idFromFile, nameFromFile } from "@/domain/glb";
+import { readFrame } from "@/domain/partFrame";
 import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
 import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
 import { type DesignsApiResponse, DesignsFieldsSchema } from "@/lib/api/designs";
@@ -24,6 +25,8 @@ export async function calculateDesigns(
     material: form.get("material"),
     density: form.get("density"),
     name: form.get("name"),
+    units: form.get("units"),
+    up: form.get("up"),
     total: form.get("total"),
     freightRates: form.get("freightRates"),
   });
@@ -34,9 +37,9 @@ export async function calculateDesigns(
   const { bytes, fileName } = await checkedGlb(form.get("file"));
   const sizeUnits = glbSizeUnits(bytes);
   if (!sizeUnits) throw new ApiFailure(422, "invalid_glb", GLB_MESSAGES.noGeometry, "file");
-  const { sizeMm, readAsMm } = unitsToMm(sizeUnits);
+  const { mass, material, name, total, freightRates, units, up } = fields.data;
+  const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units, up });
   const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const { mass, material, name, total, freightRates } = fields.data;
 
   const req: SweepRequest = {
     part: { id: idFromFile(fileName), name: name ?? nameFromFile(fileName), mass_kg: mass, dimensions_mm: sizeMm, material },
@@ -46,5 +49,5 @@ export async function calculateDesigns(
     total: total ?? null,
   };
   const report = await pool.run("designs", req);
-  return { ...report, model: { sha256, sizeBytes: bytes.byteLength, readAsMm } };
+  return { ...report, model: { sha256, sizeBytes: bytes.byteLength, readAsMm: frame.units === "mm", units: frame.units, up: frame.up, unitsGuessed: guessed } };
 }

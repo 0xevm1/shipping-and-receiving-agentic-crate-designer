@@ -55,7 +55,7 @@ export function ExportPill() {
         onClick={run}
       >
         {busy ? <span className={styles.spin} aria-hidden="true" /> : <DownloadIcon />}
-        <span>{busy ? "Exporting…" : "Export specs"}</span>
+        <span>{busy ? "Exporting…" : "Export Packing Specs"}</span>
         {caution && <span className={styles.dot} aria-hidden="true" data-testid="export-caution-dot" />}
       </button>
       <button

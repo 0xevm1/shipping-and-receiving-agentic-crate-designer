@@ -101,14 +101,14 @@ describe("part size extremes", () => {
     expect(r.design).toBeNull();
     expect(r.layouts).toEqual([]);
     expect(r.problem?.id).toBe("part-size");
-    expect(r.problem!.detail).toMatch(/\w/);
+    expect(metric(r.problem!.detail)).toMatch(/\w/);
   });
 
   it("rejects a part longer than the limit, hinting at units", () => {
     const r = run(part([MAX_PART_MM + 1, 100, 100]));
     expect(r.design).toBeNull();
     expect(r.problem?.id).toBe("part-too-large");
-    expect(r.problem!.detail).toMatch(/units/);
+    expect(metric(r.problem!.detail)).toMatch(/units/);
     expect(run(part([MAX_PART_MM, 100, 100]), { quantity: 1 }).problem).toBeNull();
   });
 

@@ -20,7 +20,8 @@ import { lastProfileMs } from "@/lib/partProfile";
 import type { Units } from "@/lib/units";
 import { useSweep } from "@/state/bestQuantity";
 import { anim, autoplay, isIdle } from "@/state/motion";
-import { currentMode, useDesigner, type Tab, type ViewState } from "@/state/store";
+import { useDesigner } from "@/state/store";
+import { currentMode, useView, type Tab, type ViewState } from "@/state/viewStore";
 import { probeStats } from "./probeStats";
 import { domainToWorld, sceneOrigin } from "./scene";
 
@@ -58,6 +59,12 @@ export interface CrateSnapshot {
   /** Parts in the crate on screen. */
   crateParts: number | null;
   partId: string;
+  /**
+   * How the part the design on screen was made from is read (`designedFrom`): the file's units and
+   * up axis, the size the plan uses (`sizeMm`, from the file's own measurements) and the size the viewer measured on the model it draws, turned to Z up
+   * (`drawnMm`; null before the model has rendered). Z is the part's height in the crate.
+   */
+  partFrame: { units: string; up: string; sizeMm: Vec3; drawnMm: Vec3 | null };
   massAssumed: boolean;
   /** The crate's outside box projected onto the canvas, CSS px; null with no design or camera. */
   crateScreen: { left: number; top: number; right: number; bottom: number } | null;
@@ -93,6 +100,8 @@ export interface CrateSnapshot {
     endsShown: [boolean, boolean];
     /** The near-end (+X) arrow's screen box in CSS px, from the last frame; null before one. */
     arrowBox: { left: number; top: number; right: number; bottom: number } | null;
+    /** Every fork arrow drawn in the last frame, as screen boxes in CSS px. */
+    arrowBoxes: { left: number; top: number; right: number; bottom: number }[];
   } | null;
 }
 
@@ -134,6 +143,7 @@ function recommendedNow(): number | null {
 
 function snapshot(): CrateSnapshot {
   const s = useDesigner.getState();
+  const v = useView.getState();
   const three = getThree?.();
   const camera = three?.camera;
   const target = (three?.controls as OrbitControlsImpl | null)?.target;
@@ -150,28 +160,34 @@ function snapshot(): CrateSnapshot {
   const designed = s.designedFrom;
   const { handling } = probeStats;
   return {
-    mode: currentMode(s.view),
-    view: { ...s.view },
+    mode: currentMode(v.view),
+    view: { ...v.view },
     cameraDistance,
     cameraAngles,
     cameraTarget: target ? [target.x, target.y, target.z] : null,
-    pin: s.pin,
-    hoverKey: s.hover?.key ?? null,
-    hoverAssembly: s.hover?.assembly ?? null,
+    pin: v.pin,
+    hoverKey: v.hover?.key ?? null,
+    hoverAssembly: v.hover?.assembly ?? null,
     anim: { ...anim },
     autoplay: autoplay.on,
     idle: isIdle(),
     outside: external ? [external[0], external[1], external[2]] : null,
     problem: s.result.problem?.id ?? null,
-    tab: s.tab,
-    units: s.units,
-    panelsHidden: s.panelsHidden,
-    drawerOpen: s.drawerOpen,
+    tab: v.tab,
+    units: v.units,
+    panelsHidden: v.panelsHidden,
+    drawerOpen: v.drawerOpen,
     quantity: designed.settings.quantity,
     crateTypes: s.plan.crates.map(({ label, count, quantity }) => ({ label, count, quantity })),
     crateIndex: s.crateIndex,
     crateParts: s.result.design?.layout.slots.length ?? null,
     partId: designed.part.id,
+    partFrame: {
+      units: designed.part.modelUnits,
+      up: designed.part.upAxis,
+      sizeMm: [...designed.part.dimensions_mm],
+      drawnMm: s.measured ? [...s.measured] : null,
+    },
     massAssumed: designed.part.massAssumed,
     crateScreen: projectCrate(three),
     frames,
@@ -189,6 +205,7 @@ function snapshot(): CrateSnapshot {
           arrowsShown: handling.arrowsShown,
           endsShown: [handling.endsShown[0], handling.endsShown[1]],
           arrowBox: handling.arrowBox ? { ...handling.arrowBox } : null,
+          arrowBoxes: handling.arrowBoxes.map((b) => ({ ...b })),
         }
       : null,
   };

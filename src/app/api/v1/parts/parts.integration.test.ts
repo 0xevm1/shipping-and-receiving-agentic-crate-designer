@@ -83,7 +83,9 @@ describe("POST /api/v1/parts", () => {
     const a = CreatePartResponseSchema.parse(await body(first));
     expect(a.part).toMatchObject({ name: "Machined steel bracket", material: "4140 steel", densityKgM3: 7850, massKg: 21.5, source: "upload" });
     expect(a.model.created).toBe(true);
-    expect(a.model.readAsMm).toBe(false);
+    // Read as the app reads a new file: units guessed from its size (metres), Z up (spec §4).
+    expect(a.model).toMatchObject({ readAsMm: false, units: "m", up: "z", unitsGuessed: true });
+    expect(a.part).toMatchObject({ units: "m", up: "z" });
     expect(first.headers.get("location")).toBe(`/api/v1/parts/${a.part.id}`);
     // The size comes from the file, as the browser measures it (PART-001 is about 300 × 200 × 150 mm).
     a.part.sizeMm.forEach((v) => expect(v).toBeGreaterThan(50));
@@ -202,5 +204,25 @@ describe("GET /api/v1/parts/:id/model", () => {
       source: "upload",
     });
     await expectError(await modelUrl(theirs.id), 404, "There is no model for that part.");
+  });
+});
+
+describe("POST /api/v1/parts: the file's units and up axis (#105)", () => {
+  it("reads the file in the units and up axis sent, and keeps them on the part", async () => {
+    const guessed = CreatePartResponseSchema.parse(await body(await POST(upload({ mass: "1" }, { bytes: sampleBytes, name: SAMPLE }))));
+    const res = await POST(upload({ mass: "1", units: "mm", up: "y" }, { bytes: sampleBytes, name: SAMPLE }));
+    expect(res.status).toBe(201);
+    const framed = CreatePartResponseSchema.parse(await body(res));
+    expect(framed.model).toMatchObject({ readAsMm: true, units: "mm", up: "y", unitsGuessed: false, sha256: guessed.model.sha256 });
+    // Millimetres, not metres; Y up turns the file's Y into the part's height.
+    const [x, y, z] = guessed.part.sizeMm;
+    [x / 1000, z / 1000, y / 1000].forEach((v, i) => expect(framed.part.sizeMm[i]).toBeCloseTo(v, 2));
+    const [row] = await t.sql`select model_units, up_axis from part where id = ${framed.part.id}`;
+    expect(row).toEqual({ model_units: "mm", up_axis: "y" });
+  });
+
+  it("refuses units or an axis it doesn't know", async () => {
+    await expectError(await POST(upload({ mass: "1", units: "ft" }, { bytes: sampleBytes, name: SAMPLE })), 400, "Units must be m, mm or in.", "units");
+    await expectError(await POST(upload({ mass: "1", up: "x" }, { bytes: sampleBytes, name: SAMPLE })), 400, "Up must be z or y.", "up");
   });
 });

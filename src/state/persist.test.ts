@@ -159,3 +159,31 @@ describe("stored data from before persist.ts still loads", () => {
     expect(last?.design.part.id).toBe("PART-001");
   });
 });
+
+/** The design inside the last-design entry is versioned on its own (#105 moved it to format 3). */
+describe("last designs saved before and after the part's units and up axis (#105)", () => {
+  const read = (name: string) => loadLastDesign(memoryStorageWith(LAST_DESIGN_STORAGE_KEY, fixture(name)));
+
+  it("a format 2 design (no units, no axis) opens as Z up with its units left to find", () => {
+    const last = read("last-design.v1.design-v2.json");
+    expect(last).toMatchObject({ tab: "layouts", ranking: "volume" });
+    expect(last?.design.schemaVersion).toBe(3);
+    expect(last?.design.part).toMatchObject({ id: "bracket-inches", up: "z" });
+    expect(last?.design.part.units).toBeUndefined();
+  });
+
+  it("a format 3 design keeps its units and axis", () => {
+    const last = read("last-design.v1.design-v3.json");
+    expect(last?.design.part).toMatchObject({ id: "bracket-y-up", units: "m", up: "y" });
+  });
+
+  it("saving what was loaded writes the current format, and it loads again the same", () => {
+    const store = memoryStorage();
+    for (const name of ["last-design.v1.design-v2.json", "last-design.v1.design-v3.json"]) {
+      const last = read(name)!;
+      expect(saveLastDesign(last, store)).toBe(true);
+      expect(JSON.parse(store.data.get(LAST_DESIGN_STORAGE_KEY)!).design.schemaVersion).toBe(3);
+      expect(loadLastDesign(store)).toEqual(last);
+    }
+  });
+});

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { crate, island, openApp, panel, pollCrate, screenBox, shot } from "./helpers";
 
 /**
- * Idle auto-play: hovering never stops it; a deliberate action (click, drag, wheel, key) does. Hover-only
+ * Idle auto-play: hovering never stops it, nor does anything done in the island or header; a click, drag or wheel on the 3D view does. Hover-only
  * movement over empty canvas, the boards and the island keeps the page idle; one click stops it, and it
  * resumes after `IDLE_MS` (5 s). Motion is turned back on, because auto-play never runs with reduced motion.
  */
@@ -56,8 +56,8 @@ test("hover-only movement keeps the crate turning, a click stops it, and it resu
   // Still turning: the camera kept moving through all of it (headless frames are slow and dt is capped).
   await pollCrate(page, (s) => Math.abs(s.cameraAngles!.theta - theta0)).toBeGreaterThan(0.1);
 
-  // One click on empty canvas stops it at once.
-  await page.mouse.click(80, 120);
+  // One click on empty canvas (clear of the header block, which is not the 3D view) stops it at once.
+  await page.mouse.click(120, 620);
   const clicked = Date.now();
   const after = await crate(page);
   expect(after.autoplay).toBe(false);
@@ -72,7 +72,7 @@ test("hover-only movement keeps the crate turning, a click stops it, and it resu
   expect(waited).toBeLessThan(15_000);
 });
 
-test("a drag, the wheel and a key each stop it", async ({ page }) => {
+test("a drag and the wheel on the canvas each stop it", async ({ page }) => {
   test.setTimeout(90_000);
   await openApp(page);
   const c = await crateCentre(page);
@@ -86,7 +86,6 @@ test("a drag, the wheel and a key each stop it", async ({ page }) => {
     await page.mouse.move(c.x, c.y);
     await page.mouse.wheel(0, 100);
   });
-  await stops("key", () => page.keyboard.press("Shift"));
   await stops("drag", async () => {
     await page.mouse.move(c.x - 100, c.y);
     await page.mouse.down();
@@ -95,11 +94,22 @@ test("a drag, the wheel and a key each stop it", async ({ page }) => {
   });
 });
 
-test("a click on the header stops it (the title does nothing else)", async ({ page }) => {
+test("clicks in the header and the island, and a key outside the view, leave it turning; the mode button stops it", async ({ page }) => {
+  test.setTimeout(60_000);
   await openApp(page);
   await pollCrate(page, (s) => s.autoplay, { timeout: 15_000 }).toBe(true);
+
   await page.getByRole("banner").getByRole("heading", { name: "Crate Designer" }).click();
-  await pollCrate(page, (s) => s.autoplay).toBe(false);
+  await page.getByRole("tab", { name: "Rules" }).click();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await page.keyboard.press("Shift");
+  const s = await crate(page);
+  expect(s.autoplay, "still turning after header, tab and key input").toBe(true);
+  expect(s.idle).toBe(true);
+
+  // A control that sets the view counts as input on the view.
+  await page.getByRole("button", { name: /view\. Click for/ }).click();
+  await pollCrate(page, (c) => c.autoplay).toBe(false);
 });
 
 test("the hover tooltip follows the turning crate", async ({ page }) => {

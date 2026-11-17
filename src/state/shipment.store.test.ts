@@ -24,20 +24,16 @@ describe("shipment plan in the store", () => {
     expect(s().result.design!.layout.slots).toHaveLength(s().plan.crates[0].quantity);
   });
 
-  it("switches the shown crate type, and re-frames without recording a change", () => {
+  it("switches the shown crate type", () => {
     s().setSettings({ quantity: 200 });
     expect(s().plan.crates).toHaveLength(2);
-    const fit = s().fit.nonce;
-    const change = s().lastChange;
-    s().setPin(s().result.design!.bom[0].key);
     s().setCrateIndex(1);
     expect(s().crateIndex).toBe(1);
     expect(s().result).toBe(s().plan.crates[1].result);
-    expect(s().pin).toBeNull();
-    expect(s().fit.nonce).toBe(fit + 1);
-    expect(s().lastChange).toBe(change);
     // Out-of-range picks are ignored.
     s().setCrateIndex(5);
+    s().setCrateIndex(-1);
+    s().setCrateIndex(0.5);
     expect(s().crateIndex).toBe(1);
   });
 

@@ -75,14 +75,46 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Exported GLB** (`src/lib/exportGlb.ts`) follows the input GLB convention, not three.js's:
   metres, **Z up**. The only conversion from the domain is × 0.001 (mm → m); there is no Y-up
   rotation in the file.
-- **Loaded GLBs** are read as metres, Z up, like the samples. A file more than **20 units**
-  across is read as millimetres instead (`MM_FILE_THRESHOLD` in `src/lib/loadPart.ts`), and the
-  UI says so ("file read as millimetres", plus an info check).
+- **Loaded GLBs (#105)** are read in a **frame**: the units their numbers are in (**metres**,
+  **millimetres** or **inches**) and the axis that points **up** (**Z**, like the samples and the
+  crate, or **Y**, as glTF itself and most CAD exports have it). The frame starts as a guess
+  (`guessUnits` in `src/domain/partFrame.ts`: Z up; metres up to 3 units across, inches up to 20,
+  millimetres beyond) and the user can set both choices for any file they loaded, in the part
+  header (§8.5); the three catalog parts' own files are known and offer no choice. The header's
+  note, the Checks tab's model check and the design file all say what the file was read as
+  ("file in inches, Y up", "units guessed from the size"). The guess is only a start: sizes
+  overlap (a 60 in part looks like a 60 mm one), which is why the choice is one click away.
+  - **Applied once, before measuring.** `src/domain/partFrame.ts` (pure numbers) and
+    `src/lib/partFrame.ts` (the three.js turn, re-exporting the numbers) are the only place units
+    and the axis are applied: `framedSizeMm` for the size (mm per unit, and a Y-up model's two other
+    sides swapped, rounded to 0.01 mm so float noise doesn't reach the crate) and `framedScene`
+    for the model (a Y-up model is held in a group turned a quarter about X, Y to Z, a proper
+    rotation; the shared loader cache is never touched). The viewer (`PartInstances`), the part
+    turntable (`PartView`), the part outline (§7.5b), the exported GLB and the zip's GLB all take
+    that framed scene and `mmPerUnit`, so the size, the outline, the views, the export and the
+    print agree. The domain only sees mm, Z up.
+  - **The same on the server (#46).** `POST /api/v1/parts`, `POST /api/v1/designs` and
+    `bun run crate` take optional `units` and `up` (`--units`, `--up`) and read the file with
+    `readFrame` (the same guess when they are absent). An uploaded part keeps its frame
+    (`part.model_units`, `part.up_axis`), and a server-built crate GLB reads the model in it,
+    through the engine's `glbMaker` (`framedScene`, `mmPerUnit`), as the browser's export does. The
+    app uploads a loaded file with the frame it is read in, and the same file in another frame
+    is another part, with its own job. The engine's request only carries the part's size, in mm,
+    Z up, so the frame reaches the design and `inputHash` through `dimensions_mm`.
+  - **Any distance from the origin.** Files are not centred. The viewer and the export both
+    re-centre each part on the centre of its bounding box (in model units, before scaling), and
+    the outline is taken from the box's own corner, so a mesh tens of metres from the origin
+    loads centred and measures the same as a centred one (fixture `bracket-off-origin.glb`).
+    The outline's grid sampling treats a cell centre within 0.01 cells of a triangle's edge as
+    on it, because drawings on round numbers have edges exactly there and a file's float32
+    rounding puts them a hair either side.
 - **Units in the UI (#15):** **imperial (in / lb) is the default**, for a domestic US shop floor;
   metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
   changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
-  and the shop standards stay in mm and kg; the mass field shows and accepts the selected unit
-  and stores kg; the CSV follows the selected units (§7.6). **One rule for a mass shown to
+  and the shop standards stay in mm and kg (the Shop standards editor shows and accepts the selected
+  units, §6.4); the header's mass field (uncatalogued parts) accepts the selected unit and stores
+  kg, reads by the mass rule below when it has no focus ("22 lb") and holds the full value while
+  it is being edited ("22.05"), so editing never loses what was typed (`weightNumber`); the CSV follows the selected units (§7.6). **One rule for a mass shown to
   people (#62):** in the displayed unit, one decimal under 100 ("47.4 lb", "8 kg", a trailing
   .0 dropped) and whole numbers from 100 ("297 lb"). It lives once in `weight` / `partWeight`
   (`src/lib/units.ts`) and serves the header, Overview, Checks, print and PDF. The CSV and the
@@ -169,13 +201,35 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 - **The domain layer is pure and synchronous.** It has no React, DOM or I/O, and it is fully
   unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the
   store re-runs it on every input change, through the engine (§5.1), in a Web Worker.
-- **One store, two kinds of state.**
-  - `src/state/store.ts` (zustand) holds everything the UI renders from: the part, settings,
-    the shop standards (§6.4), the design result, units, tab, view targets, hover / pin, tooltip, panel
-    visibility, the free-area insets, and a `fit` request counter for the camera. Any change to
-    the part, settings, standards or layout key goes through `recompute()`, which also drops a pin whose
-    cut-list line no longer exists. The edit is stored at once; its plan lands when the engine's
-    worker answers (a few ms), with `designedFrom`, the inputs and stamp it was made from (§5.1).
+- **Two stores, one rule: the design, and how it is shown.**
+  - `src/state/store.ts` (`useDesigner`, zustand) is the design: the part (and its measured size and
+    profile), settings, layout pick, the shop standards (§6.4), the ranking, extra catalog parts, and
+    what is derived from them: the shipment plan, the crate type on screen and its result. It is
+    the only store that persistence (last design, design file, share links), exports and the print
+    document read. Any change to the part, settings, standards, ranking or layout key goes through
+    `recompute()`, which re-plans once and then announces the edit. The edit is stored at once; its
+    plan lands when the engine's worker answers (a few ms), with `designedFrom`, the inputs and stamp
+    it was made from (§5.1). The store also holds `autoRecommend`, a newly loaded part waiting to
+    open at the quantity sweep's recommendation (§7.16), since applying it changes the design.
+  - `src/state/viewStore.ts` (`useView`, zustand) is everything about how it is shown right now:
+    the tab, the 3D view toggles and camera preset, hover, pin, tooltip, panel visibility, the
+    narrow-screen drawer, the free-area insets, the `fit` request counter, the load message, the
+    `restoring` flag, the change note (`lastChange`), the time-to-design clock and the display units
+    (saved in this browser, not with a design). Nothing in it is an input to the design.
+  - **The coupling** is one mechanism, `src/state/designEvents.ts`: after each design action sets
+    its own state it emits a `DesignEdit` (`opened`, `edited`, `refined` or `crate-switched`, with
+    the shown result before and after), and `viewStore.ts` listens and applies the reaction in a
+    single `set`: clear the hover, drop a pin or hover whose cut-list line the new design no longer
+    has, ask the camera to re-frame (new part or design, a different layout, another crate type),
+    write the change note for the input behind the edit, and stop or restart the time-to-design
+    clock. The design store never writes view state and the view store never writes the design.
+    The emit follows the design's own `set` synchronously, when the design lands: at once where the
+    engine runs in the page (tests, a failed worker), so the view has reacted by the time the action
+    returns, and a few ms later with the worker. When several edits land with one design, an
+    `opened` among them wins (it resets the view anyway). `whenDesigned(fn)` runs `fn` once no
+    design is on its way; the startup uses it to clear `restoring` only after a reopened crate's
+    design has landed. The view store imports the design store's types only
+    through `designEvents.ts`; components that need both read each with its own selector.
   - `src/state/motion.ts` holds values that change every frame (eased explode distance, lid and
     front-wall opacity, idle auto-play bookkeeping, last-input time). They live outside React on
     purpose, so animation never re-renders the UI.
@@ -321,7 +375,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | File | Responsibility |
 |---|---|
 | `src/domain/schema.ts` | zod schemas and types: `Part`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
-| `src/domain/glb.ts` | GLB checks shared by the browser and the upload API (#46): `glbProblem` (magic, version, chunks, Draco / Meshopt), `looksLikeTextGltf`, the user-facing `GLB_MESSAGES`, `MAX_GLB_BYTES` (50 MB, API only), `glbSizeUnits` (bounding box from accessor min / max, no three.js), `unitsToMm` (the 20-unit mm rule), `idFromFile` / `nameFromFile` |
+| `src/domain/glb.ts` | GLB checks shared by the browser and the upload API (#46): `glbProblem` (magic, version, chunks, Draco / Meshopt), `looksLikeTextGltf`, the user-facing `GLB_MESSAGES`, `MAX_GLB_BYTES` (50 MB, API only), `glbSizeUnits` (bounding box from accessor min / max, no three.js), `idFromFile` / `nameFromFile` |
+| `src/domain/partFrame.ts` | The file frame's numbers (#105, §4), shared by the browser, the API and the CLI: `MODEL_UNITS`, `UP_AXES`, `MM_PER_UNIT`, `guessUnits`, `guessedFrame`, `framedSizeMm`, `readFrame`, `fitFrame` |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart`. Data only: the `/parts/…` model URL is built in `lib/part.ts` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotationMatrix()` (integer, as three.js's XYZ Euler) and `rotatedSize()` |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
@@ -363,7 +418,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions, the one mass rule) |
 | `src/lib/message.ts` | `renderMessage`: check messages (typed quantities) rendered for the selected units (#62, §7.7) |
-| `src/lib/part.ts` | `LoadedPart` (a part with its model URL and load facts), `catalogPart()` and `modelUrl()` |
+| `src/lib/part.ts` | `LoadedPart` (a part with its model URL, units, up axis and load facts), `catalogPart()`, `framePart()` and `canSetFrame()` |
+| `src/lib/partFrame.ts` | The file frame (#105, §4): `framedScene` (the three.js turn to Z up), the UI's words (`UNITS_LABEL`, `UP_LABEL`, `frameWords`), and the domain's numbers re-exported |
 | `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
 | `src/lib/lumber.ts` | US shop names (#15): the nominal-lumber names from `domain/lumber.ts` (`sectionText`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
@@ -381,7 +437,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url (the share link's encoding), plus the units (`printHash`, `readPrintHash`) |
 | `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles. The route sits outside the `(designer)` group, so it loads `globals.css` and `print.css` only |
 | `src/app/globals.css` | Global CSS, loaded on every route: the design tokens (custom properties, including the `--z-*` stacking scale), the `@layer` order, the base element rules, and the one list of breakpoints |
-| `src/app/ui.css` | The shared UI primitives in `@layer ui`: `glass`, `card`, `seg`, `pillbtn`, `btn`, `linkbtn`, `iconbtn`, `switch`, `lede`, `subhead`, `line`, `actions`, `mono`, `muted`, `nw`, `nominal`, `tight`, `sr-only`, `eyebrow-label`, `hint-mouse` / `hint-touch`. Used as plain string class names; everything else is a module (§13) |
+| `src/app/ui.css` | The shared UI primitives in `@layer ui`: `glass`, `card`, `seg`, `pillbtn`, `btn`, `linkbtn`, `iconbtn`, `switch`, `lede`, `subhead`, `line`, `actions`, `mono`, `muted`, `nw`, `nominal`, `tight`, `sr-only`, `eyebrow-label`, `hint-mouse` / `hint-touch` (the touch wording shows wherever there is no hover or the pointer is coarse, the mouse wording otherwise, so one always shows; the cut list row toggle is 44 px under the same drawer-or-coarse rule as the other controls, #62). Used as plain string class names; everything else is a module (§13) |
 | `src/app/(designer)/layout.tsx`, `designer.css`, `page.tsx` | The route group (no URL segment) for `/`: it loads `ui.css` and `designer.css` (the dark, full-window, never-scrolling page) |
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
 | `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate). The engine's `buildBundleZip` wires in the makers |
@@ -412,20 +468,22 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/server/auth.ts`, `src/server/db/apiKeys.ts` | `authenticate(request)` → `OrgContext` (API key, or the UI's same-origin marker); hashed API keys |
 | `src/cli/` | `bun run crate`: argument parsing, the API call, the in-process `--offline` run |
 | `src/state/fakeEngineWorker.ts` | A stand-in worker for tests (answers on `flush()`) |
-| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
 | `src/state/bestQuantity.ts` | `startSweeps`: the page's one quantity sweeper (§7.16) for the part and rules on screen, in the engine worker (a new part at once, a rule change 250 ms after the last), handing each current result to the store's `applyRecommendation` (recommended on load); `useSweep`, its small store; `useBestQuantity` for the hint |
 | `src/components/island/BestQuantity.tsx` | The best-quantity hint and its **Use** action on the Rules tab (§7.16) |
-| `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange`; designs through the engine client, `designedFrom` (§5.1) |
+| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
+| `src/state/store.ts` | `useDesigner`: the design store (part, settings, layout pick, standards, ranking, plan and result) and its actions; `autoRecommend` / `onRecommendation` / `applyRecommendation` (§7.16); designs through the engine client, `designedFrom` (§5.1); emits a `DesignEdit` when each design lands; `whenDesigned` |
+| `src/state/viewStore.ts` | `useView`: the view store (tab, 3D view, hover / pin, tooltip, panels, drawer, insets, `fit`, load message, `restoring`, `lastChange`, the time-to-design clock, units); reacts to `DesignEdit`; `currentMode()` |
+| `src/state/designEvents.ts` | `DesignEdit`, `onDesignEdit` / `emitDesignEdit` and `ChangeSource`: how the design store tells the view store what changed |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
-| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
+| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; (§9) |
 | `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
 | `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
-| `src/state/motion.ts` | Per-frame animation values and idle timing constants |
+| `src/state/motion.ts` | Per-frame animation values, idle timing constants and `reducedMotion()` |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
 | `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
 | `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
-| `src/components/shell/LoadToast.tsx` | The load message as a glass toast under the part header: a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
+| `src/components/shell/LoadToast.tsx` | The load message as a glass toast by the part header (beside it on desktop, under it on narrow screens): a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (`usePopover`), Hide panels |
@@ -435,7 +493,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/state/startup.ts` | `createStartup` / `startSavedState`: the run-once startup (saved units, standards, library, then share link, last crate or default) that survives StrictMode's second effect run |
 | `src/components/shell/SavedStateLoader.tsx` | Runs `startSavedState()` once, then keeps saving (`watchLastDesign`) and follows `hashchange` share links |
 | `src/state/lastDesignLoader.ts` | `restoreLastDesign()` (with a load ticket) and `watchLastDesign()`: reopens the last-opened crate, and saves it (debounced) plus a custom GLB's bytes (§9) |
-| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope (read by `domain/envelope.ts`), validation, precedence, debounced saver (§9). Imports no GLB code; `lastDesignOf` (the store state as an entry) is in `lastDesignLoader.ts` |
+| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope (read by `domain/envelope.ts`), validation, precedence, debounced saver (§9). Imports no GLB code; `lastDesignOf` (the design store's state plus the tab as an entry) is in `lastDesignLoader.ts` |
 | `src/state/glbCache.ts` | The last custom GLB's bytes in IndexedDB, one record, 50 MB cap (§9) |
 | `src/state/shareLink.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
 | `src/components/island/*.tsx` | The island and its five tabs. `Island.tsx` owns the WAI-ARIA tabs (§8.3a) and computes `allChecks` once for the tab badges, the Overview verdict and the Checks tab |
@@ -457,7 +515,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
-| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…", why there is no crate); shared by the shell and the viewer |
+| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…"), or with `problem` the no-crate message on a dark pill with a next-step line; shared by the shell and the viewer |
+| `src/components/island/ProblemCard.tsx` | The island's panel when there is no crate (§7.9): the problem once, in the selected units, with the action for its kind |
 | `src/components/shell/Tooltip.tsx` | The hover tooltip over the 3D view |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
 | `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), keeping a panned crate in the free area (`keepCrateInFreeArea`) |
@@ -465,7 +524,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
 | `src/components/viewer/DimensionLines.tsx` | Draws the size lines; positions the DOM labels each frame; shows the part's lines once the inside is open; drives the photon pulse |
 | `src/components/viewer/sizeLines.ts` | Pure size-line geometry (`buildLines`, label anchors, the dimension hidden per preset, label text) |
-| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement, and the occlusion test that hides an arrow behind the crate |
+| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement (`layoutArrows`: gap, size and whether it is drawn, to keep it in the free area, #62), and the occlusion test that hides an arrow behind the crate |
 | `src/components/viewer/probeStats.ts` | What the scene reports to the e2e hook (`probeStats`); writes are gated by `NEXT_PUBLIC_E2E` |
 | `src/components/viewer/dimensionPulse.ts` | Pure photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
 | `src/components/viewer/PhotonLayer.ts` | One `Points` of photons per line group, updated per frame (#65) |
@@ -474,9 +533,10 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
 | `src/components/viewer/scene.ts` | Units and shared constants (`MM_TO_M`, `FOV_DEG`, click slop, far plane), colours, explode offsets, opacity rules, highlight rules, part material |
 | `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity stencils on the outside faces (only when a CoG check is a caution, #87), and the fork-entry arrows at both ends, which fade out when the crate hides them (#8, §8.4) |
-| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with the store's types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
+| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with both stores' types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
 | `playwright.config.ts`, `e2e/*.spec.ts`, `e2e/helpers/` | End-to-end UI tests and their shared helpers (`bun run e2e`, §10); screenshots go to the git-ignored `e2e/screenshots/` |
 | `scripts/docs-shots.mjs` | `bun run e2e:docs-shots`: copies chosen e2e screenshots into `docs/screenshots/` on request |
+| `scripts/fixtures/units-axis.mjs` | Writes `fixtures/units-axis/*.glb` (#105): PART-001 in metres, millimetres, inches, Y up and 50 m from the origin, and the shaft in inches; deterministic (`bun scripts/fixtures/units-axis.mjs`) |
 | `.prettierrc`, `.prettierignore`, `knip.json` | Formatting (`bun run format`, checked in CI) and the unused-code report (`bun run knip`) |
 
 ## 6. Data model
@@ -553,11 +613,14 @@ measured dimensions and possibly no material.
 The UI wraps it in a **`LoadedPart`** (`src/lib/part.ts`), which adds:
 
 - `modelUrl` (a `/parts/…` path or a `blob:` URL)
-- `mmPerUnit` (1000 for metre files, 1 for files read as millimetres)
+- `modelUnits` (`"m" | "mm" | "in"`), `upAxis` (`"z" | "y"`) and `unitsGuessed` (the units are the
+  size-based guess, not a choice): how the file is read (§4). `mmPerUnit` (1000, 1 or 25.4) is
+  derived from `modelUnits`, and `rawSize` is the model's size as the file has it (file units,
+  file axes). `framePart` sets all of them together and recomputes `dimensions_mm` from `rawSize`,
+  so a change of frame needs no new load
 - `suggested_quantities`
 - `catalogDims`, the catalog size used for the model check (absent for unknown files)
 - `massAssumed`, true when a 10 kg stand-in is in use (`STAND_IN_MASS_KG`)
-- `readAsMm`
 
 Mass is never inferred from the mesh.
 
@@ -576,6 +639,14 @@ Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
 - `material`: tidied the same way, at most 60 characters (`PART_MATERIAL_MAX`). Blank clears it,
   and the UI shows "material not given". Free text; `MATERIAL_SUGGESTIONS` are only offered.
 - `mass_kg`: a finite number above 0. Any accepted mass, even 10, clears `massAssumed`.
+
+**The file's frame.** The store action `setPartFrame({ units?, up? })` (#105) re-reads the loaded
+file in another frame: `framePart` gives the new size, the measured outline is dropped (it was
+taken the old way; the viewer measures it again), the layout pick resets like any input that
+changes the size, the camera re-frames, and the change is recorded in `lastChange` with source
+`frame`. The person has looked at how the file is read, so any choice clears `unitsGuessed`.
+Choosing what is already in use does nothing. It is for files the user loaded (`canSetFrame`:
+a `blob:` URL); the catalog's bundled files return "Catalog parts can't be edited."
 
 Invalid input changes nothing and returns a message. Catalog parts are read-only. A mass change
 recomputes the design and resets the layout pick, like any other input. A name or material
@@ -620,7 +691,7 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
     same layout, and the number of shaped blocks
 - **`LayoutExplanation`** (from `explainLayout`, §7.8).
 - **`DesignResult`:** `{ layouts, design, problem }`. `problem` (`DesignProblem`:
-  `{ id, title, detail }`) is set exactly when `design` is null (§7.9).
+  `{ id, title, detail }`, with `detail` a unit-free `Message` like a check's, §7.16) is set exactly when `design` is null (§7.9).
 
 ### 6.4 Shop standards (`ShopStandardsSchema`, #19)
 
@@ -741,6 +812,23 @@ A changed field is tinted and says its default. A **Customised** tag shows when 
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
 standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUtilization`).
 
+**Units in the editor (#62).** The stored standards, the standards JSON file and the validation are
+always metric; the editor converts at the edge with `editUnit(dimension, units)` in
+`src/lib/units.ts`. Each field in `standardsFields.ts` has a `dim`: `length` (mm to inches, 2
+decimals, step 1/4″), `lumber` (a stock side: nominal actual inches, so 3.5 in is exactly the 89
+mm a 2x4 is; 3 decimals otherwise), `plywood` (the sheet as sold: 12 / 15 / 19 mm read and type as
+1/2, 5/8, 3/4; the 16 and 18 mm sheets read as 5/8 and 3/4), `mass` (lb, 2 decimals, step 1),
+`density` (lb/ft³) and `cost` ($/ft³). Stock fields name the section ("The section is 1x4.") and
+the plywood fields say what it is sold as. The "Default …" note and the hint sentences follow the
+units. A value typed in inches is stored as mm to 3 decimals and shows as the same inches
+after a save and a reload (`units.test.ts`). **Kept as they are**, in both unit systems, because
+the app has no imperial convention for them: minutes, $/h, $/100 screws, %, ×, degrees, counts,
+in³/lb (already imperial), and MPa (the app shows no stress anywhere else, and the shipped
+values are not the round psi figures the hint quotes, so a psi column would only add a second set
+of numbers to check). A field where 0 is stored for "none" (`zero` in the table: max parts per
+crate, stacked on the lid) shows an empty box with the placeholder "no limit" / "none"; clearing
+the box stores 0.
+
 ### 6.5 Design file (`DesignFileSchema`, #28)
 
 A saved design is a JSON file, downloaded from the Cut list tab with **Download design
@@ -753,7 +841,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 ```jsonc
 {
   "kind": "crate-design",          // tells it apart from a parts.json catalog
-  "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
+  "schemaVersion": 3,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
   "engine": { "version": "0.1.0+engine.3", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
@@ -764,7 +852,10 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     "material": "4140 steel",      // optional
     "mass_kg": 21.5,
     "massAssumed": true,           // optional; only written when the 10 kg stand-in is in use
-    "dimensions_mm": [360, 220, 258],
+    "dimensions_mm": [360, 220, 258],   // Z up, mm, read with the units and axis below
+    "units": "m",                  // "m" | "mm" | "in": what the GLB's numbers are in
+    "up": "z",                     // "z" | "y": which GLB axis points up
+    "unitsGuessed": true,          // optional; only written while the units are the size-based guess
     "model": "PART-001-machined-steel-bracket.glb",
     "outline": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 3.5,   // optional: the measured
                  "grids": [[63, 74], …], "data": "eJz…" }                 // part profile, packed
@@ -789,6 +880,12 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 - **Source.** A part is `catalog` when the bundled catalog has the same id and model, even if
   its GLB was loaded from disk. Anything else, including entries from a dropped `parts.json`, is
   `custom`.
+- **Units and axis (#105).** A custom part's GLB is measured with the saved `units` and `up`
+  before anything else (`loadDesign`), so a reloaded design, a share link, a library entry and the
+  last-opened crate (whose GLB bytes come from IndexedDB, §9) all measure as they did. The saved
+  size is still compared with the measured one (0.5 mm), and the message says when the file
+  differs. `up` is optional and means Z up when absent. `units` is absent only in a custom part
+  migrated from format 2 (below).
 - **Validation.** `parseDesignFile` never throws. It checks, in order: the text is JSON; `kind`
   is `"crate-design"`; `schemaVersion` is a whole number from 1 up to the app's version; then the
   zod schema. `settings` must already pass `CrateSettingsSchema` (out-of-range values are
@@ -811,7 +908,13 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   a time before validation (`readEnvelope`, `src/domain/envelope.ts`). Format 2 added `ranking`
   and `part.outline`. The 1 → 2 migration sets `ranking: "volume"` (every older file was
   ranked that way) and marks the summary `shapeUnknown`, because an older file's summary may
-  include shaped blocks that the file has no outline for.
+  include shaped blocks that the file has no outline for. Format 3 added `part.units`, `part.up`
+  and `part.unitsGuessed` (#105). The 2 → 3 migration sets `up: "z"` (every older file was read
+  Z up) and, for a catalog part, `units: "m"`. A custom part's units were a size-based guess that
+  older files did not record, so they stay absent, and `loadDesign` takes the units (Z up, then
+  metres, millimetres, inches) that give the saved `dimensions_mm` again (`fitFrame`), falling
+  back to the guess when none does. A format 1 file takes both steps. The last-opened crate and
+  the design library keep their own format 1 and migrate the design inside them on read.
 - **Restoring** (`loadDesign` in `loadPart.ts`, then `restoreDesign`):
   - A `catalog` part is rebuilt from the bundled catalog entry and its `/public/parts` model.
   - A `custom` part (or a catalog id this app doesn't have) needs its GLB in the same pick or
@@ -1286,14 +1389,20 @@ the first `problem` that applies:
 | id | When | What the user is told |
 |---|---|---|
 | `part-size` | A dimension is 0, negative, NaN or infinite (e.g. a flat model) | Every side must be longer than zero |
-| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | The size, and to check the file's units |
-| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero |
+| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | "This part is too large to crate": the size and the limit, in metres or feet (`longMm`), and to check the file's units |
+| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero, in the part header |
 | `settings` | Settings fail `CrateSettingsSchema` (only if the store boundary was bypassed) | Which field, and to reset the rules |
 | `standards` | Custom standards fail `ShopStandardsSchema` (only if `setStandards` was bypassed; the shipped defaults are not re-parsed) | Which field, and to reset the shop standards |
 | `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or turning off upright |
 
-The island shows the title and detail in place of the tabs' content (with Reset rules for
-`settings` and `no-layout`), and the canvas shows the title.
+The problem is shown once (#62). The island's panel is a `ProblemCard`: the title, the detail in the
+selected units and the way out for the kind of problem: **Load another part** for `part-size`,
+`part-too-large` and `part-mass` (gold for the first two; the mass is entered in the header),
+**Reset rules** for `settings` and `no-layout`, **Reset shop standards** for `standards`. The
+tabs other than Overview are disabled, since they have nothing to show, so the message is not
+repeated on all five. The canvas shows the title on its own dark pill at 22 px with one line
+saying what to do next (`StageMessage` with `problem`); on a phone the summary chip says "No crate"
+and opens the drawer on the card.
 
 Very small parts (down to sub-millimetre) get the minimum 178 mm interior (§7.2). Very large ones
 up to 20 m get a normal design, with the `oversize` and `door` checks as they apply. The 3D view
@@ -1368,8 +1477,8 @@ takes about 150 ms. The tests fail above 200 ms and 500 ms.
 
 **In the store:** `plan`, `crateIndex` (the crate type on screen) and `result`, which is always
 `plan.crates[crateIndex].result`, so the 3D view, Layouts, Cut list and Checks follow the
-selected type unchanged. `setCrateIndex(i)` switches type (clears the pin and hover, re-frames,
-records no change note). An edit keeps the type while the new plan has it, else shows A.
+selected type unchanged. `setCrateIndex(i)` switches type (the view clears the pin and hover and
+re-frames; no change note). An edit keeps the type while the new plan has it, else shows A.
 
 ### 7.11 Export document (`PrintableDesign`, #26)
 
@@ -1594,7 +1703,7 @@ header repeats when it runs onto another page, and every page has "page i of n".
 `import()` on the first click, never with the page, through the engine's `buildBundleZip` (§5.1).
 `fflate` (`zipSync`) zips.
 
-**The pill** (§8.2): idle "Export specs"; busy "Exporting…" with a spinner, held for at least
+**The pill** (§8.2): idle "Export Packing Specs"; busy "Exporting…" with a spinner, held for at least
 `MIN_BUSY_MS` (1.5 s) even when the work is faster, so the action registers; with
 `prefers-reduced-motion`, no spin and no hold. On success the file downloads,
 `markExported()` stops the design clock (§7.12) and a `role="status"` note says "Downloaded
@@ -1881,8 +1990,12 @@ the layout, the ranking, the shop standards or the part's name, material or mass
 is **opened** keeps its own settings: the last design restored at startup (`restoreDesign`), a
 saved design from the library, an imported design file and a share link (`loadDesign`) never set
 `autoRecommend`. The preloaded default part (PART-001 × 4, when there is nothing to restore) is
-not a load either and keeps its default quantity. The e2e hook reports it (`autoRecommend`:
-`waiting`, `measuring` or null, and `recommended`, §10).
+not a load either and keeps its default quantity. **A change of the file's units or up axis**
+(§4, `setPartFrame`) on a part whose rules are still the load's or the recommendation's (no edit
+by the person since it was loaded: `onRecommendation`) starts it again, even after it settled: a
+quantity swept for a misread size means nothing, and the corrected file then opens at the crate the
+same part in the right units gets. After an edit, the person's rules are kept. The e2e hook
+reports it (`autoRecommend`: `waiting`, `measuring` or null, and `recommended`, §10).
 
 ### 7.17 Artifacts and the multi-configuration bundle (`src/engine/artifacts.ts`, #46)
 
@@ -2041,7 +2154,7 @@ The canvas fills the window. Four regions float above it:
 | Region | Contents |
 |---|---|
 | Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a), then the green **Export** pill (#51, §7.13), left-aligned with the lines, with its status note beside it. Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
-| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
+| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px), which folds away (0.25 s, none with reduced motion) once the panel is scrolled, and altogether in windows under 760 px tall, so a laptop gets the room for content (#62); the tabs; the selected tab's panel, which is the only thing that scrolls. The island keeps its fixed height |
 | Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads).  |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
 
@@ -2076,9 +2189,11 @@ The canvas fills the window. Four regions float above it:
     focus to its close button, Tab and Shift+Tab cycle inside it, and closing it (close button,
     scrim, or Escape) returns focus to the hamburger. Escape closes the drawer before it clears
     a pin. It slides in over 0.28 s, and just appears with `prefers-reduced-motion`. Inside: part
-    name, Load a part and close, the part view (130 px; 84 px on screens under 560 px tall),
-    the tabs, the panel (the only thing that scrolls), then the credit at half size (hidden on
-    short screens). `drawerOpen` in the store is separate from `panelsHidden`.
+    name, Load a part and close, the part view (130 px, folded away once the panel is scrolled
+    and on screens under 760 px tall; it only folds if the content overflows by more than its
+    height, so folding can't leave nothing to scroll), the tabs, then the panel (the only thing
+    that scrolls) with the credit at half size as its last item, scrolling with the content
+    instead of pinned (#62). With the thumbnail folded, a rules or layout change note floats under the tabs. `drawerOpen` in the view store is separate from `panelsHidden`.
   - **Foot:** the **summary chip** (always the width of the foot, outside size and gross
     weight in amber, with thousands separators, the size shortening before it can touch the weight; for a split batch, "Crate A outside" with the shown type's size and
     "Gross, 7 crates" with the shipment's gross; tapping it opens the drawer on Overview; it flashes with the Overview on an
@@ -2109,7 +2224,7 @@ The canvas fills the window. Four regions float above it:
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
-| **Rules** | Quantity (− / input / + and the part's suggested quantities), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part opens at the recommendation; dimmed while a rule change waits to be swept), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Rules** | Quantity (a − / input / + capsule, the 18 px glyphs being the intended look, and under it the part's suggested quantities as their own labelled group, #62; the one matching the stepper is outlined in gold, not filled), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part opens at the recommendation; dimmed while a rule change waits to be swept), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
@@ -2137,19 +2252,25 @@ open question for the user (see #20).
   foot. Its surface is near-opaque (0.97 / 0.98), as is the drawer's, so the crate's colours don't
   show through the blur. It closes on Escape (focus returns to View), a press outside, or focus
   leaving it; `aria-controls` is set only while it exists.
-- **Load messages (`LoadToast`):** one glass toast under the part header on every layout, never
-  loose text over the floor. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
+- **Load messages (`LoadToast`):** one glass toast by the part header on every layout, never
+  loose text over the floor. On a desktop it sits beside the header, level with the app name
+  (left at the header's right edge + 18 px, width up to 440 px and never under the island), so
+  it can't brush the crate's top-left corner, which it did when it hung under the header (#62);
+  under 981 px it hangs under the header as wide as it. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
   region and goes after 9 s; an error is `role="alert"`, has a gold edge and stays until
   dismissed or the next load. Both have a dismiss button.
-- **Export specs:** only the header's Export pill (§7.13) exports; the View popover has no export
+- **Export Packing Specs:** only the header's Export pill (§7.13) exports; the View popover has no export
   button (#77 added one, removed in #62). The zip's `crate-{part id}-x{quantity}.glb` (#27) is built from the
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
   it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
   - **Units and frame:** metres, Z up, like the input GLBs (§4).
-  - **Origin (#81):** the `Crate` node is offset so the assembled crate's bounding-box centre is
-    the file's origin (`crateCentreMm`). Viewers orbit about the origin, so the crate turns about
-    its own middle; before, the origin was the inside corner of the floor and the crate swung
-    around an empty point. The parts move with it, because they are children of `Crate`.
+  - **Origin (#81):** the file's origin is the loaded crate's centre of gravity
+    (`cratePivotMm`, the `handling.cogMm` of §7.14: boards and parts). The offset is taken off
+    every board and part, so `Crate` and the assembly groups carry no transform of their own,
+    like the `world` node of the sample part files. A 3D tool that orbits about the scene origin,
+    and one that pivots on the origin of the selected node (`Crate`, `Base`, …), both turn the
+    crate about its balance point. Before, `Crate` carried the offset, so selecting it and
+    rotating swung the crate around the inside corner of the floor.
   - **Node tree:** `Crate` → `Base`, `Side walls`, `End walls`, `Lid`, `Inside the crate`
     (empty assemblies are left out), each holding one box mesh per board named
     `{label} {n}`, numbered per label across the crate (e.g. `Side rail 3`); then, with parts,
@@ -2202,18 +2323,20 @@ open question for the user (see #20).
 - **Opacity:** `setOpacity` (`scene.ts`) moves a material between the opaque and transparent
   passes and recompiles it, because three bakes an `OPAQUE` define into opaque shaders.
 - **Idle auto-play:**
-  - After **5 s** (6 s until #64, shortened at the user's request) with no deliberate input
-    anywhere, the camera turns at
-    **0.18 rad/s** (slowed from the handoff's 0.3 at the user's request) and steps closed → exploded → open → exploded → …, half a turn per mode. The
-    next mode starts 0.12 turn early so it lands as the half-turn completes.
-  - **Deliberate input** (#64) stops it at once and restarts the idle timer: `pointerdown` (a
-    click or tap), a drag (`pointermove` with a button held, so orbiting the crate or grabbing
-    the part view), `wheel`, `keydown` and `touchstart`, listened for on `window` in
-    `DesignerShell` and classified by `isDeliberateInput` (`src/state/motion.ts`).
-  - **Hovering is not input:** a `pointermove` with no button held, over empty canvas, a board
-    or the island (cut-list rows, weight bars), neither stops nor delays it. It still holds
-    while a row is pinned (pinning is a click), during an orbit drag, or while the narrow-screen
-    drawer is open (#42), and resumes from the mode on screen. It runs on first load.
+  - After **5 s** with no input on the 3D view, the camera turns at **0.18 rad/s** and steps
+    closed → exploded → open → exploded → …, half a turn per mode. The next mode starts 0.12 turn
+    early so it lands as the half-turn completes.
+  - **Input on the 3D view** stops it at once and restarts the idle timer. It is a deliberate
+    event (`isDeliberateInput`: `pointerdown`, a drag, `wheel`, `keydown`, `touchstart`) whose
+    target is a canvas (the crate, or the part's turntable in the island) or a control marked
+    `data-view-input` because it sets the view itself: the mode button, the View popover and the
+    pinned-row bar (`isViewInput`, `src/state/motion.ts`; listened for on `window` in
+    `DesignerShell`). Without that mark auto-play would undo what such a control just did.
+  - **The island and the header are not input:** clicking tabs, editing rules or shop standards,
+    typing in a field, scrolling a panel or pressing a key outside the view leave the crate
+    turning. So does **hovering** anywhere (a `pointermove` with no button held). It still holds
+    while a row is pinned, during an orbit drag, or while the narrow-screen drawer is open, and
+    resumes from the mode on screen. It runs on first load.
   - **Hover while turning:** r3f only picks on pointer events, so while auto-play turns the
     crate under a still pointer `Director` re-picks about 10 times a second
     (`events.update()`, only while the pointer is over the canvas). The board tooltip and
@@ -2233,6 +2356,21 @@ open question for the user (see #20).
     width size label, which sits on the same centre line (`arrowGapMm`: the label's 110 mm + 5 %
     of the longest side, plus 36 % of that side for the fixed-size pill, plus 90 mm), so the
     arrow and "25.7 in" never overlap, closed or exploded, on a desktop or a phone (#62).
+  - **Kept in the free area (#62):** framing fits the arrows' tails only once exploded
+    (`ARROWS_FIT_FROM`), because fitting them when closed zoomed the crate out too far; so on first
+    load the near arrow sat under the island's glass and the far one half off the screen. Instead
+    `layoutArrows` (`forkArrows.ts`) places each arrow for the camera of the frame, in three steps. (1) At the
+    +X end, which has the width label, the tip stands at the smallest gap (down to 120 mm) at which
+    the arrow's outline is clear of the label's 88 × 28 px pill on screen (`clearGapMm`) instead of the
+    worst-case `arrowGapMm`, so it usually lies in the free area between the crate and the island; the −X end,
+    which has no label but is mostly hidden behind the crate from the usual angle, keeps the full gap. (2)
+    If its outline still leaves the free area (the insets, but out to 12 px from the window's left edge,
+    since the arrow is low and flat) it is drawn smaller, down to 50 % of its size (`fitArrowScale`:
+    the tip stays put, the proportions stay). (3) If even that doesn't fit, it is not drawn; it needs 60 %
+    to come back, so an arrow at the edge doesn't flicker as the camera turns. The size eases to its target.
+    Nothing is drawn under the island, the header, the bottom bars or off screen, in the closed, open and
+    exploded views (exploded, the framing already fits the tails, so all are full size); the crate is framed
+    exactly as before. The e2e hook reports the drawn arrows' screen boxes (`cog.arrowBoxes`).
   - **Hidden behind the crate:** an end's arrows drop out (fading, over about 0.3 s) when the
     crate hides most of them from the current camera, so the far arrow never shows as a sliver
     poking out. `forkArrows.ts` samples a 3 × 3 grid over each arrow and tests the segment from the
@@ -2349,7 +2487,9 @@ open question for the user (see #20).
   layout instead. A custom part's GLB goes in the same pick or drop; without it, the message
   says which file to add.
 - **A known GLB** (file name equals a catalog `model`) takes that entry's mass, material and
-  quantities, and gets the model check.
+  quantities, and gets the model check. It is read in the frame that gives the catalog size
+  (`fitFrame`); only if none does is it guessed, and then the header offers the choice because the
+  model check fails.
 - **An unknown GLB** gets a name from its file name, no material, and a 10 kg stand-in mass. The
   part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
   steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
@@ -2368,8 +2508,17 @@ open question for the user (see #20).
 ```
 gearbox-cover · Gearbox cover
 6061-T6 aluminum · 14.71 kg each · crate gross 20 kg
-435 × 445 × 254 mm · size measured from the file
+435 × 445 × 254 mm · file in metres, Z up · units guessed from the size
 ```
+
+- **File units and up axis (#105).** The size line has two native `<select>`s, styled as the
+  underlined fields ("File units": metres, millimetres, inches; "Up axis": Z up, Y up), for a file
+  the user loaded (an unknown GLB, or a catalog-named one whose size does not match). Choosing
+  one calls `setPartFrame` (§6.2a): the size, the crate, the 3D view and the Checks tab update at
+  once, and the change note says what moved ("Crate shrank: …"). The note after them is "units
+  guessed from the size" while the guess stands, "size measured from the file" once a choice
+  was made, and the catalog model check for a catalog file. A Y-up file read Z up lies on its
+  side in the part view and the crate, which is how the person sees it needs the axis.
 
 - **Fields are text with an underline:** no border, background or radius; they inherit the line's
   mono font. A 1 px `--hair` underline, brighter on hover; on focus a 1.5 px sky underline and
@@ -2401,7 +2550,7 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
   new values in domain units: gross, tare and payload (kg, compared to the gram), outside size,
   wall plywood, floor, skid section and count, and the layout grid. It returns `[]` when either side
   has no design.
-- **`lastChange`** in the store: `{ id, at, source, changes, note? }`, set when an input changes the design:
+- **`lastChange`** in the view store: `{ id, at, source, changes, note? }`, written when a `DesignEdit` with a source arrives (the design store knows nothing of it), after an input changes the design:
   `setPartDetails` (source `name`, `material` or `mass`), `setSettings` / `resetRules` (`rules`)
   and `setLayoutKey` (`layout`), and the recommendation applied to a newly loaded part
   (`recommended`, §7.16, whose `note` "Set to the recommended 34 per crate" is shown instead of the
@@ -2444,14 +2593,15 @@ the browser doesn't read or write it yet, so the two can differ ([API.md](API.md
 
 All four saved items (standards, units, library, last design) go through `src/state/persist.ts`
 with one contract: a save never throws and returns `true` only if the value is stored, so a
-missing store (server, blocked) is a failed save. Standards and units save inside their
-`useDesigner` actions, the library inside `useLibrary`, and the last design from a debounced
-subscriber in `lastDesignLoader.ts`. The library shows the "browser refused to store it"
+missing store (server, blocked) is a failed save. Standards save inside their
+`useDesigner` actions, units inside `useView`'s, the library inside `useLibrary`, and the last design
+from a debounced subscriber in `lastDesignLoader.ts` (it watches the design store, and the view
+store for the tab it saves beside the crate). The library shows the "browser refused to store it"
 message when a save, rename, delete (`remove(...).saveError`) or undo fails to store.
 
 **Display units** (#15) are saved under `crate-designer.units.v1` (`src/state/unitsStorage.ts`)
 as `"imperial"` or `"metric"` on every `setUnits`. Either choice is saved, so a later change of
-default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
+default doesn't flip anyone. The view store starts on `DEFAULT_UNITS` (imperial), and
 `SavedStateLoader` applies the saved units after mount, like the standards, so there is no
 hydration mismatch. Nothing saved, an unknown value (with a `console.warn`) or storage that
 throws keeps the default.
@@ -2563,11 +2713,11 @@ refresh or a reopened tab brings back the crate on screen:
   kept GLB that can't be read, or any error on the way. `localStorage` or IndexedDB that is
   missing, blocked or full is treated as empty and a refused save is a warning, never an error.
 - **No flash and no hydration mismatch:** the restore runs in an effect after mount. While it
-  runs, the store's `restoring` flag holds the 3D scene back (`CrateViewer` keeps the canvas and
+  runs, the view store's `restoring` flag holds the 3D scene back (`CrateViewer` keeps the canvas and
   draws nothing in it), so
   the default crate doesn't flash before the remembered one.
 - **Time to design (#17):** a reopened crate isn't newly designed, so `restoreDesign` leaves the
-  clock stopped (`designStartedAt` null): no "Designed in" note appears for it, and an export
+  clock stopped (the view's `designStartedAt` null): no "Designed in" note appears for it, and an export
   records nothing. Loading a new part or design (any `setPart` / `loadDesign`) starts the clock
   as usual. When nothing is reopened (the default part, a share link, a failed restore), the
   clock starts at mount as before.
@@ -2880,13 +3030,11 @@ under the cost ranking. Shipment totals sum cost, labour and dim weight. **`stan
 also rejects a negative or over-$1,000 labour rate, NaN or negative minutes, an hour per screw,
 a negative screw cost and a dim divisor outside 50–500. **`src/state/scorecard.store.test.ts`**
 checks `ranking` (default volume; `setRanking` resets the pick, is kept across edits and
-standards changes) and a labour-rate change re-costing the design, and the time-to-design
-clock (no record before it starts, starts once, records only the first export, restarts on a
-new part). **`src/lib/format.test.ts`** checks the scorecard text.
+standards changes) and a labour-rate change re-costing the design. **`src/lib/format.test.ts`** checks the scorecard text.
 
 **`src/state/shipment.store.test.ts`** checks the store: one crate at start, 200 brackets show
-crate A, `setCrateIndex` switches `result` (clearing the pin, re-framing, no change note, out of
-range ignored), the type is kept across edits while it exists, a lower max gross re-plans, and
+crate A, `setCrateIndex` switches `result` (out of range ignored; the view's reaction is in
+`designToView.test.ts`), the type is kept across edits while it exists, a lower max gross re-plans, and
 `loadDesign` opens the saved type.
 
 **`src/domain/designFile.test.ts`** checks the design file (§6.5, #28):
@@ -2959,7 +3107,10 @@ angles, that every size label and fork arrow tail projects inside the free area 
 360 px phones, closed, open and exploded), the pan bound and the angle helpers.
 **`src/components/viewer/sizeLines.test.ts`** checks the size-line geometry, the one part pill,
 the dimension left out per preset and the label text. **`src/components/viewer/forkArrows.test.ts`**
-checks the arrow size and the occlusion test with its hysteresis.
+checks the arrow size and the occlusion test with its hysteresis, the fit into the free area (tip fixed, proportions kept,
+shortest and longest scale, dropped when the tip is out, the return threshold) and the gap that clears the width label.
+`framing.test.ts` also lays the arrows out for the three sample parts at 1440 × 900, 1280 × 720, a 900 px drawer layout and 390 / 360 px
+phones, closed, open and exploded, and checks every drawn arrow lies in the free area and clears the width label.
 **`src/components/viewer/tooltipText.test.ts`** checks the board tooltip's detail line.
 **`src/components/viewer/dimensionPulse.test.ts`** checks the photon paths (#65, §8.4) on
 PART-001 × 4: one pulse per label (L, W, H, then the part's three); each crate dimension gives 6
@@ -2986,25 +3137,44 @@ damaged one) keeps the default part, naming the file and holding the design unti
 a design file that survives a share-link round trip and restores with no notes, and gives null
 without a crate.
 
-**`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
-changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
-flag, invalid input changes nothing, and catalog parts are read-only. `loadDesign` keeps the
-given settings and layout pick (unlike `setPart`). It also checks
-`lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
-payload with source `mass`; name and material edits record an empty diff; rules and layout edits
-record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
+**`src/state/store.test.ts`** checks the design store: `setPartDetails` (name and material update without
+changing the layout pick, a mass recomputes the payload and clears the stand-in flag, invalid input
+changes nothing, catalog parts are read-only), `loadDesign` (keeps the given settings and layout
+pick, unlike `setPart`) and `setPartProfile` (#16: shapes the blocking without moving the layout
+pick, ignores a profile for another model or a failed analysis, survives a mass edit and is dropped
+with a new part).
+
+
 **`src/state/recommendOnLoad.test.ts`** checks the recommendation on load (§7.16) with the sweeps
 held in a queue: a new part opens at the recommended quantity and layout with its change note, is
 swept at once, is applied once more for the measured outline (or settles unchanged, or on a
-failed analysis), ignores a result for another part or a second one before measurement; an edit
-before the result (quantity, a rule, the layout, the ranking, the mass, the standards, or after the
-first result) is kept; and `loadDesign` / `restoreDesign` keep their own quantity.
-**`src/state/partLoader.test.ts`** checks which loads wait for it: a picked GLB does, a design
-file or `openDesignFile` (saved designs, share links) doesn't.
-`setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
-a profile for another model or a failed analysis, drops a pin or hover on a cut-list line that is
-gone, survives a mass edit and is dropped with a new
-part.
+failed analysis), ignores a result for another part or a second one before measurement; a change of
+the file's units or up axis waits for the recommendation for the new size (also once settled), but
+not once the rules were edited; an edit before the result (quantity, a rule, the layout, the ranking,
+the mass, the standards, or after the first result) is kept; and `loadDesign` / `restoreDesign`
+keep their own quantity. **`src/state/partLoader.test.ts`** checks which loads wait for it: a
+picked GLB does, a design file or `openDesignFile` (saved designs, share links) doesn't.
+**`src/state/store.worker.test.ts`** runs the store with its engine in a stand-in worker: an edit
+shows at once and its design (and the view's reaction) when the engine answers, quick edits build
+on each other, a design's crate type is shown once its plan has it, and `whenDesigned` holds a
+reopened crate's scene until its design has landed.
+
+**`src/state/designToView.test.ts`** checks the coupling (`designEvents.ts`) from both ends: opening
+a part or design clears the pin, hover and note, re-frames once and restarts the clock (a reopened
+crate has none) and keeps the tab; each kind of edit writes its change note (mass 16 → 20 kg and
+payload for a 1 mm part, name and material an empty diff, rules, layout and ranking, none for a
+standards change or a units or tab change, none when the design becomes a problem); a re-frame only
+when the layout or part changed; a pin whose line is gone is dropped and one that remains is kept;
+the stale "Designed in" goes; a measured profile drops a stale pin without re-framing or touching
+the note; switching crate type clears the pin and re-frames; ignored actions (out-of-range index,
+the same ranking, invalid input, a catalog rename) leave the view untouched; each edit is one design
+update and one view update, with the new design already in place when the view changes; the note
+expires after 5 s and an older timer never removes a newer note.
+
+**`src/state/viewStore.test.ts`** checks the view store: the display units (imperial default,
+versioned key round trip, nothing saved, an unknown value, storage that throws, no window,
+`setUnits` / `loadSavedUnits`), the 3D view (modes, `setView`, insets and `requestFit`),
+hover de-duplication, the load message and the time-to-design clock.
 
 **`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5b) with synthetic profiles: the
 rotation matrix equals three.js's for all six orientations, and a part lying on its side shows
@@ -3049,15 +3219,16 @@ check of PART-001/002/003 at quantities 1, 8 and 40 leaves "mm" or "kg" in imper
 `src/lib/units.test.ts` also pins the one mass rule (one decimal under 100, whole from 100).
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions, including the edges (0, under
 and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into the next inch) and the
-CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
+CSV's ` in` mark, and the standards editor's conversions (`editUnit`, #62): nominal stock both ways
+(3.5 in is 89 mm, 3/4 is 19 mm), metric as stored, and a value typed in inches in every dimension
+reading back the same after a JSON round trip. `standardsFields.test.ts` checks every field's dimension and that
+every default shows in imperial and stores back a valid value. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
 4x6, …, either order and 1 mm of rounding, no name for non-stock), plywood by sold thickness with
 the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
 **`src/lib/csv.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
 units line, `cut_in`), nominal stock, fractional cuts and ASCII only; the metric header and
 `cut_mm`; the same rows and quantities in both; and a split shipment in both.
-**`src/state/units.store.test.ts`** checks the imperial default, the versioned key round trip,
-nothing saved, an unknown value, storage that throws, no window, and `setUnits` /
-`loadSavedUnits` in the store. **`src/lib/loadPart.test.ts`**
+**`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
 names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
 design restored from the bundled catalog, a custom design without its GLB naming the file,
@@ -3067,6 +3238,23 @@ chunk bounds; Draco and Meshopt; text glTF sniffing) and the three-free measure 
 transforms; **`src/lib/glbMeasure.parity.test.ts`** checks that measure against three.js's
 `Box3.setFromObject` on every bundled GLB. The upload API's integration tests are listed in
 `docs/BLOB_STORAGE.md`.
+
+**`src/lib/partFrame.test.ts`** and **`partFrame.design.test.ts`** (#105) check the guess's limits,
+`framedSizeMm` (units, the Y-up swap) against measuring the turned scene, `fitFrame`, and the three
+acceptance criteria at the engine level with the fixtures in `fixtures/units-axis/` (written by
+`bun scripts/fixtures/units-axis.mjs`, deterministic): PART-001 in metres, millimetres and inches
+(each read the right way) gives the same size, outline, layout, outside size, cut list and gross as
+the original; a Y-up copy gives the same once Y up is picked (its outline's six faces are the
+original's, so it is upright, not upside down; the base plate is at the bottom), and read Z up it
+lies on its side; a mesh 50 m from the origin measures the same size and outline and sits where
+the original sits in the exported crate; a 60 in shaft is guessed as 60 mm and gives the catalog
+shaft's crate once inches are picked. Reopening: a design saved with units and axis measures the
+same and says nothing; a guess stays marked as one; a format 2 file's units are found from its
+saved size; a different file is called out. **`src/domain/designFile.test.ts`** adds format 3: the
+fields round trip byte for byte, bad units or axis are refused, and the 2 → 3 and 1 → 3
+migrations. **`src/state/persist.test.ts`** adds a format 2 and a format 3 last design beside the
+old fixtures. **`src/state/store.test.ts`** checks `setPartFrame` (re-measure, replan, change note,
+outline dropped, no-op, catalog refused).
 
 **`src/lib/printable.test.ts`** checks the export document (§7.11):
 
@@ -3192,6 +3380,9 @@ copies chosen shots there on request.
     column is visible in both units; "4x4" keeps a plain x; piece names stay on one line; on a phone each row stacks.
   - `checks`: every check is listed and the default crate has no cautions; check text follows the units; the Overview verdict
     names a caution and links to Checks; the tab counts cautions and notes apart.
+  - `part-units`: a 60 in shaft is guessed as 60 mm, picking inches gives the catalog shaft's size and crate (each read once its recommendation has settled) and the
+    viewer measures the same; a Y-up bracket lies on its side until Y up is picked, then the crate and the drawn height match
+    the Z-up bracket (probe `partFrame`); the catalog parts offer no choice; a file far from the origin loads centred; a reload reopens the file read the same way.
   - `load-part`: a catalog GLB fills in its details; a new part opens at the recommended quantity and layout ("Set to the recommended N per crate", **In use**); an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
     parts are refused with a message; dragging text doesn't raise the drop veil, a file does.
   - `load-messages`: the toast under the header: an error (alert) stays until dismissed, a note (status) goes by itself;
@@ -3202,7 +3393,8 @@ copies chosen shots there on request.
   - `view-controls`: the mode icon, the first framing, camera presets, the switches and Pull apart, Hide panels. `view-popover`
     (`.mobile`): placement, nothing covering it, closing by Escape, focus-out and a press outside, the gesture hint.
   - `size-labels`: labels stay in the free area for every sample part and mode. `viewer` (`.mobile`): which labels each camera
-    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, a lost WebGL context.
+    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, no arrow under the island or summary bar or off screen,
+    a lost WebGL context.
   - `camera` (`.mobile`): right-drag and two-finger pan, bounded so the crate can't be lost; a preset or the idle turn returns
     to the middle. `layout` (`.narrow`, `.mobile`): only the island panel scrolls; the crate sits in the free area at load, after
     a reload, Hide / Show panels and a resize; the narrow drawer and the phone layout. `drawer.mobile`: the drawer's open and
@@ -3210,7 +3402,7 @@ copies chosen shots there on request.
   - `idle-autoplay`: hover never stops auto-play, a click, drag, wheel or key does, it resumes after 5 s, and the tooltip follows
     the turning crate. `dimension-pulse`: a pulse fires after framing, splits at the witness lines and ends; none with size
     labels off or reduced motion.
-  - `shop-standards`: collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
+  - `shop-standards` (also in imperial: inches, lb and plywood fractions, a value typed in inches surviving a reload, and the "no limit" placeholder): collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
     resets; a lower threshold switches the plywood; bad input is flagged. `scorecard`: the Overview card, the Layouts deltas and
     ranking toggle, the labour rate, "Designed in" after the first export.
   - `design-file`: Download design (.json) and reopen it (catalog, custom with and without its model, stale layout, newer
@@ -3245,7 +3437,7 @@ copies chosen shots there on request.
 | Checks report passes, not only problems | The Checks tab shows what was verified, not just what failed | More strings in the domain |
 | Size labels as DOM, not drei `<Html>` | `<Html>` mounts a React root per label, and unmounting those during a render raced in React 19 | Positions are projected manually each frame |
 | Camera framing via `setViewOffset` toward the free area | The crate stays centred beside the island; picking and projection still use one camera | Insets are measured from the DOM |
-| GLBs over 20 units across are read as millimetres | Catches the common "exported in mm" mistake; the UI says when it happened | A real 20 m+ part would be misread (none are expected) |
+| A loaded GLB's units (m, mm, in) and up axis (Z, Y) are guessed from its size, saved in the design file and one choice away in the header (#105) | Interviewers may hand over a file from another CAD system; a wrong guess must be obviously visible and fixable on screen, and a reload must measure the same | The guess can't tell a 60 in part from a 60 mm one; Y up is never guessed, only chosen |
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
@@ -3349,7 +3541,7 @@ Other known gaps:
   3. load it and check that the part line reads "model matches catalog"
 - Never derive values in components that the domain should own. If the UI needs a number,
   add it to `CrateDesign` with a test.
-- Inside the 3D scene, read the store with `useDesigner.getState()` in `useFrame` and write
+- Inside the 3D scene, read the stores with `useDesigner.getState()` (the design) and `useView.getState()` (the view) in `useFrame` and write
   three.js objects directly. Subscribe with hooks only for things that change rarely.
 - Don't use drei `<Html>`; use the `SizeLabels` pattern for DOM over the canvas.
 - **Styles:** Tailwind v4 runs through Next's built-in PostCSS support (`postcss.config.mjs`,

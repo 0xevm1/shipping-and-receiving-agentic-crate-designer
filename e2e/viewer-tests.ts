@@ -108,6 +108,36 @@ export function defineViewerTests() {
     await closeView(page);
   });
 
+  test("no fork arrow is drawn under the island or the summary bar, or off screen, closed, open and exploded", async ({ page }) => {
+    const vp = page.viewportSize()!;
+    const island = page.getByRole("complementary");
+    const summary = page.getByTestId("summary");
+    const check = async (what: string) => {
+      await waitForFrames(page, 3);
+      const boxes = (await crate(page)).cog!.arrowBoxes;
+      // At least one arrow (the −X end's) is always drawn at these sizes.
+      expect(boxes.length, `${what}: arrows drawn`).toBeGreaterThan(0);
+      const islandLeft = (await island.isVisible()) ? (await island.boundingBox())!.x : vp.width;
+      const summaryTop = (await summary.isVisible()) ? (await summary.boundingBox())!.y : vp.height;
+      for (const b of boxes) {
+        expect(b.left, `${what}: left edge`).toBeGreaterThanOrEqual(0);
+        expect(b.top, `${what}: top edge`).toBeGreaterThanOrEqual(0);
+        expect(b.right, `${what}: right edge, and the island`).toBeLessThanOrEqual(Math.min(vp.width, islandLeft));
+        expect(b.bottom, `${what}: bottom edge, and the summary bar`).toBeLessThanOrEqual(Math.min(vp.height, summaryTop));
+      }
+    };
+    await check("closed");
+    await shot(page, "viewer-arrows-in-view-closed");
+    await modeButton(page).click();
+    await pollCrate(page, (s) => s.mode).toBe("open");
+    await check("open");
+    await shot(page, "viewer-arrows-in-view-open");
+    await modeButton(page).click();
+    await pollCrate(page, (s) => s.anim.explode).toBe(1);
+    await check("exploded");
+    await shot(page, "viewer-arrows-in-view-exploded");
+  });
+
   test("a lost WebGL context shows a cover with a way back", async ({ page }) => {
     const lose = () =>
       stage(page)

@@ -13,8 +13,10 @@ vi.mock("./engineClient", async (importOriginal) => {
   return { ...real, engine: real.createEngineClient(() => fake.worker) };
 });
 
-const { useDesigner } = await import("./store");
+const { useDesigner, whenDesigned } = await import("./store");
+const { useView } = await import("./viewStore");
 const initial = useDesigner.getState();
+const initialView = useView.getState();
 const s = () => useDesigner.getState();
 const flush = () => fake.worker!.flush();
 
@@ -22,6 +24,7 @@ describe("store with the engine in a worker", () => {
   beforeEach(() => {
     flush();
     useDesigner.setState(initial, true);
+    useView.setState(initialView, true);
   });
 
   it("opens with a design made in this thread, stamped", () => {
@@ -39,7 +42,7 @@ describe("store with the engine in a worker", () => {
     expect(s().plan.totals.parts).toBe(5);
     expect(s().designedFrom.settings.quantity).toBe(5);
     expect(s().designedFrom.inputHash).toBe(inputHash(s().designedFrom));
-    expect(s().lastChange?.source).toBe("rules");
+    expect(useView.getState().lastChange?.source).toBe("rules");
   });
 
   it("keeps up with quick edits: each builds on the last, and the newest design wins", () => {
@@ -61,13 +64,26 @@ describe("store with the engine in a worker", () => {
     expect(s().result).toBe(s().plan.crates[1].result);
   });
 
-  it("keeps the scene held until a reopened crate's design has landed", () => {
-    s().setRestoring(true);
-    s().restoreDesign(catalogPart(getPart("PART-003")), { ...initial.settings, quantity: 2 }, null, 0, { tab: "rules", ranking: "volume" });
-    s().setRestoring(false);
-    expect(s().restoring).toBe(true);
+  it("tells the view of an edit when its design lands, not before", () => {
+    const fit = useView.getState().fit.nonce;
+    s().setPart(catalogPart(getPart("PART-002")));
+    expect(useView.getState().fit.nonce).toBe(fit);
     flush();
-    expect(s().restoring).toBe(false);
+    expect(useView.getState().fit.nonce).toBe(fit + 1);
+    expect(useView.getState().designStartedAt).not.toBeNull();
+  });
+
+  it("keeps the scene held until a reopened crate's design has landed (`whenDesigned`)", () => {
+    useView.getState().setRestoring(true);
+    s().restoreDesign(catalogPart(getPart("PART-003")), { ...initial.settings, quantity: 2 }, null, 0, "volume");
+    whenDesigned(() => useView.getState().setRestoring(false));
+    expect(useView.getState().restoring).toBe(true);
+    flush();
+    expect(useView.getState().restoring).toBe(false);
     expect(s().designedFrom.part.id).toBe("PART-003");
+    // Nothing on its way: at once.
+    let ran = false;
+    whenDesigned(() => (ran = true));
+    expect(ran).toBe(true);
   });
 });

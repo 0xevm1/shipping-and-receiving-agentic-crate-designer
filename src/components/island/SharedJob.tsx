@@ -21,6 +21,7 @@ import {
 } from "@/state/jobSync";
 import { changesFor, effectiveJob, usePendingChanges, type PendingChange, type PendingConfig, type Selection } from "@/state/pendingChanges";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { CrateSettingsSchema } from "@/domain/schema";
 import { RANKINGS, type Ranking } from "@/domain/design";
 import styles from "./SharedJob.module.css";
@@ -129,7 +130,7 @@ export function SharedJob() {
   const persisted = usePendingChanges((s) => s.persisted);
   const inputHash = useDesigner((s) => s.designedFrom.inputHash);
   const hasCrate = useDesigner((s) => s.plan.crates.some((c) => c.result.design));
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const [message, setMessage] = useState("");
 
   const mine = changesFor(allPending, job?.id ?? null, partKey);

@@ -65,3 +65,8 @@ export function triangleGlb(size: [number, number, number]): Buffer {
   };
   return Buffer.concat([header, chunk(0x4e4f534a, jsonChunk), chunk(0x004e4942, binChunk)]);
 }
+
+/** A part file from `fixtures/units-axis/` (scripts/fixtures/units-axis.mjs) as an in-memory upload. */
+export function unitsAxisFile(name: string) {
+  return { name, mimeType: "model/gltf-binary", buffer: readFileSync(`fixtures/units-axis/${name}`) };
+}

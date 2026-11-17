@@ -66,7 +66,10 @@ test("a reload reopens the same crate: rules, layout, ranking, tab and units", a
   const ranking = panel(page).getByRole("group", { name: "Rank layouts by" });
   await ranking.getByRole("button", { name: "Crate cost" }).click();
   // A layout card that isn't the recommended one.
+  const recommended = (await crate(page)).outside;
   await otherLayout(page).first().click();
+  // The pick's design lands from the engine's worker a few ms after the click.
+  await pollCrate(page, (s) => s.outside).not.toEqual(recommended);
   const before = await crate(page);
   await expect.poll(() => savedQuantity(page)).toBe(8);
   await shot(page, "last-design-before-reload");

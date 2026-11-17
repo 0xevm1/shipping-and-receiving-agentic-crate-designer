@@ -86,13 +86,15 @@ says what the app says. Multipart form fields (schemas in `src/lib/api/parts.ts`
 | `material` | Optional text |
 | `density` | Optional, kg/m³ |
 | `name` | Optional; defaults to one made from the file name, as the app does |
+| `units` | Optional: what the file's numbers are in, `m`, `mm` or `in` (spec §4). Guessed from its size when absent |
+| `up` | Optional: which axis of the file points up, `z` or `y`. `z` when absent |
 
 Checks, with the same messages as the browser (`GLB_MESSAGES` in `src/domain/glb.ts`, which
 `src/lib/loadPart.ts` uses too):
 
 | Refused | Status | Code |
 |---|---|---|
-| Missing or bad `mass`, bad `density`, missing `file` | 400 | `invalid_request` (with `field`) |
+| Missing or bad `mass`, bad `density`, `units` or `up`, missing `file` | 400 | `invalid_request` (with `field`) |
 | Not multipart | 415 | `invalid_request` |
 | Over 50 MB (by `Content-Length` before reading, then by the file) | 413 | `too_large` |
 | Text `.gltf` (by name or content), non-GLB data | 415 | `unsupported_file` |
@@ -100,8 +102,10 @@ Checks, with the same messages as the browser (`GLB_MESSAGES` in `src/domain/glb
 
 The server measures the model's bounding box from the JSON chunk (`glbSizeUnits`: each POSITION
 accessor's min / max through the node transforms, the same box three.js gives; a unit test
-compares them on every bundled part), and reads a part over 20 units across as millimetres, as
-the browser does.
+compares them on every bundled part), and reads it in the `units` and `up` sent, each guessed
+as the browser guesses it when absent (`readFrame` in `src/domain/partFrame.ts`: metres up to 3
+units across, inches up to 20, millimetres beyond; Z up). The part keeps that frame
+(`model_units`, `up_axis`), and a server-built crate GLB reads the model in it.
 
 Then, in this order:
 
@@ -112,7 +116,8 @@ Then, in this order:
    finds the existing row, `model.created: false`) and a new `part`. A crash between 2 and 3
    leaves an orphan object, never a row with nothing behind it.
 
-`201` with `{ part, model: { sha256, sizeBytes, readAsMm, created } }` and a `Location` header.
+`201` with `{ part, model: { sha256, sizeBytes, readAsMm, units, up, unitsGuessed, created } }` and a
+`Location` header (`readAsMm` is `units === "mm"`, kept for older clients).
 Every upload is its own `part` (the mass or name may differ); the bytes are stored once.
 
 The `part.created` event will be appended in that transaction once the event slice lands (a

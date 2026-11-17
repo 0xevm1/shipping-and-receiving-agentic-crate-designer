@@ -8,7 +8,8 @@
  * object and one `part_model` row; each upload is still its own `part` (mass may differ).
  */
 import { createHash } from "node:crypto";
-import { GLB_MESSAGES, glbProblem, glbSizeUnits, looksLikeTextGltf, MAX_GLB_BYTES, nameFromFile, unitsToMm } from "@/domain/glb";
+import { GLB_MESSAGES, glbProblem, glbSizeUnits, looksLikeTextGltf, MAX_GLB_BYTES, nameFromFile } from "@/domain/glb";
+import { readFrame } from "@/domain/partFrame";
 import { CreatePartFieldsSchema, type CreatePartResponse, type PartResponse } from "@/lib/api/parts";
 import { modelKey } from "../blob/keys";
 import { ORPHAN_AGE_MS } from "../blob/gc";
@@ -33,6 +34,8 @@ export function partResponse(part: Part): PartResponse {
     densityKgM3: part.densityKgM3,
     massKg: part.massKg,
     sizeMm: [part.sizeXMm, part.sizeYMm, part.sizeZMm],
+    units: part.modelUnits,
+    up: part.upAxis,
     modelSha256: part.modelSha256,
     source: part.source,
     catalogId: part.catalogId,
@@ -73,6 +76,8 @@ export async function createPart(request: Request, { db, blob, org }: PartsDeps)
     material: form.get("material"),
     density: form.get("density"),
     name: form.get("name"),
+    units: form.get("units"),
+    up: form.get("up"),
   });
   if (!fields.success) {
     const issue = fields.error.issues[0]!;
@@ -81,7 +86,9 @@ export async function createPart(request: Request, { db, blob, org }: PartsDeps)
   const { bytes, fileName } = await checkedGlb(form.get("file"));
   const sizeUnits = glbSizeUnits(bytes);
   if (!sizeUnits) throw new ApiFailure(422, "invalid_glb", GLB_MESSAGES.noGeometry, "file");
-  const { sizeMm, readAsMm } = unitsToMm(sizeUnits);
+  // Read in the units and up axis sent, as the app read it (spec §4); each guessed when not sent.
+  const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units: fields.data.units, up: fields.data.up });
+  const readAsMm = frame.units === "mm";
 
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const key = modelKey(org, sha256);
@@ -98,7 +105,7 @@ export async function createPart(request: Request, { db, blob, org }: PartsDeps)
       sha256,
       sizeBytes: bytes.byteLength,
       objectKey: key,
-      validation: { format: "glb", version: 2, compression: "none", maxBytes: MAX_GLB_BYTES, readAsMm, sizeMm, checkedBy: "api" },
+      validation: { format: "glb", version: 2, compression: "none", maxBytes: MAX_GLB_BYTES, sizeUnits, checkedBy: "api" },
     });
     const part = await repo.parts.create(org, {
       name: fields.data.name ?? nameFromFile(fileName),
@@ -109,13 +116,15 @@ export async function createPart(request: Request, { db, blob, org }: PartsDeps)
       sizeYMm: sizeMm[1],
       sizeZMm: sizeMm[2],
       modelSha256: sha256,
+      modelUnits: frame.units,
+      upAxis: frame.up,
       source: "upload",
     });
     // Last in the transaction (see emitEvent). Org-wide: the part has no job yet.
     await emitEvent(repo, org, { jobId: null, type: "part.created", payload: { partId: part.id } });
     return {
       part: partResponse(part),
-      model: { sha256, sizeBytes: bytes.byteLength, readAsMm, created: model.created },
+      model: { sha256, sizeBytes: bytes.byteLength, readAsMm, units: frame.units, up: frame.up, unitsGuessed: guessed, created: model.created },
     };
   });
 }

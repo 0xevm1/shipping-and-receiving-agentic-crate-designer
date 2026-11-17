@@ -27,6 +27,7 @@ import { APP } from "./appInfo";
 import type { QuantitySweep } from "@/domain/sweep";
 import { bomToCsv, shipmentToCsv, stampCsv } from "./csv";
 import { documentDate } from "./format";
+import { renderMessage } from "./message";
 import { designFilePart } from "./loadPart";
 import { buildPrintable, type PrintableDesign, type PrintableStamp } from "./printable";
 import type { Units } from "./units";
@@ -100,7 +101,8 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
   const { part, settings, plan, crateIndex, standards, units, ranking, generatedAt, timeZone, stamp, sweep } = input;
   const csv = (text: string) => encode(stamp ? stampCsv(text, stamp) : text);
   const shown = plan.crates[crateIndex]?.result.design ?? plan.crates[0]?.result.design;
-  if (!shown || plan.problem) throw new NoCrateError(plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : "There is no crate to export.");
+  if (!shown || plan.problem)
+    throw new NoCrateError(plan.problem ? `${plan.problem.title}. ${renderMessage(plan.problem.detail, units)}` : "There is no crate to export.");
   const designs = plan.crates.map((t) => {
     if (!t.result.design) throw new NoCrateError(`Crate ${t.label} has no design.`);
     return { label: t.label, design: t.result.design };

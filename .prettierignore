@@ -20,3 +20,5 @@ src/**/__snapshots__
 # drizzle-kit output; `bun run db:generate` writes it and CI diffs it.
 db/migrations
 .engine-worker
+# Generated test fixtures, some deliberately malformed (scripts/fixtures/scenarios.mjs).
+fixtures

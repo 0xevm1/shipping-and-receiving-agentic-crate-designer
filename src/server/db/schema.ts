@@ -28,6 +28,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ModelUnits, UpAxis } from "@/domain/partFrame";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const orgId = () =>
@@ -61,6 +62,13 @@ export const part = pgTable(
     sizeZMm: doublePrecision("size_z_mm").notNull(),
     /** sha256 of the GLB in `part_model`; null for a part with no model. */
     modelSha256: text("model_sha256"),
+    /**
+     * How the model is read (spec §4): what its numbers are in and which axis is up. On the part,
+     * not the model, since two parts may read the same file differently. Null for a part with no
+     * model, or one uploaded before they were recorded (read by `part_model.validation.readAsMm`, Z up).
+     */
+    modelUnits: text("model_units").$type<ModelUnits>(),
+    upAxis: text("up_axis").$type<UpAxis>(),
     source: text("source").$type<PartSource>().notNull(),
     /** The catalog entry (`src/data/parts.json` id) a `catalog` part was registered from; one row per org and id. */
     catalogId: text("catalog_id"),
@@ -81,6 +89,8 @@ export const part = pgTable(
     check("part_source_check", sql`${t.source} in ('catalog', 'upload')`),
     check("part_mass_positive", sql`${t.massKg} > 0`),
     check("part_catalog_id_check", sql`${t.catalogId} is null or ${t.source} = 'catalog'`),
+    check("part_model_units_check", sql`${t.modelUnits} is null or ${t.modelUnits} in ('m', 'mm', 'in')`),
+    check("part_up_axis_check", sql`${t.upAxis} is null or ${t.upAxis} in ('z', 'y')`),
   ],
 );
 

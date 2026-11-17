@@ -7,12 +7,17 @@ import { catalogPart, type LoadedPart } from "@/lib/part";
 import { startSweeps, useSweep } from "./bestQuantity";
 import { engine, type EngineClient } from "./engineClient";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 /**
  * Loading a new part opens it at the quantity sweep's recommendation (spec §7.16), once, unless
  * the person edits first; designs that are opened (saved, imported, shared, restored) keep their
  * own settings. The sweeps wait in a queue here, so each test decides when a result arrives.
  */
+
+// Each test runs real sweeps (a few hundred designs each): about a second alone, several under a
+// full parallel run, so the default 5 s is too tight.
+vi.setConfig({ testTimeout: 20_000 });
 
 const queue: { req: SweepRequest; apply: (out: SweepResponse) => void }[] = [];
 const fakeEngine: EngineClient = {
@@ -48,9 +53,12 @@ const widget: LoadedPart = {
   dimensions_mm: [300, 200, 100],
   suggested_quantities: [1, 4, 8],
   modelUrl: "blob:widget",
+  modelUnits: "m",
+  upAxis: "z",
+  unitsGuessed: true,
   mmPerUnit: 1000,
+  rawSize: [0.3, 0.2, 0.1],
   massAssumed: true,
-  readAsMm: false,
 };
 
 /** A flat profile for the widget: what the outline analysis hands `setPartProfile`. */
@@ -65,13 +73,17 @@ const profile = (): PartProfile => {
 };
 
 const initial = useDesigner.getState();
+const initialView = useView.getState();
 const s = () => useDesigner.getState();
+/** The change note is view state (`viewStore.ts`), told of each edit by the design store. */
+const lastChange = () => useView.getState().lastChange;
 const shaft = () => catalogPart(getPart("PART-002"));
 let stop: () => void;
 
 beforeEach(() => {
   vi.useFakeTimers();
   useDesigner.setState(initial, true);
+  useView.setState(initialView, true);
   useSweep.setState({ inputs: null, done: null });
   queue.length = 0;
   stop = startSweeps(fakeEngine);
@@ -102,7 +114,7 @@ describe("a newly loaded part opens at the recommendation", () => {
     expect(s().layoutKey).toBe(rec.crate.layoutKey);
     expect(s().result.design!.layout.key).toBe(rec.crate.layoutKey);
     expect(s().plan.crates).toHaveLength(1);
-    expect(s().lastChange).toMatchObject({ source: "recommended", note: `Set to the recommended ${rec.quantity} per crate` });
+    expect(lastChange()).toMatchObject({ source: "recommended", note: `Set to the recommended ${rec.quantity} per crate` });
     // Applied; one more is due when the outline is measured.
     expect(s().autoRecommend).toEqual({ modelUrl: shaft().modelUrl, applied: true });
   });
@@ -126,7 +138,7 @@ describe("a newly loaded part opens at the recommendation", () => {
     expect(measured.quantity).not.toBe(first.quantity);
     expect(s().settings.quantity).toBe(measured.quantity);
     expect(s().layoutKey).toBe(measured.crate.layoutKey);
-    expect(s().lastChange?.note).toBe(`Set to the recommended ${measured.quantity} per crate`);
+    expect(lastChange()?.note).toBe(`Set to the recommended ${measured.quantity} per crate`);
     expect(s().autoRecommend).toBeNull();
 
     // Settled: a later result changes nothing.
@@ -138,12 +150,12 @@ describe("a newly loaded part opens at the recommendation", () => {
   it("settles without a change when the measured outline keeps the recommendation", () => {
     loadPart(widget);
     answer();
-    const change = s().lastChange;
+    const change = lastChange();
     s().setPartProfile("blob:widget", profile());
     vi.advanceTimersByTime(0);
     answer();
     expect(s().autoRecommend).toBeNull();
-    expect(s().lastChange).toBe(change);
+    expect(lastChange()).toBe(change);
   });
 
   it("settles when the outline analysis fails (no second result is coming)", () => {
@@ -173,6 +185,46 @@ describe("a newly loaded part opens at the recommendation", () => {
   });
 });
 
+describe("the file's units or up axis, set on a part still at its recommendation (#105)", () => {
+  it("waits for the recommendation for the part's new size", () => {
+    loadPart(widget);
+    answer();
+    expect(s().autoRecommend?.applied).toBe(true);
+    expect(s().setPartFrame({ units: "mm" })).toBeNull();
+    // A quantity swept for a misread size means nothing: the next result is applied again.
+    expect(s().autoRecommend).toEqual({ modelUrl: widget.modelUrl, applied: false });
+    vi.advanceTimersByTime(0);
+    const rec = answer().recommendation!;
+    expect(s().part.dimensions_mm).toEqual([0.3, 0.2, 0.1]);
+    expect(s().settings.quantity).toBe(rec.quantity);
+  });
+
+  it("even once the first recommendation has settled", () => {
+    loadPart(widget);
+    answer();
+    s().setPartProfile("blob:widget", profile());
+    vi.advanceTimersByTime(0);
+    answer();
+    expect(s().autoRecommend).toBeNull();
+    s().setPartFrame({ units: "in" });
+    expect(s().autoRecommend).toEqual({ modelUrl: widget.modelUrl, applied: false });
+    vi.advanceTimersByTime(0);
+    const rec = answer().recommendation!;
+    expect(s().settings.quantity).toBe(rec.quantity);
+  });
+
+  it("not once the person has set the rules", () => {
+    loadPart(widget);
+    answer();
+    s().setSettings({ quantity: 3 });
+    s().setPartFrame({ up: "y" });
+    expect(s().autoRecommend).toBeNull();
+    vi.runOnlyPendingTimers();
+    while (queue.length) answer();
+    expect(s().settings.quantity).toBe(3);
+  });
+});
+
 describe("an edit before the result is kept", () => {
   it.each([
     ["the quantity", () => s().setSettings({ quantity: 7 })],
@@ -190,7 +242,7 @@ describe("an edit before the result is kept", () => {
     while (queue.length) answer();
     expect(s().settings).toEqual(settings);
     expect(s().layoutKey).toBe(layoutKey);
-    expect(s().lastChange?.source).not.toBe("recommended");
+    expect(lastChange()?.source).not.toBe("recommended");
   });
 
   it("including one after the first result: the measured outline doesn't override it", () => {
@@ -213,11 +265,11 @@ describe("an opened design keeps its own settings", () => {
     expect(s().autoRecommend).toBeNull();
     answer();
     expect(s().settings.quantity).toBe(3);
-    expect(s().lastChange).toBeNull();
+    expect(lastChange()).toBeNull();
   });
 
   it("the last design, restored at startup (`restoreDesign`)", () => {
-    s().restoreDesign(shaft(), ownSettings(), null, 0, { tab: "rules", ranking: "volume" });
+    s().restoreDesign(shaft(), ownSettings(), null, 0, "volume");
     vi.advanceTimersByTime(0);
     answer();
     expect(s().settings.quantity).toBe(3);

@@ -4,6 +4,7 @@ import type { CrateDesign } from "@/domain/crate";
 import { exportCrateGlb, loadPartScene, type PartModel } from "@/lib/exportGlb";
 import type { DesignPart } from "@/domain/schema";
 import type { LoadedPart } from "@/lib/part";
+import { framedScene } from "@/lib/partFrame";
 
 /**
  * GLB reading and writing behind runtime adapters (spec §5.1). Loaded only with `import()`
@@ -18,10 +19,11 @@ import type { LoadedPart } from "@/lib/part";
  */
 
 /**
- * Gives the part's model scene. A design request's part is a `DesignPart`; the browser's is a
- * `LoadedPart`, which also carries its model URL and scale.
+ * Gives the part's model scene, as the file has it. A design request's part is a `DesignPart`; the
+ * browser's is a `LoadedPart`, which also carries its model URL and how the file is read (its
+ * scale and up axis, spec §4).
  */
-export type PartModelReader = (part: DesignPart & Partial<Pick<LoadedPart, "modelUrl" | "mmPerUnit">>) => Promise<Object3D>;
+export type PartModelReader = (part: DesignPart & Partial<Pick<LoadedPart, "modelUrl" | "mmPerUnit" | "upAxis">>) => Promise<Object3D>;
 
 /** Browser: the model at the part's URL, loaded once and cached (`loadPartScene`). */
 export const urlModelReader: PartModelReader = (part) => {
@@ -73,13 +75,19 @@ export async function crateGlb(design: CrateDesign, model?: PartModel | null, ex
 }
 
 /**
- * A GLB maker: each crate design with this part's model in its slots (metre files unless the
- * part says otherwise), stamped with `extras`. A null reader gives the boards only.
+ * A GLB maker: each crate design with this part's model in its slots, stamped with `extras`. The
+ * model is read in the part's frame (spec §4): turned to Z up (`framedScene`) and scaled by
+ * `mmPerUnit`, metre Z-up files unless the part says otherwise. A null reader gives the boards only.
  */
 export function glbMaker(
   part: Parameters<PartModelReader>[0],
   read: PartModelReader | null,
   extras?: Record<string, string>,
 ): (design: CrateDesign) => Promise<ArrayBuffer> {
-  return async (design) => crateGlb(design, read ? { scene: await read(part), mmPerUnit: part.mmPerUnit ?? 1000, material: part.material } : null, extras);
+  return async (design) =>
+    crateGlb(
+      design,
+      read ? { scene: framedScene(await read(part), part.upAxis ?? "z"), mmPerUnit: part.mmPerUnit ?? 1000, material: part.material } : null,
+      extras,
+    );
 }

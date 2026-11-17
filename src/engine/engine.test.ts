@@ -3,7 +3,7 @@ import { getPart } from "@/domain/catalog";
 import { FACE_AXES, FACE_IDS, type PartProfile } from "@/domain/profile";
 import { planShipment } from "@/domain/shipment";
 import { bomToCsv, shipmentToCsv } from "@/lib/csv";
-import { catalogPart } from "@/lib/part";
+import { catalogPart, framePart } from "@/lib/part";
 import { cutList, designShipment, inputHash, summarize } from "./engine";
 import { parityRequest } from "./parityCases";
 import { CutListResponseSchema, DesignRequestSchema, DesignResponseSchema } from "./schemas";
@@ -27,8 +27,21 @@ describe("inputHash", () => {
   });
 
   it("ignores how the part was loaded (model URL, file name, load facts)", () => {
-    const part = { ...catalogPart(getPart("PART-001"), "blob:http://localhost/123"), model: "other.glb", mmPerUnit: 1, readAsMm: true };
+    const part = {
+      ...catalogPart(getPart("PART-001"), "blob:http://localhost/123"),
+      model: "other.glb",
+      mmPerUnit: 1,
+      modelUnits: "mm" as const,
+      upAxis: "y" as const,
+    };
     expect(inputHash({ ...req, part })).toBe(inputHash(req));
+  });
+
+  it("follows the file's units and up axis through the size they give (#105)", () => {
+    const loaded = { ...catalogPart(getPart("PART-001"), "blob:http://localhost/123"), catalogDims: undefined };
+    const yUp = framePart(loaded, { units: "m", up: "y" });
+    expect(yUp.dimensions_mm).not.toEqual(loaded.dimensions_mm);
+    expect(inputHash({ ...req, part: yUp })).not.toBe(inputHash(req));
   });
 
   it("changes with every design input", () => {
