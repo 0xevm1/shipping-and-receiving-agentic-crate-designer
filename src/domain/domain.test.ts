@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getPart, parts } from "./catalog";
-import { ASSEMBLIES } from "./crate";
+import { ASSEMBLIES, CARDBOARD_LIMITS, DRY_VAN_53FT_MM, LTL_EXCESSIVE_LENGTH_MM } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from "./design";
 import { ORIENTATIONS, rotatedSize } from "./orientations";
 import type { CrateSettings, Vec3 } from "./schema";
@@ -191,7 +191,16 @@ describe("checks", () => {
     expect(level(r, "stable")).toBe("ok");
     expect(level(r, "blocking")).toBe("ok");
     expect(level(r, "base-rating")).toBe("ok");
-    expect(level(r, "export")).toBe("info");
+  });
+
+  it("has no export (ISPM-15) check: shipping is domestic only", () => {
+    for (const p of parts) {
+      for (const quantity of p.suggested_quantities) {
+        const checks = design(p.id, { quantity }).design!.checks;
+        expect(checks.map((c) => c.id)).not.toContain("export");
+        expect(checks.some((c) => /ISPM/.test(c.title + c.detail))).toBe(false);
+      }
+    }
   });
 
   it("flags tight gaps and tall crates", () => {
@@ -205,6 +214,92 @@ describe("checks", () => {
   it("only reports a stack check when parts are stacked", () => {
     expect(level(design("PART-001", { quantity: 4 }), "stack")).toBeUndefined();
     expect(level(design("PART-001", { quantity: 8 }), "stack")).toBe("ok");
+  });
+});
+
+describe("trailer limits", () => {
+  const settings = { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: true };
+  const probe: Vec3 = [3000, 800, 400];
+  const run = (dims: Vec3) =>
+    computeDesign({ id: "custom", name: "Big part", mass_kg: 50, dimensions_mm: dims }, settings).design!;
+  /** A single part sized so the crate's external size on `axis` is exactly `target` mm. */
+  const crateWith = (axis: number, target: number) => {
+    const offset = run(probe).layout.external[axis] - probe[axis];
+    const dims = [...probe] as Vec3;
+    dims[axis] = target - offset;
+    const d = run(dims);
+    expect(d.layout.external[axis]).toBeCloseTo(target, 6);
+    return d;
+  };
+  const check = (d: ReturnType<typeof run>, id: string) => d.checks.find((c) => c.id === id);
+
+  it.each([
+    ["length", 0, DRY_VAN_53FT_MM.interiorLength],
+    ["width", 1, DRY_VAN_53FT_MM.doorWidth],
+    ["height", 2, DRY_VAN_53FT_MM.doorHeight],
+  ] as const)("flags a crate %s just over the 53' dry van limit", (_, axis, limit) => {
+    expect(check(crateWith(axis, limit), "door")?.level).toBe("ok");
+    const over = check(crateWith(axis, limit + 1), "door");
+    expect(over?.level).toBe("caution");
+    expect(over?.detail).toContain(limit.toLocaleString("en-US"));
+  });
+
+  it("uses the door opening, not the larger interior, for width and height", () => {
+    expect(DRY_VAN_53FT_MM.doorWidth).toBeLessThanOrEqual(DRY_VAN_53FT_MM.interiorWidth);
+    expect(DRY_VAN_53FT_MM.doorHeight).toBeLessThanOrEqual(DRY_VAN_53FT_MM.interiorHeight);
+  });
+
+  it("notes an LTL length surcharge only past the excessive-length limit", () => {
+    expect(check(crateWith(0, LTL_EXCESSIVE_LENGTH_MM), "oversize")).toBeUndefined();
+    expect(check(crateWith(0, LTL_EXCESSIVE_LENGTH_MM + 1), "oversize")?.level).toBe("info");
+  });
+
+  it("passes every sample part at its suggested quantities", () => {
+    for (const p of parts) {
+      for (const quantity of p.suggested_quantities) {
+        const d = design(p.id, { quantity }).design!;
+        expect(check(d, "door")?.level).toBe("ok");
+        expect(check(d, "oversize")).toBeUndefined();
+      }
+    }
+  });
+});
+
+describe("cardboard check", () => {
+  const cardboard = (r: ReturnType<typeof design>) => r.design!.checks.find((c) => c.id === "cardboard");
+  const custom = (mass_kg: number, dimensions_mm: Vec3, quantity = 1) =>
+    computeDesign({ id: "custom", name: "Loaded part", mass_kg, dimensions_mm }, { ...DEFAULT_SETTINGS, quantity });
+
+  it("suggests cardboard for a single aluminum housing, and still designs the crate", () => {
+    const r = design("PART-003", { quantity: 1 });
+    expect(cardboard(r)?.level).toBe("info");
+    expect(cardboard(r)?.title).toMatch(/cardboard/i);
+    expect(r.design!.members.length).toBeGreaterThan(0);
+  });
+
+  it("stays quiet for every other sample part and quantity", () => {
+    for (const p of parts) {
+      for (const quantity of p.suggested_quantities) {
+        if (p.id === "PART-003" && quantity === 1) continue;
+        expect(cardboard(design(p.id, { quantity }))).toBeUndefined();
+      }
+    }
+  });
+
+  it("applies the per-part and payload limits inclusively", () => {
+    const { partKg, payloadKg } = CARDBOARD_LIMITS;
+    expect(cardboard(custom(partKg, [300, 200, 100]))?.level).toBe("info");
+    expect(cardboard(custom(partKg + 0.1, [300, 200, 100]))).toBeUndefined();
+    expect(cardboard(custom(payloadKg / 2, [300, 200, 100], 2))?.level).toBe("info");
+    expect(cardboard(custom(payloadKg / 2 + 0.1, [300, 200, 100], 2))).toBeUndefined();
+  });
+
+  it("stays quiet when the box would be too big", () => {
+    // Light but long: the interior's L + W + H is over the corrugated box limit.
+    const r = custom(2, [1500, 200, 100]);
+    const [L, W, H] = r.design!.layout.interior;
+    expect(L + W + H).toBeGreaterThan(CARDBOARD_LIMITS.boxDimSumMm);
+    expect(cardboard(r)).toBeUndefined();
   });
 });
 

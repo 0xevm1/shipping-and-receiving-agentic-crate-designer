@@ -83,8 +83,9 @@ tab at a time.
    - **Overview:** outside size, gross weight, how it's built, and crate weight by assembly
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
-   - **Checks:** every rule of thumb, passed ones included (door clearance, tip-over, blocking,
-     stack load, base rating, export lumber)
+   - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
+     tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
+     cardboard box may be enough)
 6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
 
 ### The crate it designs
@@ -98,14 +99,16 @@ tab at a time.
 
 ## Scope and non-goals
 
-**In scope:** one part type per crate, any quantity from 1 to 200, wood plus basic fasteners only.
+**In scope:** one part type per crate, any quantity from 1 to 200, wood plus basic fasteners only,
+**domestic shipping only** (US truckload or LTL in a 53' dry van).
 
 **Out of scope for v1 (deliberately):**
 
 - **Disposable packing materials** (foam, bubble wrap, stretch film). The brief excludes them.
 - **Mixed-part crates.** A crate never mixes part numbers.
-- **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039,
-  ISPM-15 or a structural calculation.
+- **Export shipping.** No ISPM-15 lumber, ocean containers or air freight.
+- **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
+  or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
 - **Persistence and accounts.** Nothing is saved yet. The plan is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
