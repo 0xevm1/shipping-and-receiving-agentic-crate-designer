@@ -2609,8 +2609,13 @@ mobile-360 (360 × 800), both with touch, `isMobile` and 2× pixels, run only `*
 (#42). Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
 transitions are instant (§8.4); the idle tests (`06-view`, `12-mobile`, `21-idle-hover`)
 turn motion back on. Each flow saves named full-page
-screenshots to `e2e/screenshots/` (git-ignored); CI uploads them as `e2e-screenshots` with the
-HTML report as `playwright-report`.
+screenshots to `e2e/screenshots/` (git-ignored).
+
+The suite is slow, so it runs only on demand: it is not in the pre-commit hook and not in
+pull-request CI. Trigger it with the `E2E` workflow (`.github/workflows/e2e.yml`,
+`workflow_dispatch`: Actions → E2E → Run workflow, or `gh workflow run e2e.yml --ref <branch>`,
+with an optional `filter` input for part of the suite), which uploads the screenshots as
+`e2e-screenshots` and the HTML report as `playwright-report`; or run `bun run e2e` locally.
 
 - **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`)
   exposes a read-only `window.__crate` with `getState()` (mode from the view targets, view
@@ -2865,8 +2870,8 @@ HTML report as `playwright-report`.
     busy state ("Exporting…", `aria-busy`) lasts at least 1.4 s. Hide panels hides it (and Tab can't reach it). At
     390 × 844 it stays under the part lines at 44 px and exports. Screenshots `19-export-idle`,
     `-loading`, `-success`, `-narrow` and the PDF `19-export.pdf`.
-- **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
-  its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
+- **When the UI changes,** put a screenshot of the change in the PR, and update the affected
+  spec when you next run the suite. Tests have no retries, so a flaky test is a bug to fix.
 
 ## 11. Decision log
 
@@ -2995,8 +3000,8 @@ Other known gaps:
 - **CSS modules work.** Give a component its own `Name.module.css` and import it as `styles`
   (see `ShopStandards.module.css`). Wrap the shared classes from `globals.css` in `:global()`
   (`:global(.rule)`), and use the design tokens (`var(--…)`) from `globals.css`.
-- Before you push, run `bun run test`, `bun run lint` and `bun run build`. For UI changes, also
-  run `bun run e2e` and update the specs in `e2e/` (§10); CI's `e2e` job runs them on every PR.
+- Before you push, run `bun run test`, `bun run lint` and `bun run build`. The e2e suite (§10)
+  is opt-in: it runs from the manually triggered `E2E` workflow or `bun run e2e`, not in CI.
 - Prefer roles and accessible names for anything the e2e tests need to find. Add a
   `data-testid` only where there is no accessible handle, and read 3D state through the
   `window.__crate` hook (`E2EProbe`) rather than adding DOM for tests.
