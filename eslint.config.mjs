@@ -7,13 +7,15 @@ import nextTs from "eslint-config-next/typescript";
  *
  *   components/, app/   render; may import everything below (components: all but server/)
  *   state/              zustand stores and persistence; may import lib and domain
- *   server/             server-only data access (Postgres, #46); may import lib and domain.
+ *   server/             server-only data access (Postgres, blob storage, #46); may import lib
+ *                       and domain.
  *                       Only app/ (Route Handlers, Server Components) may import it
  *   lib/                edge code (format, load, export); may import domain
  *   domain/             pure TypeScript in mm/kg, Z-up; imports nothing above it
  *
- * server/ sits beside state/, not under it: neither imports the other. Its database packages
- * (postgres, drizzle-orm) are banned everywhere but server/, so a client bundle can't pull them in.
+ * server/ sits beside state/, not under it: neither imports the other. Its database and S3
+ * packages (postgres, drizzle-orm, @aws-sdk/*) are banned everywhere but server/, so a client
+ * bundle can't pull them (or the blob-store credentials) in.
  *
  * Type-only imports get no exemption: a type that crosses a boundary is in the wrong layer.
  * Test files follow the same rules as the code they sit beside.
@@ -31,10 +33,11 @@ const upState = ban("src/state", ...layer("state"));
 const upComponents = ban("src/components", ...layer("components"));
 const upApp = ban("src/app", ...layer("app"));
 const upServer = ban("src/server", ...layer("server"));
-// Server-only packages: reachable only through src/server.
+// Server-only packages: reachable only through src/server. The S3 SDK is here so blob-store
+// credentials (BLOB_*) can never be bundled into browser code (#46 §2a).
 const serverPackages = {
-  group: ["postgres", "drizzle-orm", "drizzle-orm/**", "drizzle-kit", "server-only"],
-  message: "Database access is server-only: go through src/server (and only from src/app).",
+  group: ["postgres", "drizzle-orm", "drizzle-orm/**", "drizzle-kit", "server-only", "@aws-sdk/*", "@aws-sdk/**"],
+  message: "Database and blob-store access are server-only: go through src/server (and only from src/app).",
 };
 
 const DOMAIN_PACKAGES = [

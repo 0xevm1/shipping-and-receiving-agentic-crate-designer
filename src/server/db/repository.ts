@@ -3,11 +3,11 @@
  * stamps) `org_id` from it, so application code has no way to query across orgs. Code outside
  * this file should not use the drizzle handle directly; add a method here instead.
  */
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { type OrgContext, requireOrg } from "./org";
 import * as schema from "./schema";
-import { configuration, designJob, event, part, partModel } from "./schema";
+import { artifact, configuration, designJob, event, part, partModel } from "./schema";
 
 export type Database = PostgresJsDatabase<typeof schema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -173,6 +173,28 @@ export function createRepository(db: Executor) {
           .where(and(eq(event.orgId, orgId), eq(event.jobId, jobId), gt(event.id, afterId)))
           .orderBy(asc(event.id))
           .limit(limit);
+      },
+    },
+
+    blobRefs: {
+      /**
+       * Which of `keys` a metadata row (`part_model`, `artifact`) points at, for orphan cleanup
+       * (src/server/blob/gc.ts). An object no row names is an orphan.
+       */
+      async referenced(ctx: OrgContext, keys: string[]): Promise<Set<string>> {
+        const orgId = requireOrg(ctx);
+        if (keys.length === 0) return new Set();
+        const [models, artifacts] = await Promise.all([
+          db
+            .select({ key: partModel.objectKey })
+            .from(partModel)
+            .where(and(eq(partModel.orgId, orgId), inArray(partModel.objectKey, keys))),
+          db
+            .select({ key: artifact.objectKey })
+            .from(artifact)
+            .where(and(eq(artifact.orgId, orgId), inArray(artifact.objectKey, keys))),
+        ]);
+        return new Set([...models, ...artifacts].map((r) => r.key));
       },
     },
   };
