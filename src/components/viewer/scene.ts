@@ -17,6 +17,7 @@ export const WOOD: Record<MemberKind, string> = {
   separator: "#ebd6ad",
   bearer: "#85522b",
   blocking: "#85522b",
+  joist: "#a87a48",
   cradle: "#7a4a26",
 };
 export const EDGE = new Color("#291a0a");
@@ -38,8 +39,7 @@ export const GHOST_PART = 0.1;
  */
 export function sceneOrigin(design: CrateDesign): Vec3 {
   const [L, W] = design.layout.interior;
-  const { floorMm, skid } = design.construction;
-  return [-L / 2, -W / 2, floorMm + skid.tall];
+  return [-L / 2, -W / 2, design.construction.baseMm];
 }
 
 export function explodeOffset(face: Member["face"], e: number): Vec3 {

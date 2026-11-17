@@ -1,7 +1,8 @@
-import { designCrate, resolveConstruction, structureAllowance, type CrateDesign } from "./crate";
+import { designCrate, resolveConstruction, structureAllowance, structureMaterials, type CrateDesign } from "./crate";
 import { enumerateLayouts, type Layout } from "./packing";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, ShopStandardsSchema, type ShopStandards } from "./standards";
+import { planStructure } from "./structure";
 
 export type { DesignPart } from "./schema";
 
@@ -128,7 +129,9 @@ export function scoreLayouts(
  * `computeDesign` accepts; used by shipment planning to compare crate sizes cheaply.
  */
 export function rankLayouts(part: DesignPart, settings: CrateSettings, standards: ShopStandards = DEFAULT_STANDARDS): Layout[] {
-  const construction = resolveConstruction(settings, part.mass_kg * settings.quantity, standards);
+  const payloadKg = part.mass_kg * settings.quantity;
+  const construction = resolveConstruction(settings, payloadKg, standards);
+  const materials = structureMaterials(construction, standards);
   return enumerateLayouts(
     {
       partSize: part.dimensions_mm,
@@ -138,7 +141,9 @@ export function rankLayouts(part: DesignPart, settings: CrateSettings, standards
       partGapMm: settings.partGapMm,
       wallClearanceMm: settings.wallClearanceMm,
       separatorMm: construction.panelMm,
-      structureAllowance: structureAllowance(construction),
+      // The base and lid are sized per layout (#7), exactly as `designCrate` will build them.
+      structureAllowance: (grid) =>
+        structureAllowance(construction, planStructure(grid, materials, payloadKg, settings.partGapMm, standards)),
       minInteriorMm: minInteriorMm(standards),
     },
     standards,

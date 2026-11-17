@@ -82,8 +82,9 @@ export function planShipment(
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
   const total = settings.quantity;
   const inside = (l: Layout) => withinOutsideLimits(l.external, standards);
+  // Gross within the smaller of the per-crate limit and the computed base rating (#7, as gross).
   const fitsLimits = (d: CrateDesign, k: number) =>
-    inside(d.layout) && d.grossKg <= maxGrossKg && (maxParts === 0 || k <= maxParts);
+    inside(d.layout) && d.grossKg <= crateGrossLimitKg(d, standards) && (maxParts === 0 || k <= maxParts);
   const layoutMemo = new Map<number, Layout[]>();
   const memo = new Map<number, Candidate>();
 
@@ -192,6 +193,15 @@ export function planShipment(
   return plan(types, null, standards);
 }
 
+/**
+ * The most a crate may weigh (#25 with #7): the smaller of `limits.perCrate.maxGrossKg` and the
+ * base rating as a gross weight (`structure.ratedPayloadKg + tareKg`, so the payload is within
+ * the rating).
+ */
+export function crateGrossLimitKg(d: CrateDesign, standards: ShopStandards = DEFAULT_STANDARDS): number {
+  return Math.min(standards.limits.perCrate.maxGrossKg, d.structure.ratedPayloadKg + d.tareKg);
+}
+
 /** `result` with the layout `key` designed, when it has that layout and it isn't already shown. */
 function withLayout(
   result: DesignResult,
@@ -240,7 +250,7 @@ const kgText = (v: number) => `${Math.round(v).toLocaleString("en-US")} kg`;
 /** "1,000 kg gross, 40 parts and the trailer door": the limits in force, for messages. */
 function limitText(standards: ShopStandards): string {
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
-  return [`${kgText(maxGrossKg)} gross`, ...(maxParts > 0 ? [`${maxParts} parts`] : []), "the trailer door and floor"].join(", ");
+  return [`${kgText(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [`${maxParts} parts`] : []), "the trailer door and floor"].join(", ");
 }
 
 function crateLimitCheck(text: string, unmet: string | null, standards: ShopStandards): Check {

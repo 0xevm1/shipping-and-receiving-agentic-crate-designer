@@ -124,7 +124,9 @@ tab at a time.
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
      tip-over, blocking, stack load, base rating, centre of gravity, forklift and pallet-jack
-     entry, LTL length surcharge, and a hint when a cardboard box may be enough)
+     entry, LTL length surcharge, and a hint when a cardboard box may be enough). The **base
+     rating** is computed from the skids, floor and joists (#7): "Base rated 859 kg; this
+     crate's payload is 645 kg (75%)"
 6. **Switch units** between in / lb (the default, for a US shop floor) and mm / kg; the choice is
    remembered in this browser. **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
@@ -135,7 +137,9 @@ tab at a time.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
-   stack and base-rating limits, the cradle rules for long parts, densities, material costs, screw spacing and screw price,
+   stack and per-crate limits, the cradle rules for long parts, the **structural rules**
+   (allowable lumber and plywood stresses, load factor, minimum fork opening, floor-joist
+   threshold and spacing, a stacking load for the lid), densities, material costs, screw spacing and screw price,
    the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
    crate), the dimensional-weight divisor, and **handling** (forklift and pallet-jack tine width,
    spread and clearance under the floor, the off-centre limit and the smallest tip angle). A change
@@ -301,9 +305,17 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Part masses** come from the catalog as given, or from the user for unknown files (as do
   their name and material). They are
   never derived from mesh volume.
-- **Per-crate limits:** at most 1,000 kg gross (the standard base rating) and the 53' dry van
-  door and floor; no part-count limit. None of the sample parts splits at its suggested
-  quantities.
+- **Per-crate limits:** at most 1,000 kg gross (a handling limit) and within the crate's
+  computed base rating, and the 53' dry van door and floor; no part-count limit. None of the
+  sample parts splits at its suggested quantities.
+- **Structural sizing** (#7, spec §7.15): skids, floor joists and the lid are sized by simple
+  allowable-stress formulas for **SPF No. 2** lumber (Fb 875 psi × 1.3, Fv 135 psi, Fc⊥ 425 psi)
+  and sheathing plywood (about 870 psi), with a **1.5 load factor**, the skids taken as supported
+  only at their ends. The smallest skid section that passes is used, then more skids (never
+  closer than a 200 mm fork opening); a payload over 450 kg, or a floor that can't span the
+  skids, gets 2×4 floor joists across the skids. Wood and screws only. Strength only: no
+  deflection, joint or point-load checks, so heavy or unusual loads still need an engineer.
+  Crates aren't assumed to be stacked; enter a stacking load to size the lid for it.
 - **Stability:** a crate counts as "stable" if its outside height is at most 1.5× its narrowest
   base side.
 - **Screw count** is an estimate:

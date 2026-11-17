@@ -32,8 +32,11 @@ test("an unknown GLB uses a stand-in mass until details are entered", async ({ p
   await expect(header.getByLabel("Mass of one part in kilograms")).toHaveValue("10");
   await expect(header).toContainText("kg each stand-in");
   await expect(header).toContainText("size measured from the file");
-  await expect(tab(page, /Checks/)).toHaveText("Checks1");
+  // The stand-in mass adds one caution; other checks (e.g. #8's fork entry on this narrow crate)
+  // may add their own, so compare counts rather than fixing the badge number.
   await pollCrate(page, (s) => s.massAssumed).toBe(true);
+  await expect(tab(page, /Checks/)).toHaveText(/^Checks\d+$/);
+  const cautions = Number((await tab(page, /Checks/).textContent())!.replace("Checks", ""));
   await openTab(page, /Checks/);
   await expect(panel(page)).toContainText("Part mass is a stand-in");
   await shot(page, "07-unknown-part-standin");
@@ -48,7 +51,7 @@ test("an unknown GLB uses a stand-in mass until details are entered", async ({ p
 
   await expect(island(page).getByRole("heading", { name: "Test widget", exact: true })).toBeVisible();
   await expect(header).not.toContainText("stand-in");
-  await expect(tab(page, /Checks/)).toHaveText("Checks");
+  await expect(tab(page, /Checks/)).toHaveText(cautions > 1 ? `Checks${cautions - 1}` : "Checks");
   await expect(panel(page)).not.toContainText("Part mass is a stand-in");
   await pollCrate(page, (s) => s.massAssumed).toBe(false);
   await openTab(page, "Overview");

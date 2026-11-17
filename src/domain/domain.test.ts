@@ -232,10 +232,14 @@ describe("trailer limits", () => {
     computeDesign({ id: "custom", name: "Big part", mass_kg: 50, dimensions_mm: dims }, settings).design!;
   /** A single part sized so the crate's external size on `axis` is exactly `target` mm. */
   const crateWith = (axis: number, target: number) => {
-    const offset = run(probe).layout.external[axis] - probe[axis];
+    // The structure's allowance depends on the crate (#7: a tall crate is heavier, so its skids
+    // may be deeper), so re-measure it at the new size until it settles.
     const dims = [...probe] as Vec3;
-    dims[axis] = target - offset;
-    const d = run(dims);
+    let d = run(dims);
+    for (let i = 0; i < 4 && Math.abs(d.layout.external[axis] - target) > 1e-6; i++) {
+      dims[axis] = target - (d.layout.external[axis] - dims[axis]);
+      d = run(dims);
+    }
     expect(d.layout.external[axis]).toBeCloseTo(target, 6);
     return d;
   };
