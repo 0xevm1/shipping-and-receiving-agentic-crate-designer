@@ -8,8 +8,9 @@ import type { Layout } from "@/domain/packing";
 import type { Vec3 } from "@/domain/schema";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
-import { useDesigner, type LoadedPart } from "@/state/store";
+import { useDesigner } from "@/state/store";
 import { cloneWithMaterial, GHOST_PART, hasFocus, partMaterial, setOpacity } from "./scene";
+import { type LoadedPart } from "@/lib/part";
 
 /**
  * Loads the part GLB once and places a copy in every filled slot.

@@ -5,7 +5,6 @@ import {
   createDebouncedSaver,
   LAST_DESIGN_SAVE_DELAY_MS,
   LAST_DESIGN_STORAGE_KEY,
-  lastDesignOf,
   lastDesignToJson,
   loadLastDesign,
   parseLastDesign,
@@ -13,6 +12,7 @@ import {
   startupSource,
   type LastDesign,
 } from "./lastDesignStorage";
+import { lastDesignOf } from "./lastDesignLoader";
 import { useDesigner } from "./store";
 
 /** An in-memory Storage, standing in for the browser's localStorage. */

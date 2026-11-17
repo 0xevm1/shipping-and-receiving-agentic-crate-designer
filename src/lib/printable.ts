@@ -26,7 +26,7 @@ import type { DesignPart } from "@/domain/schema";
 import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
 import { renderMessage } from "./message";
-import { allChecks } from "@/state/checks";
+import { allChecks } from "@/lib/checks";
 import { crateDrawings, type Drawing } from "./drawings";
 import { cutText, describeLayout, documentDate, stockText } from "./format";
 import { memberBounds } from "./memberBounds";

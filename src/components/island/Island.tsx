@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
-import { allChecks } from "@/state/checks";
+import { allChecks } from "@/lib/checks";
 import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import { useLoadFiles } from "../shell/useLoadFiles";

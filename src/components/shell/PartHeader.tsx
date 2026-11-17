@@ -5,7 +5,7 @@ import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MA
 import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
 import { dims, lengthUnit, partWeight, weight } from "@/lib/units";
-import { modelMatchesCatalog } from "@/state/checks";
+import { modelMatchesCatalog } from "@/lib/checks";
 import { useDesigner, type ChangeSource } from "@/state/store";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";

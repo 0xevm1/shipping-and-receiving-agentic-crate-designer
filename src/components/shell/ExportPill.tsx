@@ -1,7 +1,7 @@
 "use client";
 
 import { cautionNote } from "@/lib/format";
-import { allChecks, cautionCount } from "@/state/checks";
+import { allChecks, cautionCount } from "@/lib/checks";
 import { exportNote, useExportRun } from "@/state/exportRun";
 import { useDesigner } from "@/state/store";
 

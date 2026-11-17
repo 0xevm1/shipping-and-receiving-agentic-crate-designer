@@ -1,7 +1,7 @@
 import type { Check } from "@/domain/crate";
 import { dimsMessage, msg, parts } from "@/domain/message";
 import type { Vec3 } from "@/domain/schema";
-import type { LoadedPart } from "./store";
+import type { LoadedPart } from "./part";
 
 export type CheckItem = Pick<Check, "level" | "title" | "detail"> & { id: string };
 

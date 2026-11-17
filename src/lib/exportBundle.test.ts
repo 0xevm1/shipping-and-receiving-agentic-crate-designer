@@ -6,9 +6,9 @@ import { parseDesignFile } from "@/domain/designFile";
 import { APP } from "./appInfo";
 import { planShipment } from "@/domain/shipment";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
-import { useDesigner, type LoadedPart } from "@/state/store";
 import { buildBundle, bundleStem, NoCrateError, zipBundle, zipFileName, type BundleInput, type BundleMakers } from "./exportBundle";
 import type { Units } from "./units";
+import { catalogPart as toLoaded, type LoadedPart } from "./part";
 
 const NOW = "2026-11-16T12:00:00.000Z";
 
@@ -18,7 +18,7 @@ const makers: BundleMakers = {
   pdf: async (doc) => new TextEncoder().encode(`%PDF ${doc.crates.length}`),
 };
 
-const catalogPart = (): LoadedPart => useDesigner.getState().part;
+const catalogPart = (): LoadedPart => toLoaded(getPart("PART-001"));
 
 function input(part: LoadedPart, quantity: number, units: Units = "imperial", crateIndex = 0): BundleInput {
   const settings = { ...DEFAULT_SETTINGS, quantity };

@@ -1,9 +1,8 @@
 import { RANKINGS, type Ranking } from "@/domain/design";
 import { parseDesignFile, type DesignFile } from "@/domain/designFile";
 import { readShareHash } from "@/domain/shareLink";
-import { currentDesignFile } from "@/lib/currentDesign";
 import { browserStorage, readJson, writeJson, type KeyValueStore } from "./persist";
-import type { DesignerState, Tab } from "./store";
+import type { Tab } from "./store";
 
 /**
  * The last-opened crate (spec §9): the design on screen, saved so a reload or a reopened
@@ -23,12 +22,6 @@ export interface LastDesign {
   design: DesignFile;
   tab: Tab;
   ranking: Ranking;
-}
-
-/** The design on screen as a last-design entry, or null when there is no crate to keep. */
-export function lastDesignOf(s: Pick<DesignerState, "part" | "settings" | "plan" | "result" | "tab" | "ranking">): LastDesign | null {
-  const design = currentDesignFile(s);
-  return design ? { design, tab: s.tab, ranking: s.ranking } : null;
 }
 
 export function lastDesignToJson({ design, tab, ranking }: LastDesign): string {

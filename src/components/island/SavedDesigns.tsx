@@ -9,9 +9,10 @@ import { savedDateText } from "@/lib/format";
 import { designFilePart } from "@/lib/loadPart";
 import { dims, lengthUnit, weight } from "@/lib/units";
 import { useLibrary } from "@/state/libraryStore";
-import { useDesigner, type LoadedPart } from "@/state/store";
+import { useDesigner } from "@/state/store";
 import { openDesignFile } from "../shell/useLoadFiles";
 import styles from "./SavedDesigns.module.css";
+import { type LoadedPart } from "@/lib/part";
 
 /** How long a deleted design can be brought back. */
 const UNDO_MS = 8000;

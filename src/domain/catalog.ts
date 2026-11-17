@@ -11,7 +11,3 @@ export function getPart(id: string): Part {
   if (!part) throw new Error(`Unknown part id: ${id}`);
   return part;
 }
-
-export function modelUrl(part: Part): string {
-  return `/parts/${part.model}`;
-}
