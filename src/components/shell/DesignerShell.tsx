@@ -20,7 +20,7 @@ const CrateViewer = dynamic(() => import("../viewer/CrateViewer"), {
   loading: () => <div className="stage-msg">Starting 3D view…</div>,
 });
 
-/** Below this the island is a drawer (#42). Must match the `max-width: 980px` media queries in globals.css. */
+/** Below this the island is a drawer. Must match the `max-width: 980px` media queries in globals.css. */
 const NARROW = "(max-width: 980px)";
 /** Margins around the free area, matching the prototype's freeArea(). */
 const FREE_LEFT = 40;
@@ -51,7 +51,7 @@ function useNarrow() {
  * float above it — part title (top left), the island (upper right), the load
  * hint and credit (bottom left) and the view bar (bottom right).
  *
- * Narrow screens (#42): the stage still fills the window; the island becomes a right-side
+ * Narrow screens: the stage still fills the window; the island becomes a right-side
  * drawer behind a hamburger, a summary chip shows the answer above a compact view bar, and the
  * credit moves to the foot of the drawer.
  */
@@ -78,7 +78,7 @@ export function DesignerShell() {
   const closeDrawer = useCallback(() => useDesigner.getState().setDrawerOpen(false), []);
 
   // Deliberate input anywhere (click or tap, drag, wheel, key) stops idle auto-play; hovering
-  // doesn't (#64). Escape closes the drawer, or else clears a pinned row.
+  // doesn't. Escape closes the drawer, or else clears a pinned row.
   useEffect(() => {
     const opts = { passive: true, capture: true };
     INPUT_EVENTS.forEach((e) => window.addEventListener(e, onInputEvent, opts));
@@ -245,7 +245,7 @@ export function DesignerShell() {
 /**
  * Narrow screens: the answer (outside size and gross weight, in amber) while the drawer is
  * closed. Tapping it opens the drawer on Overview. Hidden by CSS above 980 px. For a batch split
- * across crates (#25): the size of the crate type on screen, and the whole shipment's gross.
+ * across crates: the size of the crate type on screen, and the whole shipment's gross.
  */
 function Summary({ onOpen }: { onOpen: () => void }) {
   const design = useDesigner((s) => s.result.design);

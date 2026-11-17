@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX } from "@/domain/partDetails";
+import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
 import { dims, lengthUnit, partWeight, weight } from "@/lib/units";
 import { modelMatchesCatalog } from "@/state/checks";
@@ -9,16 +10,16 @@ import { useDesigner, type ChangeSource } from "@/state/store";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";
 
-/** Edits from the header's own fields; their change note shows under the header (#39). */
+/** Edits from the header's own fields; their change note shows under the header. */
 const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
 
 /**
- * Top left: app name, then what is shipping, read as a sentence (#40):
+ * Top left: app name, then what is shipping, read as a sentence:
  *
  *     id · name
  *     material · mass each · crate gross
  *     measured size · model check
- *     [Export]  (#51: one-click .zip; hidden with the header by Hide panels)
+ *     [Export]  (one-click .zip; hidden with the header by Hide panels)
  *
  * For a part loaded without catalog data, name, material and mass are inline underlined
  * fields. Catalog parts show the same sentence as plain text.
@@ -28,9 +29,6 @@ export function PartHeader() {
   const measured = useDesigner((s) => s.measured);
   const units = useDesigner((s) => s.units);
   const match = modelMatchesCatalog(part, measured);
-
-  const modelNote =
-    match === null ? (part.readAsMm ? "file read as millimetres" : "size measured from the file") : match ? "model matches catalog" : "model does not match catalog";
 
   return (
     <header className="tl">
@@ -55,7 +53,7 @@ export function PartHeader() {
         )}
         {measured && (
           <div>
-            {dims(measured, units)} {lengthUnit(units)} · <span className={match === false ? "warn" : ""}>{modelNote}</span>
+            {dims(measured, units)} {lengthUnit(units)} · <span className={match === false ? "warn" : ""}>{modelNote(match, part.readAsMm)}</span>
           </div>
         )}
         <ChangeNote sources={PART_SOURCES} />
@@ -71,7 +69,7 @@ function Gross() {
   const units = useDesigner((s) => s.units);
   const crates = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   if (gross === undefined) return null;
-  // A split batch (#25): the shipment, not one crate.
+  // A split batch: the shipment, not one crate.
   if (crates) {
     return (
       <>
@@ -83,7 +81,7 @@ function Gross() {
   return (
     <>
       {" "}
-      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits (#62). */}
+      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}
       ·{" "}
       <span className="nw">
         <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units)}</Flash>
@@ -279,6 +277,7 @@ function InlineField(p: InlineFieldProps) {
       inputMode={p.inputMode}
       spellCheck={false}
       autoComplete="off"
+      // Per-field widths, as custom properties the `.pf` rule reads (values computed from the text).
       style={{ "--pf-ch": fieldWidthCh(text, p.placeholder, p.size[0], p.size[1]), "--pf-min": p.size[0], "--pf-max": p.size[1] } as CSSProperties}
       onChange={(e) => {
         setDraft(e.target.value);

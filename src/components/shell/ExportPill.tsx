@@ -4,7 +4,7 @@ import { useDesigner } from "@/state/store";
 import { exportNote, useExportRun } from "@/state/exportRun";
 
 /**
- * The Export pill (#51), under the part header: one click downloads `crate-<part>-x<qty>.zip`
+ * The Export pill, under the part header: one click downloads `crate-<part>-x<qty>.zip`
  * with the GLB, the PDF, the cut list, the design file and a README, all made in the browser
  * (`src/lib/exportBundle.ts`). The bundle code and jsPDF load only on the first click.
  *

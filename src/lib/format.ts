@@ -82,3 +82,13 @@ export function densityDelta(lbFt3: number, u: Units): string {
   const text = u === "imperial" ? `${Math.abs(v).toFixed(1)} lb/ft³` : `${Math.abs(v)} kg/m³`;
   return `${v > 0 ? "+" : "−"}${text}`;
 }
+
+/**
+ * The header's model note after the measured size. `matches` is whether the file's size agrees
+ * with the catalog (null when there is nothing to compare: a part without catalog data).
+ */
+export function modelNote(matches: boolean | null, readAsMm: boolean | undefined): string {
+  if (matches === true) return "model matches catalog";
+  if (matches === false) return "model does not match catalog";
+  return readAsMm ? "file read as millimetres" : "size measured from the file";
+}

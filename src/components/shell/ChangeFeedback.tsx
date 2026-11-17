@@ -5,14 +5,11 @@ import { changeNote, changeSummary, visibleChanges } from "@/lib/changes";
 import { useDesigner, type ChangeSource } from "@/state/store";
 
 /**
- * Feedback for an edit (#39), read from the store's `lastChange` so every highlight and note
- * agrees with one diff of the previous and new design.
- */
-
-/**
  * A polite live region that says what the last edit from one of `sources` moved:
- * "Gross 16 → 20 kg", or "No change to the crate". The region is always mounted, so screen
- * readers announce new text; the text fades (CSS) and is cleared after `CHANGE_NOTE_MS`.
+ * "Gross 16 → 20 kg", or "No change to the crate". Both it and `Flash` read the store's
+ * `lastChange`, so every highlight and note agrees with one diff of the previous and new design.
+ * The region is always mounted, so screen readers announce new text; the text fades (CSS) and
+ * is replaced by the next edit's.
  */
 export function ChangeNote({ sources, className }: { sources: readonly ChangeSource[]; className?: string }) {
   const last = useDesigner((s) => s.lastChange);
@@ -24,7 +21,7 @@ export function ChangeNote({ sources, className }: { sources: readonly ChangeSou
   const hasDetail = show && detail !== text;
   return (
     <div className={className ? `changenote ${className}` : "changenote"} role="status">
-      {/* `title` also keeps the full text where narrow screens cut the note to one line (#42). */}
+      {/* `title` also keeps the full text where narrow screens cut the note to one line. */}
       {show && (
         <span key={last.id} title={hasDetail ? detail : text}>
           {text}
