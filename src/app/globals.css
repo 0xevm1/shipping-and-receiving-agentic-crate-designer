@@ -68,8 +68,7 @@ body {
   color: var(--text);
   background:
     radial-gradient(ellipse at 42% 52%, rgba(19, 73, 125, 0.55) 0%, transparent 60%),
-    radial-gradient(ellipse at 50% 48%, transparent 45%, rgba(0, 12, 26, 0.55) 100%),
-    var(--navy);
+    radial-gradient(ellipse at 50% 48%, transparent 45%, rgba(0, 12, 26, 0.55) 100%), var(--navy);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }

@@ -4,17 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Spherical, Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import {
-  anim,
-  autoplay,
-  EASE_FAST,
-  EASE_SLOW,
-  IDLE_LEAD,
-  IDLE_SEQUENCE,
-  IDLE_TURN_RATE,
-  isIdle,
-  pointer,
-} from "@/state/motion";
+import { anim, autoplay, EASE_FAST, EASE_SLOW, IDLE_LEAD, IDLE_SEQUENCE, IDLE_TURN_RATE, isIdle, pointer } from "@/state/motion";
 import { currentMode, reducedMotion, useDesigner } from "@/state/store";
 import { approach, fitGoal, homeTarget, keepCrateInFreeArea, shortestAngle, viewOffset, type Goal } from "./framing";
 import { CAMERA_FAR_M } from "./scene";

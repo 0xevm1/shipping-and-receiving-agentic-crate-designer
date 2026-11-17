@@ -55,8 +55,8 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         </div>
       </dl>
       <p className={styles.note}>
-        Material is {usd(cost.woodUsd)} of wood and {usd(cost.fastenersUsd)} of screws. The class is an estimate from the NMFC density scale; rates
-        come from the shop standards.
+        Material is {usd(cost.woodUsd)} of wood and {usd(cost.fastenersUsd)} of screws. The class is an estimate from the NMFC density scale; rates come from
+        the shop standards.
       </p>
     </section>
   );

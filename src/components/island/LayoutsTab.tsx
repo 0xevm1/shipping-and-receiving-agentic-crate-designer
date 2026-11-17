@@ -43,17 +43,14 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
   // Each card's cost and freight against the recommendation. Only the cards on screen are
   // designed (about 1 ms for five). The React Compiler is not enabled, so memoize by hand: the
   // hover and flash re-renders would otherwise design every card again.
-  const scores = useMemo(
-    () => scoreLayouts(part, { ...settings, quantity }, [best, ...shown], standards),
-    [part, settings, quantity, best, shown, standards],
-  );
+  const scores = useMemo(() => scoreLayouts(part, { ...settings, quantity }, [best, ...shown], standards), [part, settings, quantity, best, shown, standards]);
 
   return (
     <>
       <h2>Ways to pack it</h2>
       <p className="lede">
-        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate
-        from above, then from the side.
+        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from above,
+        then from the side.
       </p>
       <div className="seg rank" role="group" aria-label="Rank layouts by">
         {RANKING_LABELS.map((r) => (
@@ -157,8 +154,8 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
         <>Ranked by crate cost: the recommended layout is the cheapest stable, fully blocked crate to build.</>
       ) : (
         <>
-          Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked
-          crates without an LTL length charge.
+          Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked crates without
+          an LTL length charge.
         </>
       );
     case "picked":

@@ -2,15 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import type { Vec3 } from "@/domain/schema";
-import {
-  createPulseClock,
-  dimensionPulses,
-  pulsePaths,
-  PULSE_DURATION_S,
-  PULSE_FIRST_S,
-  PULSE_PERIOD_S,
-  tickPulse,
-} from "./dimensionPulse";
+import { createPulseClock, dimensionPulses, pulsePaths, PULSE_DURATION_S, PULSE_FIRST_S, PULSE_PERIOD_S, tickPulse } from "./dimensionPulse";
 import { buildLines, type Seg } from "./sizeLines";
 
 function design(id = "PART-001", quantity = 4) {

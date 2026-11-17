@@ -47,22 +47,8 @@ export function Credit() {
       <span className="credit-x" aria-hidden="true">
         ×
       </span>
-      <svg
-        ref={svgRef}
-        className="credit-person"
-        width={SIG_WIDTH}
-        height={SIG_HEIGHT}
-        viewBox={`0 0 ${SIG_WIDTH} ${SIG_HEIGHT}`}
-        aria-hidden="true"
-      >
-        <text
-          ref={sigRef}
-          className="credit-signature"
-          x={SIG_X}
-          y={SIG_Y}
-          fontSize={SIG_FONT_PX}
-          transform={`rotate(${SIG_TILT_DEG} ${SIG_X} ${SIG_Y})`}
-        >
+      <svg ref={svgRef} className="credit-person" width={SIG_WIDTH} height={SIG_HEIGHT} viewBox={`0 0 ${SIG_WIDTH} ${SIG_HEIGHT}`} aria-hidden="true">
+        <text ref={sigRef} className="credit-signature" x={SIG_X} y={SIG_Y} fontSize={SIG_FONT_PX} transform={`rotate(${SIG_TILT_DEG} ${SIG_X} ${SIG_Y})`}>
           Eric White
         </text>
         {span && (

@@ -154,8 +154,13 @@ function ViewPopover() {
             />
           </div>
           <span className="lab">
-            <span className="hint-mouse" data-testid="hint-mouse">Drag to turn, scroll to zoom, right-drag to pan.</span>
-            <span className="hint-touch" data-testid="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to pan.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
+            <span className="hint-mouse" data-testid="hint-mouse">
+              Drag to turn, scroll to zoom, right-drag to pan.
+            </span>
+            <span className="hint-touch" data-testid="hint-touch">
+              Drag to turn, pinch to zoom, drag with two fingers to pan.
+            </span>{" "}
+            Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
           </span>
         </div>
       )}

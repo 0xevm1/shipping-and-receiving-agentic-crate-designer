@@ -6,9 +6,7 @@ export const FOCUSABLE =
 
 /** The tabbable elements inside `root`, in DOM order; disabled, hidden and collapsed ones are left out. */
 export function tabbables(root: HTMLElement): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (el) => !el.matches(":disabled") && !el.hidden && el.getClientRects().length > 0,
-  );
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.matches(":disabled") && !el.hidden && el.getClientRects().length > 0);
 }
 
 /**

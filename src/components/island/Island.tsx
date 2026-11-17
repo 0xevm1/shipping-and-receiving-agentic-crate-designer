@@ -98,16 +98,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           />
           {drawer && (
             <button type="button" className="iconbtn drawer-close" aria-label="Close the panel" onClick={drawer.onClose}>
-              <svg
-                viewBox="0 0 24 24"
-                width="22"
-                height="22"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
             </button>

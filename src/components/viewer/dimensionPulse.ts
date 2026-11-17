@@ -66,9 +66,7 @@ function along(s: Seg, p: Vec3): number | null {
 export function pulsePaths(segs: Seg[], label: Anchor, others: number[] = []): DimensionPulse {
   const { seg: dimIndex, at: anchor, where } = label;
   const dim = segs[dimIndex];
-  const member = segs.filter(
-    (s, i) => i === dimIndex || (!others.includes(i) && (along(s, dim[0]) !== null || along(s, dim[1]) !== null)),
-  );
+  const member = segs.filter((s, i) => i === dimIndex || (!others.includes(i) && (along(s, dim[0]) !== null || along(s, dim[1]) !== null)));
 
   const nodes: Vec3[] = [];
   const node = (p: Vec3) => {

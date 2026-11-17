@@ -82,8 +82,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
               joists and a{" "}
             </>
           )}
-          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of
-          parts
+          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
         </Step>
         {cradles > 0 ? (
           <Step name="Cradles" value={`${cradles} cradles`}>
@@ -96,8 +95,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
           </Step>
         )}
         <Step name="Gross weight" value={weight(design.grossKg, units)} flash={["gross"]} end>
-          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about {usd(design.materialCostUsd)} of
-          wood
+          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about {usd(design.materialCostUsd)} of wood
         </Step>
       </ul>
 

@@ -158,7 +158,9 @@ function BuildSheet({ doc, crate: c }: { doc: PrintableDesign; crate: PrintableC
           {c.build.cutList.map((g) => (
             <tbody key={g.stock}>
               <tr className="stock-head">
-                <td colSpan={2} className="nominal">{g.stock}</td>
+                <td colSpan={2} className="nominal">
+                  {g.stock}
+                </td>
                 <td>{g.total}</td>
                 <td className="n">{g.pieces}</td>
               </tr>
@@ -281,7 +283,13 @@ function EndMarks({ label: l }: { label: PrintableLabel }) {
   // The openings the handling checks measured, so the arrows match them.
   const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   return (
-    <svg className="end-marks" viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad + 40}`} width="100%" role="img" aria-label="Crate end with fork entry marks">
+    <svg
+      className="end-marks"
+      viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad + 40}`}
+      width="100%"
+      role="img"
+      aria-label="Crate end with fork entry marks"
+    >
       <rect x="0" y="0" width={W} height={H - skidH} fill="#fff" stroke="#000" strokeWidth="2" />
       {l.skids.map((k, i) => (
         <rect key={i} x={k.y * s} y={H - skidH} width={k.w * s} height={skidH} fill="#000" />

@@ -83,8 +83,7 @@ function Gross() {
   return (
     <>
       {" "}
-      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}
-      ·{" "}
+      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}·{" "}
       <span className="nw" data-testid="crate-gross">
         <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units, true)}</Flash>
       </span>

@@ -49,10 +49,7 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
   }, [material]);
 
   const count = layout.slots.length;
-  const copies = useMemo(
-    () => Array.from({ length: count }, () => cloneWithMaterial(scene, material)),
-    [scene, material, count],
-  );
+  const copies = useMemo(() => Array.from({ length: count }, () => cloneWithMaterial(scene, material)), [scene, material, count]);
 
   useFrame(() => {
     const s = useDesigner.getState();
@@ -78,11 +75,7 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
   return (
     <group>
       {layout.slots.map((slot, i) => (
-        <group
-          key={i}
-          position={[slot.min[0] + a / 2, slot.min[1] + b / 2, slot.min[2] + c / 2]}
-          rotation={layout.orientation.euler}
-        >
+        <group key={i} position={[slot.min[0] + a / 2, slot.min[1] + b / 2, slot.min[2] + c / 2]} rotation={layout.orientation.euler}>
           <group scale={part.mmPerUnit}>
             <primitive object={copies[i]} position={center.clone().negate()} onPointerMove={onMove(i)} onPointerOut={onOut} />
           </group>

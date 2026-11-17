@@ -158,13 +158,7 @@ function PartLibrary({ part, partKey: key }: { part: LoadedPart; partKey: string
                     <button type="button" className="btn" aria-label={`Use ${e.name}`} onClick={() => void reuse(e)}>
                       Use
                     </button>
-                    <button
-                      type="button"
-                      id={renameButtonId(e.id)}
-                      className="linkbtn"
-                      aria-label={`Rename ${e.name}`}
-                      onClick={() => setRenaming(e.id)}
-                    >
+                    <button type="button" id={renameButtonId(e.id)} className="linkbtn" aria-label={`Rename ${e.name}`} onClick={() => setRenaming(e.id)}>
                       Rename
                     </button>
                     <button
@@ -312,13 +306,7 @@ function SaveForm({
       </label>
       <label>
         <span>Notes (optional)</span>
-        <textarea
-          rows={2}
-          maxLength={NOTES_MAX}
-          value={notes}
-          placeholder="e.g. proven on the March order"
-          onChange={(ev) => setNotes(ev.target.value)}
-        />
+        <textarea rows={2} maxLength={NOTES_MAX} value={notes} placeholder="e.g. proven on the March order" onChange={(ev) => setNotes(ev.target.value)} />
       </label>
       <div className="actions">
         <button type="submit" className="btn">
@@ -332,15 +320,7 @@ function SaveForm({
   );
 }
 
-function RenameForm({
-  entry,
-  onDone,
-  onCancel,
-}: {
-  entry: SavedDesign;
-  onDone: (error: string | null, renamed: boolean) => void;
-  onCancel: () => void;
-}) {
+function RenameForm({ entry, onDone, onCancel }: { entry: SavedDesign; onDone: (error: string | null, renamed: boolean) => void; onCancel: () => void }) {
   const [name, setName] = useState(entry.name);
   return (
     <form
