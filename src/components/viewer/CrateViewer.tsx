@@ -13,6 +13,8 @@ import { PartInstances } from "./PartInstances";
 
 const MM_TO_M = 0.001;
 const CLICK_SLOP_PX = 5;
+/** Orbit limit in m, raised for crates large enough to need more room. */
+const MAX_DISTANCE_M = 60;
 
 /**
  * The 3D scene. three.js is Y-up in metres; the domain is Z-up in mm. One root
@@ -25,14 +27,16 @@ export default function CrateViewer() {
   const part = useDesigner((s) => s.part);
   const units = useDesigner((s) => s.units);
   const view = useDesigner((s) => s.view);
+  const problem = useDesigner((s) => s.result.problem);
   const down = useRef<[number, number] | null>(null);
 
-  if (!design) return <div className="stage-msg">No layout fits these packing rules.</div>;
+  if (!design) return <div className="stage-msg">{problem?.title ?? "No crate to show."}</div>;
 
   const [L, W] = design.layout.interior;
   const { floorMm, skid } = design.construction;
   // Centre the footprint on the origin, with the bottom of the skids on the ground.
   const origin: Vec3 = [-L / 2, -W / 2, floorMm + skid.tall];
+  const maxDistance = Math.max(MAX_DISTANCE_M, 4 * Math.max(...design.layout.external) * MM_TO_M);
 
   const clearHover = () => {
     const s = useDesigner.getState();
@@ -73,7 +77,7 @@ export default function CrateViewer() {
         </group>
 
         <Director />
-        <OrbitControls makeDefault enableDamping={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.3} maxDistance={60} />
+        <OrbitControls makeDefault enableDamping={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.3} maxDistance={maxDistance} />
       </Canvas>
       <LoadingOverlay />
     </>

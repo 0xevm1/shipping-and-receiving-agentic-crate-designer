@@ -32,6 +32,7 @@ export function Island({ ref }: { ref: Ref<HTMLElement> }) {
   const part = useDesigner((s) => s.part);
   const tab = useDesigner((s) => s.tab);
   const design = useDesigner((s) => s.result.design);
+  const problem = useDesigner((s) => s.result.problem);
   const measured = useDesigner((s) => s.measured);
   const setTab = useDesigner((s) => s.setTab);
   const loadFiles = useLoadFiles();
@@ -72,7 +73,17 @@ export function Island({ ref }: { ref: Ref<HTMLElement> }) {
       </div>
       <div className="panel" role="tabpanel">
         {!design ? (
-          <p className="lede">No layout fits these packing rules. Try more layers or smaller gaps.</p>
+          <div role="alert">
+            <h2>{problem?.title ?? "No crate to show"}</h2>
+            <p className="lede">{problem?.detail}</p>
+            {(problem?.id === "settings" || problem?.id === "no-layout") && (
+              <div className="actions" style={{ marginTop: 16 }}>
+                <button type="button" className="btn" onClick={() => useDesigner.getState().resetRules()}>
+                  Reset rules
+                </button>
+              </div>
+            )}
+          </div>
         ) : tab === "overview" ? (
           <OverviewTab design={design} />
         ) : tab === "layouts" ? (

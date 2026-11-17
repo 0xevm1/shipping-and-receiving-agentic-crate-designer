@@ -122,15 +122,16 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 
 | File | Responsibility |
 |---|---|
-| `src/domain/schema.ts` | zod schemas and types: `Part`, `PartsCatalog`, `CrateSettings`, `DesignPart`, `Vec3` |
+| `src/domain/schema.ts` | zod schemas and types: `Part`, `PartsCatalog`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart` and `modelUrl` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotatedSize()` |
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()`, `STABLE_HEIGHT_RATIO` |
-| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES` |
-| `src/domain/design.ts` | `computeDesign()`, `explainLayout()`, `DEFAULT_SETTINGS` |
+| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`, `MIN_INTERIOR_MM` |
+| `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
+| `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging |
@@ -185,6 +186,19 @@ The catalog-level field `model_units` must be the literal `"meters"`.
 The part is not a setting. It is passed to `computeDesign` separately, and loading a new part
 resets `quantity` to that part's first suggested quantity.
 
+**Validation at the store boundary.** Every settings change goes through `normalizeSettings`
+(`schema.ts`) in the store's `setSettings`, so the domain only ever sees values the schema
+accepts:
+
+- **Clamped:** a finite number outside its range is clamped into it, and `quantity` and
+  `maxLayers` are rounded to integers. Typing 500 gives 200; a gap of −20 gives 0.
+- **Rejected:** NaN, ±Infinity, a value of the wrong type, or a panel size that isn't on the list
+  is ignored field by field, and the previous value stays. Unknown keys are dropped.
+
+`setPartMass` likewise ignores a mass that isn't a finite number above zero. As a second line of
+defence, `computeDesign` re-checks its input and returns a `problem` rather than throwing
+(§7.9).
+
 ### 6.2a The part being designed
 
 `computeDesign` takes a **`DesignPart`**: `id`, `name`, `mass_kg`, `dimensions_mm`, and an
@@ -223,7 +237,7 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
 ### 6.3 Derived types
 
 - **`Layout`:** `key`, `orientation`, `cellSize` (rotated bbox), `counts [nx,ny,nz]`,
-  `interior`, `external`, `externalVolumeM3`, `utilization`, `stable`, and `slots[]`. Each slot
+  `interior`, `clearance` (per axis, §7.2), `external`, `externalVolumeM3`, `utilization`, `stable`, and `slots[]`. Each slot
   has `index [i,j,k]` and `min` (slot min corner).
 - **`Member`:** `{ kind, material, assembly, face, label, bomKey, min, size }`.
   - `kind` is one of `skid`, `floor`, `side`, `end`, `lid`, `cleat`, `lid-cleat`, `separator`,
@@ -242,6 +256,8 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
   - `plywoodM2`, `lumberM`, `screws`, `materialCostUsd`
   - `checks[]`
 - **`LayoutExplanation`** (from `explainLayout`, §7.8).
+- **`DesignResult`:** `{ layouts, design, problem }`. `problem` (`DesignProblem`:
+  `{ id, title, detail }`) is set exactly when `design` is null (§7.9).
 
 ## 7. Algorithms
 
@@ -265,7 +281,8 @@ rounded to 0.001 mm.
 ### 7.2 Packing (`enumerateLayouts`)
 
 Inputs: `partSize`, `n`, `keepUpright`, `maxLayers`, gap `g`, clearance `c`, separator thickness
-`s` (= panel thickness), and `structureAllowance`.
+`s` (= panel thickness), `structureAllowance`, and `minInteriorMm` (`MIN_INTERIOR_MM` = 178, two
+cleat widths, from `crate.ts`).
 
 For each allowed orientation, with rotated cell `[a, b, h]`:
 
@@ -274,16 +291,26 @@ for nz in 1..min(maxLayers, n):
   perLayer = ceil(n / nz);            skip if perLayer·(nz−1) ≥ n     (empty top layer)
   for nx in 1..perLayer:
     ny = ceil(perLayer / nx);         skip if (nx−1)·ny ≥ perLayer    (empty column)
-    interior = [ 2c + nx·a + (nx−1)·g,
-                 2c + ny·b + (ny−1)·g,
-                 2c + nz·h + (nz−1)·(g + s) ]
+    content  = [ nx·a + (nx−1)·g,  ny·b + (ny−1)·g,  nz·h + (nz−1)·(g + s) ]
+    cl[axis] = max(c, (minInteriorMm − content[axis]) / 2)             (per-axis clearance)
+    interior = content + 2·cl
     skip if interior.L < interior.W                                    (X is the long axis)
     dedupe on (rounded interior, nx, ny, nz)
     external = interior + structureAllowance
 ```
 
+- **Minimum interior:** a very small part's crate is padded to at least 178 mm on each axis, with
+  the extra split evenly as clearance (`layout.clearance`), so the part stays centred and the top
+  and bottom rails of each wall and the lid's edge cleats fit without overlapping. For every
+  sample part at the default clearance `cl = c` on all axes, so their results are unchanged.
 - **Slots** are filled layer by layer, then row by row, then column by column, until there are
-  `n`. Slot min = `[c + i(a+g), c + j(b+g), c + k(h+g+s)]`.
+  `n`. Slot min = `[cl₀ + i(a+g), cl₁ + j(b+g), cl₂ + k(h+g+s)]`.
+- **There is always a layout** for valid input: `nz = 1, nx = n, ny = 1` passes both skips, and
+  the orientation set always contains a cell and its 90° turn (`as-modeled` / `turned`), one of
+  which has `a ≥ b` and so `L ≥ W`. The `no-layout` problem (§7.9) is only a safety net.
+- **Speed:** at quantity 200 (the maximum), `computeDesign` takes 1–2 ms for each sample part
+  with `keepUpright` on or off and `maxLayers` 1–4, and about 5 ms for a 20 m part (measured on
+  an M-series Mac). The hardening tests fail above 50 ms.
 - **Key format:** `"{u|s}:{L}x{W}x{H}:{nx}{ny}{nz}"`. `u`/`s` means upright or not, and the
   dimensions are rounded mm. Keys are only used to select a layout in the UI; they aren't stored.
 
@@ -345,7 +372,13 @@ Each member is tagged where it is created:
 ### 7.5 Dunnage (inside the crate)
 
 - **Bearers:** under each bottom-layer part, two 89-wide strips running along X, at 20% and 80%
-  of the part's width. Their height equals the wall clearance.
+  of the part's width. Their height equals the floor clearance (`layout.clearance[2]`), and there
+  are none when it is 0. A strip that would poke into a side wall (a narrow part with little
+  side clearance) is moved inward to touch the wall instead.
+- Dunnage uses the per-axis `layout.clearance` for the gaps at the walls, so a padded tiny crate
+  is blocked in like any other. With zero gap and clearance there is no dunnage at all, no board
+  has zero size (members under 0.5 mm on any axis are never created), and the `blocking` check
+  reports "Parts are not restrained".
 - **Separators:** one plywood sheet across the whole interior between each pair of layers, of
   thickness `t`.
 - **Blocking posts:** one per side (±X, ±Y) of every part, centred on that side:
@@ -443,6 +476,27 @@ This compares the layout on screen with the recommendation (`layouts[0]`) and th
 | `stable` | Recommended, and the runner-up would tip |
 | `smaller` | Recommended, and the runner-up ships `nextMorePct` ≥ 3% more volume |
 | `tie` | Recommended, and the volumes are within 3%, so the lower crate won |
+
+### 7.9 When there is no crate (`DesignProblem`)
+
+`computeDesign` never throws. When it can't design, it returns `design: null`, `layouts: []` and
+the first `problem` that applies:
+
+| id | When | What the user is told |
+|---|---|---|
+| `part-size` | A dimension is 0, negative, NaN or infinite (e.g. a flat model) | Every side must be longer than zero |
+| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | The size, and to check the file's units |
+| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero |
+| `settings` | Settings fail `CrateSettingsSchema` (only if the store boundary was bypassed) | Which field, and to reset the rules |
+| `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or turning off upright |
+
+The island shows the title and detail in place of the tabs' content (with Reset rules for
+`settings` and `no-layout`), and the canvas shows the title.
+
+Very small parts (down to sub-millimetre) get the minimum 178 mm interior (§7.2). Very large ones
+up to 20 m get a normal design, with the `oversize` and `door` checks as they apply. The 3D view
+pushes the camera's far plane and orbit limit out for crates too large for the defaults (200 m
+and 60 m).
 
 ## 8. UI
 
@@ -630,6 +684,24 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
   but long part whose interior L + W + H is over 1905 mm doesn't trigger it.
 - `explainLayout` covers `only`, the recommended layout and a user pick.
 
+**`src/domain/hardening.test.ts`** checks edge cases and bad input (#10):
+
+- Quantity 1 and 200 for every part, `keepUpright` on and off, `maxLayers` 1–4: every part is
+  packed, the crate is sound, and each design takes under 50 ms.
+- Parts of 1 mm, 0.001 mm, a 1 mm × 10 m rod and a 10 m cube, at gaps of 0 and 50: a sound crate
+  with an interior of at least 178 mm. A tiny part is centred in the padded crate.
+- "Sound" means: the boards' bounds equal `layout.external`, no board has zero size, dunnage stays
+  inside the interior, slots lie inside the interior, and weight and screws are finite.
+- Zero, negative, NaN and infinite dimensions, parts over 20 m, and bad masses each return the
+  right `problem` with no design.
+- Zero gap and clearance: no dunnage, no zero-size board or cut-list entry, and the blocking
+  caution. Bearers stay inside the walls under a narrow part.
+- `normalizeSettings` clamps, rounds, rejects bad values field by field, ignores unknown keys and
+  always returns settings the schema accepts. Invalid settings passed straight to `computeDesign`
+  return a `settings` problem.
+- Across a grid of extreme sizes and settings there is always a layout, and `design` is null
+  exactly when `problem` is set.
+
 **`src/domain/partDetails.test.ts`** checks the entered-details path: names and materials are
 tidied, a blank material clears it, a blank or overlong name, an overlong material and a mass
 that isn't a positive number are rejected, `partFinish` maps "alum" text to aluminum and
@@ -664,6 +736,9 @@ deliberately changes an expected value, update the test and this spec in the sam
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
+| Settings are clamped at the store, bad values rejected per field | A slider or typed value just past a limit should still do something useful; NaN or a wrong type has no sensible nearest value, so the last good one stays | The user isn't told a typed value was clamped (the input shows the clamped value) |
+| `computeDesign` returns a `problem` instead of throwing | The UI can always explain an empty screen, in domain wording | One more field to check alongside `design` |
+| Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
 
 ## 12. Known limitations and roadmap
 
@@ -691,7 +766,8 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 
 Other known gaps:
 
-- No limit on maximum crate size or weight, and no splitting a batch across several crates.
+- No limit on maximum crate size or weight beyond the 20 m part limit (§7.9), and no splitting a
+  batch across several crates.
 - No top hold-down blocking under the lid.
 - Separators are full-interior sheets, with no cut-outs for parts that are taller than their
   neighbours.

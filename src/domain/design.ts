@@ -1,20 +1,39 @@
-import { designCrate, resolveConstruction, structureAllowance, type CrateDesign } from "./crate";
+import { designCrate, MIN_INTERIOR_MM, resolveConstruction, structureAllowance, type CrateDesign } from "./crate";
 import { enumerateLayouts, type Layout } from "./packing";
-import type { CrateSettings, DesignPart } from "./schema";
+import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
 
 export type { DesignPart } from "./schema";
 
+/**
+ * Longest part side accepted, in mm. Anything longer is almost always a file
+ * exported in the wrong units, and would make a crate too big to draw.
+ */
+export const MAX_PART_MM = 20000;
+
+/** Why there is no crate to show. The domain owns the wording, as it does for checks. */
+export interface DesignProblem {
+  id: "part-size" | "part-too-large" | "part-mass" | "settings" | "no-layout";
+  title: string;
+  detail: string;
+}
+
 export interface DesignResult {
-  /** All candidate layouts, best first. */
+  /** All candidate layouts, best first. Empty when there is a problem. */
   layouts: Layout[];
   design: CrateDesign | null;
+  /** Set exactly when `design` is null. */
+  problem: DesignProblem | null;
 }
 
 /**
  * Part + settings → ranked layouts → crate design. Pure and synchronous, so the
- * UI can recompute it on every change with `useMemo`.
+ * UI can recompute it on every change with `useMemo`. Never throws: input it
+ * can't design for comes back as a `problem` instead of a design.
  */
 export function computeDesign(part: DesignPart, settings: CrateSettings, layoutKey?: string | null): DesignResult {
+  const problem = inputProblem(part, settings);
+  if (problem) return { layouts: [], design: null, problem };
+
   const construction = resolveConstruction(settings, part.mass_kg * settings.quantity);
   const layouts = enumerateLayouts({
     partSize: part.dimensions_mm,
@@ -25,9 +44,51 @@ export function computeDesign(part: DesignPart, settings: CrateSettings, layoutK
     wallClearanceMm: settings.wallClearanceMm,
     separatorMm: construction.panelMm,
     structureAllowance: structureAllowance(construction),
+    minInteriorMm: MIN_INTERIOR_MM,
   });
   const layout = layouts.find((l) => l.key === layoutKey) ?? layouts[0];
-  return { layouts, design: layout ? designCrate(part, settings, layout) : null };
+  // Unreachable for valid input (spec §7.2), but never leave the screen blank.
+  if (!layout) return { layouts, design: null, problem: NO_LAYOUT };
+  return { layouts, design: designCrate(part, settings, layout), problem: null };
+}
+
+const NO_LAYOUT: DesignProblem = {
+  id: "no-layout",
+  title: "No layout fits these packing rules",
+  detail: "Try more layers, smaller gaps or turning off Keep parts upright.",
+};
+
+/** The first reason the part or settings can't be designed for, or null when they can. */
+function inputProblem(part: DesignPart, settings: CrateSettings): DesignProblem | null {
+  const dims = part.dimensions_mm;
+  if (!Array.isArray(dims) || dims.length !== 3 || !dims.every((v) => Number.isFinite(v) && v > 0)) {
+    return {
+      id: "part-size",
+      title: "The part has no usable size",
+      detail: "Every side must be longer than zero. Check that the model has solid geometry on all three axes.",
+    };
+  }
+  const longest = Math.max(...dims);
+  if (longest > MAX_PART_MM) {
+    return {
+      id: "part-too-large",
+      title: `The part is over ${MAX_PART_MM / 1000} m long`,
+      detail: `Its longest side is ${Math.round(longest)} mm. Check the file's units: parts over ${MAX_PART_MM / 1000} m are not crated here.`,
+    };
+  }
+  if (!Number.isFinite(part.mass_kg) || part.mass_kg <= 0) {
+    return { id: "part-mass", title: "The part needs a mass", detail: "Enter a mass above zero for one part." };
+  }
+  const parsed = CrateSettingsSchema.safeParse(settings);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      id: "settings",
+      title: "A packing rule is out of range",
+      detail: `${issue.path.join(".") || "Settings"}: ${issue.message}. Reset the rules to continue.`,
+    };
+  }
+  return null;
 }
 
 /** Why the shown layout is the one on screen, for a one-sentence explanation. */

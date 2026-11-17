@@ -15,6 +15,12 @@ const BLOCK_WIDTH = 89; // blocking cut from 2x4 / 4x4 stock
 const FLOOR_THICKNESS = 19;
 const MAX_CLEAT_SPACING = 600;
 const MIN_BLOCKING_GAP = 19;
+/**
+ * Smallest interior on any axis: room for the top and bottom rails of a wall
+ * (and the two lid edge cleats) without them overlapping or overhanging.
+ * Only very small parts hit it; the packer pads their crate up to this.
+ */
+export const MIN_INTERIOR_MM = 2 * CLEAT.wide;
 
 const DENSITY_KG_M3 = { plywood: 600, lumber: 480 };
 /** Placeholder material rates for a rough cost comparison between designs. */
@@ -245,8 +251,9 @@ function addDunnage(
   const [a, b, c] = layout.cellSize;
   const [, , nz] = layout.counts;
   const gap = settings.partGapMm;
-  const clear = settings.wallClearanceMm;
-  const layerBase = (k: number) => clear + k * (c + gap + separatorMm);
+  // Per-axis clearance: the setting, or more where a tiny part's crate was padded.
+  const [clearX, clearY, clearZ] = layout.clearance;
+  const layerBase = (k: number) => clearZ + k * (c + gap + separatorMm);
 
   for (let k = 1; k < nz; k++) {
     add("separator", "plywood", insideTag("Layer separator"), [0, 0, layerBase(k) - separatorMm], [L, W, separatorMm]);
@@ -267,19 +274,21 @@ function addDunnage(
     const topZ = k < nz - 1 ? layerBase(k + 1) - separatorMm : z + c;
     const h = topZ - floorZ;
 
-    if (k === 0 && clear > 0) {
+    if (k === 0 && clearZ > 0) {
       for (const fy of [0.2, 0.8]) {
-        block([x, y + b * fy - BLOCK_WIDTH / 2, 0], [a, BLOCK_WIDTH, clear], "bearer");
+        // Kept inside the walls when the side clearance is too small for a centred strip.
+        const by = Math.min(W - BLOCK_WIDTH, Math.max(0, y + b * fy - BLOCK_WIDTH / 2));
+        block([x, by, 0], [a, BLOCK_WIDTH, clearZ], "bearer");
       }
     }
 
     // Gap on each side: to the wall (clearance) or to the neighbour (part gap).
     const [i, j] = slot.index;
     const [nx, ny] = layout.counts;
-    const gx0 = i === 0 ? clear : gap;
-    const gx1 = i === nx - 1 ? clear : gap;
-    const gy0 = j === 0 ? clear : gap;
-    const gy1 = j === ny - 1 ? clear : gap;
+    const gx0 = i === 0 ? clearX : gap;
+    const gx1 = i === nx - 1 ? clearX : gap;
+    const gy0 = j === 0 ? clearY : gap;
+    const gy1 = j === ny - 1 ? clearY : gap;
     const bwx = Math.min(BLOCK_WIDTH, a);
     const bwy = Math.min(BLOCK_WIDTH, b);
     const cx = x + a / 2 - bwx / 2;

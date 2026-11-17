@@ -61,3 +61,28 @@ export const CrateSettingsSchema = z.object({
   panelThickness: z.union([z.literal("auto"), z.literal(12), z.literal(15), z.literal(19)]),
 });
 export type CrateSettings = z.infer<typeof CrateSettingsSchema>;
+
+const NUMERIC_SETTINGS = ["quantity", "maxLayers", "partGapMm", "wallClearanceMm"] as const;
+
+/**
+ * The store boundary for settings: merges a patch from the UI onto the current
+ * settings so the domain only ever sees values the schema accepts.
+ * - Finite numbers are clamped into the schema's range (counts are rounded).
+ * - Anything else (NaN, ±Infinity, a wrong type, an unknown panel size) is
+ *   rejected field by field: the current value is kept.
+ * - Unknown keys are dropped.
+ */
+export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateSettings): CrateSettings {
+  const next: CrateSettings = { ...current };
+  const shape = CrateSettingsSchema.shape;
+  for (const key of NUMERIC_SETTINGS) {
+    const v: unknown = patch[key];
+    if (typeof v !== "number" || !Number.isFinite(v)) continue;
+    const field = shape[key];
+    const n = field.isInt ? Math.round(v) : v;
+    next[key] = Math.min(field.maxValue ?? n, Math.max(field.minValue ?? n, n));
+  }
+  if (typeof patch.keepUpright === "boolean") next.keepUpright = patch.keepUpright;
+  if (shape.panelThickness.safeParse(patch.panelThickness).success) next.panelThickness = patch.panelThickness!;
+  return CrateSettingsSchema.parse(next);
+}

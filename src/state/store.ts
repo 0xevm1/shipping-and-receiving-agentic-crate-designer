@@ -3,7 +3,7 @@ import { catalog, modelUrl } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignResult } from "@/domain/design";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
-import type { CrateSettings, DesignPart, Part, Vec3 } from "@/domain/schema";
+import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
 import type { Units } from "@/lib/units";
 import { anim } from "./motion";
 
@@ -187,7 +187,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         measured: null,
         pin: null,
         layoutKey: null,
-        settings: { ...get().settings, quantity: part.suggested_quantities[0] ?? 1 },
+        settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
       }),
     setMeasured: (measured) => set({ measured }),
     setPartDetails: (input) => {
@@ -212,7 +212,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       set({ part, result: computeDesign(part, settings, layoutKey) });
       return null;
     },
-    setSettings: (patch) => recompute({ settings: { ...get().settings, ...patch }, layoutKey: null }),
+    // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
+    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }),
     resetRules: () => recompute({ settings: { ...DEFAULT_SETTINGS, quantity: get().settings.quantity }, layoutKey: null }),
     setLayoutKey: (layoutKey) => recompute({ layoutKey }),
     addCatalogParts: (parts) => {
