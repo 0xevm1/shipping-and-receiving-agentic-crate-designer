@@ -57,12 +57,12 @@ describe("entered details on the cut list", () => {
   const design = computeDesign(part, { ...DEFAULT_SETTINGS, quantity: 2 }).design!;
 
   it("puts the name, material and mass in the CSV header", () => {
-    const lines = bomToCsv(part, design).split("\n");
+    const lines = bomToCsv(part, design, "metric").split("\n");
     expect(lines[0]).toBe("# Crate for 2 x widget Gear housing");
     expect(lines[1]).toBe("# Part 6061-T6 aluminum, 3.25 kg each");
   });
 
   it("says when no material was given", () => {
-    expect(bomToCsv({ ...part, material: undefined }, design)).toContain("# Part material not given, 3.25 kg each");
+    expect(bomToCsv({ ...part, material: undefined }, design, "metric")).toContain("# Part material not given, 3.25 kg each");
   });
 });

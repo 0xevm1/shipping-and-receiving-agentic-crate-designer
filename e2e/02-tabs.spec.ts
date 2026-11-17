@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { openApp, openTab, panel, shot, tab } from "./helpers";
+import { openApp, openTab, panel, setUnits, shot, tab } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
 });
 
 test("Overview shows the build chain and weight by assembly", async ({ page }) => {

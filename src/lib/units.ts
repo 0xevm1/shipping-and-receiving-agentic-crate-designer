@@ -27,8 +27,11 @@ export function dimsOther(mm: readonly number[], u: Units): string {
   return u === "imperial" ? `${dims(mm, "metric")} mm` : `${dims(mm, "imperial")} in`;
 }
 
-/** Shop measurements: inches to the nearest 1/16, e.g. 35 7/16″. */
-export function fraction(mm: number): string {
+/**
+ * Shop measurements: inches to the nearest 1/16, e.g. 35 7/16″. `mark` is the inch sign; the
+ * CSV passes " in" to stay plain ASCII.
+ */
+export function fraction(mm: number, mark = "″"): string {
   const sixteenths = Math.round((mm / MM_PER_IN) * 16);
   const whole = Math.floor(sixteenths / 16);
   let num = sixteenths % 16;
@@ -37,8 +40,8 @@ export function fraction(mm: number): string {
     num /= 2;
     den /= 2;
   }
-  if (!num) return `${whole}″`;
-  return whole ? `${whole} ${num}/${den}″` : `${num}/${den}″`;
+  if (!num) return `${whole}${mark}`;
+  return whole ? `${whole} ${num}/${den}${mark}` : `${num}/${den}${mark}`;
 }
 
 /** A cut or stock size: whole mm, or fractional inches. */

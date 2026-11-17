@@ -180,7 +180,7 @@ describe("restoreDesign", () => {
             const again = computeDesign(p, restored.settings, restored.layoutKey).design!;
             expect(again.layout.external).toEqual(design.layout.external);
             expect(again.grossKg).toBeCloseTo(design.grossKg, 6);
-            expect(bomToCsv(p, again)).toBe(bomToCsv(p, design));
+            for (const u of ["metric", "imperial"] as const) expect(bomToCsv(p, again, u)).toBe(bomToCsv(p, design, u));
           }
         }
       }

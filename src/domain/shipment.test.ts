@@ -241,7 +241,7 @@ describe("shipmentBom", () => {
       const at = labels.flatMap((x, i) => (x === label ? [i] : []));
       expect(at[at.length - 1] - at[0]).toBe(at.length - 1);
     }
-    const csv = shipmentToCsv(getPart("PART-003"), plan);
+    const csv = shipmentToCsv(getPart("PART-003"), plan, "metric");
     expect(csv).toMatch(/^# Shipment of 10 x PART-003 .*: 2 x crate A \(4 each\) \+ 1 x crate B \(2\)\n/);
     expect(csv).toContain("# 3 crates, gross");
     expect(csv.trim().endsWith(`Wood screws (approx),fastener,,,${all.screws}`)).toBe(true);

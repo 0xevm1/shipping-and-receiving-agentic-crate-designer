@@ -76,7 +76,10 @@ describe("change note", () => {
     expect(changeNote([gross], "metric")).toBe("Gross 16 → 20 kg");
     expect(changeNote([gross], "imperial")).toBe("Gross 34 → 45 lb");
     expect(changeNote([gross, panel], "metric")).toBe("Gross 16 → 20 kg, wall plywood 12 → 15 mm");
-    expect(changeNote([panel], "imperial")).toBe("Wall plywood 1/2″ → 9/16″");
+    // Plywood and skids by their shop names (#15): 15 mm is sold as 5/8″, not 9/16″.
+    expect(changeNote([panel], "imperial")).toBe("Wall plywood 1/2″ → 5/8″");
+    expect(changeNote([{ field: "skid", from: [89, 89], to: [89, 140] }], "imperial")).toBe("Skids 4x4 → 4x6");
+    expect(changeNote([{ field: "skid", from: [89, 89], to: [89, 140] }], "metric")).toBe("Skids 89 × 89 → 89 × 140 mm");
   });
 
   it("lists two changes, then a count", () => {

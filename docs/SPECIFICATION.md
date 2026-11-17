@@ -50,8 +50,8 @@ buildable crate design and cut list in under a minute, without needing CAD.
 
 ## 4. Conventions (do not break)
 
-- **Units:** everything in `src/domain/` is **mm** and **kg**. Conversion to inches happens only
-  for display.
+- **Units:** everything in `src/domain/` is **mm** and **kg**. Conversion to inches and pounds
+  happens only at the edges: the UI and the CSV export.
 - **Frame:** right-handed, **Z up**, the same as the GLBs. **X is the crate's long axis**: the
   packer only keeps layouts where interior `L ≥ W`.
 - **Crate origin:** the interior min corner, which is the top face of the floor. Walls sit
@@ -74,8 +74,26 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Loaded GLBs** are read as metres, Z up, like the samples. A file more than **20 units**
   across is read as millimetres instead (`MM_FILE_THRESHOLD` in `src/lib/loadPart.ts`), and the
   UI says so ("file read as millimetres", plus an info check).
-- **Units in the UI:** the metric / imperial toggle is display-only (`src/lib/units.ts`). The
-  domain, the CSV and the mass input stay metric.
+- **Units in the UI (#15):** **imperial (in / lb) is the default**, for a domestic US shop floor;
+  metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
+  changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
+  and the shop standards stay in mm and kg; the mass field shows and accepts the selected unit
+  and stores kg; the CSV follows the selected units (§7.6). In imperial, stock uses shop names:
+  - **Lumber** by nominal S4S name (`NOMINAL_LUMBER`, 1 mm tolerance): 19 × 89 → `1x4`,
+    38 × 89 → `2x4`, 89 × 89 → `4x4`, 89 × 140 → `4x6`, and the other common sections
+    (1x2 … 1x12, 2x2 … 2x12, 4x8, 6x6, 6x8).
+  - **Plywood** by the thickness it is sold as: 6 → `1/4″`, 9 → `3/8″`, 12 → `1/2″`,
+    15 / 16 → `5/8″`, 18 / 19 → `3/4″`, 25 → `1″`; other thicknesses to the nearest 1/16″.
+  - **Blocking and bearers** are cut to the gap, so they read as their size and the smallest
+    stock that covers it: "1 15/16″ × 3 1/2″ from 4x4" (a gap that is itself stock, e.g. 38 mm,
+    is just `2x4`).
+  - **Anything else** (custom shop standards) is fractional inches, e.g. `1″ × 3 15/16″`.
+  - Cuts and other shop sizes are inches to the nearest 1/16″, reduced (`35 7/16″`, `3/4″`,
+    `12″`); overall sizes are inches to one decimal.
+
+  The Cut list, Overview ("stiffened with 1x4 cleats", "4x4 skids under a 3/4″ floor"), Rules
+  (plywood buttons and the Auto note), 3D tooltips and change notes all use these names; metric
+  is unchanged.
 - **Rotations** are XYZ-order Euler angles in multiples of π/2. Packing and rendering both use
   three.js `Euler`/`Matrix4` (`orientations.ts`), so packed bounding boxes always match the
   rendered models.
@@ -133,7 +151,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
-| `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
+| `src/domain/export.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (an export edge, formatted with `src/lib`), `downloadText()`, `ASSEMBLY_NAMES` |
 | `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign`, `parseDesignFile` (version check and migrations), `restoreDesign` |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
@@ -141,6 +159,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
+| `src/lib/lumber.ts` | US shop names (#15): `NOMINAL_LUMBER` (`nominalLumber`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
@@ -148,6 +167,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
+| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and the saved units in `localStorage` (§9) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger, focus trap and summary chip (#42); idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
@@ -155,7 +175,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design |
-| `src/components/shell/StandardsLoader.tsx` | Applies the saved shop standards once the app has mounted |
+| `src/components/shell/SavedStateLoader.tsx` | Applies the saved units and shop standards once the app has mounted |
 | `src/components/island/*.tsx` | The island and its five tabs |
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
@@ -600,10 +620,19 @@ Each member is tagged where it is created:
   - **Plywood:** stock is `"{thickness} mm"` and cut is `"{largest} × {second}"`.
   - **Lumber:** stock is `"{smallest} × {middle}"` and cut is `"{length}"`.
   - Regrouping by label instead of kind changes how many lines there are, not the total quantity.
-- **CSV** (always metric): four `#` header lines (part id and name; part material and mass each;
-  external size and gross; layout), then
-  `component,material,stock,cut_mm,qty` with component as `"{Assembly}: {label}"`, then a final
-  wood-screws line.
+- **CSV** (`bomToCsv`, and `shipmentToCsv` for a split batch) **follows the selected units**
+  (#15), so it is imperial by default. Five `#` header lines (part id and name; part material and
+  mass each; external size and gross, or the crate count and gross for a shipment; layout; the
+  units), then `component,material,stock,cut_in,qty` (or `cut_mm`) with component as
+  `"{Assembly}: {label}"`, then a final wood-screws line.
+  - **Imperial** is plain ASCII, so spreadsheets don't garble it: `# Units: inches (cuts to the
+    nearest 1/16) and pounds; lumber by nominal size`, mass each to 2 decimals in lb, gross in
+    whole lb, stock by nominal name (`4x4`, `1x4`, `1/2 in` plywood, `1 15/16 in x 3 1/2 in
+    from 4x4` blocking) and cuts as `36 11/16 in` or `35 3/16 in x 14 1/8 in`.
+  - **Metric** is as before plus the units line: `# Units: mm and kg`, stock as `19 × 89` or
+    `12 mm`, cuts in whole mm (`1082`, `932 x 652`).
+  - The build sheet / PDF (#26) should follow the same rule: the selected units, imperial by
+    default, with the same names (`src/lib/lumber.ts`).
 
 ### 7.7 Checks
 
@@ -803,7 +832,7 @@ The canvas fills the window. Four regions float above it:
 | Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a). Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
 | Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
 | Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads). Above it, any load message (shown only when there is one) |
-| Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb), View popover, Hide panels |
+| Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
 
 - **Crate centring:** the crate is centred in the area the overlays leave free, not in the
   window. `DesignerShell` measures the island and sets the insets. `Director` shifts the projection with `camera.setViewOffset` and
@@ -1019,12 +1048,19 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
 **Shop standards** (§6.4) are saved in `localStorage` under `crate-designer.shop-standards.v1`
 (`src/state/standardsStorage.ts`), as the same JSON envelope as the download. Every
 `setStandards` / `resetStandards` saves; the defaults are saved as no entry, so a later change
-to the shipped defaults reaches users who never customised them. `StandardsLoader` applies the
+to the shipped defaults reaches users who never customised them. `SavedStateLoader` applies the
 saved standards in an effect after the first render, so the server render and the first client
 render match; the design then re-computes once. Loading is safe: unreadable JSON, another
 version or an invalid value falls back to the defaults with a `console.warn`, and storage that
 is missing or throws (server, private mode, quota) is treated as empty. The version is in the
 key, so an incompatible future format starts fresh rather than misreading old data.
+
+**Display units** (#15) are saved under `crate-designer.units.v1` (`src/state/unitsStorage.ts`)
+as `"imperial"` or `"metric"` on every `setUnits`. Either choice is saved, so a later change of
+default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
+`SavedStateLoader` applies the saved units after mount, like the standards, so there is no
+hydration mismatch. Nothing saved, an unknown value (with a `console.warn`) or storage that
+throws keeps the default.
 
 A design can be saved to and reopened from a JSON file (§6.5), but isn't stored in the app.
 Everything else lives in memory. The plan for designs is SQLite WASM with the `opfs-sahpool`
@@ -1174,7 +1210,17 @@ lb → kg → lb round trips, ↑ / ↓ steps in either unit with a floor, the f
 change note text ("Gross 16 → 20 kg", lb and inch fractions, "+N more", and "No change to the
 crate" when the changes round away).
 
-**`src/lib/units.test.ts`** checks formatting and 1/16″ fractions. **`src/lib/loadPart.test.ts`**
+**`src/lib/units.test.ts`** checks formatting and 1/16″ fractions, including the edges (0, under
+and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into the next inch) and the
+CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
+4x6, …, either order and 1 mm of rounding, no name for non-stock), plywood by sold thickness with
+the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
+**`src/domain/export.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
+units line, `cut_in`), nominal stock, fractional cuts and ASCII only; the metric header and
+`cut_mm`; the same rows and quantities in both; and a split shipment in both.
+**`src/state/units.store.test.ts`** checks the imperial default, the versioned key round trip,
+nothing saved, an unknown value, storage that throws, no window, and `setUnits` /
+`loadSavedUnits` in the store. **`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
 names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
 design restored from the bundled catalog, a custom design without its GLB naming the file,
@@ -1221,8 +1267,17 @@ HTML report as `playwright-report`.
   - `03-rules`: quantity 8 gives 938 × 658 × 823; a typed 500 clamps to 200 and shows the
     note "Quantity is 1–200; set to 200"; Reset rules
     restores the defaults and keeps the quantity.
-  - `04-units`: mm → in in the header, Overview (36.7 × 25.7 × 19.6 in) and size labels, and
-    back.
+  - Specs that assert mm / kg text pick metric first with `setUnits(page, "metric")` (the view
+    bar toggle, in `helpers.ts`), since the app opens in imperial (#15).
+  - `04-units`: opens in imperial (header in / lb, Overview 36.7 × 25.7 × 19.6 with
+    932 × 652 × 497 mm under it, size labels in inches), then metric, then back.
+  - `14-imperial-default` (#15): first load is imperial (header "47 lb each", Overview "1/2″ ply",
+    "stiffened with 1x4 cleats", "4x4 skids under a 3/4″ floor"); the Cut list has `Cut, in`,
+    `3/4″ plywood`, `4x4`, `1/2″ plywood`, `1x4` and blocking "1 15/16″ × 3 1/2″ from 4x4";
+    the downloaded CSV is imperial (`cut_in`, nominal stock). After switching to metric a reload
+    keeps metric (and its CSV is `cut_mm`); switching back to imperial is remembered too.
+    Screenshots `15-overview-imperial`, `15-cutlist-nominal`, `15-cutlist-blocking`,
+    `15-overview-metric`.
   - `05-cutlist`: hovering a row sets the hover key, clicking pins it and shows
     "Showing N × piece", Escape clears it.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
@@ -1243,7 +1298,8 @@ HTML report as `playwright-report`.
     opens from the hamburger with every tab and no page scroll, and a scrim click closes it.
   - `12-mobile` (#42, at 390 × 844 and 360 × 800): the page doesn't scroll, the canvas is
     full-bleed and the size labels sit between the header and the summary; the summary shows
-    932 × 652 × 497 mm and the gross in amber; the hamburger opens the drawer (a modal dialog
+    36.7 × 25.7 × 19.6 in and the gross in lb by default, then 932 × 652 × 497 mm after the
+    units toggle, with the gross in amber; the hamburger opens the drawer (a modal dialog
     85–90 vw wide, focus on close), Tab stays inside it, and Escape, the scrim and the close
     button each close it and return focus to the hamburger; every tab works inside it with no
     page scroll and only the panel scrolls; drawer controls are at least 44 px; tapping the
@@ -1307,7 +1363,8 @@ HTML report as `playwright-report`.
 | Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
 | House rules are one zod-validated `ShopStandards` object passed into `computeDesign`, defaulting to `DEFAULT_STANDARDS` (#19) | Makes the PM's tribal knowledge explicit and editable; the domain stays pure (no store or storage access), and every existing call and test works unchanged with the defaults | Every domain function takes one more argument; a few exports remain as views of the defaults for tests |
 | Shop standards persist in `localStorage` under a versioned key, loaded after mount | No backend yet; a PM's house rules should survive reloads. Loading after mount avoids a hydration mismatch, and invalid data falls back to the defaults with a warning | Per browser, not per shop: share them with Download / Load standards until there are accounts (§9) |
-| Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists that are usually metric here | An imperial user converts by hand |
+| Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists; the stock fields are actual sizes, which map to nominal names for display | An imperial user converts by hand |
+| Imperial by default, with nominal lumber names and a CSV in the selected units (#15) | The shop floor is domestic US: crews think in inches, pounds, 2x4s and 3/4″ ply, and the cut list is what they saw to | Two CSV formats; a custom stock size not in `NOMINAL_LUMBER` shows as fractional inches |
 | A split is N identical crates plus at most one remainder, chosen fewest crates → least volume (3% tie) → most even (#25) | Identical crates are faster to build from one cut list; a PM thinks in crate counts first, then truck space; an even split balances the crates when volume doesn't care | A mixed plan (e.g. 4 + 3 + 3) is never offered; bisection assumes fit falls as the part count grows |
 | Per-crate limits reuse the trailer door and floor for size; only gross and part count are new standards | The door check already holds the handling size limit; two sources would drift | Forklift-specific size limits wait for #8 |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
@@ -1332,7 +1389,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #12 | Flag when a wooden crate is overkill (for example, light aluminum that a carton would do) |
 | #13 | Shipping-mode constraints (LTL, container, air) |
 | #14 | Shareable design via URL |
-| #15 | Imperial / metric units toggle (landed with #20) |
+| #15 | Imperial units by default with a metric toggle, nominal lumber names, CSV in the selected units |
 | #16 | Geometry-aware blocking for irregular parts |
 | #19 | Shop standards configuration (§6.4). Stock, defaults, thresholds, limits and material rates landed; labour rates need a labour-time model first |
 | #20 | UX redesign: full-bleed scene, glass island, tabbed detail |

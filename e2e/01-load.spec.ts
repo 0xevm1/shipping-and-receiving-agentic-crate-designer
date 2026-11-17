@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { crate, island, openApp, panel, shot, tab } from "./helpers";
+import { crate, island, openApp, panel, setUnits, shot, tab } from "./helpers";
 
 test("loads PART-001 × 4 with a rendered crate", async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
 
   const header = page.getByRole("banner");
   await expect(header).toContainText("PART-001 · Machined steel bracket");

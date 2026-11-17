@@ -9,7 +9,8 @@ import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import type { Units } from "@/lib/units";
 import { anim } from "./motion";
-import { loadStandards, saveStandards } from "./standardsStorage";
+import { loadStandards, saveStandards, type KeyValueStore } from "./standardsStorage";
+import { DEFAULT_UNITS, loadUnits, saveUnits } from "./unitsStorage";
 
 /** The part being crated: catalog metadata or a GLB loaded at runtime. */
 export interface LoadedPart extends DesignPart {
@@ -149,7 +150,10 @@ export interface DesignerState {
   /** Reads the standards saved in this browser. Called once after the app mounts. */
   loadSavedStandards: () => void;
   addCatalogParts: (parts: Part[]) => void;
-  setUnits: (u: Units) => void;
+  /** Shows these units and remembers them in this browser (`storage` is for tests). */
+  setUnits: (u: Units, storage?: KeyValueStore | null) => void;
+  /** Applies the units saved in this browser, if any. Called once after the app mounts. */
+  loadSavedUnits: (storage?: KeyValueStore | null) => void;
   setTab: (t: Tab) => void;
   setMode: (m: Mode) => void;
   setView: (patch: Partial<ViewState>) => void;
@@ -259,7 +263,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     extraParts: [],
     standards: DEFAULT_STANDARDS,
 
-    units: "metric",
+    units: DEFAULT_UNITS,
     tab: "overview",
     view: { lid: true, front: true, explode: 0, blocking: true, parts: true, dims: true, camera: "iso" },
     hover: null,
@@ -335,7 +339,14 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       for (const p of parts) byModel.set(p.model, p);
       set({ extraParts: [...byModel.values()] });
     },
-    setUnits: (units) => set({ units }),
+    setUnits: (units, storage) => {
+      set({ units });
+      saveUnits(units, storage);
+    },
+    loadSavedUnits: (storage) => {
+      const units = loadUnits(storage);
+      if (units && units !== get().units) set({ units });
+    },
     setTab: (tab) => set({ tab }),
     setMode: (mode) => {
       const view = { ...get().view, lid: mode !== "open", front: mode !== "open", explode: mode === "exploded" ? 1 : 0 };
