@@ -110,7 +110,9 @@ tab at a time.
    **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
    cost or freight; Volume is the default.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
-   labels. The real part models sit in each slot. Left alone for 5 s, the crate slowly turns and
+   labels. The real part models sit in each slot. With the size labels come the **centre of
+   gravity** (a black-and-white quartered ball with a drop line to the ground) and gold
+   **fork-entry arrows** at both ends, one per opening between the skids. Left alone for 5 s, the crate slowly turns and
    cycles through the modes.
 5. **Read off the build data:**
    - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost
@@ -121,8 +123,8 @@ tab at a time.
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
-     tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
-     cardboard box may be enough)
+     tip-over, blocking, stack load, base rating, centre of gravity, forklift and pallet-jack
+     entry, LTL length surcharge, and a hint when a cardboard box may be enough)
 6. **Switch units** between in / lb (the default, for a US shop floor) and mm / kg; the choice is
    remembered in this browser. **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
@@ -135,7 +137,8 @@ tab at a time.
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
    stack and base-rating limits, densities, material costs, screw spacing and screw price,
    the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
-   crate), and the dimensional-weight divisor. A change
+   crate), the dimensional-weight divisor, and **handling** (forklift and pallet-jack tine width,
+   spread and clearance under the floor, the off-centre limit and the smallest tip angle). A change
    re-designs the crate at once (for example, a higher plywood cost raises the Overview's
    "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
@@ -153,8 +156,8 @@ tab at a time.
       drawn from the design's boards; the cut list grouped by stock with totals; a fastener
       schedule; and the assembly order (base → walls → load parts → blocking and separators →
       lid).
-    - **Shipping label** for the dock: part number, quantity, gross weight, THIS SIDE UP and
-      the fork-entry marks.
+    - **Shipping label** for the dock: part number, quantity, gross weight, THIS SIDE UP, the
+      fork-entry arrows in the openings between the skids, and the centre-of-gravity mark.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
@@ -201,6 +204,12 @@ tab at a time.
 ### The crate it designs
 
 - **Base:** a plywood floor on lumber skids. Forklift entry is from the ends.
+- **Handling (#8):** the combined centre of gravity of the crate and the parts (each part
+  assumed to have its CoG at its bounding-box centre) is checked for being off-centre (over 10%
+  of the length or width: mark it) or top-heavy (static tip angle under 30°), and the openings
+  between the skids are checked for a forklift (75 mm clear, 100 mm tines) and a pallet jack
+  (85 mm clear, 180 mm forks at a 520–690 mm spread), with the load between the tines. All of
+  these are shop standards. Spec §7.14.
 - **Walls and lid:** plywood panels, each stiffened by a frame of 1×4 cleats.
 - **Inside:** wood holds the parts in place. Bearers lift the bottom layer, a plywood separator
   sits between layers, and blocking posts fill every gap.

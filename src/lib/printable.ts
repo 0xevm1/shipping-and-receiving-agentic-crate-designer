@@ -87,9 +87,11 @@ export interface PrintableLabel {
   heightMm: number;
   skidTallMm: number;
   skids: { y: number; w: number }[];
-  /** The centre of gravity, once the design has one (#8); null until then. */
+  /** The fork openings between the skids (#8, `design.handling.openings`), where the entry arrows go. */
+  openings: { y: number; w: number }[];
+  /** The design's centre of gravity (#8), crate-interior mm; null for a design without one. */
   cogMm: Vec3 | null;
-  /** The centre of gravity on the end view, from the bottom-left corner; null until #8. */
+  /** The centre of gravity on the end view, from the bottom-left corner; null without one. */
   cogEnd: { y: number; z: number } | null;
 }
 
@@ -178,9 +180,9 @@ function runnerUp(layouts: Layout[], shown: Layout, u: Units): string | null {
   return `${layoutText(next, u)}, ${volume(next.externalVolumeM3, u)}, ${vol}${next.stable ? "" : ", may tip"}.`;
 }
 
-/** Centre of gravity, when the design carries one (#8 adds it). */
+/** The design's centre of gravity (#8), when it is a usable point. */
 function cogOf(design: CrateDesign): Vec3 | null {
-  const cog = (design as CrateDesign & { centerOfGravityMm?: unknown }).centerOfGravityMm;
+  const cog: unknown = design.centerOfGravityMm;
   return Array.isArray(cog) && cog.length === 3 && cog.every((v) => typeof v === "number" && Number.isFinite(v)) ? (cog as Vec3) : null;
 }
 
@@ -293,6 +295,7 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
     heightMm: layout.external[2],
     skidTallMm: c.skid.tall,
     skids: members.filter((m) => m.kind === "skid").map((m) => ({ y: m.min[1] - y0, w: m.size[1] })),
+    openings: (design.handling?.openings ?? []).map((o) => ({ y: o.y - y0, w: o.width })),
     cogMm: cog,
     cogEnd: cog ? { y: cog[1] - y0, z: cog[2] - z0 } : null,
   };
