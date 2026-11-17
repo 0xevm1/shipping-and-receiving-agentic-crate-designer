@@ -9,6 +9,8 @@ import { UNITS_LABEL, UP_LABEL, type ModelUnits, type UpAxis } from "@/lib/partF
 import { MODEL_UNITS, UP_AXES } from "@/domain/designFile";
 import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
+import { massWarning } from "@/lib/fileCheck";
+import { renderMessage } from "@/lib/message";
 import type { ChangeSource } from "@/state/designEvents";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
@@ -36,6 +38,7 @@ export function PartHeader() {
   const measured = useDesigner((s) => s.measured);
   const units = useView((s) => s.units);
   const match = modelMatchesCatalog(part, measured);
+  const warning = massWarning(part.mass_kg);
   // The file's units and axis are the user's to set on a file they loaded: always for an unknown one (even when its size
   // leaves no crate to draw, which is when a wrong guess most needs fixing), and for a catalog-named one that doesn't match.
   const showFrame = canSetFrame(part) && (!part.catalogDims || match === false);
@@ -66,6 +69,12 @@ export function PartHeader() {
           <div>
             {dims(size, units)} {lengthUnit(units)} · {showFrame && <FrameFields />}
             <span className={match === false ? styles.warn : ""}>{modelNote(match, part.unitsGuessed)}</span>
+          </div>
+        )}
+        {warning && (
+          // A mass the app will take but not believe (#122): said under the header, never blocking.
+          <div className={styles.massWarning} role="status" data-testid="mass-warning">
+            {renderMessage(warning, units)}
           </div>
         )}
         <ChangeNote sources={PART_SOURCES} variant="header" />

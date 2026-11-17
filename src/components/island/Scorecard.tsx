@@ -1,6 +1,7 @@
 "use client";
 
 import type { CrateDesign } from "@/domain/crate";
+import { MAX_PLAUSIBLE_MASS_KG } from "@/lib/fileCheck";
 import { densityText, elapsedText, hoursText, usd } from "@/lib/format";
 import { weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -17,6 +18,8 @@ export function Scorecard({ design }: { design: CrateDesign }) {
   const rate = useDesigner((s) => s.standards.labour.rateUsdPerHour);
   const plan = useDesigner((s) => (s.plan.split ? s.plan : null));
   const designedInMs = useView((s) => s.designedInMs);
+  // A mass nobody believes (#122): the freight estimate from it, and the cost around it, are not shown as real.
+  const absurd = useDesigner((s) => s.part.mass_kg > MAX_PLAUSIBLE_MASS_KG);
   const { cost, labour, freight } = design;
   const lb = (v: number) => weightFromLb(v, units);
 
@@ -44,8 +47,8 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         </div>
         <div>
           <dt>Freight class</dt>
-          <dd className={styles.value}>{design.freight.freightClass}</dd>
-          <dd>est., {densityText(design.freight.densityLbFt3, units)}</dd>
+          <dd className={styles.value}>{absurd ? "—" : design.freight.freightClass}</dd>
+          <dd>{absurd ? "not estimated" : `est., ${densityText(design.freight.densityLbFt3, units)}`}</dd>
         </div>
         <div>
           <dt>Dim weight</dt>
@@ -55,6 +58,12 @@ export function Scorecard({ design }: { design: CrateDesign }) {
           </dd>
         </div>
       </dl>
+      {absurd && (
+        <p className={`${styles.note} ${styles.absurd}`} data-testid="scorecard-mass-note">
+          The part&apos;s mass looks wrong (see Checks), so the freight class is not estimated and the weights and cost here are not real. Correct the mass in
+          the header.
+        </p>
+      )}
       <p className={styles.note}>
         Material is {usd(cost.woodUsd)} of wood and {usd(cost.fastenersUsd)} of screws. The class is an estimate from the NMFC density scale; rates come from
         the shop standards.

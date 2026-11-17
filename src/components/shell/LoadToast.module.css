@@ -46,6 +46,26 @@
   height: 0;
   overflow: hidden;
 }
+/* Opens the File check report. A pill the size of the close button's row, in the toast's own colour. */
+.details {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: 500 11.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.details:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.row.isError .details {
+  border-color: color-mix(in srgb, var(--gold) 70%, transparent);
+  color: var(--gold);
+}
 .close {
   flex: none;
   width: 28px;
@@ -66,18 +86,20 @@
  * the part of the stage the crate is framed in and brushed the crate's top-left corner (1440 and
  * 1180 px wide). Up there nothing but the header is, and the crate never rises above its free area.
  * Its room runs from the header's right edge (`100%` is the header's width: about 400 px with the
- * tagline, 345 without) to the island; a longer sentence wraps, it never runs under the island.
+ * tagline, 345 without, and more when the header has a long line, such as the file's units and axis)
+ * to the island; a longer sentence wraps, it never runs under the island. `--header-w` is the header's
+ * measured width (DesignerShell.tsx); the numbers are only for the first paint.
  */
 @media (min-width: 981px) {
   .row {
     top: 0;
     left: calc(100% + 18px);
-    max-width: max(140px, min(440px, calc(100vw - 420px - var(--pad) * 2 - 345px - 34px)));
+    max-width: max(140px, min(440px, calc(100vw - 420px - var(--pad) * 2 - var(--header-w, 345px) - 34px)));
   }
 }
 @media (min-width: 1181px) {
   .row {
-    max-width: min(440px, calc(100vw - 440px - var(--pad) * 2 - 400px - 34px));
+    max-width: max(140px, min(440px, calc(100vw - 440px - var(--pad) * 2 - var(--header-w, 400px) - 34px)));
   }
 }
 
@@ -92,5 +114,13 @@
     width: 36px;
     height: 36px;
     margin: -4px 0;
+  }
+}
+
+/* A touch screen: the report's button is a full 44 px target (the row grows to hold it). */
+@media (max-width: 980px), (pointer: coarse) {
+  .details {
+    min-height: var(--touch);
+    margin: -9px 0;
   }
 }

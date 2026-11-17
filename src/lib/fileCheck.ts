@@ -72,7 +72,7 @@ export const sizeMatches = (measured: readonly number[], expected: readonly numb
  */
 export function massWarning(massKg: number, shown: string | Message = [kg(massKg)]): Message | null {
   if (massKg > MAX_PLAUSIBLE_MASS_KG) {
-    return msg`${shown} is more than ${kg(MAX_PLAUSIBLE_MASS_KG)}, the most one part is taken to weigh. Check for an extra digit or the wrong unit: the weights and freight figures follow from it.`;
+    return msg`${shown} is more than ${kg(MAX_PLAUSIBLE_MASS_KG)}, the most one part is taken to weigh. Check for an extra digit or the wrong unit.`;
   }
   if (massKg < MIN_PLAUSIBLE_MASS_KG) return msg`${shown} is under 1 g. Check the mass is in kilograms, not grams.`;
   return null;

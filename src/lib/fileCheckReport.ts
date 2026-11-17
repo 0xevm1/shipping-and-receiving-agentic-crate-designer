@@ -11,7 +11,7 @@ export interface FileReport {
   loaded: boolean;
 }
 
-export const SEVERITIES: readonly Severity[] = ["error", "warning", "note"];
+const SEVERITIES: readonly Severity[] = ["error", "warning", "note"];
 export const SEVERITY_LABEL: Record<Severity, string> = { error: "Error", warning: "Warning", note: "Note" };
 
 function countBySeverity(findings: readonly Finding[]): Record<Severity, number> {

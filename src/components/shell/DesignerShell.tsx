@@ -10,6 +10,7 @@ import { Island, ISLAND_ID } from "../island/Island";
 import { SizeLabels } from "../viewer/SizeLabels";
 import { StageMessage } from "../viewer/StageMessage";
 import { Flash } from "./ChangeFeedback";
+import { FileCheckDialog } from "./FileCheckDialog";
 import { Credit } from "./Credit";
 import styles from "./DesignerShell.module.css";
 import { PartHeader } from "./PartHeader";
@@ -126,6 +127,10 @@ export function DesignerShell() {
     const measure = () => {
       const island = islandRef.current;
       const s = useView.getState();
+      // The header's width, for the load toast beside it on a desktop (LoadToast.module.css): the header grows with its
+      // longest line (the file's units and axis, a long name), and the toast has to stop short of the island whatever it is.
+      const headerEl = shellRef.current?.querySelector("header");
+      if (headerEl) shellRef.current?.style.setProperty("--header-w", `${headerEl.offsetWidth}px`);
       if (mq.matches) {
         // Narrow: the full width, between the header and the summary and view bar at the foot.
         const header = shellRef.current?.querySelector("header")?.getBoundingClientRect();
@@ -232,6 +237,7 @@ export function DesignerShell() {
       {!narrow && <Credit />}
       {narrow && <div className={styles.scrim} data-testid="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
       <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} footer={narrow ? <Credit inline /> : undefined} />
+      <FileCheckDialog />
       {dragging && (
         <div className={styles.veil} data-testid="drop-veil">
           <div className={`glass card ${styles.veilCard}`}>Drop a .glb file to load the part</div>

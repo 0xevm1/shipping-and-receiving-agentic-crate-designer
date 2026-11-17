@@ -58,7 +58,13 @@ export function allChecks(
     });
   }
   const warning = part.mass_kg === undefined ? null : massWarning(part.mass_kg);
-  if (warning) items.push({ id: "mass-implausible", level: "caution", title: "Part mass looks wrong", detail: warning });
+  if (warning)
+    items.push({
+      id: "mass-implausible",
+      level: "caution",
+      title: "Part mass looks wrong",
+      detail: parts(warning, " The weights, cost and freight figures all follow from it."),
+    });
   const problems = fileFindings.filter((f) => f.severity !== "note");
   if (problems.length) {
     items.push({

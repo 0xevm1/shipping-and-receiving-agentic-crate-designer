@@ -46,6 +46,8 @@ export function useFocusTrap(
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
       const current = document.activeElement as HTMLElement | null;
+      // Focus in another dialog opened over this one (the File check over the drawer) is that dialog's to keep.
+      if (current && !root.contains(current) && current.closest('[role="dialog"]')) return;
       const target = trapTarget(tabbables(root), current && root.contains(current) ? current : null, e.shiftKey);
       if (target) {
         e.preventDefault();
