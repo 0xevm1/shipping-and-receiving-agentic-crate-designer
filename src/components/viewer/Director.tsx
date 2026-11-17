@@ -57,7 +57,8 @@ const sph = new Spherical();
  * - re-frames the camera on request (`fit` in the store), easing to the goal,
  * - eases the explode distance and lid / front-wall opacity toward the view targets,
  * - idle auto-play: after 6 s without input the crate turns and steps through
- *   closed → exploded → open → exploded, half a turn per mode.
+ *   closed → exploded → open → exploded, half a turn per mode. It holds while a row is pinned,
+ *   anything is hovered, or the narrow-screen drawer is open (#42).
  */
 export function Director() {
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
@@ -150,7 +151,7 @@ export function Director() {
     const s = useDesigner.getState();
     const reduce = reducedMotion();
 
-    if (s.result.design && !reduce && !dragging.current && !s.pin && !s.hover && (autoplay.on || isIdle())) {
+    if (s.result.design && !reduce && !dragging.current && !s.pin && !s.hover && !s.drawerOpen && (autoplay.on || isIdle())) {
       if (!autoplay.on || autoplay.step < 0) {
         autoplay.on = true;
         autoplay.turned = 0;

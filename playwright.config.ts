@@ -39,14 +39,25 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testIgnore: /\.narrow\.spec\.ts$/,
+      testIgnore: /\.(narrow|mobile)\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
     {
-      // Below the 980 px breakpoint: the stacked layout.
+      // Below the 980 px breakpoint with a mouse (a small window or a tablet): the drawer layout (#42).
       name: "narrow",
       testMatch: /\.narrow\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 900, height: 900 } },
+    },
+    // Phones (#42): touch, a mobile viewport and the drawer layout. Same specs at both sizes.
+    {
+      name: "mobile-390",
+      testMatch: /\.mobile\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+    },
+    {
+      name: "mobile-360",
+      testMatch: /\.mobile\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 360, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
     },
   ],
   webServer: {

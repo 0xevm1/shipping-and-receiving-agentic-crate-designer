@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef, type Ref } from "react";
+import { useRef, type ReactNode, type Ref } from "react";
 import { allChecks } from "@/state/checks";
 import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
@@ -27,11 +27,23 @@ const TABS: { id: Tab; label: string }[] = [
 
 const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout"];
 
+/** The island's id, for the hamburger's `aria-controls` on narrow screens (#42). */
+export const ISLAND_ID = "island";
+
+/** On narrow screens the island is a modal drawer (#42); the shell owns its state and focus. */
+export interface DrawerProps {
+  open: boolean;
+  onClose: () => void;
+}
+
 /**
  * The glass island: part name and loader, the part turning on its own, tabs,
  * and the selected tab's panel — the only thing on the page that scrolls.
+ *
+ * With `drawer` (narrow screens) it is a right-side modal dialog with a close button, inert
+ * while closed. `footer` renders below the panel (the credit, on narrow screens).
  */
-export function Island({ ref }: { ref: Ref<HTMLElement> }) {
+export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?: DrawerProps; footer?: ReactNode }) {
   const part = useDesigner((s) => s.part);
   const tab = useDesigner((s) => s.tab);
   const design = useDesigner((s) => s.result.design);
@@ -43,7 +55,12 @@ export function Island({ ref }: { ref: Ref<HTMLElement> }) {
   const cautions = design ? allChecks(design.checks, part, measured).filter((c) => c.level === "caution").length : 0;
 
   return (
-    <aside className="glass card island" ref={ref}>
+    <aside
+      id={ISLAND_ID}
+      className="glass card island"
+      ref={ref}
+      {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open })}
+    >
       <div className="parthead">
         <div className="partbar">
           <h2>{part.name}</h2>
@@ -61,6 +78,13 @@ export function Island({ ref }: { ref: Ref<HTMLElement> }) {
               e.target.value = "";
             }}
           />
+          {drawer && (
+            <button type="button" className="iconbtn drawer-close" aria-label="Close the panel" onClick={drawer.onClose}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          )}
         </div>
         <div aria-label="The part on its own. Drag to turn it, double-click to reset.">
           <PartView />
@@ -101,6 +125,7 @@ export function Island({ ref }: { ref: Ref<HTMLElement> }) {
           <ChecksTab design={design} />
         )}
       </div>
+      {footer && <div className="island-foot">{footer}</div>}
     </aside>
   );
 }

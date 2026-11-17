@@ -38,6 +38,8 @@ export interface CrateSnapshot {
   tab: string;
   units: string;
   panelsHidden: boolean;
+  /** Narrow screens: the island drawer is open (#42). */
+  drawerOpen: boolean;
   quantity: number;
   /** The shipment plan's crate types (#25): one for a single crate. */
   crateTypes: { label: string; count: number; quantity: number }[];
@@ -91,6 +93,7 @@ function snapshot(): CrateSnapshot {
     tab: s.tab,
     units: s.units,
     panelsHidden: s.panelsHidden,
+    drawerOpen: s.drawerOpen,
     quantity: s.settings.quantity,
     crateTypes: s.plan.crates.map(({ label, count, quantity }) => ({ label, count, quantity })),
     crateIndex: s.crateIndex,

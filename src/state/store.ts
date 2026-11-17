@@ -120,6 +120,8 @@ export interface DesignerState {
   fit: { nonce: number; instant: boolean };
   /** The last edit's effect on the design (#39). Units changes and loading a part don't set it. */
   lastChange: LastChange | null;
+  /** Narrow screens (#42): the island is a right-side drawer; true while it is open. Separate from `panelsHidden`. */
+  drawerOpen: boolean;
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
@@ -159,6 +161,7 @@ export interface DesignerState {
   setInsets: (i: Insets) => void;
   setLoadMessage: (m: string) => void;
   requestFit: (instant?: boolean) => void;
+  setDrawerOpen: (open: boolean) => void;
 }
 
 export const DEFAULT_PART_ID = "PART-001";
@@ -268,6 +271,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     loadMessage: "",
     fit: { nonce: 0, instant: true },
     lastChange: null,
+    drawerOpen: false,
 
     setPart: (part) =>
       recompute({
@@ -363,5 +367,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     },
     setLoadMessage: (loadMessage) => set({ loadMessage }),
     requestFit: (instant = false) => set({ fit: { nonce: get().fit.nonce + 1, instant } }),
+    setDrawerOpen: (drawerOpen) => {
+      if (get().drawerOpen !== drawerOpen) set({ drawerOpen });
+    },
   };
 });
