@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { PerspectiveCamera, Spherical, Vector3 } from "three";
 import { getPart } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
-import { arrowReachMm } from "./forkArrows";
+import type { CrateDesign } from "@/domain/crate";
+import type { Vec3 } from "@/domain/schema";
+import { arrowFreeRect, arrowGapMm, arrowOutline, arrowReachMm, layoutArrows, MIN_ARROW_SCALE } from "./forkArrows";
 import {
   approach,
   ARROWS_FIT_FROM,
@@ -22,8 +24,10 @@ import {
   viewOffset,
   zoomMode,
   type FrameRequest,
+  type Insets,
 } from "./framing";
-import { domainToWorld, FOV_DEG, sceneOrigin } from "./scene";
+import { domainToWorld, EXPLODE_WALL_MM, FOV_DEG, sceneOrigin } from "./scene";
+import { crateLabelAnchors } from "./sizeLines";
 
 function design(quantity = 4) {
   const d = computeDesign(getPart("PART-001"), { ...DEFAULT_SETTINGS, quantity }).design;
@@ -255,5 +259,93 @@ describe("panning stays in the free area", () => {
 
   it("measures home from the middle of the exploded crate when it is exploded", () => {
     expect(homeTarget(d, 1).y).toBeGreaterThan(homeTarget(d, 0).y);
+  });
+});
+
+/**
+ * The fork arrows on first load (#62): framing fits the crate and its labels, not the arrows' far tails (that
+ * zoomed the closed view out too far), so an arrow could land under the island or off screen. `layoutArrows`
+ * brings each one in: nearer, smaller, or not drawn. The insets below are what DesignerShell measures at each size.
+ */
+describe("fork arrows stay in the free area, at every size and view", () => {
+  const SIZES: [string, number, number, Insets][] = [
+    ["1440 × 900", 1440, 900, { left: 40, top: 96, right: 496, bottom: 130 }],
+    ["1280 × 720", 1280, 720, { left: 40, top: 96, right: 496, bottom: 130 }],
+    ["900 × 800 drawer", 900, 800, { left: 12, top: 153, right: 12, bottom: 68 }],
+    ["390 × 844 phone", 390, 844, { left: 12, top: 172, right: 12, bottom: 125 }],
+    ["360 × 800 phone", 360, 800, { left: 12, top: 190, right: 12, bottom: 125 }],
+  ];
+
+  function camera(d: CrateDesign, req: FrameRequest) {
+    const g = fitGoal(req);
+    const cam = new PerspectiveCamera(FOV_DEG, req.width / req.height, 0.02, 1000);
+    const o = viewOffset(req.width, req.height, req.insets);
+    cam.setViewOffset(req.width, req.height, o.x, o.y, req.width, req.height);
+    cam.position.copy(g.target).add(new Vector3().setFromSpherical(new Spherical(g.radius, g.phi, g.theta)));
+    cam.lookAt(g.target);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    const origin = sceneOrigin(d);
+    return (p: Vec3) => {
+      const q = domainToWorld([p[0] + origin[0], p[1] + origin[1], p[2] + origin[2]], new Vector3()).project(cam);
+      return [((q.x + 1) / 2) * req.width, ((1 - q.y) / 2) * req.height] as const;
+    };
+  }
+
+  const cases = SIZES.flatMap(([name, width, height, insets]) =>
+    (["closed", "open", "exploded"] as const).flatMap((mode) => ["PART-001", "PART-002", "PART-003"].map((id) => ({ name, width, height, insets, mode, id }))),
+  );
+
+  it.each(cases)("$id, $mode, $name: none is drawn outside the free area, and the label is clear", ({ width, height, insets, mode, id }) => {
+    const d = computeDesign(getPart(id), { ...DEFAULT_SETTINGS, quantity: id === "PART-001" ? 4 : 1 }).design!;
+    const req = request({ design: d, mode, width, height, insets });
+    const project = camera(d, req);
+    const out = EXPLODE_WALL_MM * req.view.explode;
+    const free = arrowFreeRect(insets, width, height);
+    const label = crateLabelAnchors(d, 0)[1];
+    const placed = layoutArrows(d, out, project, free, { at: [label[0] + out, label[1], label[2]], halfPx: LABEL_HALF_PX });
+    expect(placed.length).toBe(d.handling.openings.length * 2);
+    for (const a of placed) {
+      if (a.scale === 0) continue;
+      expect(a.scale).toBeGreaterThanOrEqual(MIN_ARROW_SCALE);
+      for (const p of arrowOutline(a.tip, a.outward, a.length, a.width, a.scale)) {
+        const [x, y] = project(p);
+        expect(x, "x").toBeGreaterThanOrEqual(free.left);
+        expect(x, "x").toBeLessThanOrEqual(free.right);
+        expect(y, "y").toBeGreaterThanOrEqual(free.top);
+        expect(y, "y").toBeLessThanOrEqual(free.bottom);
+      }
+      // The +X arrow clears the width label's pill, or stands at the worst-case gap it always had (the pill is then as close as the old placement left it).
+      if (a.end === 1) {
+        const px = arrowOutline(a.tip, a.outward, a.length, a.width, a.scale).map(project);
+        const [lx, ly] = project([label[0] + out, label[1], label[2]]);
+        const clear =
+          Math.max(...px.map((p) => p[0])) < lx - LABEL_HALF_PX.x ||
+          Math.min(...px.map((p) => p[0])) > lx + LABEL_HALF_PX.x ||
+          Math.max(...px.map((p) => p[1])) < ly - LABEL_HALF_PX.y ||
+          Math.min(...px.map((p) => p[1])) > ly + LABEL_HALF_PX.y;
+        expect(clear || a.gap === arrowGapMm(d.layout.external), "clear of the width label").toBe(true);
+      }
+    }
+    // Pulled apart, the framing already fits the arrows' tails: all are drawn, at full size.
+    if (mode === "exploded") expect(placed.every((a) => a.scale === 1)).toBe(true);
+  });
+
+  it("the far end's arrow keeps its old place and size at the sizes it fits, so the look is unchanged", () => {
+    for (const [, width, height, insets] of SIZES.slice(0, 3)) {
+      const d = design();
+      const req = request({ design: d, width, height, insets });
+      const project = camera(d, req);
+      const label = crateLabelAnchors(d, 0)[1];
+      const free = arrowFreeRect(insets, width, height);
+      const minus = layoutArrows(d, 0, project, free, { at: label, halfPx: LABEL_HALF_PX }).filter((a) => a.end === 0);
+      expect(minus.every((a) => a.gap === arrowGapMm(d.layout.external) && a.scale > 0.5)).toBe(true);
+    }
+  });
+
+  it("does not zoom the closed view out for the arrows: only the three size labels are fitted", () => {
+    // The framing is as it was; the arrows are fitted around it, never the other way round.
+    expect(keepInView(design(), 0)).toHaveLength(3);
+    expect(keepInView(design(), 0.4)).toHaveLength(3);
   });
 });

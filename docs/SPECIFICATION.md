@@ -282,7 +282,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
 | `src/components/viewer/DimensionLines.tsx` | Draws the size lines; positions the DOM labels each frame; shows the part's lines once the inside is open; drives the photon pulse |
 | `src/components/viewer/sizeLines.ts` | Pure size-line geometry (`buildLines`, label anchors, the dimension hidden per preset, label text) |
-| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement, and the occlusion test that hides an arrow behind the crate |
+| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement (`layoutArrows`: gap, size and whether it is drawn, to keep it in the free area, #62), and the occlusion test that hides an arrow behind the crate |
 | `src/components/viewer/probeStats.ts` | What the scene reports to the e2e hook (`probeStats`); writes are gated by `NEXT_PUBLIC_E2E` |
 | `src/components/viewer/dimensionPulse.ts` | Pure photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
 | `src/components/viewer/PhotonLayer.ts` | One `Points` of photons per line group, updated per frame (#65) |
@@ -1882,6 +1882,21 @@ open question for the user (see #20).
     width size label, which sits on the same centre line (`arrowGapMm`: the label's 110 mm + 5 %
     of the longest side, plus 36 % of that side for the fixed-size pill, plus 90 mm), so the
     arrow and "25.7 in" never overlap, closed or exploded, on a desktop or a phone (#62).
+  - **Kept in the free area (#62):** framing fits the arrows' tails only once exploded
+    (`ARROWS_FIT_FROM`), because fitting them when closed zoomed the crate out too far; so on first
+    load the near arrow sat under the island's glass and the far one half off the screen. Instead
+    `layoutArrows` (`forkArrows.ts`) places each arrow for the camera of the frame, in three steps. (1) At the
+    +X end, which has the width label, the tip stands at the smallest gap (down to 120 mm) at which
+    the arrow's outline is clear of the label's 88 × 28 px pill on screen (`clearGapMm`) instead of the
+    worst-case `arrowGapMm`, so it usually lies in the free area between the crate and the island; the −X end,
+    which has no label but is mostly hidden behind the crate from the usual angle, keeps the full gap. (2)
+    If its outline still leaves the free area (the insets, but out to 12 px from the window's left edge,
+    since the arrow is low and flat) it is drawn smaller, down to 50 % of its size (`fitArrowScale`:
+    the tip stays put, the proportions stay). (3) If even that doesn't fit, it is not drawn; it needs 60 %
+    to come back, so an arrow at the edge doesn't flicker as the camera turns. The size eases to its target.
+    Nothing is drawn under the island, the header, the bottom bars or off screen, in the closed, open and
+    exploded views (exploded, the framing already fits the tails, so all are full size); the crate is framed
+    exactly as before. The e2e hook reports the drawn arrows' screen boxes (`cog.arrowBoxes`).
   - **Hidden behind the crate:** an end's arrows drop out (fading, over about 0.3 s) when the
     crate hides most of them from the current camera, so the far arrow never shows as a sliver
     poking out. `forkArrows.ts` samples a 3 × 3 grid over each arrow and tests the segment from the
@@ -2483,7 +2498,10 @@ angles, that every size label and fork arrow tail projects inside the free area 
 360 px phones, closed, open and exploded), the pan bound and the angle helpers.
 **`src/components/viewer/sizeLines.test.ts`** checks the size-line geometry, the one part pill,
 the dimension left out per preset and the label text. **`src/components/viewer/forkArrows.test.ts`**
-checks the arrow size and the occlusion test with its hysteresis.
+checks the arrow size and the occlusion test with its hysteresis, the fit into the free area (tip fixed, proportions kept,
+shortest and longest scale, dropped when the tip is out, the return threshold) and the gap that clears the width label.
+`framing.test.ts` also lays the arrows out for the three sample parts at 1440 × 900, 1280 × 720, a 900 px drawer layout and 390 / 360 px
+phones, closed, open and exploded, and checks every drawn arrow lies in the free area and clears the width label.
 **`src/components/viewer/tooltipText.test.ts`** checks the board tooltip's detail line.
 **`src/components/viewer/dimensionPulse.test.ts`** checks the photon paths (#65, §8.4) on
 PART-001 × 4: one pulse per label (L, W, H, then the part's three); each crate dimension gives 6
@@ -2712,7 +2730,8 @@ copies chosen shots there on request.
   - `view-controls`: the mode icon, the first framing, camera presets, the switches and Pull apart, Hide panels. `view-popover`
     (`.mobile`): placement, nothing covering it, closing by Escape, focus-out and a press outside, the gesture hint.
   - `size-labels`: labels stay in the free area for every sample part and mode. `viewer` (`.mobile`): which labels each camera
-    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, a lost WebGL context.
+    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, no arrow under the island or summary bar or off screen,
+    a lost WebGL context.
   - `camera` (`.mobile`): right-drag and two-finger pan, bounded so the crate can't be lost; a preset or the idle turn returns
     to the middle. `layout` (`.narrow`, `.mobile`): only the island panel scrolls; the crate sits in the free area at load, after
     a reload, Hide / Show panels and a resize; the narrow drawer and the phone layout. `drawer.mobile`: the drawer's open and

@@ -24,5 +24,7 @@ export const probeStats = {
     endsShown: [true, true] as [boolean, boolean],
     /** The near-end (+X) arrow's screen box, CSS px, from the last frame. */
     arrowBox: null as { left: number; top: number; right: number; bottom: number } | null,
+    /** Every fork arrow drawn in the last frame (not hidden behind the crate, not dropped for lack of room), screen boxes in CSS px. */
+    arrowBoxes: [] as { left: number; top: number; right: number; bottom: number }[],
   },
 };

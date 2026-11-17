@@ -83,6 +83,8 @@ export interface CrateSnapshot {
     endsShown: [boolean, boolean];
     /** The near-end (+X) arrow's screen box in CSS px, from the last frame; null before one. */
     arrowBox: { left: number; top: number; right: number; bottom: number } | null;
+    /** Every fork arrow drawn in the last frame, as screen boxes in CSS px. */
+    arrowBoxes: { left: number; top: number; right: number; bottom: number }[];
   } | null;
 }
 
@@ -168,6 +170,7 @@ function snapshot(): CrateSnapshot {
           arrowsShown: handling.arrowsShown,
           endsShown: [handling.endsShown[0], handling.endsShown[1]],
           arrowBox: handling.arrowBox ? { ...handling.arrowBox } : null,
+          arrowBoxes: handling.arrowBoxes.map((b) => ({ ...b })),
         }
       : null,
   };
