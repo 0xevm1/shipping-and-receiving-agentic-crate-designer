@@ -24,7 +24,7 @@ export interface Construction {
 }
 
 /** What `resolveConstruction` picks from the payload alone; `minSkid` is the smallest skid allowed. */
-export interface ConstructionMaterials {
+interface ConstructionMaterials {
   panelMm: number;
   floorMm: number;
   minSkid: { wide: number; tall: number };

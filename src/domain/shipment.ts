@@ -30,7 +30,7 @@ export interface CrateType {
   result: DesignResult;
 }
 
-export interface ShipmentTotals {
+interface ShipmentTotals {
   crates: number;
   parts: number;
   payloadKg: number;
@@ -274,7 +274,7 @@ export function describeShipment(plan: { crates: Pick<CrateType, "label" | "coun
     .join(" + ");
 }
 
-export interface ShipmentBom {
+interface ShipmentBom {
   /** Cut-list lines for every crate, each crate type's quantities × its count, equal pieces merged. */
   lines: BomLine[];
   plywoodM2: number;

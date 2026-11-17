@@ -55,7 +55,7 @@ function shapedText(d: CrateDesign): Message {
  * The computed base rating (spec §7.15): "Base rated 1,240 kg; this crate's payload is 820 kg
  * (66%)", with the skids, joists and floor, and what governs.
  */
-export function baseRatingCheck(d: CrateDesign, standards: ShopStandards): Check<"base-rating"> {
+function baseRatingCheck(d: CrateDesign, standards: ShopStandards): Check<"base-rating"> {
   const c = d.construction;
   const { ratedPayloadKg: rated, base } = d.structure;
   const pct = rated > 0 ? `${Math.round((d.payloadKg / rated) * 100)}%` : "over";
@@ -72,7 +72,7 @@ export function baseRatingCheck(d: CrateDesign, standards: ShopStandards): Check
 }
 
 /** Only when crates may be stacked (`structure.lidStackKg` > 0): whether the lid carries it. */
-export function lidRatingCheck(d: CrateDesign): Check<"lid"> | null {
+function lidRatingCheck(d: CrateDesign): Check<"lid"> | null {
   const lid = d.structure.lid;
   if (lid.stackKg <= 0 || lid.capacityKg === null) return null;
   const c = d.construction.lid;

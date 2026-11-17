@@ -392,7 +392,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-export type StandardsResult = { ok: true; standards: ShopStandards } | { ok: false; error: string };
+type StandardsResult = { ok: true; standards: ShopStandards } | { ok: false; error: string };
 
 /** Validates standards, returning the first problem in plain words. */
 export function parseStandards(input: unknown): StandardsResult {

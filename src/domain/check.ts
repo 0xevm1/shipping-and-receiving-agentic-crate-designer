@@ -6,13 +6,13 @@ import type { Message } from "./message";
  */
 
 /** Produced by `crateChecks.ts`. */
-export type CrateCheckId = "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "lid" | "utilization" | "cardboard";
+type CrateCheckId = "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "lid" | "utilization" | "cardboard";
 
 /** Produced by `handling.ts`. */
 export type HandlingCheckId = "cog-offset" | "cog-tip" | "forklift" | "pallet-jack";
 
 /** Produced by `shipment.ts`, only for a crate in a shipment plan. */
-export type ShipmentCheckId = "crate-limit";
+type ShipmentCheckId = "crate-limit";
 
 export type CheckId = CrateCheckId | HandlingCheckId | ShipmentCheckId;
 

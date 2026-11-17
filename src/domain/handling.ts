@@ -17,7 +17,7 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  */
 
 /** A point mass. */
-export interface MassPoint {
+interface MassPoint {
   at: Vec3;
   kg: number;
 }
@@ -32,9 +32,9 @@ export interface Opening {
   clearMm: number;
 }
 
-export type Device = "forklift" | "pallet-jack";
+type Device = "forklift" | "pallet-jack";
 
-export interface DeviceFit {
+interface DeviceFit {
   device: Device;
   fits: boolean;
   /** Why not, when it doesn't: the height under the floor, or the width between the skids. */

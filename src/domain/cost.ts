@@ -16,8 +16,8 @@ import { IN3_PER_FT3, LB_PER_KG, MM_PER_IN } from "./units";
  * Pure: everything is computed from the design's cut list, screws and outside size.
  */
 
-/** Assembly steps that don't depend on the layout: the base, four walls and the lid. */
-export const FIXED_ASSEMBLY_STEPS = 6;
+/** Assembly steps that don't depend on the layout: one for the base, one per wall (four) and one for the lid. */
+export const FIXED_ASSEMBLY_STEPS = 1 + 4 + 1;
 
 export interface LabourEstimate {
   /** What was counted. */

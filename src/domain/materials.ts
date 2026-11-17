@@ -3,7 +3,7 @@ import type { ShopStandards } from "./standards";
 import { MM2_PER_M2, MM3_PER_M3, MM_PER_M } from "./units";
 
 /** A board's volume in m³. */
-export function memberVolumeM3(m: Pick<Member, "size">): number {
+function memberVolumeM3(m: Pick<Member, "size">): number {
   return (m.size[0] * m.size[1] * m.size[2]) / MM3_PER_M3;
 }
 
@@ -12,7 +12,7 @@ export function memberKg(m: Pick<Member, "size" | "material">, standards: ShopSt
   return memberVolumeM3(m) * standards.rates.densityKgM3[m.material];
 }
 
-export interface MaterialTotals {
+interface MaterialTotals {
   /** Wood volume by material, m³. */
   volumeM3: { plywood: number; lumber: number };
   /** Empty-crate weight, kg. */
