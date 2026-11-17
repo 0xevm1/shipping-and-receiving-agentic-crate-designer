@@ -1,6 +1,7 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Scene, Vector3, type Object3D } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { cradleGeometry } from "@/components/viewer/cradleGeometry";
 import { cloneWithMaterial, partMaterial, WOOD } from "@/components/viewer/scene";
 import { ASSEMBLIES, type CrateDesign, type MemberKind } from "@/domain/crate";
 import { ASSEMBLY_NAMES } from "@/domain/export";
@@ -78,7 +79,9 @@ export function buildCrateScene(design: CrateDesign, part?: PartModel | null): S
       const n = (counts.get(m.label) ?? 0) + 1;
       counts.set(m.label, n);
       const [sx, sy, sz] = m.size;
-      const mesh = new Mesh(new BoxGeometry(sx * M_PER_MM, sy * M_PER_MM, sz * M_PER_MM), materials[m.kind]);
+      // Cradles keep their notches (#6): the viewer's solid, scaled to metres.
+      const geometry = m.cradle ? cradleGeometry(m).scale(M_PER_MM, M_PER_MM, M_PER_MM) : new BoxGeometry(sx * M_PER_MM, sy * M_PER_MM, sz * M_PER_MM);
+      const mesh = new Mesh(geometry, materials[m.kind]);
       mesh.name = `${m.label} ${n}`;
       mesh.position.set((m.min[0] + sx / 2) * M_PER_MM, (m.min[1] + sy / 2) * M_PER_MM, (m.min[2] + sz / 2) * M_PER_MM);
       group.add(mesh);

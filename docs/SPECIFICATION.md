@@ -148,6 +148,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/orientations.ts` | The 6 orientations; `rotatedSize()` |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
+| `src/domain/cradles.ts` | Cradles for slender parts (#6, §7.5a): `isSlender`, `usesCradles`, `cradleStations`, `notchFor`, `addCradleDunnage`, and the notch outline (`cradleProfile`, `cradleSolidAt`) |
+| `src/components/viewer/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
@@ -201,7 +203,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
 | `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
-| `src/components/viewer/CrateModel.tsx` | One box per `Member`; explode, fades, highlight, ghosting, picking |
+| `src/components/viewer/CrateModel.tsx` | One box per `Member` (a notched solid for cradles, #6); explode, fades, highlight, ghosting, picking |
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
 | `src/components/viewer/DimensionLines.tsx` | Crate and part size lines; positions the DOM labels each frame; drives the photon pulse |
 | `src/components/viewer/dimensionPulse.ts` | Pure size-line geometry (`buildLines`), photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
@@ -348,7 +350,8 @@ one zod-validated object in `src/domain/standards.ts`, and `computeDesign(part, 
 layoutKey?, standards = DEFAULT_STANDARDS)` passes it down to `resolveConstruction`,
 `enumerateLayouts`, `designCrate`, the dunnage, the screw estimate and the checks. Nothing in
 the domain reads a rule from a module constant. **With `DEFAULT_STANDARDS`, every design is
-exactly what it was before** (the 18-case baseline in §10 is unchanged).
+exactly what it was before** (the 18-case baseline in §10 was unchanged by #19; #6's cradles
+later re-captured the PART-002 rows on purpose).
 
 Units are fixed per field (mm, kg, kg/m³, USD/m³, USD per 100 screws, minutes, USD/h, in³/lb),
 whatever the display units.
@@ -395,11 +398,18 @@ whatever the display units.
 | `handlingMin` | 15 | Minutes per crate: moving, marking, staging |
 | **`freight`** — LTL terms (§7.12, #17) | | |
 | `dimDivisorIn3PerLb` | 139 | Dimensional weight = outside in³ / divisor |
+| **`cradle`** — cradles for slender parts (§7.5a, #6) | | |
+| `slenderRatio` | 3 | A part is slender when longest ÷ middle side ≥ this (1.5–50) |
+| `maxSpacingMm` | 600 | Cradles along the part at most this far apart, centre to centre |
+| `endOffsetMm` | 150 | End cradles' centre lines this far in from each part end (cut to ¼ of a short part) |
+| `notchDepth` | 0.25 | Notch depth as a fraction of the part's height (0.05–0.45) |
+| `roundTolerance` | 0.1 | Cross-section sides within 10% count as round: a circular seat, not a flat pocket |
+| `thickMm` | 38 | Cradle board thickness along the part (2× lumber) |
 
 **Validation.** Every number is finite and inside a sane range (for example cleat spacing
 100–5000 mm, so a typo can't make thousands of boards). Across fields: panel plywood must go
 `light ≤ medium ≤ heavy`, `panelLightMaxKg ≤ panelMediumMaxKg`, the trailer door can't be
-bigger than the trailer inside, and blocking can't be wider than the minimum interior (two
+bigger than the trailer inside, the end-cradle offset can't be more than the cradle spacing, and blocking can't be wider than the minimum interior (two
 cleats), or a bearer would poke through a wall. `parseStandards` returns the first problem as
 `"path: message"`.
 
@@ -425,8 +435,8 @@ the defaults (so a file can hold only the house's differences), and rejects inva
 different `version`, or an invalid value.
 
 **In the UI.** Rules → **Shop standards · house rules for every crate**, a `<details>` section
-collapsed by default. Seven groups (Stock on hand, Defaults, Construction, Limits, Rates, Labour,
-Freight) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
+collapsed by default. Eight groups (Stock on hand, Defaults, Construction, Cradles, Limits, Rates,
+Labour, Freight) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
 text is a valid standard; invalid text is outlined in gold with the reason and reverts on blur.
 A changed field is tinted and says its default. A **Customised** tag shows when anything
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
@@ -630,7 +640,7 @@ Each member is tagged where it is created:
 | `sides` | `side-` (front) / `side+` (back) | Side panel, Side rail (top and bottom cleats), Side upright (vertical cleats) |
 | `ends` | `end-` / `end+` | End panel, End rail, End upright |
 | `lid` | `lid` | Lid panel, Lid edge cleat, Lid cross cleat |
-| `inside` | `inside` | Bearer, Layer separator, Blocking post |
+| `inside` | `inside` | Bearer, Layer separator, Blocking post; for slender parts (§7.5a) Cradle, Stacking cradle, End stop |
 
 **Invariant:** the bounding box of all members equals `layout.external`, which is tested.
 
@@ -654,6 +664,71 @@ Each member is tagged where it is created:
     or for the top layer, to the part's top. This means the posts also carry the layer above.
   - Posts are only made when the gap is ≥ 19 mm (`construction.minBlockingGapMm`).
   - Posts shared by two neighbouring parts are de-duplicated by rounded position and size.
+- **Slender parts** get cradles instead of all of the above (§7.5a).
+
+### 7.5a Cradles for slender parts (`src/domain/cradles.ts`, #6)
+
+A round shaft on two flat bearers with one post per side can roll, bow and slide. Real shaft
+crates sit the part in **notched wooden saddles** across its length, with stops at the ends.
+Values are the defaults; the standards field is in brackets (§6.4, group `cradle`).
+
+**Which parts.** `isSlender(dims, standards)`: the part's **longest side ÷ its middle side ≥ 3**
+[`slenderRatio`]. It reads the part's own dimensions, not the layout. PART-002 (1530 × 172 ×
+172) is 8.9 and qualifies; PART-001 (1.4) and PART-003 (1.02) do not, and their crates are
+unchanged. A flat plate (600 × 500 × 10) is 1.2: thin, but not long. **Ownership:** cradles own
+slender parts and the general / geometry-aware blocking (#16) owns the rest, using the same
+predicate. `designCrate` takes the cradle path (`usesCradles`) when the part is slender **and**
+its long axis lies horizontal in the layout (along X or, for a wide batch, Y). A slender part
+stood on end (a layout the user picks) has no length to cradle and keeps the general blocking.
+
+**Stations.** `cradleStations(start, length)`: the end cradles' centre lines **150 mm in from
+each end** [`endOffsetMm`] (cut to a quarter of the length on a short part, so the two don't
+meet), and the rest evenly between them **at most 600 mm apart** [`maxSpacingMm`]: `count =
+max(2, ceil((length − 2·150) / 600) + 1)`. The 1530 mm shaft gets 4, 410 mm apart. Every part in
+a row along the long axis shares the stations, and every layer uses the same ones, so stacked
+cradles line up.
+
+**The notch.** `notchFor(width, height)`: depth = **25% of the part's height** [`notchDepth`]. A
+cross-section whose sides are within 10% [`roundTolerance`] is taken as **round** and gets a
+circular seat of the part's radius; its opening is the chord at that depth, `2√(d(2r − d))`
+(shaft: r = 86, d = 43, opening 149 mm). Any other section gets a **flat** pocket as wide as the
+part. The bounding box can't tell round from square, so a square bar also gets a round seat.
+
+**Members** (all `assembly: "inside"`, `face: "inside"`, lumber, so the Blocking switch fades
+them like other dunnage):
+
+| Label | Kind | Geometry |
+|---|---|---|
+| Cradle | `cradle` | At each station, on the floor: **38 mm** thick along the part [`thickMm`], spanning the interior **wall to wall** across it, from z = 0 to the part's bottom + notch depth (the part rests on the notch bottom; the bottom layer's parts sit at the floor clearance, so the shaft's cradle is 50 + 43 = 93 mm tall). One `top` notch per part in the row. Replaces the bearers and the side posts |
+| Stacking cradle | `cradle` | Between each pair of layers, at the same stations: from the lower part's top − notch depth to the upper part's bottom + notch depth, with `bottom` notches over the layer below and `top` notches for the layer above. The part gap and the separator's thickness become wood between the notches, so **there is no separator sheet**; the layers' cradles stack into one column. Only where the upper layer has parts |
+| End stop | `blocking` | At both ends of every column of parts, in the gap to the end wall or the next part, from the floor to the top of the column. Width and minimum gap as blocking posts (`stock.blockWidthMm`, `construction.minBlockingGapMm`); de-duplicated |
+
+Packing is untouched: the layout, slot positions and outside size are the packer's. A cradle
+member is still its bounding box, with `cradle: { axis, notches }` (`CradleProfile`) for the
+notches; each `Notch` has its centre, width, depth, shape, radius and face. BOM, weight and
+cost use the box (the stock it is cut from). `cradleProfile(member)` gives the outline in the
+board's plane (round notches as 16-segment arcs), and `cradleSolidAt(member, at)` the solid Z
+range at a point along it.
+
+**Outputs.**
+
+- **Cut list:** Cradle and Stacking cradle lines, stock "{38} × {height}" cut to the interior
+  width; imperial reads e.g. "1 1/2″ × 3 11/16″ from 2x6" (cut to size, like blocking). Pieces
+  with a different notch count are different lines (key suffix `|n notches`, `BomLine.notches`).
+- **Screws** (§7.6): 4 per cradle, two at each end: "Cradles to floor", and "Stacking cradles
+  through the side walls". End stops are 2 each, and the blocking line is titled "End stops".
+- **Labour** (§7.12): each notch is one more lumber cut.
+- **Checks:** the `blocking` pass names them: "4 notched cradles hold the parts across their
+  length, and 2 end stops hold them along it."
+- **3D:** each cradle is its profile extruded through its thickness (`cradleGeometry`), with
+  edges drawn above 20°, so the notch reads clearly; it picks, tooltips, highlights and ghosts
+  like any board. The GLB export uses the same solid.
+- **Overview:** a "Cradles" step ("N cradles", the end stops) in place of "Blocking".
+- **Build sheet** (§7.11): floor cradles are placed in "Load the parts", with the notch size
+  ("a round seat of 86 mm radius, 43 mm deep and 149 mm across"); stacking cradles and end
+  stops in "Blocking and separators". Section A–A shows the floor cradles under the parts (seen
+  below the cut) and the end stops; Section B–B cuts the cradles through the notch, so each shows
+  its solid part only. Both titles name the cradles.
 
 ### 7.6 Outputs
 
@@ -673,11 +748,12 @@ Each member is tagged where it is created:
   - each cleat: `ceil(len/150)+1`
   - each skid: `ceil(len/300)+1`
   - each block or bearer: 2
+  - each cradle or stacking cradle: 4 (#6, §7.5a)
   - walls-to-floor plus lid-to-walls: `2·ceil(2(L+W)/200)`
   - corners: `4·ceil(H/200)`
   - `screwSchedule(members, interior, standards)` returns these line by line (floor to skids,
-    side and end wall cleats, walls to floor, corners, bearers, blocking, lid cleats, lid to
-    walls), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
+    side and end wall cleats, walls to floor, corners, bearers, cradles, stacking cradles,
+    blocking (titled "End stops" in a cradled crate), lid cleats, lid to walls), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
     `screws` is its sum, so the estimate is unchanged.
 - **BOM:** members are grouped by `(assembly, label, stock, cut)`; that string is the line's
   `key` and each member's `bomKey`.
@@ -710,7 +786,7 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 |---|---|---|---|
 | `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`limits.trailerMm`) |
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
-| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
+| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). For a cradled slender part (§7.5a) the pass text names the cradles and end stops instead of the posts. The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
 | `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg (`limits.baseRatingKg`; the title quotes the limit). The pass text names the skids ("4×4", "4×6", or the size in mm for non-standard stock) |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
@@ -892,6 +968,9 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
      - **Section B–B**, a side cut through the front row of parts: blocking, separators, lid
        and floor are cut, the bearers under the row are seen beyond the cut, and the interior
        L and H are dimensioned.
+     - For a cradled slender part (#6, §7.5a), A–A also shows the floor cradles seen below the
+       cut, B–B cuts the cradles through the notch (only the solid part is drawn), and both
+       titles name the cradles.
 
      Dimensions are shop sizes: fractional inches to 1/16″, or whole mm.
    - **Cut list by stock:** the crate's cut list regrouped by stock name (`stockText`). Each
@@ -955,7 +1034,8 @@ hours     = Σ / 60;   labour $ = hours × rateUsdPerHour
 ```
 
 Pieces are the cut list's quantities (one cut per lumber piece; one plywood piece is a rip and a
-cross-cut, hence its own time). The same size in two assemblies is one set-up.
+cross-cut, hence its own time). Each cradle notch (#6, `BomLine.notches`) counts as one more
+lumber cut. The same size in two assemblies is one set-up.
 
 **Cost (`crateCost`).** `woodUsd` = `materialCostUsd` (§7.6); `fastenersUsd` = screws / 100 ×
 `rates.screwCostUsdPer100`; `materialUsd` = wood + fasteners; `totalUsd` = material + labour.
@@ -1562,6 +1642,27 @@ The ranking option (#17) is saved only as part of the last-opened crate; the tim
 - **Regression baseline:** 18 part × quantity × keepUpright cases. For each, the external size,
   gross, screws, member count, layout count and total BOM quantity must equal the values captured
   before the #20 redesign. For example, PART-003 × 8 is 1102 × 1082 × 809 mm with 308 screws.
+  The six PART-002 rows were deliberately re-captured by #6 (cradles, §7.5a): same outside size
+  and layouts, gross 76.25 / 120.44 / 193.08 → 70.61 / 109.30 / 180.15 kg, screws 200 / 226 /
+  268 → 208 / 228 / 272, members 40 / 45 / 53 → 40 / 42 / 46 (× 1 / 2 / 4). PART-001 and
+  PART-003 did not change.
+- **Cradles (#6, `cradles.test.ts`):** `isSlender` picks PART-002 and not PART-001 or PART-003,
+  at exactly the ratio, in any side order, and follows the standard; a flat plate isn't
+  slender; a shaft stood on end keeps the general blocking. Stations: 150 mm from each end,
+  ≤ 600 mm apart, at least 2, a third one exactly past 900 mm, a short part's two don't meet.
+  Notches: a round seat of the part's radius, 25% deep, opening = the chord; a flat pocket as
+  wide as the part; the depth follows the standard. In the shaft crate: only cradles and end
+  stops inside; 4 cradles wall to wall under one shaft, top at the part's bottom + notch depth;
+  one notch per shaft side by side; stacking cradles at the same stations, notched both ways,
+  clear of the floor cradles, no separator; end stops from the floor to the top of the stack;
+  everything inside the crate; a part along Y turns the cradles; a flat bar gets a flat
+  pocket. Cut-list lines (with notch counts), 4 screws per cradle, "End stops", one lumber cut
+  per notch, and the blocking check's text. The profile is counter-clockwise, inside the box
+  and cut to the notch; `cradleSolidAt` is shorter through a notch. `cradleGeometry.test.ts`:
+  the 3D solid fills the member box, centred, and is cut to the notch bottom.
+  `printable.test.ts`: floor cradles in "Load the parts" with the notch size, stacking cradles
+  and end stops in "Blocking and separators", pieces and screws still add up, and both
+  sections draw the cradles (Section B–B cut down to the notch).
 - Every member has an assembly, a face and a label, and each face sits on the correct side of the
   interior.
 - The cut list has the finer labels, every member links to exactly one line, and line quantities
@@ -1944,6 +2045,14 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
+  - `23-cradles` (#6): the shaft (PART-002 × 4, open view) has Cradle, Stacking cradle and End
+    stop rows in the cut list and no Bearer, Layer separator or Blocking post rows; hovering
+    and pinning the Cradle row lights it in 3D ("Showing 4 × cradle", pin key ending
+    "|2 notches"). PART-002 × 1 says "4 cradles" in the Overview and names the cradles and end
+    stops in the blocking check. Shop standards has a Cradles group. The print build sheet's
+    Section A–A and B–B titles name the cradles, and its cut list and assembly list them with
+    "Cradles to floor". Screenshots `23-cradles-pinned`, `23-cradles-cutlist`,
+    `23-cradles-build-drawings`, `23-cradles-build-cutlist`.
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one
@@ -2025,6 +2134,9 @@ HTML report as `playwright-report`.
 | The Export pill's PDF is drawn with jsPDF from `PrintableDesign`, drawings included, without svg2pdf (#51) | One model for print and PDF; the drawings are only rectangles and lines, so drawing them directly keeps the code DOM-free and unit-testable in Node, with one dependency | Built-in Helvetica only (non-WinAnsi characters are spelled out); the PDF's page layout is its own, not `/print`'s |
 | The Export pill keeps the separate downloads (#51) | Someone who wants one file (an engineer wanting only the GLB) and the print-to-paper path stay one click away | Two ways to get each file |
 | The print route gets the design as a design file in the URL hash, not through `sessionStorage` | Works on reload and when opened directly, never leaves the browser, and reuses the #28 format a share link can use | It uses the printing browser's saved shop standards, not the opener's in-memory ones (in the same browser these are the same) |
+| Slender parts (longest ÷ middle ≥ 3) sit in notched cradles instead of bearers and side posts; `isSlender` reads the part's own sides, not the layout (#6) | A round shaft on flat bearers can roll and bow; real shaft crates use saddles. One predicate on the part lets the general blocking (#16) skip exactly the parts cradles own | The bounding box can't tell a round bar from a square one: a section within 10% of square gets a round seat |
+| Stacked slender layers stack their cradles (notched under and over) and drop the separator (#6) | The layout and outside size stay exactly the packer's, the part gap and the separator's thickness become the wood between notches, and each layer is clamped by the one above | Load passes part → stacking cradle → part; no separator sheet protects the lower layer's finish |
+| A cradle is a `Member` box plus an optional notch profile (#6) | BOM, weight, screws, drawings and highlighting keep working on boxes; only the 3D view and GLB extrude the profile | Tare and wood cost count the full box (the stock cut), not the notched solid |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
 
 ## 12. Known limitations and roadmap
@@ -2038,7 +2150,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #3 | Upload a custom GLB part, with user-entered name, mass and material. Loading and mass entry landed with #20; name and material entry followed |
 | #4 | Capture and export LLM logs (a deliverable) |
 | #5 | Architecture and decision notes for the on-site walkthrough |
-| #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |
+| #6 | Cradles for long or cylindrical parts (§7.5a): notched saddles at ≤ 600 mm, stacking cradles between layers, end stops |
 | #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds |
 | #8 | Centre of gravity and forklift handling |
 | #9 | Printable shop-floor build sheet (superseded by #26) |
