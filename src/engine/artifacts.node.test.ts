@@ -60,9 +60,9 @@ describe("artifacts in Node", () => {
     expect(pdf).toContain(`inputHash=${inputHash}`);
     const sweep = sweepFor(req);
     const rec = sweep.recommendation!;
-    // PART-001's recommended 34 splits under §7.10 (it judges the volume-best layout), so its PDF says so.
-    if (isRecommended(plan, sweep)) expect(pdf).toContain(`Recommended: ${rec.quantity} per crate`);
-    else expect(pdf).toContain(`per crate; the sweep recommends ${rec.quantity}`);
+    // The recommendation applied is one crate of that quantity and layout (§7.10, §7.16).
+    expect(isRecommended(plan, sweep)).toBe(true);
+    expect(pdf).toContain(`Recommended: ${rec.quantity} per crate`);
     if (rec.stoppedBy) expect(pdf).toContain(`${rec.stoppedBy.quantity} per crate fails the`);
     expect(pdf).toContain("placeholder");
 

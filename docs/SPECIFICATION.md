@@ -203,7 +203,7 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
 
 - **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
-  `ENGINE_REVISION`, as `0.1.0+engine.2`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  `ENGINE_REVISION`, as `0.1.0+engine.3`. **Rule:** bump `ENGINE_REVISION` in the same change as
   anything that gives a different output for the same input (a rule, a constant, an algorithm, a
   default standard, or the text of a generated file). A refactor that leaves every output
   identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
@@ -1259,7 +1259,12 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
 1. **One crate when it fits.** If the crate for the whole batch is within every limit, the plan
    is that crate: `computeDesign`'s own result, value for value (tested on every sample part ×
    suggested quantity × keep-upright, so the 18-case baseline can't move). A single part is
-   never split (Q = 1 stays as today, with its `door` or `base-rating` cautions).
+   never split (Q = 1 stays as today, with its `door` or `base-rating` cautions). **A layout
+   pick counts:** when `layoutKey` is one of the whole batch's layouts and the crate on it is
+   within every limit, the batch ships as that one crate even if the recommended layout's crate
+   isn't. This is what makes applying the quantity sweep's recommendation (§7.16: quantity and
+   layout) plan as exactly that crate: the sweep's hard checks (`door`, `base-rating`, gross and
+   part limits) imply these limits, so a crate it passes never splits.
 2. **Layouts that fit the trailer first.** For any part count, if the recommended layout is over
    the trailer limits but others aren't, the ones that fit are ranked ahead (each in its usual
    order) and the best of them is recommended.
@@ -1279,8 +1284,8 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
    2 × 4 + 1 × 2.
 6. **When even one part is over the limits,** every part ships in its own crate, `unmet` says
    why, and each crate's `crate-limit` check is a caution.
-7. **Layout picks:** `layoutKey` applies to the first crate type that has that layout; the
-   split itself always uses the recommended layouts.
+7. **Layout picks:** besides keeping a batch whole (step 1), `layoutKey` applies to the first
+   crate type that has that layout; a split itself always uses the recommended layouts.
 
 On a split, every crate type gets the `crate-limit` check (§7.7); its text names the limits as
 "1,000 kg gross or the base rating, the trailer door and floor". `shipmentBom(plan)` merges the
@@ -1769,8 +1774,15 @@ With the defaults the sample parts are stopped by the base rating or the 1,000 k
 about half the others. A split counts only when every size is `ok` on the curve. The lowest cost
 per part wins (crate types' costs × counts, plus freight with rates, ÷ N); ties go to fewer crates
 (each `c` has one split, so density never breaks a tie here). Null when no split passes (one part
-alone fails a hard check). `planShipment` (§7.10) is unchanged: it plans the quantity on screen by
-the largest crate that fits; `planTotal` plans a total by cost.
+alone fails a hard check). `planShipment` (§7.10) plans the quantity on screen by the largest
+crate that fits; `planTotal` plans a total by cost.
+
+**The sweep and the shipment plan agree.** A quantity and layout from the sweep (the
+recommendation or any shortlist entry) given to `planShipment` as the quantity and `layoutKey`
+plan as one crate of that quantity on that layout, never a split: `planShipment` honours a picked
+layout that is within the limits (§7.10 step 1), and every crate the sweep passes is. Tested for
+every sample part × keep-upright, so the Rules tab's **In use**, the PDF's "Recommended" and the
+bundle's `-recommended` folder all hold for the applied recommendation.
 
 **Speed:** 30–125 ms per sample part on an M-series Mac (the gross-limit cut-off skips most of
 1–200). Built to run off the render thread in a Web Worker. The test fails above 1.5 s or 400 ×
@@ -1843,7 +1855,7 @@ entries carry `generatedAt`.
 
 **`comparison.pdf`** (`buildComparison` in `src/lib/comparison.ts`, laid out by
 `comparisonToPdf`): the part; a table with a row per configuration — folder, quantity per crate
-("18 / 16" for a split), crates, outside size and gross (crate A), crate cost per part, and a note
+("30 / 20" for a split), crates, outside size and gross (crate A), crate cost per part, and a note
 (Recommended; the split; the hard rule a quantity fails, with its reason; or how much more per part
 than the recommendation); then **Why this quantity**: the recommendation, its rationale and the
 constraint that stopped a larger crate. It always says freight is not priced, and says when costs
@@ -1858,10 +1870,6 @@ each shortlist quantity at its layout with the same rules). The sweep, PDF, ZIP 
 with `import()` on the first click; nothing goes to a server. States and timings are the Export
 pill's: "Bundling…" with a spinner (at least 1.5 s unless reduced motion), then "Downloaded
 crates-PART-001-6-configs.zip" in its own `role="status"` note, or one plain error sentence.
-
-**Known gap:** `planShipment` (§7.10) decides whether to split by the volume-best layout, while the
-sweep judges the layout it picked, so PART-001's recommended 34 per crate plans as a split (18 + 16)
-when set as the quantity. The PDF and comparison then say the crate is not the recommendation.
 
 ## 8. UI
 
