@@ -216,6 +216,13 @@ accepts:
   `maxLayers` are rounded to integers. Typing 500 gives 200; a gap of −20 gives 0.
 - **Rejected:** NaN, ±Infinity, a value of the wrong type, or a panel size that isn't on the list
   is ignored field by field, and the previous value stays. Unknown keys are dropped.
+- **Told (#36):** `settingsAdjustments(patch, current)` lists the numeric fields that were
+  clamped, rounded or rejected, without changing `normalizeSettings`. When a typed quantity
+  isn't taken as given, the Rules tab shows a short polite note under the field
+  (`role="status"`, `clampNote` in `src/lib/clampNote.ts`): "Quantity is 1–200; set to 200",
+  "Quantity is a whole number; set to 4", or "Not a number; kept 4". It fades over 5 s and is
+  then cleared; with reduced motion it appears and goes without animation. Quantity is the only
+  typed rule; the sliders and buttons can't leave their ranges.
 
 `setPartMass` likewise ignores a mass that isn't a finite number above zero. As a second line of
 defence, `computeDesign` re-checks its input and returns a `problem` rather than throwing
@@ -599,7 +606,7 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 |---|---|---|---|
 | `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`limits.trailerMm`) |
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
-| `blocking` | Every part is blocked in | caution: Parts are not restrained | min(partGap, wallClearance) ≥ 19 mm (`construction.minBlockingGapMm`) |
+| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
 | `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg (`limits.baseRatingKg`; the title quotes the limit). The pass text names the skids ("4×4", "4×6", or the size in mm for non-standard stock) |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
@@ -961,9 +968,13 @@ standards could move there (one row per shop) when accounts exist.
 - Zero, negative, NaN and infinite dimensions, parts over 20 m, and bad masses each return the
   right `problem` with no design.
 - Zero gap and clearance: no dunnage, no zero-size board or cut-list entry, and the blocking
-  caution. Bearers stay inside the walls under a narrow part.
+  caution.
+- The `blocking` check reads the drawn crate's gaps (#36): a padded 10 mm part with a 0 mm
+  clearance setting passes; a 10 mm part gap or a 5 mm clearance is a caution naming that gap;
+  one part per layer ignores the part gap. Bearers stay inside the walls under a narrow part.
 - `normalizeSettings` clamps, rounds, rejects bad values field by field, ignores unknown keys and
-  always returns settings the schema accepts. Invalid settings passed straight to `computeDesign`
+  always returns settings the schema accepts. `settingsAdjustments` reports each clamp, round
+  and rejection, and `clampNote` words it. Invalid settings passed straight to `computeDesign`
   return a `settings` problem.
 - Across a grid of extreme sizes and settings there is always a layout, and `design` is null
   exactly when `problem` is set.
@@ -1075,7 +1086,8 @@ HTML report as `playwright-report`.
     the canvas draws.
   - `02-tabs`: Overview chain and weight bars; Layouts cards with "recommended"; Cut list
     groups; Rules controls; Checks with "Fits a 53' dry van" and no count badge.
-  - `03-rules`: quantity 8 gives 938 × 658 × 823; a typed 500 clamps to 200; Reset rules
+  - `03-rules`: quantity 8 gives 938 × 658 × 823; a typed 500 clamps to 200 and shows the
+    note "Quantity is 1–200; set to 200"; Reset rules
     restores the defaults and keeps the quantity.
   - `04-units`: mm → in in the header, Overview (36.7 × 25.7 × 19.6 in) and size labels, and
     back.
@@ -1137,7 +1149,7 @@ HTML report as `playwright-report`.
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
-| Settings are clamped at the store, bad values rejected per field | A slider or typed value just past a limit should still do something useful; NaN or a wrong type has no sensible nearest value, so the last good one stays | The user isn't told a typed value was clamped (the input shows the clamped value) |
+| Settings are clamped at the store, bad values rejected per field | A slider or typed value just past a limit should still do something useful; NaN or a wrong type has no sensible nearest value, so the last good one stays | A typed quantity that is clamped or rejected gets a short note by the field (#36); nothing else is typed |
 | `computeDesign` returns a `problem` instead of throwing | The UI can always explain an empty screen, in domain wording | One more field to check alongside `design` |
 | Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
 | House rules are one zod-validated `ShopStandards` object passed into `computeDesign`, defaulting to `DEFAULT_STANDARDS` (#19) | Makes the PM's tribal knowledge explicit and editable; the domain stays pure (no store or storage access), and every existing call and test works unchanged with the defaults | Every domain function takes one more argument; a few exports remain as views of the defaults for tests |
