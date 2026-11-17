@@ -25,6 +25,9 @@ import {
 } from "./sweep";
 import { custom, loadAwareBudget, metricText, settings, facesFor } from "./testFixtures";
 
+/** Plywood sheets bigger than any panel here: no seams, so costs are as before sheets were modelled. */
+const NO_SEAMS = custom({ stock: { sheetMm: { width: 6000, length: 6000 } } });
+
 const cents = (v: number) => Math.round(v * 100);
 const RATES: FreightRates = { usdPerCwtByClass: { "50": 20, "65": 30, "85": 40, "125": 60, "400": 150 }, minimumUsd: 90 };
 
@@ -244,8 +247,9 @@ describe("ties", () => {
     expect(tieBreakBetween(point(4, 10, 20), point(4, 10, 12))).toBe("denser-freight");
     expect(tieBreakBetween(point(4, 10), undefined)).toBeNull();
   });
-  it("PART-003 lying down: 42 and 36 per crate cost the same to the cent, so 42 (fewer crates) wins", () => {
-    const rec = sweepQuantities(getPart("PART-003"), settings({ restingFaces: ANY_FACES })).recommendation!;
+  it("PART-003 lying down, with sheets big enough to need no seams: 42 and 36 per crate cost the same to the cent, so 42 (fewer crates) wins", () => {
+    // The tie is between crates whose panels fit one sheet; with the shipped 4 × 8 sheet the 36 crate's seams cost it the tie.
+    const rec = sweepQuantities(getPart("PART-003"), settings({ restingFaces: ANY_FACES }), NO_SEAMS).recommendation!;
     expect(rec.quantity).toBe(42);
     expect(rec.tieBreak).toBe("fewer-crates");
   });

@@ -19,6 +19,7 @@ import { longAxis } from "@/domain/cradles";
 import type { BomLine, Check, CrateDesign, Member, ScrewLine } from "@/domain/crate";
 import { screwSchedule } from "@/domain/crate";
 import { explainLayout, type LayoutExplanation, type Ranking } from "@/domain/design";
+import { FORK_ENTRY_TEXT, skidsRunAcross } from "@/domain/forkEntry";
 import { fileProfile, parseDesignFile, restoreDesign } from "@/domain/designFile";
 import type { Message } from "@/domain/message";
 import type { Layout } from "@/domain/packing";
@@ -35,6 +36,7 @@ import { cutText, describeLayout, documentDate, groupThousands, stockText, usdCe
 import { shipmentFigures } from "./shipmentFigures";
 import { memberBounds } from "./memberBounds";
 import { LB_PER_KG } from "@/domain/units";
+import { sheetsHint, sheetsTotal } from "./sheets";
 import { area, cut, dims, dimsOther, groupDigits, lengthUnit, run, volume, weight, type Units } from "./units";
 
 /** A labelled value, with an optional second line (the other units, or how it was worked out). */
@@ -89,16 +91,28 @@ export interface PrintableLabel {
   /** "CRATE A · 6 CRATES OF THIS TYPE" for a split batch, else null. */
   crate: string | null;
   outside: string;
+  /** "Fork entry from the ends", "... from the sides" or "... from all four sides" (`handling.forkEntry`). */
   forkEntry: string;
-  /** End view for the marks, in mm from the crate's outside bottom-left corner. */
+  /** The views for the marks: the crate's end for end entry, its side for side entry, both for four-way. */
+  views: LabelView[];
+}
+
+/** One view of the crate on the label, in mm from the crate's outside bottom-left corner as seen. */
+export interface LabelView {
+  /** The face looked at: the `End` (along the length) or the `Side` (along the width). */
+  name: "End" | "Side";
   widthMm: number;
   heightMm: number;
-  skidTallMm: number;
-  skids: { y: number; w: number }[];
-  /** The fork openings between the skids (`design.handling.openings`), where the entry arrows go. */
+  /** Top of what stands on the ground (the skids, and the lifting blocks under them), mm above the ground. */
+  baseMm: number;
+  /** The skids and lifting blocks as the view sees them: `y` across, `z` up from the ground. */
+  feet: { y: number; w: number; z: number; h: number }[];
+  /** The fork openings between the feet (`design.handling.entries`), where the entry arrows go. */
   openings: { y: number; w: number }[];
-  /** The design's centre of gravity on the end view, from the bottom-left corner. */
-  cogEnd: { y: number; z: number };
+  /** How high the arrow tips stand, mm above the ground: the middle of the clear height. */
+  tipMm: number;
+  /** The design's centre of gravity in this view. */
+  cog: { y: number; z: number };
 }
 
 export interface PrintableCrate {
@@ -335,13 +349,24 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
   const floor = design.bom.find((l) => l.kind === "floor");
   const separator = design.bom.find((l) => l.kind === "separator");
   const joist = design.bom.find((l) => l.kind === "joist");
+  const block = design.bom.find((l) => l.kind === "lift-block");
+  const across = skidsRunAcross(c.forkEntry);
+  const extL = layout.external[0];
+  const forkText = {
+    ends: "Forklift tines go between the skids from the ends.",
+    sides: "Forklift tines go between the skids from the sides.",
+    fourWay: "Forklift tines go between the skids from the ends, and under the skids between the lifting blocks from the sides.",
+  }[c.forkEntry];
   out[0].text =
-    `Lay the ${c.skidCount} ${skid ? stockText(skid, u) : ""} skids along the length, evenly spread across the ${shopSize(extW, u)} width, ` +
+    (across
+      ? `Lay the ${c.skidCount} ${skid ? stockText(skid, u) : ""} skids across the width, evenly spread along the ${shopSize(extL, u)} length, `
+      : `Lay the ${c.skidCount} ${skid ? stockText(skid, u) : ""} skids along the length, evenly spread across the ${shopSize(extW, u)} width, `) +
+    (block && c.lift ? `with a lifting block (${stockText(block, u)}) screwed under each end of every skid, ${shopSize(c.lift.tall, u)} high, ` : "") +
     (c.joist && joist
-      ? `screw ${c.joist.count} ${stockText(joist, u)} floor joists on edge across them, evenly spread along the length, and screw the ` +
+      ? `screw ${c.joist.count} ${stockText(joist, u)} floor joists on edge across them, evenly spread ${across ? "across the width" : "along the length"}, and screw the ` +
         `${floor ? stockText(floor, u) : "plywood"} floor to the joists. `
       : `and screw the ${floor ? stockText(floor, u) : "plywood"} floor on top. `) +
-    `The base is rated for ${weight(design.structure.ratedPayloadKg, u)} of parts. Forklift tines go between the skids from the ends.`;
+    `The base is rated for ${weight(design.structure.ratedPayloadKg, u)} of parts. ${forkText}`;
   out[1].text =
     "Screw the rails and uprights to the outside of each side and end panel. Stand the side walls on the floor, fit the end walls " +
     "between them, then screw the walls to the floor and at the four corners.";
@@ -377,15 +402,57 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
           "full layer, load the next layer on it, and block it the same way."
         : "Screw a blocking post into the gap on each side of every part, from the floor to the top of the part.";
   out[4].text = "Screw the edge and cross cleats to the lid panel, set the lid on the walls and screw it down around the top.";
+  // Panels bigger than a sheet come in pieces: say where the seams are and what backs them.
+  const seamsOf = (names: string[]) => design.splices.spliced.filter((p) => names.includes(p.name)).reduce((n, p) => n + p.seams, 0);
+  const joined = (n: number, where: string) =>
+    n
+      ? ` The ${where} ${n === 1 ? "has 1 seam" : `have ${n} seams`}: lay the pieces edge to edge and screw a joint cleat across each seam that is not already over a ${where === "floor" ? "joist or skid" : "cross cleat"}.`
+      : "";
+  out[0].text += joined(seamsOf(["Floor"]), "floor");
+  const wallSeams = seamsOf(["Side panel", "End panel"]);
+  if (wallSeams) {
+    out[1].text += ` Wall panels bigger than a sheet are in pieces (${wallSeams} ${wallSeams === 1 ? "seam" : "seams"} in all): join them with their joint cleats, over an upright where one is there, before standing the wall.`;
+  }
+  out[4].text += joined(seamsOf(["Lid"]), "lid");
   return out;
 }
 
-function label(design: CrateDesign, part: DesignPart, type: CrateType, split: boolean, u: Units): PrintableLabel {
-  const { layout, construction: c, members } = design;
+/** The label's views: for each direction the forks enter, the crate seen from that face (the end along X, the side along Y). */
+function labelViews(design: CrateDesign): LabelView[] {
+  const { layout, members, handling } = design;
   const {
-    min: [, y0, z0],
+    min: [x0, y0, z0],
   } = memberBounds(members);
-  const cog = design.handling.cogMm;
+  const cog = handling.cogMm;
+  return handling.entries.map((e) => {
+    // The view's horizontal axis is the one the openings are measured along.
+    const axis = e.direction === "ends" ? 1 : 0;
+    const lo = axis === 1 ? y0 : x0;
+    const seen = new Set<string>();
+    const feet: LabelView["feet"] = [];
+    for (const m of members) {
+      if (m.kind !== "skid" && m.kind !== "lift-block") continue;
+      const foot = { y: m.min[axis] - lo, w: m.size[axis], z: m.min[2] - z0, h: m.size[2] };
+      const key = JSON.stringify(foot);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      feet.push(foot);
+    }
+    return {
+      name: e.direction === "ends" ? "End" : "Side",
+      widthMm: layout.external[axis],
+      heightMm: layout.external[2],
+      baseMm: Math.max(0, ...feet.map((f) => f.z + f.h)),
+      feet,
+      openings: e.openings.map((o) => ({ y: o.y - lo, w: o.width })),
+      tipMm: (e.openings[0]?.clearMm ?? 0) / 2,
+      cog: { y: cog[axis] - lo, z: cog[2] - z0 },
+    };
+  });
+}
+
+function label(design: CrateDesign, part: DesignPart, type: CrateType, split: boolean, u: Units): PrintableLabel {
+  const { layout, construction: c } = design;
   return {
     partId: part.id,
     partName: part.name,
@@ -394,13 +461,8 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
     grossOther: weight(design.grossKg, other(u)).toUpperCase(),
     crate: split ? `CRATE ${type.label} · ${groupDigits(type.count)} ${type.count === 1 ? "CRATE" : "CRATES"} OF THIS TYPE` : null,
     outside: withUnit(layout.external, u),
-    forkEntry: "Fork entry from the ends",
-    widthMm: layout.external[1],
-    heightMm: layout.external[2],
-    skidTallMm: c.skid.tall,
-    skids: members.filter((m) => m.kind === "skid").map((m) => ({ y: m.min[1] - y0, w: m.size[1] })),
-    openings: design.handling.openings.map((o) => ({ y: o.y - y0, w: o.width })),
-    cogEnd: { y: cog[1] - y0, z: cog[2] - z0 },
+    forkEntry: FORK_ENTRY_TEXT[c.forkEntry],
+    views: labelViews(design),
   };
 }
 
@@ -452,6 +514,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       cutList: cutList(design, u),
       totals: [
         { label: "Plywood", value: area(design.plywoodM2, u) },
+        { label: "Plywood sheets", value: sheetsTotal(design.sheets), note: sheetsHint(design.sheets, u) },
         { label: "Lumber", value: run(design.lumberM, u) },
         { label: "Wood screws", value: `~${design.screws}` },
       ],
@@ -542,6 +605,7 @@ function shipmentRows(plan: ShipmentPlan, u: Units): Row[] {
     ...rows,
     { label: "Plywood, all crates", value: f.plywood },
     { label: "Lumber, all crates", value: f.lumber },
+    { label: "Plywood sheets, all crates", value: f.sheets, note: "piece area plus waste, no nesting" },
     { label: "Wood screws, all crates", value: f.screws },
     { label: "Crate cost, all crates", value: f.cost, note: "wood, screws and labour" },
     { label: "Labour, all crates", value: f.labour },

@@ -16,7 +16,8 @@ import {
   arrowOutline,
   arrowSamples,
   arrowWidthMm,
-  crateXRange,
+  crateRange,
+  forkEnds,
   layoutArrows,
   nextHidden,
   occludedShare,
@@ -35,6 +36,18 @@ const STENCIL_GAP_MM = 3;
 const ARROW_ALPHA = 0.85;
 const ARROW_FADE_RATE = 10;
 const noRaycast = () => null;
+
+/** Where an arrow starts: its tip `gap` outside the face, `across` the face (crate-interior mm, on the ground at `z`). */
+function arrowStart(fe: { axis: 0 | 1; outward: 1 | -1 }, across: number, range: readonly [number, number], gap: number, z: number): Vec3 {
+  const along = (fe.outward < 0 ? range[0] : range[1]) + fe.outward * gap;
+  return fe.axis === 0 ? [along, across, z] : [across, along, z];
+}
+
+/** The turn about Z that points an arrow drawn toward +X into the crate: nothing at -X, half a turn at +X, a quarter turn at -Y or +Y. */
+function arrowTurn(fe: { axis: 0 | 1; outward: 1 | -1 }): number {
+  if (fe.axis === 0) return fe.outward < 0 ? 0 : Math.PI;
+  return fe.outward < 0 ? Math.PI / 2 : -Math.PI / 2;
+}
 
 /** Arrow pointing +X in the XY plane, tip at the origin. */
 function arrowShape(length: number, width: number): Shape {
@@ -55,7 +68,6 @@ function arrowShape(length: number, width: number): Shape {
 /** Where the CoG stencil goes on each outside face, and which way that face points. */
 type Face = "side-" | "side+" | "end-" | "end+";
 const FACES: readonly Face[] = ["side-", "side+", "end-", "end+"];
-const ENDS = ["minus", "plus"] as const;
 
 const eye = new Vector3();
 const spot = new Vector3();
@@ -69,9 +81,9 @@ const ARROW_SCALE_RATE = 14;
  *   is drawn as a real crate marking would be: a flat quartered black-and-white circle (the
  *   ISO 7000-0627 mark) stencilled on each outside face, at the CoG's position along that face
  *   and its height. A centred, low CoG gets no marker; the label and Checks still give it.
- * - flat arrows on the ground at both ends, one per opening between the skids, pointing in. An
- *   end the crate hides from the current camera (mostly behind it) drops its arrows, fading,
- *   rather than leaving a sliver of yellow poking out.
+ * - flat arrows on the ground at each face the forks enter (#112: both ends, both sides, or all
+ *   four), one per opening, pointing in. A face the crate hides from the current camera (mostly
+ *   behind it) drops its arrows, fading, rather than leaving a sliver of yellow poking out.
  *
  * Pure decoration: they can't be hovered or clicked (no raycast), have no handlers and never
  * call `markInput`, so they never count as input. The stencils move out with their walls and the
@@ -81,20 +93,20 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
   const { handling, layout } = design;
   const cog = handling.cogMm;
   const root = useRef<Group>(null);
-  const ends = useRef<(Group | null)[]>([null, null]);
+  const endGroups = useRef<(Group | null)[]>([]);
   const nearArrow = useRef<Mesh>(null);
   const faceRefs = useRef<Partial<Record<Face, Group | null>>>({});
-  /** Per end (−X, +X): whether the crate hides it now. */
-  const hidden = useRef([false, false]);
+  /** Per entry face (`forkEnds`): whether the crate hides it now. */
+  const hidden = useRef<boolean[]>([]);
   /** The camera and explode amount the ends were last judged at; NaN until the first frame. */
   const judged = useRef({ x: NaN, y: NaN, z: NaN, e: NaN });
   /** Each end's arrow meshes, and for each whether it is dropped for lack of room in the free area. */
-  const meshes = useRef<(Mesh | null)[][]>([[], []]);
-  const dropped = useRef<boolean[][]>([[], []]);
+  const meshes = useRef<(Mesh | null)[][]>([]);
+  const dropped = useRef<boolean[][]>([]);
 
   const lo = [0, 1, 2].map((i) => Math.min(...design.members.map((m) => m.min[i])));
   const hi = [0, 1, 2].map((i) => Math.max(...design.members.map((m) => m.min[i] + m.size[i])));
-  const [x0, x1] = crateXRange(design);
+  const ranges = [crateRange(design, 0), crateRange(design, 1)] as const;
   const ground = handling.groundZ;
   const radius = Math.max(40, Math.min(90, 0.07 * Math.min(layout.external[1], layout.external[2])));
   const showCog = design.checks.some((c) => (c.id === "cog-offset" || c.id === "cog-tip") && c.level === "caution");
@@ -118,26 +130,33 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
     { face: "end+", position: [hi[0] + STENCIL_GAP_MM, cog[1], cog[2]], rotation: [0, Math.PI / 2, 0] },
   ];
 
-  const length = arrowLengthMm(layout.external);
   const gap = arrowGapMm(layout.external);
+  /** The faces the forks enter, and per face one arrow shape for each opening. */
+  const fork = useMemo(() => forkEnds(design), [design]);
   const arrows = useMemo(
     () =>
-      handling.openings.map((o) => {
-        const width = arrowWidthMm(o.width);
-        return { y: o.y + o.width / 2, width, geometry: new ShapeGeometry(arrowShape(length, width)) };
+      fork.map((fe) => {
+        const length = arrowLengthMm(layout.external, fe.axis);
+        return fe.openings.map((o) => {
+          const width = arrowWidthMm(o.width);
+          return { across: o.y + o.width / 2, width, geometry: new ShapeGeometry(arrowShape(length, width)) };
+        });
       }),
-    [handling.openings, length],
+    [fork, layout.external],
   );
-  // One material per end, so each fades on its own.
+  const arrowCount = arrows.reduce((n, a) => n + a.length, 0);
+  // The end whose first arrow the probe measures against the width label: the +X end, where the label is.
+  const nearEnd = fork.findIndex((fe) => fe.axis === 0 && fe.outward === 1);
+  // One material per entry face, so each fades on its own.
   const arrowMats = useMemo(
-    () => ENDS.map(() => new MeshBasicMaterial({ color: ARROW, transparent: true, opacity: ARROW_ALPHA, side: DoubleSide, depthWrite: false })),
-    [],
+    () => fork.map(() => new MeshBasicMaterial({ color: ARROW, transparent: true, opacity: ARROW_ALPHA, side: DoubleSide, depthWrite: false })),
+    [fork],
   );
 
   useEffect(() => {
     if (!PROBE) return;
     probeStats.handling.cog = showCog ? [cog[0], cog[1], cog[2]] : null;
-    probeStats.handling.arrows = arrows.length * 2;
+    probeStats.handling.arrows = arrowCount;
     return () => {
       probeStats.handling.cog = null;
       probeStats.handling.arrows = 0;
@@ -146,7 +165,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
       probeStats.handling.arrowBox = null;
       probeStats.handling.arrowBoxes = [];
     };
-  }, [cog, arrows, showCog]);
+  }, [cog, arrowCount, showCog]);
 
   useEffect(
     () => () => {
@@ -158,7 +177,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
   );
   useEffect(
     () => () => {
-      arrows.forEach((a) => a.geometry.dispose());
+      arrows.forEach((end) => end.forEach((a) => a.geometry.dispose()));
     },
     [arrows],
   );
@@ -169,8 +188,10 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
 
   useFrame(({ camera, size }, dt) => {
     const out = EXPLODE_WALL_MM * anim.explode;
-    ends.current[0]?.position.set(-out, 0, 0);
-    ends.current[1]?.position.set(out, 0, 0);
+    fork.forEach((fe, i) => {
+      const slide = fe.outward * out;
+      endGroups.current[i]?.position.set(fe.axis === 0 ? slide : 0, fe.axis === 1 ? slide : 0, 0);
+    });
     for (const face of FACES) faceRefs.current[face]?.position.set(...explodeOffset(face, anim.explode));
 
     // Where each arrow stands and how much of it fits: its tip just clear of the width label on screen
@@ -178,7 +199,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
     // there is no room. The crate's framing is left as it was.
     let placed: ArrowLayout[] = [];
     let project: ((p: Vec3) => readonly [number, number]) | null = null;
-    if (root.current && arrows.length) {
+    if (root.current && arrowCount) {
       camera.updateMatrixWorld();
       project = (p: Vec3) => {
         spot.set(p[0], p[1], p[2]);
@@ -192,7 +213,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
 
     // Is an end's arrow mostly behind the crate? Judged again only when the camera or the explode moved.
     let snap = false;
-    if (root.current && arrows.length) {
+    if (root.current && arrowCount) {
       root.current.worldToLocal(eye.copy(camera.position));
       const j = judged.current;
       if (eye.x !== j.x || eye.y !== j.y || eye.z !== j.z || anim.explode !== j.e) {
@@ -201,22 +222,22 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
         // The crate as an occluder: a box, whose top drops to the floor as it explodes.
         const box: Box = { min: [lo[0], lo[1], lo[2]], max: [hi[0], hi[1], MathUtils.lerp(hi[2], 0, anim.explode)] };
         const from: Vec3 = [eye.x, eye.y, eye.z];
-        ENDS.forEach((_, i) => {
-          const samples = placed.filter((l) => l.end === i).flatMap((l) => arrowSamples(l.tip, l.outward, l.length, l.width));
-          hidden.current[i] = nextHidden(hidden.current[i], occludedShare(from, samples, box));
+        fork.forEach((_, i) => {
+          const samples = placed.filter((l) => l.end === i).flatMap((l) => arrowSamples(l.tip, l.outward, l.length, l.width, l.axis));
+          hidden.current[i] = nextHidden(hidden.current[i] ?? false, occludedShare(from, samples, box));
         });
       }
     }
     // Fade each end toward its target; the first judgement snaps, so a hidden end is never drawn.
     const k = snap ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * ARROW_FADE_RATE);
     let shown = 0;
-    ENDS.forEach((_, i) => {
+    fork.forEach((_, i) => {
       const m = arrowMats[i];
       const target = hidden.current[i] ? 0 : ARROW_ALPHA;
       m.opacity = Math.abs(target - m.opacity) < 0.01 ? target : m.opacity + (target - m.opacity) * k;
-      const g = ends.current[i];
+      const g = endGroups.current[i];
       if (g) g.visible = m.opacity > 0.01;
-      if (target > 0) shown += arrows.length;
+      if (target > 0) shown += arrows[i].length;
     });
 
     // Apply the layout: each arrow's gap and size (the size follows its target quickly, so one
@@ -224,16 +245,18 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
     const arrowBoxes: { left: number; top: number; right: number; bottom: number }[] = [];
     const kScale = snap ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * ARROW_SCALE_RATE);
     for (const l of placed) {
-      const mesh = meshes.current[l.end][l.index];
+      const mesh = meshes.current[l.end]?.[l.index];
       if (!mesh) continue;
-      mesh.position.x = (l.end === 0 ? x0 : x1) + l.outward * l.gap;
-      dropped.current[l.end][l.index] = l.scale === 0;
+      const along = (l.outward < 0 ? ranges[l.axis][0] : ranges[l.axis][1]) + l.outward * l.gap;
+      if (l.axis === 0) mesh.position.x = along;
+      else mesh.position.y = along;
+      (dropped.current[l.end] ??= [])[l.index] = l.scale === 0;
       const s = approach(mesh.scale.x, l.scale, kScale, 0.01);
       mesh.scale.set(s, s, 1);
       mesh.visible = s > 0.02;
       if (PROBE && project && mesh.visible && !hidden.current[l.end]) {
         const box = new Box2();
-        for (const p of arrowOutline(l.tip, l.outward, l.length, l.width, mesh.scale.x)) box.expandByPoint(new Vector2(...project(p)));
+        for (const p of arrowOutline(l.tip, l.outward, l.length, l.width, mesh.scale.x, l.axis)) box.expandByPoint(new Vector2(...project(p)));
         arrowBoxes.push({ left: box.min.x, top: box.min.y, right: box.max.x, bottom: box.max.y });
       }
     }
@@ -242,11 +265,12 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
       probeStats.handling.arrowBoxes = arrowBoxes;
       probeStats.handling.arrowsShown = shown;
       probeStats.handling.endsShown = [!hidden.current[0], !hidden.current[1]];
-      if (nearArrow.current && arrows[0]) {
+      const near = arrows[nearEnd]?.[0];
+      if (nearArrow.current && near) {
         // Where the near-end arrow lands on screen, to check it clears the width label.
         nearArrow.current.updateWorldMatrix(true, false);
         const box = new Box2();
-        const bounds = arrows[0].geometry.boundingBox ?? (arrows[0].geometry.computeBoundingBox(), arrows[0].geometry.boundingBox!);
+        const bounds = near.geometry.boundingBox ?? (near.geometry.computeBoundingBox(), near.geometry.boundingBox!);
         for (const x of [bounds.min.x, bounds.max.x])
           for (const y of [bounds.min.y, bounds.max.y]) {
             const p = new Vector3(x, y, 0).applyMatrix4(nearArrow.current.matrixWorld).project(camera);
@@ -276,46 +300,30 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
             </group>
           </group>
         ))}
-      <group
-        ref={(g) => {
-          ends.current[0] = g;
-        }}
-      >
-        {arrows.map((a, i) => (
-          <mesh
-            key={i}
-            ref={(m) => {
-              meshes.current[0][i] = m;
-            }}
-            geometry={a.geometry}
-            material={arrowMats[0]}
-            position={[x0 - gap, a.y, z]}
-            renderOrder={11}
-            raycast={noRaycast}
-          />
-        ))}
-      </group>
-      <group
-        ref={(g) => {
-          ends.current[1] = g;
-        }}
-      >
-        {arrows.map((a, i) => (
-          <mesh
-            key={i}
-            ref={(m) => {
-              meshes.current[1][i] = m;
-              if (i === 0) nearArrow.current = m;
-            }}
-            geometry={a.geometry}
-            material={arrowMats[1]}
-            position={[x1 + gap, a.y, z]}
-            rotation={[0, 0, Math.PI]}
-            renderOrder={11}
-            raycast={noRaycast}
-          />
-        ))}
-      </group>
+      {fork.map((fe, i) => (
+        <group
+          key={i}
+          ref={(g) => {
+            endGroups.current[i] = g;
+          }}
+        >
+          {arrows[i].map((a, k) => (
+            <mesh
+              key={k}
+              ref={(m) => {
+                (meshes.current[i] ??= [])[k] = m;
+                if (i === nearEnd && k === 0) nearArrow.current = m;
+              }}
+              geometry={a.geometry}
+              material={arrowMats[i]}
+              position={arrowStart(fe, a.across, ranges[fe.axis], gap, z)}
+              rotation={[0, 0, arrowTurn(fe)]}
+              renderOrder={11}
+              raycast={noRaycast}
+            />
+          ))}
+        </group>
+      ))}
     </group>
   );
 }

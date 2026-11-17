@@ -1,3 +1,4 @@
+import { liftHeightMm, skidsRunAcross, type ForkEntry } from "./forkEntry";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
@@ -14,6 +15,10 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  *   the floor either side); with two skids each carries half (`W_s = share × W`).
  *   Bending `W_s L / 8 ≤ Fb b h² / 6`; shear `1.5 (W_s / 2) / (b h) ≤ Fv`; bearing at each end
  *   `(W_s / 2) / (b × supportLength) ≤ Fc⊥`.
+ *   With side fork entry (#112) the skids run across the width: the span is the width, the skids
+ *   are spaced along the length, and the joists run along it. With four-way entry the skids stand
+ *   on a lifting block at each end, so the support length is the shorter of `supportLengthMm` and
+ *   the block's length.
  * - **Floor and joists** carry the contents: the payload plus the dunnage inside
  *   (`W_c = f g (payload + contents)`), spread over the interior footprint `A = L × W`, so the
  *   pressure is `q = W_c / A`. (The walls stand on the floor's edge, over the outer skids.)
@@ -70,7 +75,7 @@ interface DeadLoad {
 }
 
 export interface BaseInput {
-  /** Outside length and width of the crate, mm (the skid and joist lengths). */
+  /** Outside length and width of the crate, mm. The skids run along one of them and the joists along the other, as `handling.forkEntry` says. */
   extL: number;
   extW: number;
   /** Interior footprint the contents stand on, mm². */
@@ -86,6 +91,10 @@ export interface BaseInput {
 interface BasePlan {
   skid: LaidSection;
   skidCount: number;
+  /** Where forks enter (`handling.forkEntry`): which way the skids run, and whether they stand on lifting blocks. */
+  forkEntry: ForkEntry;
+  /** Four-way only: the lifting block under each end of every skid, `longMm` along the skid; else null. */
+  lift: { heightMm: number; longMm: number } | null;
   /** Floor joists across the skids, or null. `wide` is along the crate (X), `tall` vertical. */
   joist: LaidSection | null;
   joistCount: number;
@@ -130,14 +139,21 @@ const check = (id: MemberCheckId, label: string, capacityKg: number, deadKg: num
 });
 
 /** Skid checks for `n` skids of `skid` over the span `L`, carrying `deadKg` besides the payload. */
-export function skidChecks(skid: LaidSection, n: number, L: number, deadKg: number, standards: ShopStandards = DEFAULT_STANDARDS): MemberCheck[] {
+export function skidChecks(
+  skid: LaidSection,
+  n: number,
+  L: number,
+  deadKg: number,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+  supportMm: number = standards.structure.supportLengthMm,
+): MemberCheck[] {
   const s = standards.structure;
   const share = skidShare(n);
   const { wide: b, tall: h } = skid;
   return [
     check("skid-bending", "skid bending", kgOf((8 * s.lumberBendingMPa * ((b * h * h) / 6)) / (L * share), standards), deadKg),
     check("skid-shear", "skid shear", kgOf((2 * s.lumberShearMPa * b * h) / (1.5 * share), standards), deadKg),
-    check("skid-bearing", "skid bearing", kgOf((2 * s.lumberBearingMPa * b * s.supportLengthMm) / share, standards), deadKg),
+    check("skid-bearing", "skid bearing", kgOf((2 * s.lumberBearingMPa * b * supportMm) / share, standards), deadKg),
   ];
 }
 
@@ -184,18 +200,23 @@ export function sizeBase(input: BaseInput): BasePlan {
   const standards = input.standards ?? DEFAULT_STANDARDS;
   const s = standards.structure;
   const { extL, extW, floorMm, skids, floorAreaMm2: area, payloadKg, dead } = input;
+  // The skids run along `run` and are spaced across `across`: the length and width, or the other way round for side entry.
+  const entry = standards.handling.forkEntry;
+  const [run, across] = skidsRunAcross(entry) ? [extW, extL] : [extL, extW];
+  // Four-way: lifting blocks under each end of every skid; the skid rests on a block, not a full support length.
+  const lift = entry === "fourWay" ? { heightMm: liftHeightMm(standards), longMm: standards.stock.blockWidthMm } : null;
   const contentsLoad = payloadKg + dead.contentsKg;
   const joistStock: LaidSection = { wide: standards.stock.joistMm.thick, tall: standards.stock.joistMm.wide };
   const widest = Math.max(...skids.map((k) => k.wide));
-  const nMin = minSkidCount(extW, standards);
-  const nMax = Math.max(nMin, maxSkidCount(extW, widest, s.minForkOpeningMm));
-  const mMin = Math.max(2, Math.ceil(extL / s.maxJoistSpacingMm) + 1);
-  // At least one joist width clear between joists: (extL − m t) / (m − 1) ≥ t.
-  const mMax = Math.max(mMin, Math.floor((extL + joistStock.wide) / (2 * joistStock.wide)));
+  const nMin = minSkidCount(across, standards);
+  const nMax = Math.max(nMin, maxSkidCount(across, widest, s.minForkOpeningMm));
+  const mMin = Math.max(2, Math.ceil(run / s.maxJoistSpacingMm) + 1);
+  // At least one joist width clear between joists: (run − m t) / (m − 1) ≥ t.
+  const mMax = Math.max(mMin, Math.floor((run + joistStock.wide) / (2 * joistStock.wide)));
 
   const plan = (skid: LaidSection, n: number, forceJoists: boolean): BasePlan => {
-    const ss = pitch(extW, skid.wide, n);
-    const checks = skidChecks(skid, n, extL, dead.allKg, standards);
+    const ss = pitch(across, skid.wide, n);
+    const checks = skidChecks(skid, n, run, dead.allKg, standards, lift ? Math.min(s.supportLengthMm, lift.longMm) : s.supportLengthMm);
     const overSkids = floorCheck(floorMm, ss, area, dead.contentsKg, standards);
     const reason = payloadKg > s.joistOverKg ? "payload" : overSkids.payloadKg < payloadKg ? "floor-span" : null;
     let joist: LaidSection | null = null;
@@ -207,9 +228,9 @@ export function sizeBase(input: BaseInput): BasePlan {
       const unit = [floorCheck(floorMm, 1, area, 0, standards), ...joistChecks(joistStock, 1, ss, skid.wide, area, 0, standards)];
       const widestPitch = (c: MemberCheck) => (c.id === "floor-bending" ? Math.sqrt(c.capacityKg / contentsLoad) : c.capacityKg / contentsLoad);
       const maxPitch = Math.min(...unit.map(widestPitch));
-      const needed = Math.ceil((extL - joistStock.wide) / maxPitch - 1e-9) + 1;
+      const needed = Math.ceil((run - joistStock.wide) / maxPitch - 1e-9) + 1;
       joistCount = Math.min(mMax, Math.max(mMin, needed));
-      floorSpanMm = pitch(extL, joistStock.wide, joistCount);
+      floorSpanMm = pitch(run, joistStock.wide, joistCount);
       checks.push(
         floorCheck(floorMm, floorSpanMm, area, dead.contentsKg, standards),
         ...joistChecks(joistStock, floorSpanMm, ss, skid.wide, area, dead.contentsKg, standards),
@@ -221,9 +242,11 @@ export function sizeBase(input: BaseInput): BasePlan {
     return {
       skid: { ...skid },
       skidCount: n,
+      forkEntry: entry,
+      lift,
       joist,
       joistCount,
-      skidOpeningMm: (extW - n * skid.wide) / (n - 1),
+      skidOpeningMm: (across - n * skid.wide) / (n - 1),
       floorSpanMm,
       joistReason: joist ? (reason ?? "floor-span") : null,
       checks,
@@ -337,7 +360,7 @@ export interface StructurePlan {
   lid: LidPlan;
   /** Estimated crate weight above the skids, and the part of it inside (an upper bound; see `estimateDeadLoad`). */
   dead: DeadLoad;
-  /** Skids + joists + floor, mm: the bottom of the skids to the top of the floor. */
+  /** Lifting blocks + skids + joists + floor, mm: the ground to the top of the floor. */
   baseMm: number;
   /** The base rating: most payload the base carries, `base.governing.payloadKg` (never below 0). */
   ratedPayloadKg: number;
@@ -393,6 +416,6 @@ export function planStructure(
   const lid = sizeLid({ lidL: L + 2 * t, lidW: W + 2 * t, panelMm: t, nominalCount: frameCount(L + 2 * t, standards), standards });
   const dead = estimateDeadLoad(grid, m, lid, partGapMm, standards);
   const base = sizeBase({ extL, extW, floorAreaMm2: L * W, payloadKg, dead, floorMm: m.floorMm, skids: m.skids, standards });
-  const baseMm = base.skid.tall + (base.joist ? base.joist.tall : 0) + m.floorMm;
+  const baseMm = (base.lift?.heightMm ?? 0) + base.skid.tall + (base.joist ? base.joist.tall : 0) + m.floorMm;
   return { base, lid, dead, baseMm, ratedPayloadKg: Math.max(0, base.governing.payloadKg) };
 }

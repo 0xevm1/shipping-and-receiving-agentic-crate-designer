@@ -6,6 +6,8 @@ import type { Handling } from "./handling";
 import type { Assembly, Member } from "./members";
 import type { Layout } from "./packing";
 import type { Restraint } from "./profile";
+import type { SheetsNeeded } from "./sheets";
+import type { SpliceReport } from "./shell";
 import type { StructurePlan } from "./structure";
 
 /** A designed crate: the boards, the cut list, weights, cost, handling and every check's result. */
@@ -21,6 +23,10 @@ export interface CrateDesign {
   grossKg: number;
   plywoodM2: number;
   lumberM: number;
+  /** Plywood sheets to buy (spec §7.5c): by area plus a waste allowance, per thickness. */
+  sheets: SheetsNeeded;
+  /** Panels bigger than a sheet, spliced from pieces with a joint cleat behind each seam (spec §7.5c). */
+  splices: SpliceReport;
   screws: number;
   /** Plywood and lumber only (`rates.costUsdPerM3`); `cost` adds screws and labour. */
   materialCostUsd: number;

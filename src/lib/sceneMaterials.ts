@@ -10,6 +10,7 @@ import { partFinish } from "@/domain/partDetails";
 /** Wood colours. Dunnage is darker so it reads apart from the crate. */
 export const WOOD: Record<MemberKind, string> = {
   skid: "#9e7345",
+  "lift-block": "#85522b",
   floor: "#ccad7d",
   side: "#dec292",
   end: "#dec292",

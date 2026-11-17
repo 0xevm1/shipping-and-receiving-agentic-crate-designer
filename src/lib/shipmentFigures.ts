@@ -16,6 +16,8 @@ export interface ShipmentFigures {
   volume: string;
   plywood: string;
   lumber: string;
+  /** Plywood sheets to buy for every crate (#107): the pieces' area by thickness summed, plus the waste allowance. */
+  sheets: string;
   screws: string;
   /** Wood, screws and labour for every crate, in dollars and cents. */
   cost: string;
@@ -38,6 +40,7 @@ export function shipmentFigures(plan: ShipmentPlan, u: Units): ShipmentFigures {
     volume: volume(totals.volumeM3, u),
     plywood: groupThousands(area(bom.plywoodM2, u)),
     lumber: groupThousands(run(bom.lumberM, u)),
+    sheets: `~${groupDigits(bom.sheets.total)}`,
     screws: `~${groupDigits(bom.screws)}`,
     cost: usdCents(totals.costUsd),
     labour: groupThousands(hoursText(totals.labourHours)),

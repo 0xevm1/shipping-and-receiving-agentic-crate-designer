@@ -74,6 +74,21 @@ export const STANDARD_GROUPS: Group[] = [
         hint: "Set on edge across the skids. Also the lid joists for stacking.",
       },
       { path: ["stock", "joistMm", "wide"], label: "Floor joist depth", unit: "mm", dim: "lumber", pair: ["stock", "joistMm", "thick"] },
+      {
+        path: ["stock", "sheetMm", "width"],
+        label: "Plywood sheet width",
+        unit: "mm",
+        dim: "length",
+        hint: "A panel bigger than a sheet (turned either way) is cut in pieces with a joint cleat behind each seam.",
+      },
+      { path: ["stock", "sheetMm", "length"], label: "Plywood sheet length", unit: "mm", dim: "length" },
+      {
+        path: ["stock", "maxLumberLengthMm"],
+        label: "Longest lumber",
+        unit: "mm",
+        dim: "length",
+        hint: "A board longer than this raises a check. Lumber isn't spliced.",
+      },
     ],
   },
   {
@@ -254,7 +269,7 @@ export const STANDARD_GROUPS: Group[] = [
         label: "Forklift: clear under the floor",
         unit: "mm",
         dim: "length",
-        hint: "Forks enter between the skids from the ends.",
+        hint: "Forks enter under the crate: between the skids, or under them on lifting blocks.",
       },
       { path: ["handling", "forklift", "tineWidthMm"], label: "Forklift: tine width", unit: "mm", dim: "length" },
       {

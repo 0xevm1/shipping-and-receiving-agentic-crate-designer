@@ -109,8 +109,9 @@ describe("explainRecommendation: what stopped a larger crate", () => {
     expect(text(e, "limit")).toContain(`The first larger crate to fail a hard check is ${sweep.recommendation!.stoppedBy!.quantity} per crate`);
   });
 
-  it("names the tie-break when it decided the pick (PART-003 lying down: 42 over 36)", () => {
-    const { e } = find("PART-003", false);
+  it("names the tie-break when it decided the pick (PART-003 lying down: 42 over 36, with sheets that need no seams)", () => {
+    const s = settings({ restingFaces: facesFor(false) });
+    const e = explainRecommendation(sweepQuantities(getPart("PART-003"), s, custom({ stock: { sheetMm: { width: 6000, length: 6000 } } })), undefined, s)!;
     expect(e.tieBreak).toBe("fewer-crates");
     expect(text(e, "pick")).toContain("ties for the lowest cost per part");
     expect(text(e, "pick")).toContain("the tie went to fewer crates");

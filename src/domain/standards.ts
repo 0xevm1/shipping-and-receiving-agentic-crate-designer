@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FORK_ENTRIES } from "./forkEntry";
 import { hasKind, isPlainObject, readEnvelopeJson, writeEnvelope, type EnvelopeFormat } from "./envelope";
 import { CrateSettingsFields, PLYWOOD_MM } from "./schema";
 
@@ -76,6 +77,13 @@ export const ShopStandardsSchema = z
        * tall. Also the lid joists when crates are stacked.
        */
       joistMm: SectionSchema,
+      /**
+       * Plywood sheet size. Panels bigger than a sheet (turned either way) are spliced from pieces
+       * that fit (spec §7.5c). Absent in standards saved before it existed: those read as 4 × 8 ft.
+       */
+      sheetMm: z.object({ width: mm(300, 6000), length: mm(300, 6000) }).default({ width: 1220, length: 2440 }),
+      /** Longest lumber the shop stocks; a longer board raises a check (lumber is not spliced). Absent in older standards: 16 ft. */
+      maxLumberLengthMm: mm(500, 20000).default(4880),
     }),
     /** What a new crate starts with, and what Reset rules goes back to. */
     defaults: z.object({
@@ -200,7 +208,13 @@ export const ShopStandardsSchema = z
     }),
     /** Centre of gravity and handling (spec §7.14). */
     handling: z.object({
-      /** Forklift tines, entering between the skids from the ends. */
+      /**
+       * Where forks must be able to enter (#112): the `ends`, the `sides`, or `fourWay`. It sets
+       * which way the skids run (or whether they stand on lifting blocks). Defaulted so standards
+       * saved before it existed (stored rows, saved designs, exported files) read as `ends`.
+       */
+      forkEntry: z.enum(FORK_ENTRIES).default("ends"),
+      /** Forklift tines, entering between the skids (or under them, on lifting blocks). */
       forklift: LiftDeviceSchema,
       /** Pallet-jack forks; the spread range covers narrow and standard jacks. */
       palletJack: LiftDeviceSchema,
@@ -276,6 +290,8 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     panelPlywoodMm: { light: 12, medium: 15, heavy: 19 },
     blockWidthMm: 89, // cut from 2×4 / 4×4
     joistMm: { thick: 38, wide: 89 }, // 2×4 on edge
+    sheetMm: { width: 1220, length: 2440 }, // 4 × 8 ft plywood
+    maxLumberLengthMm: 4880, // 16 ft
   },
   defaults: { partGapMm: 50, wallClearanceMm: 50, maxLayers: 2, volumeTolerance: 0.03 },
   construction: {
@@ -381,6 +397,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
    *   conditions, the usual one-person cap; at or under it no device is needed.
    */
   handling: {
+    forkEntry: "ends",
     forklift: { minClearMm: 75, tineWidthMm: 100, spreadMm: { min: 250, max: 1100 } },
     palletJack: { minClearMm: 85, tineWidthMm: 180, spreadMm: { min: 520, max: 690 } },
     cogOffsetRatio: 0.1,

@@ -214,7 +214,7 @@ describe("designCrate with structural sizing", () => {
   });
 
   it("keeps the fork openings as tall as the skids: the joists sit on top of them", () => {
-    const openings = heavy.handling.openings;
+    const openings = heavy.handling.entries[0].openings;
     expect(openings).toHaveLength(2);
     for (const o of openings) {
       expect(o.clearMm).toBeCloseTo(140, 6);
