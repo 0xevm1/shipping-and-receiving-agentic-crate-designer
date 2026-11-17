@@ -13,7 +13,7 @@ import type { Vec3 } from "./schema";
  */
 
 /** Who gave the centre: the file or the person ("supplied"), or the mesh ("estimated"). No centre at all is "assumed". */
-export const COG_SOURCES = ["supplied", "estimated"] as const;
+const COG_SOURCES = ["supplied", "estimated"] as const;
 export type CogSource = (typeof COG_SOURCES)[number];
 /** What the CoG check says it used: a `CogSource`, or the bounding-box centre when there is none. */
 export type CogBasis = CogSource | "assumed";
@@ -31,7 +31,7 @@ export const PartCogSchema = z.object({
 });
 
 /** How far past the box edge an offset may sit before it is not a point of the part (float noise). */
-export const COG_EDGE_TOLERANCE_MM = 0.01;
+const COG_EDGE_TOLERANCE_MM = 0.01;
 
 /** True when the offset lies inside a box of `size` centred on the origin. */
 export const cogInsideBox = (offset: Vec3, size: Vec3): boolean => offset.every((v, i) => Math.abs(v) <= size[i] / 2 + COG_EDGE_TOLERANCE_MM);

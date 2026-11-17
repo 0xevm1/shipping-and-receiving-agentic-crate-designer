@@ -57,11 +57,6 @@ export function buildCogEstimate(scene: Object3D, mmPerUnit: number): CogOutcome
   return r.ok ? { offsetMm: r.offsetMm.map((v) => Math.round(v * 100) / 100 + 0) as [number, number, number] } : { fallback: r.reason };
 }
 
-let lastMs: number | null = null;
-
-/** Milliseconds the last estimate took, for the e2e probe and measurements; null before any. */
-export const lastCogMs = (): number | null => lastMs;
-
 /**
  * Estimates the model's centre of gravity off the critical path and hands it to `onDone`. Cached per
  * model URL and `frame` (the units and up axis it was measured in, as `scheduleProfile`). Returns a
@@ -78,7 +73,6 @@ export function scheduleCog(url: string, scene: Object3D, mmPerUnit: number, onD
   let cancelled = false;
   const cancel = whenIdle(() => {
     if (cancelled) return;
-    const started = performance.now();
     let outcome: CogOutcome;
     try {
       outcome = buildCogEstimate(scene, mmPerUnit);
@@ -86,7 +80,6 @@ export function scheduleCog(url: string, scene: Object3D, mmPerUnit: number, onD
       console.warn("Centre of gravity estimate failed; it is assumed at the middle of the part's box.", e);
       outcome = { fallback: "failed" };
     }
-    lastMs = performance.now() - started;
     memo.set(key, outcome);
     onDone(url, outcome);
   });
