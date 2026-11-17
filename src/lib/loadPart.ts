@@ -8,7 +8,7 @@ import { usableProfile, type PartProfile } from "@/domain/profile";
 import { encodeProfile } from "@/domain/profileCodec";
 import { PartSchema, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
-import { catalogPart, type LoadedPart } from "@/state/store";
+import { catalogPart, type LoadedPart } from "./part";
 import { renderMessage } from "./message";
 import type { Units } from "./units";
 

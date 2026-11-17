@@ -31,6 +31,18 @@ export const ASSEMBLIES = ["base", "sides", "ends", "lid", "inside"] as const;
 export type Assembly = (typeof ASSEMBLIES)[number];
 
 /**
+ * How each assembly is named for people: cut-list rows, the print, the PDF, the CSV and the
+ * 3D model's node names.
+ */
+export const ASSEMBLY_NAMES: Record<Assembly, string> = {
+  base: "Base",
+  sides: "Side walls",
+  ends: "End walls",
+  lid: "Lid",
+  inside: "Inside the crate",
+};
+
+/**
  * Which face of the crate a board belongs to, so the viewer can move it when
  * exploded or fade it when opened. `side-` is the front (−Y) wall.
  */

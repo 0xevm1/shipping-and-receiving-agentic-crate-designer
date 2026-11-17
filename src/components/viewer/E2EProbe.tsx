@@ -162,7 +162,7 @@ function snapshot(): CrateSnapshot {
     profileMs: lastProfileMs(),
     cog: s.result.design
       ? {
-          mm: [...s.result.design.centerOfGravityMm],
+          mm: [...s.result.design.handling.cogMm],
           marker: handling.cog ? [...handling.cog] : null,
           arrows: handling.arrows,
           arrowsShown: handling.arrowsShown,

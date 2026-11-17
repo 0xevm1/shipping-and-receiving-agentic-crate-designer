@@ -1,34 +1,17 @@
 import { create } from "zustand";
-import { catalog, modelUrl } from "@/domain/catalog";
+import { catalog } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
 import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult, type Ranking } from "@/domain/design";
 import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import type { PartProfile } from "@/domain/profile";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
-import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
+import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
+import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
+import { catalogPart, type LoadedPart } from "@/lib/part";
 import type { Units } from "@/lib/units";
-import { anim } from "./motion";
 import { loadStandards, saveStandards, type KeyValueStore } from "./standardsStorage";
 import { DEFAULT_UNITS, loadUnits, saveUnits } from "./unitsStorage";
-
-/** The part being crated: catalog metadata or a GLB loaded at runtime. */
-export interface LoadedPart extends DesignPart {
-  modelUrl: string;
-  /** The GLB's file name (the catalog `model`, or the loaded file's name); saved in design files. */
-  model?: string;
-  /** Millimetres per model unit: 1000 for metre files, 1 for files read as millimetres. */
-  mmPerUnit: number;
-  suggested_quantities: number[];
-  /** Catalog size to check the measured model against; absent for unknown files. */
-  catalogDims?: Vec3;
-  /** No mass came with the file, so a stand-in is in use. */
-  massAssumed: boolean;
-  /** The file was larger than 20 units across, so it was read as millimetres. */
-  readAsMm: boolean;
-  // `profile` (from DesignPart) is measured from the model after it renders (`setPartProfile`).
-}
 
 export type Tab = "overview" | "layouts" | "cut" | "rules" | "checks";
 export type Mode = "closed" | "open" | "exploded";
@@ -51,13 +34,6 @@ interface Hover {
   key?: string;
   assembly?: Assembly;
   source: "list" | "3d";
-}
-
-/** A size label drawn in the DOM over the canvas; the scene positions it each frame. */
-interface SizeLabel {
-  text: string;
-  /** Part dimension (ice blue) rather than crate dimension. */
-  inner: boolean;
 }
 
 interface Tooltip {
@@ -118,7 +94,6 @@ export interface DesignerState {
   hover: Hover | null;
   pin: string | null;
   tooltip: Tooltip | null;
-  labels: SizeLabel[];
   panelsHidden: boolean;
   insets: Insets;
   loadMessage: string;
@@ -189,7 +164,6 @@ export interface DesignerState {
   setHover: (h: Hover | null) => void;
   setPin: (key: string | null) => void;
   setTooltip: (t: Tooltip | null) => void;
-  setLabels: (l: SizeLabel[]) => void;
   togglePanels: () => void;
   setInsets: (i: Insets) => void;
   setLoadMessage: (m: string, kind?: LoadMessageKind) => void;
@@ -207,23 +181,6 @@ export interface DesignerState {
 }
 
 const DEFAULT_PART_ID = "PART-001";
-
-export function catalogPart(p: Part, url = modelUrl(p)): LoadedPart {
-  return {
-    id: p.id,
-    name: p.name,
-    model: p.model,
-    material: p.material,
-    mass_kg: p.mass_kg,
-    dimensions_mm: p.dimensions_mm,
-    suggested_quantities: p.suggested_quantities,
-    modelUrl: url,
-    mmPerUnit: 1000,
-    catalogDims: p.dimensions_mm,
-    massAssumed: false,
-    readAsMm: false,
-  };
-}
 
 const initialPart = catalogPart(catalog.parts.find((p) => p.id === DEFAULT_PART_ID)!);
 
@@ -311,6 +268,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     for (const key of ["partGapMm", "wallClearanceMm", "maxLayers"] as const) {
       if (standards.defaults[key] !== old.defaults[key]) next[key] = standards.defaults[key];
     }
+    // A panel thickness the new stock no longer includes goes back to auto rather than lingering unselectable.
+    if (next.panelThickness !== "auto" && !panelOptions(standards).includes(next.panelThickness)) next.panelThickness = "auto";
     recompute({ standards, settings: normalizeSettings(next, settings), layoutKey: null });
     if (save) saveStandards(standards);
   };
@@ -330,7 +289,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     hover: null,
     pin: null,
     tooltip: null,
-    labels: [],
     panelsHidden: false,
     insets: { left: 0, top: 0, right: 0, bottom: 0 },
     loadMessage: "",
@@ -408,7 +366,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
-    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }, "rules"),
+    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings, panelOptions(get().standards)), layoutKey: null }, "rules"),
     resetRules: () => recompute({ settings: settingsFromStandards(get().standards, get().settings.quantity), layoutKey: null }, "rules"),
     setLayoutKey: (layoutKey) => recompute({ layoutKey }, "layout"),
     setStandards: (patch) => {
@@ -438,10 +396,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     setTab: (tab) => set({ tab }),
     setMode: (mode) => {
       const view = { ...get().view, lid: mode !== "open", front: mode !== "open", explode: mode === "exploded" ? 1 : 0 };
-      if (reducedMotion()) {
-        anim.explode = view.explode;
-        anim.lidAlpha = anim.frontAlpha = view.lid ? 1 : 0;
-      }
       set({ view, fit: { nonce: get().fit.nonce + 1, instant: false } });
     },
     setView: (patch) => set({ view: { ...get().view, ...patch } }),
@@ -452,11 +406,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     },
     setPin: (pin) => set({ pin }),
     setTooltip: (tooltip) => set({ tooltip }),
-    setLabels: (labels) => {
-      const a = get().labels;
-      const same = a.length === labels.length && a.every((l, i) => l.text === labels[i].text && l.inner === labels[i].inner);
-      if (!same) set({ labels });
-    },
     togglePanels: () => set({ panelsHidden: !get().panelsHidden }),
     setInsets: (insets) => {
       const a = get().insets;

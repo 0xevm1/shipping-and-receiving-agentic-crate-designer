@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { screwSchedule } from "./crate";
 import { DEFAULT_SETTINGS } from "./design";
@@ -22,7 +21,7 @@ import {
   skidShare,
   type BaseInput,
 } from "./structure";
-import { custom, designOf } from "./testFixtures";
+import { custom, designOf, metricText as metric } from "./testFixtures";
 
 const design = designOf;
 

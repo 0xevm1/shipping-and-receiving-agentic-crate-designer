@@ -1,9 +1,19 @@
+import type { DesignResult, Ranking } from "@/domain/design";
 import { parseDesignFile, serializeDesign, type DesignFile } from "@/domain/designFile";
-import type { DesignerState } from "@/state/store";
+import type { CrateSettings } from "@/domain/schema";
+import type { ShipmentPlan } from "@/domain/shipment";
 import { APP } from "./appInfo";
 import { designFilePart } from "./loadPart";
+import type { LoadedPart } from "./part";
 
-type Current = Pick<DesignerState, "part" | "settings" | "plan" | "result" | "ranking">;
+/** The slice of the designer's state a design file is written from (the store's state satisfies it). */
+export interface Current {
+  part: LoadedPart;
+  settings: CrateSettings;
+  plan: ShipmentPlan;
+  result: DesignResult;
+  ranking: Ranking;
+}
 
 /**
  * The design on screen as design-file text, exactly as "Download design (.json)" writes it, or

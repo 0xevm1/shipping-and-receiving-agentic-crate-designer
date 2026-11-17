@@ -1,12 +1,20 @@
 import { catalog } from "@/domain/catalog";
 import { planShipment } from "@/domain/shipment";
+import { currentDesignFile } from "@/lib/currentDesign";
 import { designFilePart, loadDesign } from "@/lib/loadPart";
 import { browserIdb, loadLastGlb, saveLastGlb } from "./glbCache";
-import { createDebouncedSaver, lastDesignOf, saveLastDesign, type LastDesign } from "./lastDesignStorage";
+import { createDebouncedSaver, saveLastDesign, type LastDesign } from "./lastDesignStorage";
 import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
 import { browserStorage, type KeyValueStore } from "./standardsStorage";
-import { useDesigner, type DesignerState, type LoadedPart } from "./store";
+import { useDesigner, type DesignerState } from "./store";
+import type { LoadedPart } from "@/lib/part";
+
+/** The design on screen as a last-design entry, or null when there is no crate to keep. */
+export function lastDesignOf(s: Pick<DesignerState, "part" | "settings" | "plan" | "result" | "tab" | "ranking">): LastDesign | null {
+  const design = currentDesignFile(s);
+  return design ? { design, tab: s.tab, ranking: s.ranking } : null;
+}
 
 /**
  * Reopens the last-opened crate (spec §9) through the design-file path (`loadDesign`), with

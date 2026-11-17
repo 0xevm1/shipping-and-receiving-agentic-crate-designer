@@ -9,9 +9,10 @@ import { savedDateText } from "@/lib/format";
 import { designFilePart } from "@/lib/loadPart";
 import { dims, lengthUnit, weight } from "@/lib/units";
 import { useLibrary } from "@/state/libraryStore";
-import { useDesigner, type LoadedPart } from "@/state/store";
-import { openDesignFile } from "../shell/useLoadFiles";
+import { openDesignFile } from "@/state/partLoader";
+import { useDesigner } from "@/state/store";
 import styles from "./SavedDesigns.module.css";
+import { type LoadedPart } from "@/lib/part";
 
 /** How long a deleted design can be brought back. */
 const UNDO_MS = 8000;
@@ -95,11 +96,11 @@ function PartLibrary({ part, partKey: key }: { part: LoadedPart; partKey: string
 
   const reuse = async (entry: SavedDesign) => {
     const glbs = entry.design.part.source === "custom" ? await currentModelFile(part) : [];
-    await openDesignFile(entry.design, glbs);
-    // `openDesignFile` reports a failure only in the load message, so check that the design is on screen.
-    const s = useDesigner.getState();
-    if (s.part.id === entry.design.part.id && s.settings.quantity === entry.design.settings.quantity) say(`Reused “${entry.name}”.`);
-    else say(`Couldn't open “${entry.name}”.${s.loadMessage ? ` ${s.loadMessage}` : ""}`);
+    if (await openDesignFile(entry.design, glbs)) say(`Reused “${entry.name}”.`);
+    else {
+      const { loadMessage } = useDesigner.getState();
+      say(`Couldn't open “${entry.name}”.${loadMessage ? ` ${loadMessage}` : ""}`);
+    }
   };
 
   const copyLink = async () => {

@@ -3,6 +3,8 @@ import { getPart } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { planShipment } from "@/domain/shipment";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "@/domain/standards";
+import { custom as mergeStandardsOk } from "@/domain/testFixtures";
+import type { DesignPart } from "@/domain/schema";
 import { bomToCsv, shipmentToCsv } from "./csv";
 
 const part = getPart("PART-001");
@@ -67,5 +69,36 @@ describe("cut list CSV in the selected units (#15)", () => {
     expect(metric).toMatch(/\n# \d+ crates, gross \d+ kg in all; quantities are for every crate\n/);
     expect(metric).toContain("\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\n");
     expect(imperial).toMatch(/^[\x20-\x7e\n]*$/);
+  });
+});
+
+describe("entered details on the cut list", () => {
+  const part: DesignPart = { id: "widget", name: "Gear housing", material: "6061-T6 aluminum", mass_kg: 3.25, dimensions_mm: [300, 200, 100] };
+  const design = computeDesign(part, { ...DEFAULT_SETTINGS, quantity: 2 }).design!;
+
+  it("puts the name, material and mass in the CSV header", () => {
+    const lines = bomToCsv(part, design, "metric").split("\n");
+    expect(lines[0]).toBe("# Crate for 2 x widget Gear housing");
+    expect(lines[1]).toBe("# Part 6061-T6 aluminum, 3.25 kg each");
+  });
+
+  it("says when no material was given", () => {
+    expect(bomToCsv({ ...part, material: undefined }, design, "metric")).toContain("# Part material not given, 3.25 kg each");
+  });
+});
+
+describe("shipment CSV header and footer", () => {
+  it("names the crate types and ends with the screw total", () => {
+    const plan = planShipment(
+      getPart("PART-003"),
+      { ...DEFAULT_SETTINGS, quantity: 10 },
+      null,
+      mergeStandardsOk({ limits: { perCrate: { maxParts: 4 } } }),
+    );
+    const screws = plan.crates.reduce((n, c) => n + c.count * c.result.design!.screws, 0);
+    const csv = shipmentToCsv(getPart("PART-003"), plan, "metric");
+    expect(csv).toMatch(/^# Shipment of 10 x PART-003 .*: 2 x crate A \(4 each\) \+ 1 x crate B \(2\)\n/);
+    expect(csv).toContain("# 3 crates, gross");
+    expect(csv.trim().endsWith(`Wood screws (approx),fastener,,,${screws}`)).toBe(true);
   });
 });

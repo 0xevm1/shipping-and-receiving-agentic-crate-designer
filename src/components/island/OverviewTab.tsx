@@ -2,12 +2,12 @@
 
 import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import type { DesignField } from "@/domain/diff";
-import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { countKind } from "@/domain/members";
 import { cautionVerdict, layoutName, usd } from "@/lib/format";
 import { plywoodLabel, sectionLabel } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
-import type { CheckItem } from "@/state/checks";
+import type { CheckItem } from "@/lib/checks";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";

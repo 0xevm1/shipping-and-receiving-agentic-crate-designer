@@ -242,7 +242,7 @@ function plan(types: CrateType[], unmet: Message | null, standards: ShopStandard
       materialCostUsd: sum((d) => d.materialCostUsd),
       costUsd: sum((d) => d.cost.totalUsd),
       labourHours: sum((d) => d.labour.hours),
-      dimWeightLb: sum((d) => d.dimWeightLb),
+      dimWeightLb: sum((d) => d.freight.dimWeightLb),
     },
     unmet,
     problem: types[0].result.problem,

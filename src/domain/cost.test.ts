@@ -127,10 +127,9 @@ describe("the design's cost, labour and freight (spec §7.12 worked example)", (
     expect(d.cost.fastenersUsd).toBeCloseTo(16.16);
     expect(d.cost.totalUsd).toBeCloseTo(186.14, 2);
     expect(d.freight.outsideIn).toEqual([37, 26, 20]);
-    expect(d.dimWeightLb).toBe(139);
-    expect(d.densityLbFt3).toBeCloseTo(26.72, 2);
-    expect(d.freightClass).toBe(65);
-    expect(d.freightClass).toBe(d.freight.freightClass);
+    expect(d.freight.dimWeightLb).toBe(139);
+    expect(d.freight.densityLbFt3).toBeCloseTo(26.72, 2);
+    expect(d.freight.freightClass).toBe(65);
   });
 
   it("a labour rate change moves the labour and total cost and nothing else", () => {
@@ -218,8 +217,8 @@ describe("ranking option", () => {
     const eligible = r.layouts
       .map((l) => computeDesign(part, s30, l.key).design!)
       .filter((o) => o.layout.stable && !o.checks.some((c) => c.id === "oversize") && o.checks.find((c) => c.id === "blocking")!.level === "ok");
-    expect(Math.min(...eligible.map((o) => o.freightClass))).toBe(d.freightClass);
-    const sameClass = eligible.filter((o) => o.freightClass === d.freightClass);
+    expect(Math.min(...eligible.map((o) => o.freight.freightClass))).toBe(d.freight.freightClass);
+    const sameClass = eligible.filter((o) => o.freight.freightClass === d.freight.freightClass);
     expect(Math.min(...sameClass.map((o) => Math.round(o.freight.grossLb)))).toBe(Math.round(d.freight.grossLb));
   });
 
@@ -259,6 +258,6 @@ describe("shipment totals", () => {
     expect(plan.split).toBe(true);
     expect(plan.totals.costUsd).toBeCloseTo(sum((d) => d.cost.totalUsd));
     expect(plan.totals.labourHours).toBeCloseTo(sum((d) => d.labour.hours));
-    expect(plan.totals.dimWeightLb).toBe(sum((d) => d.dimWeightLb));
+    expect(plan.totals.dimWeightLb).toBe(sum((d) => d.freight.dimWeightLb));
   });
 });

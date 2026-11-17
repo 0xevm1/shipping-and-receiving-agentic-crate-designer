@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { cradleProfile, cradleSolidAt, cradleStations, isSlender, notchFor, usesCradles, CRADLE_LABEL, END_STOP_LABEL, STACKING_CRADLE_LABEL } from "./cradles";
 import { screwSchedule, type Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
-import { custom } from "./testFixtures";
+import { custom, metricText as metric } from "./testFixtures";
 
 const S = DEFAULT_STANDARDS;
 const design = (partId: string, patch: Partial<CrateSettings> = {}, standards = S) =>

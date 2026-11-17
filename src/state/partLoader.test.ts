@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { catalog } from "@/domain/catalog";
 import { useLibrary } from "./libraryStore";
 import { loadPickedFiles } from "./partLoader";
-import { catalogPart, useDesigner } from "./store";
+import { useDesigner } from "./store";
+import { catalogPart } from "@/lib/part";
 
 const loadPartFiles = vi.fn();
 const loadDesign = vi.fn();

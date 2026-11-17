@@ -22,7 +22,7 @@ import { serializeDesign } from "@/domain/designFile";
 import type { CrateSettings } from "@/domain/schema";
 import { describeShipment, type ShipmentPlan } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
-import type { LoadedPart } from "@/state/store";
+import { type LoadedPart } from "./part";
 import { APP } from "./appInfo";
 import { bomToCsv, shipmentToCsv } from "./csv";
 import { documentDate } from "./format";

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_STANDARDS, mergeStandards, sameStandards, standardsToJson, type ShopStandards } from "@/domain/standards";
+import { DEFAULT_STANDARDS, mergeStandards, panelOptions, sameStandards, standardsToJson, type ShopStandards } from "@/domain/standards";
 import { useDesigner } from "./store";
 import { loadStandards, saveStandards, STANDARDS_STORAGE_KEY } from "./standardsStorage";
 
@@ -112,6 +112,33 @@ describe("store standards", () => {
     expect(sameStandards(s().standards, DEFAULT_STANDARDS)).toBe(true);
     expect(s().settings.maxLayers).toBe(2);
     expect(s().result.design!.materialCostUsd).toBe(initial.result.design!.materialCostUsd);
+  });
+
+  it("the panel thickness choices are the shop's stocked plywood (#89)", () => {
+    expect(panelOptions(s().standards)).toEqual([12, 15, 19]);
+    s().setStandards({ stock: { panelPlywoodMm: { light: 10, medium: 13, heavy: 16 } } });
+    expect(panelOptions(s().standards)).toEqual([10, 13, 16]);
+    s().setSettings({ panelThickness: 13 });
+    expect(s().settings.panelThickness).toBe(13);
+    expect(s().result.design!.construction.panelMm).toBe(13);
+    // 19 is no longer stocked, so the edit is ignored.
+    s().setSettings({ panelThickness: 19 });
+    expect(s().settings.panelThickness).toBe(13);
+  });
+
+  it("a panel thickness the new stock drops goes back to auto; one it keeps stays", () => {
+    s().setSettings({ panelThickness: 15 });
+    s().setStandards({ stock: { panelPlywoodMm: { light: 12, medium: 15, heavy: 18 } } });
+    expect(s().settings.panelThickness).toBe(15);
+    s().setStandards({ stock: { panelPlywoodMm: { light: 10, medium: 13, heavy: 16 } } });
+    expect(s().settings.panelThickness).toBe("auto");
+  });
+
+  it("loading a saved design keeps the thickness it was saved with, even if the stock differs", () => {
+    s().setStandards({ stock: { panelPlywoodMm: { light: 10, medium: 13, heavy: 16 } } });
+    s().loadDesign(s().part, { ...s().settings, panelThickness: 19 }, null);
+    expect(s().settings.panelThickness).toBe(19);
+    expect(s().result.design!.construction.panelMm).toBe(19);
   });
 
   it("keeps the standards when the part changes", () => {

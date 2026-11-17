@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
-import { catalogPart, useDesigner } from "./store";
+import { useDesigner } from "./store";
+import { catalogPart } from "@/lib/part";
 
 const initial = useDesigner.getState();
 const s = () => useDesigner.getState();

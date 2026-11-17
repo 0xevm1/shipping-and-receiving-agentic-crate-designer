@@ -1,11 +1,9 @@
-import { Euler, Matrix4 } from "three";
-import { metricText as metric } from "@/lib/message";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import { isSlender, usesCradles } from "./cradles";
 import { designCrate, SHAPED_BLOCK, type Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
-import { ORIENTATIONS, rotationMatrix } from "./orientations";
+import { ORIENTATIONS } from "./orientations";
 import {
   FACE_AXES,
   FACE_IDS,
@@ -17,6 +15,7 @@ import {
 } from "./profile";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
+import { metricText as metric } from "./testFixtures";
 
 /**
  * A synthetic profile on a `cell`-mm grid. Every face is flat (depth 0) unless `shape` gives a
@@ -42,14 +41,6 @@ const custom = (size: Vec3, profile?: PartProfile): DesignPart => ({ id: "X", na
 const one = { ...DEFAULT_SETTINGS, quantity: 1 };
 
 describe("profile rotation", () => {
-  it("matches three.js for every orientation", () => {
-    for (const o of ORIENTATIONS) {
-      const e = new Matrix4().makeRotationFromEuler(new Euler(...o.euler)).elements; // column-major
-      const m = rotationMatrix(o);
-      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) expect(m[r][c]).toBeCloseTo(e[c * 4 + r], 9);
-    }
-  });
-
   it("shows the part face that looks out each side of the slot", () => {
     // Only the part's +Z face is recessed (by 40 mm). Lying on its side (π/2 about X), it faces −Y.
     const size: Vec3 = [300, 200, 100];

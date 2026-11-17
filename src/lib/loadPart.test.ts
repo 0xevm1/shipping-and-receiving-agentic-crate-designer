@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { APP } from "./appInfo";
 import { describe, expect, it } from "vitest";
-import { parts } from "@/domain/catalog";
+import { getPart, parts } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { serializeDesign } from "@/domain/designFile";
-import { catalogPart, useDesigner, type LoadedPart } from "@/state/store";
 import { designFilePart, glbProblem, idFromFile, loadPartFiles, nameFromFile, partsFromJson } from "./loadPart";
+import { catalogPart, type LoadedPart } from "./part";
 
 const sample = (name: string) => {
   const b = readFileSync(`public/parts/${name}`);
@@ -52,10 +52,10 @@ describe("file helpers", () => {
     expect(idFromFile("widget_v2.GLB")).toBe("widget_v2");
     const file = serializeDesign({
       app: APP,
-      part: { ...designFilePart(useDesigner.getState().part), source: "custom", id: idFromFile(".glb"), name: nameFromFile(".glb"), model: ".glb" },
+      part: { ...designFilePart(catalogPart(getPart("PART-001"))), source: "custom", id: idFromFile(".glb"), name: nameFromFile(".glb"), model: ".glb" },
       settings: DEFAULT_SETTINGS,
-      layoutKey: computeDesign(useDesigner.getState().part, DEFAULT_SETTINGS).design!.layout.key,
-      design: computeDesign(useDesigner.getState().part, DEFAULT_SETTINGS).design!,
+      layoutKey: computeDesign(catalogPart(getPart("PART-001")), DEFAULT_SETTINGS).design!.layout.key,
+      design: computeDesign(catalogPart(getPart("PART-001")), DEFAULT_SETTINGS).design!,
       savedAt: "2026-11-16T00:00:00Z",
     });
     expect(JSON.parse(file).part).toMatchObject({ id: "part", name: "Part", model: ".glb" });
