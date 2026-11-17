@@ -5,10 +5,15 @@ import nextTs from "eslint-config-next/typescript";
 /**
  * Layer boundaries (docs/SPECIFICATION.md §5, #89). Arrows point down only:
  *
- *   components/, app/   render; may import everything below
+ *   components/, app/   render; may import everything below (components: all but server/)
  *   state/              zustand stores and persistence; may import lib and domain
+ *   server/             server-only data access (Postgres, #46); may import lib and domain.
+ *                       Only app/ (Route Handlers, Server Components) may import it
  *   lib/                edge code (format, load, export); may import domain
  *   domain/             pure TypeScript in mm/kg, Z-up; imports nothing above it
+ *
+ * server/ sits beside state/, not under it: neither imports the other. Its database packages
+ * (postgres, drizzle-orm) are banned everywhere but server/, so a client bundle can't pull them in.
  *
  * Type-only imports get no exemption: a type that crosses a boundary is in the wrong layer.
  * Test files follow the same rules as the code they sit beside.
@@ -25,6 +30,12 @@ const upLib = ban("src/lib", ...layer("lib"));
 const upState = ban("src/state", ...layer("state"));
 const upComponents = ban("src/components", ...layer("components"));
 const upApp = ban("src/app", ...layer("app"));
+const upServer = ban("src/server", ...layer("server"));
+// Server-only packages: reachable only through src/server.
+const serverPackages = {
+  group: ["postgres", "drizzle-orm", "drizzle-orm/**", "drizzle-kit", "server-only"],
+  message: "Database access is server-only: go through src/server (and only from src/app).",
+};
 
 const DOMAIN_PACKAGES = [
   { name: "three", message: "The domain is pure TypeScript: no three.js (the viewer and lib own it)." },
@@ -77,7 +88,10 @@ const eslintConfig = defineConfig([
     name: "layers/domain",
     files: ["src/domain/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { paths: DOMAIN_PACKAGES, patterns: [upLib, upState, upComponents, upApp, ...DOMAIN_PACKAGE_PATTERNS] }],
+      "no-restricted-imports": [
+        "error",
+        { paths: DOMAIN_PACKAGES, patterns: [upLib, upState, upServer, upComponents, upApp, serverPackages, ...DOMAIN_PACKAGE_PATTERNS] },
+      ],
       "no-restricted-globals": ["error", ...BROWSER_GLOBALS],
     },
   },
@@ -94,8 +108,10 @@ const eslintConfig = defineConfig([
           patterns: [
             upLib,
             upState,
+            upServer,
             upComponents,
             upApp,
+            serverPackages,
             ...DOMAIN_PACKAGE_PATTERNS.map((p) => ({ ...p, group: p.group.filter((g) => !g.startsWith("three")) })),
           ],
         },
@@ -106,14 +122,29 @@ const eslintConfig = defineConfig([
     name: "layers/lib",
     files: ["src/lib/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upState, upComponents, upApp] }],
+      "no-restricted-imports": ["error", { patterns: [upState, upServer, upComponents, upApp, serverPackages] }],
     },
   },
   {
     name: "layers/state",
     files: ["src/state/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upComponents, upApp] }],
+      "no-restricted-imports": ["error", { patterns: [upServer, upComponents, upApp, serverPackages] }],
+    },
+  },
+  {
+    name: "layers/server",
+    files: ["src/server/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [upState, upComponents, upApp] }],
+    },
+  },
+  {
+    // Components render in the browser (or are shared with it): no database access.
+    name: "layers/components",
+    files: ["src/components/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [upServer, serverPackages] }],
     },
   },
 ]);
