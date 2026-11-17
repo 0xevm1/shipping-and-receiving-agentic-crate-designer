@@ -202,7 +202,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
 | `src/components/viewer/CrateModel.tsx` | One box per `Member`; explode, fades, highlight, ghosting, picking |
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
-| `src/components/viewer/DimensionLines.tsx` | Crate and part size lines; positions the DOM labels each frame |
+| `src/components/viewer/DimensionLines.tsx` | Crate and part size lines; positions the DOM labels each frame; drives the photon pulse |
+| `src/components/viewer/dimensionPulse.ts` | Pure size-line geometry (`buildLines`), photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
+| `src/components/viewer/PhotonLayer.ts` | One `Points` of photons per line group, updated per frame (#65) |
 | `src/components/viewer/SizeLabels.tsx` | The DOM elements for the size labels |
 | `src/components/viewer/Floor.tsx` | Grid and warm light pool |
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
@@ -1256,6 +1258,45 @@ open question for the user (see #20).
   - **Part:** one part (top layer, front row, rightmost) carries ice-blue dimensions in open and
     exploded modes only.
   - Lines are drei `<Line>` without depth testing.
+  - **Photon pulse (#65):** an ambient animation on the lines.
+    - **What it does:** about every **10 s**, a small glowing photon leaves each visible label
+      in both directions and runs along its dimension line. Where that line meets a witness line,
+      it splits both ways: one copy runs toward the crate corner, the other out to the tick end.
+      Each photon fades at the end of its segment, so none turns back along a line it has already
+      travelled.
+    - **Paths:** `dimensionPulse.ts` is pure and unit-tested. It turns each dimension into a
+      small graph:
+      - The graph holds the dimension line and the witness lines that touch its ends. It leaves
+        out other dimension lines, so the width photon doesn't climb the height line.
+      - Nodes sit at segment ends, at junctions and at the label anchor.
+      - A breadth-first walk from the anchor gives the photon legs, each with its path distance
+        and normalised start and end time.
+      - Counts: a crate dimension makes 6 legs and 4 ends; a part dimension makes 2 legs and 2
+        ends.
+    - **Timing:** the first pulse comes **2 s** after the size lines mount (the crate first
+      frames), then one every 10 s. Each pulse takes **1.35 s** from emerging to the last fade.
+      - Within one dimension, the head moves at a single speed along every branch, eased in and
+        out (sine).
+      - Every dimension takes the same time, so short and long ones look alike.
+      - **All dimensions pulse together** (`PULSE_STAGGER_S = 0`): one quiet beat instead of a
+        sweep that pulls the eye round the crate.
+      - The clock advances by the frame delta, capped at 0.1 s like `Director`.
+    - **Look:** colours as the lines (`#e6eef7` crate, `#70b8fd` part).
+      - Each photon is a soft dot with a white-hot core and a tail of 10% of the dimension line.
+      - It uses additive blending and no depth test.
+      - The lines brighten (opacity 0.65 → 0.9 → 0.65) over the pulse.
+    - **Rendering:** one `Points` with a small shader per line group (`PhotonLayer`), added to
+      that group, so photons follow explode, rotation and modes.
+      - `DimensionLines` updates them from its single `useFrame`, with no React state per frame.
+      - The `Points` is hidden between pulses.
+    - **When it runs:** only with size labels on. Part photons run only while the part dimensions
+      show (open and exploded).
+      - Never with `prefers-reduced-motion`.
+      - A hidden tab restarts the clock: the first pulse comes 2 s after return, with no queued
+        burst.
+      - It never calls `markInput`, so it never stops idle auto-play.
+    - **Test hook:** `window.__crate` exposes `pulses` (fired) and `photonsActive` (photons on
+      screen in the last frame).
   - **Labels** are plain DOM (`SizeLabels`), positioned each frame by projecting their anchors.
     drei `<Html>` is not used anywhere: each `<Html>` mounts its own React root, and unmounting
     those during a render raced in React 19.
@@ -1655,6 +1696,15 @@ fall back to empty with one warning; good entries survive bad ones; throwing sto
 `useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
 each time, export and import with duplicates and bad entries counted).
 
+**`src/components/viewer/dimensionPulse.test.ts`** checks the photon paths (#65, §8.4) on
+PART-001 × 4: one pulse per label (L, W, H, then the part's three); each crate dimension gives 6
+legs and 4 ends (two legs leave the anchor in opposite directions, each splits in two at its
+witness line, ending at both crate corners and both tick ends); the width photon never runs up the
+height line nor the height photon along the width line; each part line gives 2 legs and 2 ends;
+leg times are path distances over the longest path (furthest end at 1). The 10 s clock fires
+first at 2 s then every 10 s, never while off, restarts when back on, and a 60 s frame gap
+(hidden tab) queues nothing.
+
 **`src/state/lastDesignStorage.test.ts`** checks the last-opened crate (#71): the versioned
 key and envelope round trip, the entry built from the store (null without a crate), nothing
 saved or blocked storage giving null, nine kinds of bad or old data each ignored with a warning,
@@ -1858,6 +1908,10 @@ HTML report as `playwright-report`.
     +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
     shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
     `09-header-*`.
+  - `22-dimension-pulse` (#65, motion on): a pulse fires within 12 s of load; photons are on
+    screen past the first split (≥ 7) and all fade afterwards; again in exploded mode; none fire
+    with size labels off or with reduced motion (12 s each). Saves `22-pulse-closed` and
+    `22-pulse-exploded`.
   - `18-scorecard` (#17): the Overview's scorecard (PART-001 × 4, imperial: $186, "$91 material
     + $95 labour", 2 h 43 m, class 65, 26.7 lb/ft³, 139 lb dim weight, "÷ 139 in³/lb") sits
     between the outside size and the chain, and reads 428 kg/m³ and 63 kg in metric; at

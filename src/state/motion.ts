@@ -79,3 +79,14 @@ export function markInput() {
 export function isIdle(now = performance.now()) {
   return now - lastInput > IDLE_MS;
 }
+
+/**
+ * Dimension-line photon pulse (#65), written by `DimensionLines` each frame and read by the e2e
+ * test hook. The pulse is ambient: it never calls `markInput`.
+ */
+export const pulse = {
+  /** Pulses fired since the page loaded. */
+  fired: 0,
+  /** Photons (legs) on screen this frame. */
+  active: 0,
+};

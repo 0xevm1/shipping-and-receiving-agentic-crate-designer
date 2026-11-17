@@ -6,7 +6,8 @@
  *
  * The 3D scene can't be read from the DOM, so this exposes `window.__crate`:
  * - `getState()`: a plain snapshot (copies, never live objects) of the view mode, camera,
- *   hover / pin keys, the eased `anim` values and the crate's outside size.
+ *   hover / pin keys, the eased `anim` values, the crate's outside size and the dimension-line
+ *   pulse counters (#65).
  * - `canvasCoverage()`: the share of canvas pixels the scene drew on, proving WebGL renders.
  * Nothing here writes to the store or the scene.
  */
@@ -14,7 +15,7 @@ import { useFrame, useThree, type RootState } from "@react-three/fiber";
 import { useEffect } from "react";
 import { Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { anim, autoplay, isIdle } from "@/state/motion";
+import { anim, autoplay, isIdle, pulse } from "@/state/motion";
 import { currentMode, useDesigner } from "@/state/store";
 
 export interface CrateSnapshot {
@@ -53,6 +54,10 @@ export interface CrateSnapshot {
   massAssumed: boolean;
   /** Frames rendered since the scene mounted. */
   frames: number;
+  /** Dimension-line photon pulses fired since the page loaded (#65). */
+  pulses: number;
+  /** Photons on screen in the last frame (#65). */
+  photonsActive: number;
 }
 
 declare global {
@@ -104,6 +109,8 @@ function snapshot(): CrateSnapshot {
     partId: s.part.id,
     massAssumed: s.part.massAssumed,
     frames,
+    pulses: pulse.fired,
+    photonsActive: pulse.active,
   };
 }
 
