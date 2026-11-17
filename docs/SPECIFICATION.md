@@ -129,6 +129,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`, `MIN_INTERIOR_MM` |
 | `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
+| `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
@@ -138,7 +139,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
-| `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata, mass input for unknown parts |
+| `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata; name, material and mass fields for unknown parts |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover, Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
 | `src/components/island/*.tsx` | The island and its five tabs |
@@ -214,6 +215,25 @@ The UI wraps it in a **`LoadedPart`** (`src/state/store.ts`), which adds:
 - `readAsMm`
 
 Mass is never inferred from the mesh.
+
+**Entered details.** For an unknown part (no `catalogDims`) the user can edit the **name**,
+**material** and **mass** through the store action `setPartDetails({ name?, material?, mass_kg? })`.
+Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
+
+- `name`: whitespace and control characters collapsed, then 1–80 characters (`PART_NAME_MAX`).
+- `material`: tidied the same way, at most 60 characters (`PART_MATERIAL_MAX`). Blank clears it,
+  and the UI shows "material not given". Free text; `MATERIAL_SUGGESTIONS` are only offered.
+- `mass_kg`: a finite number above 0. Any accepted mass, even 10, clears `massAssumed`.
+
+Invalid input changes nothing and returns a message. Catalog parts are read-only. A mass change
+recomputes the design and resets the layout pick, like any other input. A name or material
+change refreshes the result but keeps the layout pick and the camera.
+
+**Material → look.** `partFinish(material)` returns `"aluminum"` when the text contains "alum"
+(case-insensitive, so "aluminium" counts) and `"steel"` for everything else, including no
+material. `partMaterial()` in `scene.ts` draws aluminum lighter and smoother. The material text
+also shows in the part header, the Overview "Parts" step, the 3D part tooltip and the CSV header;
+the name shows in the island title, the Overview heading, the tooltip and the CSV header.
 ### 6.3 Derived types
 
 - **`Layout`:** `key`, `orientation`, `cellSize` (rotated bbox), `counts [nx,ny,nz]`,
@@ -392,7 +412,8 @@ Each member is tagged where it is created:
   - **Plywood:** stock is `"{thickness} mm"` and cut is `"{largest} × {second}"`.
   - **Lumber:** stock is `"{smallest} × {middle}"` and cut is `"{length}"`.
   - Regrouping by label instead of kind changes how many lines there are, not the total quantity.
-- **CSV** (always metric): three `#` header lines (part, external size and gross, layout), then
+- **CSV** (always metric): four `#` header lines (part id and name; part material and mass each;
+  external size and gross; layout), then
   `component,material,stock,cut_mm,qty` with component as `"{Assembly}: {label}"`, then a final
   wood-screws line.
 
@@ -401,16 +422,39 @@ Each member is tagged where it is created:
 `designCrate` returns every rule, passed or not, in a fixed order. The UI sorts cautions first,
 then passes, then info.
 
+**Shipping is domestic only** (US truckload or LTL in a 53' dry van). Export concerns (ISPM-15
+lumber, ocean containers, air freight) are out of scope, so there is no export check.
+
 | id | Pass (`ok`) | Problem | Rule |
 |---|---|---|---|
-| `door` | Fits a standard trailer door | caution: Too big for a standard trailer door | external W and H ≤ 2440 mm |
+| `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`DRY_VAN_53FT_MM`) |
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side) |
 | `blocking` | Every part is blocked in | caution: Parts are not restrained | min(partGap, wallClearance) ≥ 19 mm |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg; only reported when nz > 1 |
 | `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg |
-| `oversize` | — | info: Oversize freight | external L > 3000 mm |
+| `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `LTL_EXCESSIVE_LENGTH_MM`) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% |
-| `export` | — | info: Export shipments (ISPM-15) | always |
+| `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`CARDBOARD_LIMITS`) |
+
+**Trailer limits.** Typical published dimensions for a 53' × 102" dry van are an interior of
+about 52'6" × 101" × 110" and a rear door opening of about 98–100" × 108–110". The door, not the
+interior, limits width and height, so the check uses the low end of the door range: 98" (2489
+mm) wide and 108" (2743 mm) high, and the 52'6" (16000 mm) floor for length. Separately, most LTL
+carriers add an excessive-length accessorial for handling units over 8 ft, which `oversize`
+notes. Forklift and pallet-jack handling is #8.
+
+**When a crate is overkill.** The brief says smaller aluminum parts might ship in ordinary
+cardboard boxes. `cardboard` suggests it, while still producing the crate design, when:
+
+- each part is ≤ 15 kg, light enough not to punch through corrugated board. The 11.8 kg
+  aluminum housing qualifies; the 21.5 kg steel bracket and 27 kg steel shaft do not.
+- the payload is ≤ 25 kg, which leaves room for the box and dunnage under the 65 lb (29.5 kg)
+  gross limit of a 32 ECT single-wall box (NMFC Item 222 / UFC Rule 41).
+- the crate interior's L + W + H is ≤ 1905 mm (75 in), the same rule's size limit for that box.
+
+Of the sample parts at their suggested quantities, only a single PART-003 triggers it (11.8 kg,
+interior 545 × 535 × 354 mm). That is deliberate: one housing fits in a carton, while four or
+more (47 kg and up) and the steel parts justify a crate.
 
 The UI adds two checks that depend on the loaded file (`src/state/checks.ts`):
 
@@ -590,8 +634,11 @@ open question for the user (see #20).
 - Dropping a `parts.json` alongside the GLB merges its valid entries into the lookup first.
 - **A known GLB** (file name equals a catalog `model`) takes that entry's mass, material and
   quantities, and gets the model check.
-- **An unknown GLB** gets a 10 kg stand-in mass, an editable mass field and a caution until a
-  real mass is entered.
+- **An unknown GLB** gets a name from its file name, no material, and a 10 kg stand-in mass. The
+  part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
+  steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
+  mass is entered (§6.2a). Each field applies as soon as its text is valid; invalid text is
+  outlined in gold and reverts on blur.
 - **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data, each
   with a plain message.
 - Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
@@ -628,6 +675,13 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
 - Tare by assembly sums to tare.
 - Checks report passes as well as cautions, and the stack check appears only for stacked
   layouts.
+- No sample part × suggested quantity reports an `export` (ISPM-15) check.
+- **Trailer limits:** a single custom part sized so the crate is exactly at, then 1 mm over, the
+  53' dry van length, door width and door height gives `door` ok, then caution. `oversize`
+  appears only past 2438 mm. Every sample part × suggested quantity passes both.
+- **Cardboard:** a single PART-003 triggers `cardboard` and still gets a crate; no other sample
+  part × suggested quantity does. The per-part and payload limits are inclusive, and a light
+  but long part whose interior L + W + H is over 1905 mm doesn't trigger it.
 - `explainLayout` covers `only`, the recommended layout and a user pick.
 
 **`src/domain/hardening.test.ts`** checks edge cases and bad input (#10):
@@ -647,6 +701,15 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
   return a `settings` problem.
 - Across a grid of extreme sizes and settings there is always a layout, and `design` is null
   exactly when `problem` is set.
+
+**`src/domain/partDetails.test.ts`** checks the entered-details path: names and materials are
+tidied, a blank material clears it, a blank or overlong name, an overlong material and a mass
+that isn't a positive number are rejected, `partFinish` maps "alum" text to aluminum and
+everything else to steel, and the CSV header carries the entered name, material and mass.
+
+**`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
+changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
+flag, invalid input changes nothing, and catalog parts are read-only.
 
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions. **`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
@@ -685,7 +748,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 |---|---|
 | #1 | Commit the prototype as a baseline |
 | #2 | README and this spec |
-| #3 | Upload a custom GLB part, with user-entered mass and material. Loading and mass entry landed with #20; entering a material is still open |
+| #3 | Upload a custom GLB part, with user-entered name, mass and material. Loading and mass entry landed with #20; name and material entry followed |
 | #4 | Capture and export LLM logs (a deliverable) |
 | #5 | Architecture and decision notes for the on-site walkthrough |
 | #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |

@@ -69,7 +69,10 @@ tab at a time.
    click **Load a part** or drop a `.glb` anywhere on the page.
    - If the file name matches a catalog entry (`src/data/parts.json`), its mass, material and
      usual quantities fill in, and the model's size is checked against the catalog.
-   - For an unknown file, enter the mass. A 10 kg stand-in is used, with a warning, until you do.
+   - For an unknown file, enter its name, material and mass in the top-left header. The
+     material field suggests common alloys and takes any text; aluminum draws lighter than
+     steel. A 10 kg stand-in mass is used, with a warning, until you enter one. Mass is never
+     guessed from the mesh.
 2. **Set the quantity and packing rules** in the **Rules** tab: quantity, keep upright, most
    layers, gap between parts, clearance to walls, and plywood thickness (or Auto).
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
@@ -83,8 +86,9 @@ tab at a time.
    - **Overview:** outside size, gross weight, how it's built, and crate weight by assembly
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
-   - **Checks:** every rule of thumb, passed ones included (door clearance, tip-over, blocking,
-     stack load, base rating, export lumber)
+   - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
+     tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
+     cardboard box may be enough)
 6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
 
 ### The crate it designs
@@ -98,18 +102,21 @@ tab at a time.
 
 ## Scope and non-goals
 
-**In scope:** one part type per crate, any quantity from 1 to 200, wood plus basic fasteners only.
+**In scope:** one part type per crate, any quantity from 1 to 200, wood plus basic fasteners only,
+**domestic shipping only** (US truckload or LTL in a 53' dry van).
 
 **Out of scope for v1 (deliberately):**
 
 - **Disposable packing materials** (foam, bubble wrap, stretch film). The brief excludes them.
 - **Mixed-part crates.** A crate never mixes part numbers.
-- **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039,
-  ISPM-15 or a structural calculation.
+- **Export shipping.** No ISPM-15 lumber, ocean containers or air freight.
+- **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
+  or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
 - **Persistence and accounts.** Nothing is saved yet. The plan is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
-- **Entering a material for unknown parts.** Mass can be entered; material can't yet (see #3).
+- **Material properties.** An entered material sets the part's look and labels only. It doesn't
+  change the mass or any rule.
 
 ## Conventions
 
@@ -136,7 +143,8 @@ tab at a time.
 - **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
   $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
   quoting.
-- **Part masses** come from the catalog as given, or from the user for unknown files. They are
+- **Part masses** come from the catalog as given, or from the user for unknown files (as do
+  their name and material). They are
   never derived from mesh volume.
 - **Stability:** a crate counts as "stable" if its outside height is at most 1.5× its narrowest
   base side.

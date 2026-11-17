@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { catalog, modelUrl } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignResult } from "@/domain/design";
+import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
 import type { Units } from "@/lib/units";
 import { anim } from "./motion";
@@ -90,7 +91,12 @@ export interface DesignerState {
 
   setPart: (part: LoadedPart) => void;
   setMeasured: (size: Vec3) => void;
-  setPartMass: (kg: number) => void;
+  /**
+   * Name, material and mass for a part loaded without catalog data. Validated;
+   * returns an error message (and changes nothing) if the input is invalid or the
+   * part is a catalog part, which is read-only.
+   */
+  setPartDetails: (details: PartDetailsInput) => string | null;
   setSettings: (patch: Partial<CrateSettings>) => void;
   resetRules: () => void;
   setLayoutKey: (key: string | null) => void;
@@ -184,9 +190,27 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
       }),
     setMeasured: (measured) => set({ measured }),
-    setPartMass: (kg) => {
-      // Ignore unusable masses; the field keeps showing what was typed.
-      if (Number.isFinite(kg) && kg > 0) recompute({ part: { ...get().part, mass_kg: kg, massAssumed: false }, layoutKey: null });
+    setPartDetails: (input) => {
+      const current = get().part;
+      if (current.catalogDims) return "Catalog parts can't be edited.";
+      const r = cleanPartDetails(input);
+      if (!r.ok) return r.error;
+      const { mass_kg, ...meta } = r.details;
+      const part: LoadedPart = { ...current, ...meta };
+      if (mass_kg !== undefined) {
+        part.mass_kg = mass_kg;
+        part.massAssumed = false;
+        // Mass changes the construction, so the layout choice resets as for any other input.
+        if (mass_kg !== current.mass_kg) {
+          recompute({ part, layoutKey: null });
+          return null;
+        }
+      }
+      // Name and material don't move anything: refresh the result (checks may quote the
+      // part) without re-framing the camera or dropping the user's layout pick.
+      const { settings, layoutKey } = get();
+      set({ part, result: computeDesign(part, settings, layoutKey) });
+      return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
     setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }),
