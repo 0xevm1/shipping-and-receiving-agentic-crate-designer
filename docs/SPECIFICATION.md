@@ -216,7 +216,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/Floor.tsx` | Grid and warm light pool |
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
 | `src/components/viewer/scene.ts` | Colours, explode offsets, opacity rules, highlight rules, part material |
-| `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity mark with its drop line, and the fork-entry arrows at both ends (#8, §8.4) |
+| `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity stencils on the outside faces (only when a CoG check is a caution, #87), and the fork-entry arrows at both ends (#8, §8.4) |
 | `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook; only in `NEXT_PUBLIC_E2E=1` builds (§10) |
 | `playwright.config.ts`, `e2e/*.spec.ts` | End-to-end UI tests (`bun run e2e`, §10) |
 
@@ -1662,10 +1662,12 @@ open question for the user (see #20).
   - With `prefers-reduced-motion` it never runs, and mode changes and camera moves are instant.
 - **Centre of gravity and fork entry (#8):** shown with the size labels (the View popover's
   "Size labels" switch), by `HandlingMarks`:
-  - **CoG:** a ball split into eight black and white octants, so it reads as the ISO 7000-0627
-    quartered circle from any side, at `design.centerOfGravityMm`, with a dashed drop line to the
-    ground. Both skip depth testing like the size lines, so the mark shows through the walls.
-    It belongs to the assembled crate, so it stays put when exploded.
+  - **CoG, only when it matters (#87):** shown only when the `cog-offset` or `cog-tip` check is a
+    caution; a centred, low CoG gets no 3D marker (the label and Checks still give it). It is
+    drawn as a real crate marking: a flat ISO 7000-0627 quartered circle stencilled on each of
+    the four outside faces, at `design.centerOfGravityMm` projected onto that face (along the
+    face and at the CoG's height), 3 mm off the boards. The stencils are depth-tested, so only
+    the faces turned to the camera show them, and each moves out with its wall when exploded.
   - **Fork entry:** a flat gold arrow on the ground at each end (−X and +X) for every opening
     between the skids (`design.handling.openings`), pointing in. They are depth-tested and slide
     out with the end walls when exploded, as the length line does.
@@ -2415,14 +2417,18 @@ HTML report as `playwright-report`.
     +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
     shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
     `09-header-*`.
-  - `25-handling` (#8): the Checks tab lists "Centre of gravity near the middle" (on both
-    centre lines), "Low centre of gravity", "Forklift fits from the ends" with its 89 mm / 75 mm
-    text and "Forklift only: too narrow for a pallet jack", still with no badge; the test hook's
-    `cog.mm` is on the interior centre lines, the 3D marker sits there and there are 2 arrows
-    (one opening, both ends), in closed and exploded modes; Size labels off hides the marks but
-    not the CoG; the print tab's shipping label has the "Centre of gravity" mark centred on the
-    crate end, the FORKS arrow and FORK ENTRY FROM THE ENDS. Saves `25-handling-checks`,
-    `25-handling-3d`, `25-handling-3d-exploded` and `25-handling-label`.
+  - `25-handling` (#8, #87): with **bounding-box blocking** (shape analysis stubbed off) the
+    Checks tab lists "Centre of gravity near the middle" (on both centre lines), "Low centre of
+    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and "Forklift only: too
+    narrow for a pallet jack", still with no badge; the test hook's `cog.mm` is exactly on the
+    interior centre lines, there is no CoG marker (centred and low) and there are 2 arrows (one
+    opening, both ends), in closed and exploded modes; Size labels off hides the arrows but not
+    the CoG. With **shaped blocking** (#16) the blocks in each bracket's −X recess move the CoG
+    toward −X and Checks says "2 mm toward the left end"; raising "Top-heavy below tip angle" to
+    80° makes `cog-tip` a caution and the stencils appear at the CoG, and back at 30° they go;
+    the print tab's shipping label has the "Centre of gravity" mark centred on the crate end, the
+    FORKS arrow and FORK ENTRY FROM THE ENDS. Saves `25-handling-checks`, `25-handling-3d`,
+    `25-handling-3d-exploded`, `25-handling-cog-stencil` and `25-handling-label`.
   - `22-dimension-pulse` (#65, motion on): a pulse fires within 12 s of load; photons are on
     screen past the first split (≥ 7) and all fade afterwards; again in exploded mode; none fire
     with size labels off or with reduced motion (12 s each). Saves `22-pulse-closed` and
