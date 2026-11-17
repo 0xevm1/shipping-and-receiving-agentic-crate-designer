@@ -4,6 +4,7 @@ import type { Assembly } from "@/domain/crate";
 import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult, type Ranking } from "@/domain/design";
 import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
+import type { PartProfile } from "@/domain/profile";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
@@ -26,6 +27,7 @@ export interface LoadedPart extends DesignPart {
   massAssumed: boolean;
   /** The file was larger than 20 units across, so it was read as millimetres. */
   readAsMm: boolean;
+  // `profile` (from DesignPart, #16) is measured from the model after it renders (`setPartProfile`).
 }
 
 export type Tab = "overview" | "layouts" | "cut" | "rules" | "checks";
@@ -144,6 +146,12 @@ export interface DesignerState {
   /** Shows another crate type of a split batch. Out-of-range indexes are ignored. */
   setCrateIndex: (index: number) => void;
   setMeasured: (size: Vec3) => void;
+  /**
+   * Shapes blocking to the part (#16): stores the profile measured from the model at `modelUrl`
+   * and re-designs, keeping the layout pick and the camera. Ignored if another model has been
+   * loaded since, or the part already has a profile. Null (analysis failed) changes nothing.
+   */
+  setPartProfile: (modelUrl: string, profile: PartProfile | null) => void;
   /**
    * Name, material and mass for a part loaded without catalog data. Validated;
    * returns an error message (and changes nothing) if the input is invalid or the
@@ -337,6 +345,14 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       set({ crateIndex: index, result: plan.crates[index].result, pin: null, hover: null, fit: { nonce: fit.nonce + 1, instant: false } });
     },
     setMeasured: (measured) => set({ measured }),
+    setPartProfile: (modelUrl, profile) => {
+      const { part: current, settings, layoutKey, standards, ranking, crateIndex } = get();
+      if (!profile || current.modelUrl !== modelUrl || current.profile) return;
+      const part: LoadedPart = { ...current, profile };
+      const plan = planShipment(part, settings, layoutKey, standards, ranking);
+      const index = crateIndex < plan.crates.length ? crateIndex : 0;
+      set({ part, plan, crateIndex: index, result: plan.crates[index].result });
+    },
     setPartDetails: (input) => {
       const current = get().part;
       if (current.catalogDims) return "Catalog parts can't be edited.";

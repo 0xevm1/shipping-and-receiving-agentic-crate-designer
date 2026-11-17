@@ -1,5 +1,6 @@
 import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTerms, type LabourEstimate } from "./cost";
 import type { Layout } from "./packing";
+import { planShapedBlocking, restraint, slotPlans, usableProfile, type BlockBox, type PartProfile, type Restraint } from "./profile";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, type ShopStandards } from "./standards";
 
@@ -122,6 +123,11 @@ export interface CrateDesign {
   dimWeightLb: number;
   /** Every rule, passed or not, in a fixed order. */
   checks: Check[];
+  /**
+   * Set when blocking was shaped to a measured part profile (#16, spec §7.5a): how well it holds
+   * the parts, and how well bounding-box blocking would have, measured the same way.
+   */
+  shapedBlocking?: { shaped: Restraint; boundingBox: Restraint; blocks: number };
 }
 
 /** Choose board sizes from payload mass, using the shop's stock and thresholds. */
@@ -219,7 +225,8 @@ export function designCrate(
     add("lid-cleat", "lumber", lidTag("Lid cross cleat"), [x, -t + cw, H + t], [cw, W + 2 * t - 2 * cw, ct]),
   );
 
-  addDunnage(layout, settings, t, standards, add);
+  const profile = usableProfile(part);
+  const pieces = addDunnage(layout, settings, t, standards, add, profile);
 
   const bom = buildBom(members);
   const density = standards.rates.densityKgM3;
@@ -264,6 +271,14 @@ export function designCrate(
     dimWeightLb: freight.dimWeightLb,
     checks: [],
   };
+  if (profile) {
+    const boxPieces = addDunnage(layout, settings, t, standards, () => {}, null);
+    design.shapedBlocking = {
+      shaped: restraint(profile, layout, pieces),
+      boundingBox: restraint(profile, layout, boxPieces),
+      blocks: members.filter((m) => m.label === SHAPED_BLOCK).length,
+    };
+  }
   design.checks = evaluateChecks(design, part, settings, standards);
   return design;
 }
@@ -274,6 +289,9 @@ export function designCrate(
  * - plywood separators between layers,
  * - blocking posts in every gap around each part, running floor-to-separator
  *   so they also carry the layer above.
+ * - with a part `profile` (#16), posts sit where the part is solid and shaped blocks reach into
+ *   its recesses (spec §7.5a).
+ * Returns the blocking pieces and the axis each one blocks along, for measuring restraint.
  */
 function addDunnage(
   layout: Layout,
@@ -281,7 +299,8 @@ function addDunnage(
   separatorMm: number,
   standards: ShopStandards,
   add: AddMember,
-) {
+  profile: PartProfile | null,
+): BlockBox[] {
   const blockWidth = standards.stock.blockWidthMm;
   const minBlockingGap = standards.construction.minBlockingGapMm;
   const [L, W] = layout.interior;
@@ -297,12 +316,15 @@ function addDunnage(
   }
 
   const placed = new Set<string>();
-  const block = (min: Vec3, size: Vec3, kind: "blocking" | "bearer" = "blocking") => {
+  const pieces: BlockBox[] = [];
+  const block = (min: Vec3, size: Vec3, kind: "blocking" | "bearer" = "blocking", axis: 0 | 1 = 0, label = "Blocking post") => {
     const key = [...min, ...size].map((v) => Math.round(v)).join(",");
     if (placed.has(key)) return;
     placed.add(key);
-    add(kind, "lumber", insideTag(kind === "bearer" ? "Bearer" : "Blocking post"), min, size);
+    add(kind, "lumber", insideTag(kind === "bearer" ? "Bearer" : label), min, size);
+    if (kind === "blocking" && size.every((s) => s > 0.5)) pieces.push({ min, size, axis });
   };
+  const shaped = profile ? planShapedBlocking(profile, layout, blockWidth) : null;
 
   for (const slot of layout.slots) {
     const [x, y, z] = slot.min;
@@ -328,14 +350,35 @@ function addDunnage(
     const gy1 = j === ny - 1 ? clearY : gap;
     const bwx = Math.min(blockWidth, a);
     const bwy = Math.min(blockWidth, b);
-    const cx = x + a / 2 - bwx / 2;
-    const cy = y + b / 2 - bwy / 2;
-    if (gx0 >= minBlockingGap) block([x - gx0, cy, floorZ], [gx0, bwy, h]);
-    if (gx1 >= minBlockingGap) block([x + a, cy, floorZ], [gx1, bwy, h]);
-    if (gy0 >= minBlockingGap) block([cx, y - gy0, floorZ], [bwx, gy0, h]);
-    if (gy1 >= minBlockingGap) block([cx, y + b, floorZ], [bwx, gy1, h]);
+    // Shaped (#16): each post where its plan puts it, plus shaped blocks against this part's faces.
+    const plans = shaped && slotPlans(shaped, slot.index, layout.counts);
+    const cx0 = plans ? x + plans.y.low.offset : x + a / 2 - bwx / 2;
+    const cx1 = plans ? x + plans.y.high.offset : cx0;
+    const cy0 = plans ? y + plans.x.low.offset : y + b / 2 - bwy / 2;
+    const cy1 = plans ? y + plans.x.high.offset : cy0;
+    const shape = (min: Vec3, size: Vec3, axis: 0 | 1) => block(min, size, "blocking", axis, SHAPED_BLOCK);
+    if (gx0 >= minBlockingGap) {
+      block([x - gx0, cy0, floorZ], [gx0, bwy, h]);
+      plans?.x.low.fillHigh.forEach((f) => shape([x, cy0, z + f.z0], [f.depth, bwy, f.z1 - f.z0], 0));
+    }
+    if (gx1 >= minBlockingGap) {
+      block([x + a, cy1, floorZ], [gx1, bwy, h]);
+      plans?.x.high.fillLow.forEach((f) => shape([x + a - f.depth, cy1, z + f.z0], [f.depth, bwy, f.z1 - f.z0], 0));
+    }
+    if (gy0 >= minBlockingGap) {
+      block([cx0, y - gy0, floorZ], [bwx, gy0, h], "blocking", 1);
+      plans?.y.low.fillHigh.forEach((f) => shape([cx0, y, z + f.z0], [bwx, f.depth, f.z1 - f.z0], 1));
+    }
+    if (gy1 >= minBlockingGap) {
+      block([cx1, y + b, floorZ], [bwx, gy1, h], "blocking", 1);
+      plans?.y.high.fillLow.forEach((f) => shape([cx1, y + b - f.depth, z + f.z0], [bwx, f.depth, f.z1 - f.z0], 1));
+    }
   }
+  return pieces;
 }
+
+/** Cut-list name of a block shaped to the part (#16, spec §7.5a). */
+export const SHAPED_BLOCK = "Shaped block";
 
 type Tag = Pick<Member, "assembly" | "face" | "label">;
 type AddMember = (kind: MemberKind, material: WoodMaterial, tag: Tag, min: Vec3, size: Vec3) => void;
@@ -453,6 +496,23 @@ function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where
   return gaps.reduce((a, b) => (b.mm < a.mm ? b : a));
 }
 
+/**
+ * The shaped-blocking sentence for the `blocking` check (#16): the restraint metric for this
+ * crate against bounding-box blocking, or "" when blocking follows the bounding box.
+ */
+function shapedText(d: CrateDesign): string {
+  const s = d.shapedBlocking;
+  if (!s) return "";
+  const pct = (r: Restraint) => `${Math.round(r.contact * 100)}%`;
+  // Infinite only if nothing on some side touches the part: say so rather than print "Infinity".
+  const shift = (r: Restraint) => {
+    const most = Math.max(...r.freeMm);
+    return Number.isFinite(most) ? `${Math.round(most)} mm` : "unlimited";
+  };
+  const blocks = s.blocks ? ` with ${s.blocks} shaped block${s.blocks === 1 ? "" : "s"} in its recesses` : "";
+  return ` They are shaped to the part${blocks}: ${pct(s.shaped)} of the blocking face touches it (bounding box: ${pct(s.boundingBox)}), and the most a part can shift is ${shift(s.shaped)} (bounding box: ${shift(s.boundingBox)}).`;
+}
+
 /** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
 function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings, standards: ShopStandards): Check[] {
   const checks: Check[] = [];
@@ -481,14 +541,14 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
       : { id: "stable", level: "caution", title: "Tip-over risk", detail: `Height is ${ratio.toFixed(2)}× the short side, over the ${lim.stableHeightRatio}× limit. Strap it down or pick a lower layout.` },
   );
 
-  const posts = d.members.filter((m) => m.kind === "blocking").length;
+  const posts = d.members.filter((m) => m.kind === "blocking" && m.label !== SHAPED_BLOCK).length;
   const tightest = smallestSideGap(d.layout, settings.partGapMm);
   const betweenParts = tightest.where === "between parts";
   const gapText = `${Math.round(tightest.mm)} mm ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
   checks.push(
     tightest.mm < minBlockingGap
       ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `The ${gapText} is under the ${minBlockingGap} mm that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.` }
-      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides. The smallest gap is ${Math.round(tightest.mm)} mm, ${tightest.where}.` },
+      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides.${shapedText(d)} The smallest gap is ${Math.round(tightest.mm)} mm, ${tightest.where}.` },
   );
 
   if (nz > 1) {

@@ -655,6 +655,87 @@ Each member is tagged where it is created:
   - Posts are only made when the gap is ≥ 19 mm (`construction.minBlockingGapMm`).
   - Posts shared by two neighbouring parts are de-duplicated by rounded position and size.
 
+### 7.5a Shaped blocking (`src/domain/profile.ts`, #16)
+
+Bounding-box blocking touches only what reaches the bounding box. On the open-top housing
+(PART-003) that is a base-plate edge, a tab and a boss: a post can sit over an opening, and the
+part can slide up to 65 mm before it meets one. With a **part profile**, posts sit on solid
+material and **shaped blocks** reach into the recesses, so blocking touches the real surfaces.
+
+**Profile** (`PartProfile`, measured by `buildPartProfile` in `src/lib/partProfile.ts`):
+
+```ts
+PartProfile {
+  version: 1
+  sizeMm: [x, y, z]       // the bounding box it was measured on, in the part's own frame
+  cellMm: number          // grid spacing: longest side / 100, at least 2, rounded up to 0.5 mm
+  faces: Record<"-x" | "+x" | "-y" | "+y" | "-z" | "+z", {
+    cols, rows,           // whole cells close to cellMm; X faces are Y × Z, Y faces X × Z, Z faces X × Y
+    depth: number[]       // row-major, mm (0.1) from that bounding-box face inward to the first surface; -1 = no material
+  }>
+}
+```
+
+- **Analysis:** every triangle is rasterised onto the three axis planes at the cell centres,
+  keeping the nearest surface from each side (a depth buffer), so the cost is triangles × cells
+  covered, not one ray per cell. All six faces, so any orientation works.
+- **When:** once per model, in the browser, when it is idle after the crate first renders
+  (`scheduleProfile` in `PartInstances`, `requestIdleCallback` with a 1.5 s timeout), cached by
+  model URL. Measured: **2–19 ms** per sample part in Node (the test limit is 200 ms) and about
+  **5 ms** for PART-003 in headless Chromium. It never blocks the first render.
+- **Fallback:** without a usable profile, blocking is exactly §7.5. That covers a part not
+  analysed yet, an analysis that throws (no triangles) or runs past 1 s (`PROFILE_BUDGET_MS`), a
+  profile whose size is more than 1 mm from the part's (`PROFILE_SIZE_TOLERANCE_MM`), and
+  **slender parts** (longest ÷ middle side ≥ 3, such as the PART-002 shaft), which are left to
+  cradles (#6; `isSlenderForBlocking` until #6's `isSlender()` lands).
+
+**Placing the blocking** (`planShapedBlocking`). The slots share one orientation, so the plans are
+worked out once per orientation and slot size, and cached on the profile.
+
+1. The profile is rotated into the crate with the layout's orientation (an integer rotation
+   matrix, the same XYZ Euler as three.js) and resampled on each vertical side of the slot: depth
+   by position along the side and height up the part (`sideGrid`).
+2. Each post keeps its §7.5 size and gap, but slides along its side to the position where the
+   post and its shaped blocks **touch the largest share of the surface** within 2 mm
+   (`CONTACT_TOLERANCE_MM`). Ties go to the centre, so a box-shaped part keeps the centred post
+   exactly. A post between two parts is scored on both parts' faces.
+3. **Shaped blocks** ("Shaped block" in the cut list, `kind: "blocking"`, 89 wide like the post)
+   are screwed to the post's inner face. Each run of heights whose recess depths are within 10 mm
+   of each other (`SHAPED_BAND_TOLERANCE_MM`) gets one block reaching to the shallowest point of
+   that run, so it never cuts into the part. A run that meets a shallower height stops half a
+   cell short, because the step lies somewhere between two samples. No block is made for a recess
+   under 6 mm (`MIN_SHAPED_BLOCK_DEPTH_MM`, the post is close enough) or over 100 mm
+   (`MAX_SHAPED_BLOCK_DEPTH_MM`, it would be a cantilever reaching over a low wall into the open
+   top), or for a run under 19 mm tall (`MIN_SHAPED_BLOCK_HEIGHT_MM`).
+4. X-side posts are placed first; a Y-side position whose blocks would meet an X-side block near
+   a corner is skipped.
+
+Shaped blocks lie inside the part's bounding box, beside the part, so the crate's size, layout
+and packing never change; only the dunnage, weight, cost and screws (2 per block) do.
+
+**Restraint metric** (`restraint`). Both kinds of blocking are scored against the profile on
+every slot side, over the part's height, on the profile grid:
+
+- **Contact:** the share of the blocking face beside the parts that is within 2 mm of a part
+  surface. Blocking over an opening or a recess counts against it.
+- **Free movement:** per crate axis, the furthest any part can slide toward a side before it
+  meets the blocking there (`Infinity` when nothing on that side stops it).
+
+| Sample, quantity | Contact: bounding box → shaped | Free movement X, Y: bounding box → shaped | Shaped blocks |
+|---|---|---|---|
+| PART-003 × 8 | 10% → **63%** | 65, 5 mm → **0, 0 mm** | 44 |
+| PART-003 × 1 | 10% → 66% | 65, 5 mm → 0, 0 mm | 6 |
+| PART-001 × 4 | 11% → 64% | 0, 0 mm → 0, 0 mm | 12 |
+
+The rest of the shaped blocking face is over openings or recesses deeper than 100 mm. The price
+for PART-003 × 8 is 44 blocks: about 10 kg, $58 and an hour more build time than bounding-box
+blocking (205 vs 195 kg gross, $360 vs $302).
+
+The `blocking` check says so (§7.7): "24 blocking posts hold the parts on all four sides. They
+are shaped to the part with 44 shaped blocks in its recesses: 63% of the blocking face touches it
+(bounding box: 10%), and the most a part can shift is 0 mm (bounding box: 65 mm). The smallest gap is
+50 mm, between parts."
+
 ### 7.6 Outputs
 
 - **Mass:**
@@ -710,7 +791,7 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 |---|---|---|---|
 | `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`limits.trailerMm`) |
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
-| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
+| `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36). With shaped blocking (§7.5a) the pass text adds "They are shaped to the part with N shaped blocks in its recesses: C% of the blocking face touches it (bounding box: B%), and the most a part can shift is F mm (bounding box: G mm)." ("unlimited" when nothing on some side touches the part); the post count leaves out the shaped blocks |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
 | `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg (`limits.baseRatingKg`; the title quotes the limit). The pass text names the skids ("4×4", "4×6", or the size in mm for non-standard stock) |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
@@ -1733,6 +1814,29 @@ flag, invalid input changes nothing, and catalog parts are read-only. It also ch
 `lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
 record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
+`setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
+a profile for another model or a failed analysis, survives a mass edit and is dropped with a new
+part.
+
+**`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5a) with synthetic profiles: the
+rotation matrix equals three.js's for all six orientations, and a part lying on its side shows
+its +Z face on the crate's −Y side; a box-shaped profile reproduces the bounding-box blocking
+exactly for every non-slender sample part × suggested quantity (contact 1, free 0); an L-shaped
+side (set back 60 mm above half height) gets one shaped block in the notch, 60 deep, starting
+half a cell above the step, for 100% contact (bounding box 88%) and the check text says so; a
+post moves off a window through the part to just past it; a recess deeper than 100 mm gets no
+block; blocks on neighbouring sides never overlap; a profile of the wrong size or a slender part
+(the shaft) falls back to identical members and checks; and without a profile PART-003 × 8 is
+unchanged ("24 blocking posts … The smallest gap is 50 mm, between parts.").
+
+**`src/lib/partProfile.test.ts`** builds profiles from the sample GLBs in Node (three's
+`GLTFLoader.parse`), so the numbers are deterministic: PART-003 is 435 × 445 × 254 mm on a 4.5 mm
+grid, with depths 0 at the base plate, 26 mm to the end wall, −1 above the walls, 72.5 mm to the
+side wall, 0 at the boss and 219 mm down through the open top; PART-001's upright is 38 mm in;
+the shaft's grid is 15.5 mm. Each sample part is analysed in under 200 ms. An empty model or an
+exhausted time budget throws; `scheduleProfile` reports a failure as null and can be cancelled.
+**PART-003 × 8 with its profile:** the same layout and outside size, contact 10% → 63%, free
+movement [65, 5] → [0, 0] mm, 44 shaped blocks, and the exact `blocking` check text.
 
 **`src/domain/diff.test.ts`** checks `diffDesigns`: equal designs and a missing design give `[]`;
 a heavier 1 mm part changes only gross and payload; a heavy load steps up the plywood, skids,
@@ -1821,7 +1925,8 @@ HTML report as `playwright-report`.
 - **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`)
   exposes a read-only `window.__crate` with `getState()` (mode from the view targets, view
   switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play,
-  `idle` (no deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, frame count) and `canvasCoverage()` (share
+  `idle` (no deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, frame count,
+  `shapedBlocking` and `profileMs`, #16) and `canvasCoverage()` (share
   of canvas pixels drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`.
   `next.config.ts` always inlines the flag (`"0"` when unset), so normal builds drop the branch
   and don't bundle the module. Everything else is found by role, label or text; the only test
@@ -1940,6 +2045,14 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
+  - `26-shaped-blocking` (#16): PART-003 × 8 in metric. After the analysis (`shapedBlocking`
+    true, `profileMs` under 1 s and reported as a test annotation), the `blocking` check reads
+    "… shaped to the part with 44 shaped blocks in its recesses: 63% of the blocking face touches
+    it (bounding box: 10%), and the most a part can shift is 0 mm (bounding box: 65 mm)." and the cut
+    list has "Shaped block". With `requestIdleCallback` stubbed so the analysis never runs, the
+    check keeps the bounding-box text. Screenshots `26-shaped-checks`, `26-shaped-open`,
+    `26-shaped-exploded`, `26-bbox-checks`, `26-bbox-open` and `26-bbox-exploded` (copies in
+    `docs/screenshots/16-shaped-blocking/`).
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one
@@ -2022,6 +2135,10 @@ HTML report as `playwright-report`.
 | The Export pill keeps the separate downloads (#51) | Someone who wants one file (an engineer wanting only the GLB) and the print-to-paper path stay one click away | Two ways to get each file |
 | The print route gets the design as a design file in the URL hash, not through `sessionStorage` | Works on reload and when opened directly, never leaves the browser, and reuses the #28 format a share link can use | It uses the printing browser's saved shop standards, not the opener's in-memory ones (in the same browser these are the same) |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
+| Shaped blocking from a per-face depth grid, measured in the browser and applied in the pure domain (#16) | The domain stays pure and testable (a synthetic profile in a unit test); one rasterisation pass per axis costs milliseconds, not the seconds a ray per cell would; six faces cover every orientation | The profile is a grid sample, not exact geometry; it is re-measured per session, not saved |
+| Shaped blocking keeps the posts and adds blocks, rather than lengthening posts | Posts still run floor to separator and carry the layer above (§7.5); blocks only within the part's height can't hit bearers or separators | More pieces in the cut list (44 for PART-003 × 8) |
+| Restraint is measured as contact share and free movement against the same profile, for both kinds of blocking | One number a PM can compare, computed the same way before and after; it is the measurable improvement #16 asked for | It scores the sampled profile, not a physics simulation; Z restraint (floor, separators, lid) is not scored |
+| Slender parts skip shaped blocking | Cradles (#6) own long parts such as the shaft | Until #6's `isSlender()` lands, a local aspect-ratio rule (≥ 3) decides |
 
 ## 12. Known limitations and roadmap
 
@@ -2046,7 +2163,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #13 | Shipping-mode constraints (LTL, container, air) |
 | #14 | Design library and share links (§9): saved per part in `localStorage`, a library file to move them, designs in the URL hash; SQLite later |
 | #15 | Imperial units by default with a metric toggle, nominal lumber names, CSV in the selected units |
-| #16 | Geometry-aware blocking for irregular parts |
+| #16 | Geometry-aware blocking for irregular parts: shaped blocking from a measured part profile (§7.5a). Packing still uses bounding boxes, so utilization is unchanged |
 | #17 | Design scorecard (§7.12): crate cost (material + labour), build time, freight class, density and dimensional weight; Layouts deltas and a ranking option; time to design |
 | #19 | Shop standards configuration (§6.4). Stock, defaults, thresholds, limits, material rates and (with #17) the labour rate and shop times |
 | #20 | UX redesign: full-bleed scene, glass island, tabbed detail |
@@ -2058,6 +2175,9 @@ Other known gaps:
 - The GLB download and the view bar name the file by the batch quantity, not the crate type on
   screen.
 - No top hold-down blocking under the lid.
+- Shaped blocking (§7.5a) samples the mesh on a grid (about 1/100 of the part), so a feature
+  thinner than a cell can be missed; it reads the first surface from each side, so it can't block
+  undercuts; and it doesn't nest parts or shrink the crate.
 - Separators are full-interior sheets, with no cut-outs for parts that are taller than their
   neighbours.
 

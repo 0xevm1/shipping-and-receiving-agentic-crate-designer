@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PartProfile } from "./profile";
 
 /**
  * Schemas for the part catalog (mirrors `parts.json`) and for the user's crate
@@ -44,6 +45,8 @@ export type PartsCatalog = z.infer<typeof PartsCatalogSchema>;
  */
 export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm"> & {
   material?: string;
+  /** The measured outline (#16, spec §7.5a). Absent until the model is analysed: blocking then follows the bounding box. */
+  profile?: PartProfile;
 };
 
 /** User-editable inputs that drive a crate design. The part itself is passed separately. */

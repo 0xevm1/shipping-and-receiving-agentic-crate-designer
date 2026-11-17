@@ -15,6 +15,7 @@ import { useFrame, useThree, type RootState } from "@react-three/fiber";
 import { useEffect } from "react";
 import { Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { lastProfileMs } from "@/lib/partProfile";
 import { anim, autoplay, isIdle, pulse } from "@/state/motion";
 import { currentMode, useDesigner } from "@/state/store";
 
@@ -58,6 +59,10 @@ export interface CrateSnapshot {
   pulses: number;
   /** Photons on screen in the last frame (#65). */
   photonsActive: number;
+  /** The design's blocking is shaped to a measured part profile (#16). */
+  shapedBlocking: boolean;
+  /** Milliseconds the last part analysis took in this page (#16); null before any. */
+  profileMs: number | null;
 }
 
 declare global {
@@ -111,6 +116,8 @@ function snapshot(): CrateSnapshot {
     frames,
     pulses: pulse.fired,
     photonsActive: pulse.active,
+    shapedBlocking: !!s.result.design?.shapedBlocking,
+    profileMs: lastProfileMs,
   };
 }
 
