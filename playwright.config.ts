@@ -20,10 +20,11 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   // No retries: a test that needs one is flaky and should be fixed, not hidden.
   retries: 0,
-  // Software WebGL is CPU-heavy; a few workers keep frame times (and timings) steady.
-  workers: process.env.CI ? 2 : 4,
-  timeout: 45_000,
-  expect: { timeout: 10_000 },
+  // Software WebGL is CPU-heavy. The private repo's CI runner has 2 vCPUs, where two
+  // SwiftShader workers starve each other's frames, so CI runs one, with more headroom.
+  workers: process.env.CI ? 1 : 4,
+  timeout: process.env.CI ? 120_000 : 45_000,
+  expect: { timeout: process.env.CI ? 20_000 : 10_000 },
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   use: {
     baseURL,

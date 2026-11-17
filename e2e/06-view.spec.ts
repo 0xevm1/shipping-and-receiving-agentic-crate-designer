@@ -162,10 +162,11 @@ test.describe("idle auto-play", () => {
     const stopped = Date.now();
     const theta = (await crate(page)).cameraAngles!.theta;
 
-    await pollCrate(page, (s) => s.autoplay, { timeout: 20_000 }).toBe(true);
+    await pollCrate(page, (s) => s.autoplay, { timeout: 30_000 }).toBe(true);
+    // IDLE_MS is 6 s. The lower bound allows for the poll's timing; the upper one for slow CI frames.
     const waited = Date.now() - stopped;
     expect(waited).toBeGreaterThan(5_000);
-    expect(waited).toBeLessThan(15_000);
+    expect(waited).toBeLessThan(20_000);
     await pollCrate(page, (s) => Math.abs(s.cameraAngles!.theta - theta)).toBeGreaterThan(0.02);
   });
 });
