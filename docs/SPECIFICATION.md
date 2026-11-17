@@ -144,9 +144,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
   ```
   src/components/, src/app/   render; may import everything below (components: not src/server)
   src/state/                  zustand stores and persistence; may import lib and domain
-  src/server/                 server-only data access (Postgres, #46); may import lib and domain;
-                              only src/app/ imports it, and postgres / drizzle-orm are banned
-                              outside it
+  src/server/                 server-only data access (Postgres, blob storage, #46); may import
+                              lib and domain; only src/app/ imports it, and postgres /
+                              drizzle-orm / @aws-sdk are banned outside it
   src/lib/                    edge code: formatting, file loading, exports; may import domain
   src/domain/                 pure TypeScript, mm/kg, Z-up; imports nothing above it, and no
                               three, react, zustand or DOM globals
@@ -175,6 +175,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | File | Responsibility |
 |---|---|
 | `src/domain/schema.ts` | zod schemas and types: `Part`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
+| `src/domain/glb.ts` | GLB checks shared by the browser and the upload API (#46): `glbProblem` (magic, version, chunks, Draco / Meshopt), `looksLikeTextGltf`, the user-facing `GLB_MESSAGES`, `MAX_GLB_BYTES` (50 MB, API only), `glbSizeUnits` (bounding box from accessor min / max, no three.js), `unitsToMm` (the 20-unit mm rule), `idFromFile` / `nameFromFile` |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart`. Data only: the `/parts/…` model URL is built in `lib/part.ts` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotationMatrix()` (integer, as three.js's XYZ Euler) and `rotatedSize()` |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
@@ -219,7 +220,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
 | `src/lib/lumber.ts` | US shop names (#15): the nominal-lumber names from `domain/lumber.ts` (`sectionText`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
-| `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
+| `src/lib/loadPart.ts` | Loading a part in the browser: GLB validation (from `domain/glb.ts`), measuring with three.js, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
 | `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached by model URL |
 | `src/lib/currentDesign.ts` | `currentDesignText()` / `currentDesignFile()`: the design on screen as a design file (§6.5) with its part outline and ranking, for the download, the print link, the library and share links |
 | `src/lib/appInfo.ts` | `APP`: the name and version written into design files and the README |
@@ -2025,8 +2026,10 @@ open question for the user (see #20).
   part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
   steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
   mass is entered (§6.2a).
-- **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data, each
-  with a plain message.
+- **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data (bad
+  magic, version or chunk lengths), each with a plain message (`GLB_MESSAGES`, `domain/glb.ts`).
+  The upload API (`POST /api/v1/parts`, #46) gives the same messages and also refuses files over
+  50 MB (`MAX_GLB_BYTES`); see `docs/BLOB_STORAGE.md`.
 - Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
 - **A saved design** (Overview → Saved designs → Use, #14) and **a share link** open through
   the same path as a design file (`loadDesign`), so the §6.5 restore notes apply. A reused
@@ -2246,8 +2249,9 @@ in `db/migrations/`, the first tables (`org`, `part`, `part_model`, `design_job`
 `configuration`, `artifact`, `event`, `shop_standard`, `idempotency_key`), each scoped by
 `org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Nothing
 in the UI reads or writes it yet: the browser storage above stays the source until the jobs API
-lands. See `docs/POSTGRES.md`. (The earlier SQLite WASM plan, `DATA_STORE.md`, was dropped
-for this.)
+lands. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
+through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The
+earlier SQLite WASM plan, `DATA_STORE.md`, was dropped for this.)
 
 The ranking option (#17) is saved only as part of the last-opened crate; the time-to-design clock is in memory only.
 
@@ -2603,6 +2607,11 @@ checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), n
 names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
 design restored from the bundled catalog, a custom design without its GLB naming the file,
 other JSON still read as a catalog, and plain messages for a bad design or bad JSON.
+**`src/domain/glb.test.ts`** checks the shared GLB checks (damaged version, declared length and
+chunk bounds; Draco and Meshopt; text glTF sniffing) and the three-free measure through node
+transforms; **`src/lib/glbMeasure.parity.test.ts`** checks that measure against three.js's
+`Box3.setFromObject` on every bundled GLB. The upload API's integration tests are listed in
+`docs/BLOB_STORAGE.md`.
 
 **`src/lib/printable.test.ts`** checks the export document (§7.11):
 
