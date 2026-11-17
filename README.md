@@ -116,8 +116,8 @@ tab at a time.
    - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost
      (material and labour), build time, the estimated LTL freight class with its density in
      lb/ft³, and the dimensional weight; for a split batch, the whole shipment's cost. Then how
-     it's built, and crate weight by assembly. After the first export (cut list, design file
-     or 3D model) a note says how long the design took: "Designed in 1 m 12 s"
+     it's built, and crate weight by assembly. After the first export (cut list, design file,
+     3D model or the Export pill's .zip) a note says how long the design took: "Designed in 1 m 12 s"
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
@@ -158,6 +158,19 @@ tab at a time.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
+12. **Export everything in one click** (#51): the green **Export** pill under the part lines
+    downloads `crate-PART-001-x4.zip`, made in the browser (nothing is uploaded):
+    - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
+      split batch: `…-crate-A.glb`, `…-crate-B.glb`);
+    - `crate-PART-001-x4.pdf`, a real PDF file with the crate spec, build sheet and shipping
+      label of step 10, for every crate type (drawn with jsPDF, loaded only when you export);
+    - `cut-list.csv` in the selected units (a split batch: one per crate type plus
+      `shipment-cut-list.csv`);
+    - `design.json`, which reopens with **Load a part**;
+    - `README.txt`: what each file is for, the app version, the date and the units.
+
+    The pill shows "Exporting…" for at least 1.5 s (no hold or spinner with reduced motion),
+    then "Downloaded crate-PART-001-x4.zip". The separate downloads above stay. Spec §7.13.
 11. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
@@ -284,7 +297,8 @@ All of these live in one zod-validated object, `ShopStandards` (`src/domain/stan
 
 ```
 src/domain/        pure TypeScript, no React; all crate logic, unit-tested
-src/lib/           display units, cut-list formatting, part-file loading, the export document (tested)
+src/lib/           display units, cut-list formatting, part-file loading, the export document,
+                   the Export pill's .zip and PDF (tested)
 src/state/         zustand store; per-frame animation values; checks for the UI
 src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
 src/data/          parts.json catalog
