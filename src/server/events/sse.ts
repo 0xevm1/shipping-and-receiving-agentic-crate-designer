@@ -7,20 +7,23 @@
  * twice:
  *
  *   1. Check the job belongs to the caller's org (404 otherwise), before subscribing.
- *   2. Subscribe to the bus first, so a commit during the replay still wakes the stream.
+ *   2. Join the job's feed (its bus subscription) first, so a commit during the replay still
+ *      wakes the stream.
  *   3. Replay `id > cursor` from the `event` table, in pages, advancing the cursor.
- *   4. Live: a notification with `id > cursor` (or a resync after the listener reconnected)
- *      reads the table again from the cursor. Notifications only wake the stream; the rows,
- *      payloads included, always come from the table, so replay and live are one code path.
+ *   4. Live: the job's feed (`feed.ts`) reads each notification's new rows once for all of the
+ *      job's streams in this process. A stream that is caught up (its cursor at or past the
+ *      batch's start) writes what it hasn't sent; one that is behind, or a resync after the
+ *      listener reconnected, reads the table again from its own cursor. Notifications only
+ *      wake the feed; the rows, payloads included, always come from the table.
  *
  * The cursor works because `events.append` makes event ids commit in order. A heartbeat comment
  * every `heartbeatMs` keeps proxies from closing an idle stream. A client that stops reading is
  * dropped once `maxQueuedChunks` messages pile up; it reconnects and replays from its last id.
  */
-import type { JobEventMessage } from "@/lib/events";
 import { type OrgContext, requireOrg } from "@/server/db/org";
-import type { CrateEvent, Repository } from "@/server/db/repository";
+import type { Repository } from "@/server/db/repository";
 import type { EventBus } from "./bus";
+import { joinJobFeed, sseMessage } from "./feed";
 
 export type JobEventStreamDeps = {
   /** The caller's org, already authorised. */
@@ -52,19 +55,9 @@ export function readLastEventId(request: Request, url: URL): number | null {
   return Number.isSafeInteger(id) ? id : null;
 }
 
-export function toMessage(row: CrateEvent): JobEventMessage {
-  return {
-    id: row.id,
-    jobId: row.jobId,
-    type: row.type as JobEventMessage["type"],
-    payload: row.payload,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
 export async function handleJobEventsRequest(request: Request, deps: JobEventStreamDeps): Promise<Response> {
   const { ctx, repo, bus, heartbeatMs = SSE_HEARTBEAT_MS, pageSize = 500, maxQueuedChunks = 1000, retryMs = 2000, log = console } = deps;
-  const orgId = requireOrg(ctx);
+  requireOrg(ctx);
   const url = new URL(request.url);
   const jobId = url.searchParams.get("job");
   if (!jobId || !UUID.test(jobId)) return problem(400, "Query parameter `job` must be a job id.");
@@ -98,9 +91,9 @@ export async function handleJobEventsRequest(request: Request, deps: JobEventStr
     }
   }
 
-  function write(text: string): void {
+  function write(text: string | Uint8Array): void {
     if (closed) return;
-    controller.enqueue(encoder.encode(text));
+    controller.enqueue(typeof text === "string" ? encoder.encode(text) : text);
     if ((controller.desiredSize ?? 0) < -maxQueuedChunks) {
       log.warn(`[events] closing a slow SSE client of job ${jobId}; it resumes from event ${cursor}`);
       close();
@@ -121,7 +114,7 @@ export async function handleJobEventsRequest(request: Request, deps: JobEventStr
             const rows = await repo.events.listForStream(ctx, streamJobId, cursor, pageSize);
             for (const row of rows) {
               if (closed) return;
-              write(`id: ${row.id}\ndata: ${JSON.stringify(toMessage(row))}\n\n`);
+              write(sseMessage(row));
               cursor = row.id;
             }
             if (rows.length < pageSize) break;
@@ -146,16 +139,31 @@ export async function handleJobEventsRequest(request: Request, deps: JobEventStr
         request.signal.addEventListener("abort", close);
         // `retry:` sets the reconnect delay; it also sends the headers straight away.
         write(`retry: ${retryMs}\n\n`);
-        unsubscribe = bus.subscribe(streamJobId, {
-          onEvent(n) {
-            if (n.orgId !== orgId || n.id <= cursor) return;
-            void catchUp();
+        unsubscribe = joinJobFeed(
+          bus,
+          streamJobId,
+          {
+            onBatch({ after, messages }) {
+              if (closed) return;
+              // Behind the batch, or mid-read: read from the cursor instead (it coalesces).
+              if (catchingUp || after > cursor) {
+                void catchUp();
+                return;
+              }
+              for (const m of messages) {
+                if (closed) return;
+                if (m.id <= cursor) continue;
+                write(m.chunk);
+                cursor = m.id;
+              }
+            },
+            onResync() {
+              void catchUp();
+            },
+            onDrop: close,
           },
-          onResync() {
-            void catchUp();
-          },
-          onDrop: close,
-        });
+          { ctx, repo, pageSize, log },
+        );
         heartbeat = setInterval(() => write(": heartbeat\n\n"), heartbeatMs);
         heartbeat.unref?.();
         void catchUp();

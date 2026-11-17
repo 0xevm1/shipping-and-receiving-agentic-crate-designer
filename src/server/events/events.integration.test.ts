@@ -54,14 +54,16 @@ const emit = (message: string, jobId = job.id, ctx: OrgContext = DEFAULT_ORG) =>
   inTransaction(t.db, (tx) => emitEvent(tx, ctx, { jobId, type: "job.error", payload: { message } }));
 
 /** Opens the SSE stream the way the route does, and collects its messages as they arrive. */
-async function openStream(opts: { jobId?: string; ctx?: OrgContext; lastEventId?: number | string; query?: string; pageSize?: number; bus?: EventBus } = {}) {
+async function openStream(
+  opts: { jobId?: string; ctx?: OrgContext; lastEventId?: number | string; query?: string; pageSize?: number; bus?: EventBus; repo?: typeof t.repo } = {},
+) {
   const abort = new AbortController();
   const headers = new Headers();
   if (opts.lastEventId !== undefined) headers.set("Last-Event-ID", String(opts.lastEventId));
   const request = new Request(`http://test/api/v1/events?job=${opts.jobId ?? job.id}${opts.query ?? ""}`, { headers, signal: abort.signal });
   const response = await handleJobEventsRequest(request, {
     ctx: opts.ctx ?? DEFAULT_ORG,
-    repo: t.repo,
+    repo: opts.repo ?? t.repo,
     bus: opts.bus ?? bus,
     pageSize: opts.pageSize,
     heartbeatMs: 60_000,
@@ -206,6 +208,24 @@ describe("SSE stream", () => {
     const jobMessages = second.messages.filter((m) => m.data.jobId !== null);
     expect(jobMessages.slice(0, 3).map((m) => m.data.payload.message)).toEqual(["e4", "e5", "e6"]);
     expect(jobMessages[0]?.data).toMatchObject({ id: e[3]!.id, jobId: own.id, type: "job.error" });
+  });
+
+  it("reads each commit once for all of a job's streams, and every stream gets every event once", async () => {
+    const own = await newJob();
+    const reads = vi.fn(t.repo.events.listForStream);
+    const repo = { ...t.repo, events: { ...t.repo.events, listForStream: reads } };
+    const backlog = await emit("before", own.id);
+    const s = await Promise.all(Array.from({ length: 20 }, (_, i) => openStream({ jobId: own.id, repo, lastEventId: i % 2 ? backlog.id : 0 }).then(track)));
+    await waitFor(() => s.forEach((x, i) => expect(x.ids()).toEqual(i % 2 ? [] : [backlog.id])));
+    // Every stream's own replay has run (one read each), so what follows is live delivery only.
+    await waitFor(() => expect(reads.mock.calls.length).toBeGreaterThanOrEqual(s.length));
+    reads.mockClear();
+    const live: CrateEvent[] = [];
+    for (let i = 0; i < 5; i++) live.push(await emit(`live ${i}`, own.id));
+    const want = (lastEventId: number) => [backlog, ...live].filter((r) => r.id > lastEventId).map((r) => r.id);
+    await waitFor(() => s.forEach((x, i) => expect(x.ids()).toEqual(want(i % 2 ? backlog.id : 0))));
+    // One read per notification at most (fewer when they coalesce), not one per stream.
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(live.length);
   });
 
   it("accepts ?lastEventId= when the header can't be set, and rejects a malformed one", async () => {
