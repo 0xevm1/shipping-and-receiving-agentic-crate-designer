@@ -122,6 +122,15 @@ export const loadMessage = (page: Page, text?: string | RegExp) =>
     .or(loadToast(page).getByRole("alert"))
     .filter({ hasText: text ?? /\S/ });
 
+// --- The file check (#106) ------------------------------------------------------------------------
+
+/** The File check report (a dialog), opened by "Details" on the load toast or the File check button by "Load a part". */
+export const fileCheckDialog = (page: Page) => page.getByRole("dialog", { name: "File check" });
+/** "Details" on the load toast. */
+export const detailsButton = (page: Page) => loadToast(page).getByRole("button", { name: /^Details/ });
+/** "File check" with its count, by "Load a part" while the last load had findings. */
+export const fileCheckButton = (page: Page) => page.getByTestId("file-check-button");
+
 // --- Cut list and checks ------------------------------------------------------------------------
 
 export const cutTable = (page: Page) => panel(page).getByRole("table");
