@@ -9,7 +9,7 @@ import type { Vec3 } from "@/domain/schema";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner, type LoadedPart } from "@/state/store";
-import { cloneWithMaterial, GHOST_PART, highlightOf, partMaterial, setOpacity } from "./scene";
+import { cloneWithMaterial, GHOST_PART, hasFocus, partMaterial, setOpacity } from "./scene";
 
 /**
  * Loads the part GLB once and places a copy in every filled slot.
@@ -31,7 +31,7 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
     setMeasured(sizeMm);
   }, [sizeMm, setMeasured]);
 
-  // Shaped blocking (#16): measure the part's outline once the crate is on screen, when the
+  // Shaped blocking: measure the part's outline once the crate is on screen, when the
   // browser is idle. Until then, and if it fails, blocking follows the bounding box.
   const setPartProfile = useDesigner((s) => s.setPartProfile);
   const analysed = !!part.profile;
@@ -56,12 +56,12 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
 
   useFrame(() => {
     const s = useDesigner.getState();
-    const opacity = highlightOf(s).focus ? GHOST_PART : 1;
+    const opacity = hasFocus(s) ? GHOST_PART : 1;
     setOpacity(materialRef.current, opacity);
   });
 
   const onMove = (i: number) => (e: ThreeEvent<PointerEvent>) => {
-    if (highlightOf(useDesigner.getState()).focus) return;
+    if (hasFocus(useDesigner.getState())) return;
     e.stopPropagation();
     const s = useDesigner.getState();
     s.setHover(null);

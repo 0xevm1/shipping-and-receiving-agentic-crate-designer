@@ -7,9 +7,8 @@ import { Box3, MathUtils, Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { isIdle } from "@/state/motion";
 import { reducedMotion, useDesigner, type LoadedPart } from "@/state/store";
-import { cloneWithMaterial, partMaterial } from "./scene";
+import { cloneWithMaterial, FOV_DEG, MM_TO_M, partMaterial } from "./scene";
 
-const FOV_DEG = 34;
 /**
  * Turn speed, rad/s: slower than the handoff's 0.45, and reversed, at the user's request.
  * Driven from frame time in useFrame rather than OrbitControls' autoRotate, which steps a
@@ -17,6 +16,8 @@ const FOV_DEG = 34;
  */
 const TURN_RATE = 0.25;
 const HOME_PHI = Math.PI / 2 - 0.42;
+
+const turn = new Spherical();
 
 /**
  * The part on its own in the island: transparent background, slowly turning.
@@ -48,7 +49,7 @@ function Turntable({ part }: { part: LoadedPart }) {
   useEffect(() => () => material.dispose(), [material]);
   const { object, center, radius } = useMemo(() => {
     const box = new Box3().setFromObject(scene);
-    const scale = part.mmPerUnit / 1000; // model units → metres
+    const scale = part.mmPerUnit * MM_TO_M; // model units → metres
     return {
       object: cloneWithMaterial(scene, material),
       center: box.getCenter(new Vector3()).multiplyScalar(-1),
@@ -61,8 +62,8 @@ function Turntable({ part }: { part: LoadedPart }) {
     const t = Math.tan(MathUtils.degToRad(FOV_DEG / 2));
     const half = Math.min(Math.atan(t), Math.atan((t * size.width) / size.height));
     const dist = (radius / Math.sin(half)) * 1.04;
-    const theta = keepTheta ? new Spherical().setFromVector3(camera.position).theta : 0.6;
-    camera.position.setFromSpherical(new Spherical(dist, HOME_PHI, theta));
+    const theta = keepTheta ? turn.setFromVector3(camera.position).theta : 0.6;
+    camera.position.setFromSpherical(turn.set(dist, HOME_PHI, theta));
     camera.lookAt(0, 0, 0);
     controls.current?.target.set(0, 0, 0);
     controls.current?.update();
@@ -76,19 +77,19 @@ function Turntable({ part }: { part: LoadedPart }) {
   useFrame((_, dt) => {
     const c = controls.current;
     if (!c || grabbed.current || reducedMotion()) return;
-    // Resume after the shared 5 s idle (hovering doesn't count as input, #64), from wherever it was left.
+    // Resume after the shared 5 s idle (hovering doesn't count as input), from wherever it was left.
     if (!turning.current && isIdle()) turning.current = true;
     if (!turning.current) return;
-    const s = new Spherical().setFromVector3(camera.position);
-    s.theta += TURN_RATE * Math.min(dt, 0.1);
-    camera.position.setFromSpherical(s);
+    turn.setFromVector3(camera.position);
+    turn.theta += TURN_RATE * Math.min(dt, 0.1);
+    camera.position.setFromSpherical(turn);
     camera.lookAt(0, 0, 0);
     c.update();
   });
 
   return (
     <>
-      <group rotation={[-Math.PI / 2, 0, 0]} scale={part.mmPerUnit / 1000}>
+      <group rotation={[-Math.PI / 2, 0, 0]} scale={part.mmPerUnit * MM_TO_M}>
         <primitive object={object} position={center} />
       </group>
       <OrbitControls
@@ -101,7 +102,9 @@ function Turntable({ part }: { part: LoadedPart }) {
           grabbed.current = true;
           turning.current = false;
         }}
-        onEnd={() => void (grabbed.current = false)}
+        onEnd={() => {
+          grabbed.current = false;
+        }}
       />
       <DoubleClickReset
         onReset={() => {

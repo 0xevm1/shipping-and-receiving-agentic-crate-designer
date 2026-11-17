@@ -4,7 +4,7 @@ import { getPart } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { cradleGeometry } from "./cradleGeometry";
 
-describe("cradleGeometry (#6)", () => {
+describe("cradleGeometry", () => {
   const d = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 4 }).design!;
   const cradles = d.members.filter((m) => m.kind === "cradle");
 

@@ -1,9 +1,27 @@
-import { Color, MeshStandardMaterial, Mesh, type Material, type Object3D } from "three";
+import { Color, MeshStandardMaterial, Mesh, type Material, type Object3D, type Vector3 } from "three";
 import type { CrateDesign, Member, MemberKind } from "@/domain/crate";
 import { partFinish } from "@/domain/partDetails";
 import type { Vec3 } from "@/domain/schema";
 import type { DesignerState, ViewState } from "@/state/store";
 import { anim } from "@/state/motion";
+
+/**
+ * The scene's units and shared numbers. The domain is Z-up millimetres; three.js is Y-up metres.
+ * `CrateViewer`'s root group applies `MM_TO_M` and the Z-up to Y-up turn to everything drawn in
+ * domain coordinates. Code that works in world space outside that group (camera framing, the
+ * floor, the part turntable) converts with these, so the rule lives in one place.
+ */
+export const MM_TO_M = 0.001;
+/** Domain point (mm, Z up) to world metres (Y up), as the root group places it. Returns `out`. */
+export function domainToWorld(p: Vec3, out: Vector3): Vector3 {
+  return out.set(p[0], p[2], -p[1]).multiplyScalar(MM_TO_M);
+}
+/** Vertical field of view of both canvases, degrees. */
+export const FOV_DEG = 34;
+/** Pointer travel (px) that turns a click into an orbit drag. */
+export const CLICK_SLOP_PX = 5;
+/** Far clipping plane in m (the canvas default); `Director` pushes it out for very large crates. */
+export const CAMERA_FAR_M = 200;
 
 /** Wood colours. Dunnage is darker so it reads apart from the crate. */
 export const WOOD: Record<MemberKind, string> = {
@@ -68,17 +86,20 @@ export function memberAlpha(m: Member, view: ViewState): number {
 }
 
 /**
- * What is lit up. A pinned row or a cut-list / weight-bar hover "focuses":
- * the lit boards draw solid and everything else ghosts. A 3D hover only tints.
+ * Whether a board is lit: its row is pinned or hovered, or its whole assembly is hovered from
+ * the weight bars. Allocation-free, as it runs for every board each frame.
  */
-export function highlightOf(s: Pick<DesignerState, "pin" | "hover">) {
-  const keys = new Set<string>();
-  if (s.pin) keys.add(s.pin);
-  if (s.hover?.key) keys.add(s.hover.key);
-  return {
-    isLit: (m: Member) => keys.has(m.bomKey) || (!!s.hover?.assembly && m.assembly === s.hover.assembly),
-    focus: !!s.pin || s.hover?.source === "list",
-  };
+export function isLit(s: Pick<DesignerState, "pin" | "hover">, m: Member): boolean {
+  const { pin, hover } = s;
+  return pin === m.bomKey || hover?.key === m.bomKey || (!!hover?.assembly && m.assembly === hover.assembly);
+}
+
+/**
+ * Whether the scene is "focused": a pinned row or a cut-list / weight-bar hover draws the lit
+ * boards solid and ghosts everything else. A 3D hover only tints.
+ */
+export function hasFocus(s: Pick<DesignerState, "pin" | "hover">): boolean {
+  return !!s.pin || s.hover?.source === "list";
 }
 
 /**

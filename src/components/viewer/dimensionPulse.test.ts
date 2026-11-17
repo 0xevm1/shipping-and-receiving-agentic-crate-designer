@@ -3,16 +3,15 @@ import { getPart } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import type { Vec3 } from "@/domain/schema";
 import {
-  buildLines,
   createPulseClock,
   dimensionPulses,
   pulsePaths,
-  PULSE_ACTIVE_S,
+  PULSE_DURATION_S,
   PULSE_FIRST_S,
   PULSE_PERIOD_S,
   tickPulse,
-  type Seg,
 } from "./dimensionPulse";
+import { buildLines, type Seg } from "./sizeLines";
 
 function design(id = "PART-001", quantity = 4) {
   const d = computeDesign(getPart(id), { ...DEFAULT_SETTINGS, quantity }).design;
@@ -21,7 +20,10 @@ function design(id = "PART-001", quantity = 4) {
 }
 
 const close = (a: Vec3, b: Vec3) => a.every((x, i) => Math.abs(x - b[i]) < 1e-6);
-const ends = (p: ReturnType<typeof pulsePaths>) => p.legs.filter((l) => l.leaf).map((l) => l.to);
+/** A leg is a leaf when no leg continues from where it ends: the photon fades there. */
+const isLeaf = (p: ReturnType<typeof pulsePaths>, leg: ReturnType<typeof pulsePaths>["legs"][number]) => !p.legs.some((q) => q.from === leg.to);
+const leaves = (p: ReturnType<typeof pulsePaths>) => p.legs.filter((l) => isLeaf(p, l));
+const ends = (p: ReturnType<typeof pulsePaths>) => leaves(p).map((l) => l.to);
 
 describe("pulsePaths (photon graph from a dimension's segments)", () => {
   const { lines, anchors } = buildLines(design(), true);
@@ -40,7 +42,7 @@ describe("pulsePaths (photon graph from a dimension's segments)", () => {
   ])("crate %s: 2 photons leave the label, each splits in 2 at its witness line → 6 branches, 4 ends", (_, get) => {
     const p = get();
     expect(p.legs).toHaveLength(6);
-    expect(p.legs.filter((l) => l.leaf)).toHaveLength(4);
+    expect(leaves(p)).toHaveLength(4);
     // The first two legs leave the anchor in opposite directions at time 0.
     const [a, b] = p.legs;
     expect(a.start).toBe(0);
@@ -73,17 +75,14 @@ describe("pulsePaths (photon graph from a dimension's segments)", () => {
   it("a part line: 2 branches, 2 ends (its own segment ends; no witness lines)", () => {
     for (const p of part) {
       expect(p.legs).toHaveLength(2);
-      expect(p.legs.every((l) => l.leaf)).toBe(true);
+      expect(leaves(p)).toHaveLength(2);
     }
   });
 
-  it("timing is normalised: legs start at their path distance and the furthest end lands at 1", () => {
+  it("path distances add up: the furthest end is the pulse's total, each leg's length is its span", () => {
     for (const p of pulses) {
-      expect(Math.max(...p.legs.map((l) => l.endTime))).toBeCloseTo(1, 9);
-      for (const l of p.legs) {
-        expect(l.startTime).toBeCloseTo(l.start / p.total, 9);
-        expect(l.end - l.start).toBeCloseTo(Math.hypot(...l.to.map((x, i) => x - l.from[i])), 6);
-      }
+      expect(Math.max(...p.legs.map((l) => l.end))).toBeCloseTo(p.total, 9);
+      for (const l of p.legs) expect(l.end - l.start).toBeCloseTo(Math.hypot(...l.to.map((x, i) => x - l.from[i])), 6);
     }
   });
 
@@ -106,7 +105,6 @@ describe("tickPulse (the 10 s clock)", () => {
     expect(run(c, 0.2)).toBe(1);
     expect(run(c, PULSE_PERIOD_S - 0.2)).toBe(0);
     expect(run(c, 0.2)).toBe(1);
-    expect(c.fired).toBe(2);
   });
 
   it("reports time into the pulse while it is running, -1 otherwise", () => {
@@ -115,7 +113,7 @@ describe("tickPulse (the 10 s clock)", () => {
     const since = tickPulse(c, 0, true).since;
     expect(since).toBeGreaterThan(0.45);
     expect(since).toBeLessThan(0.55);
-    run(c, PULSE_ACTIVE_S);
+    run(c, PULSE_DURATION_S);
     expect(tickPulse(c, 0, true).since).toBe(-1);
   });
 
@@ -128,8 +126,7 @@ describe("tickPulse (the 10 s clock)", () => {
 
   it("a long frame gap (hidden tab) never queues a burst", () => {
     const c = createPulseClock();
-    run(c, PULSE_FIRST_S + 1);
-    expect(c.fired).toBe(1);
+    expect(run(c, PULSE_FIRST_S + 1)).toBe(1);
     // One huge delta, as when rAF resumes after the tab was hidden for a minute.
     expect(tickPulse(c, 60, true).fired).toBe(false);
     expect(run(c, 1)).toBe(0);
