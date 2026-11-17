@@ -3,7 +3,7 @@ import { FACE_AXES, type FaceDepth, type FaceId, type PartProfile } from "@/doma
 import type { Vec3 } from "@/domain/schema";
 
 /**
- * Measures a part profile (#16, spec §7.5b) from its mesh: for each of the 6 faces of the
+ * Measures a part profile (spec §7.5b) from its mesh: for each of the 6 faces of the
  * bounding box, the depth from that face inward to the first surface, on a grid.
  *
  * Instead of casting one ray per cell, every triangle is rasterised onto the 3 axis planes at
@@ -18,7 +18,7 @@ export function profileCellMm(sizeMm: Vec3): number {
 }
 
 /** Analysis that runs longer than this is abandoned, and blocking stays on the bounding box. */
-export const PROFILE_BUDGET_MS = 1000;
+const PROFILE_BUDGET_MS = 1000;
 
 /**
  * Builds the profile of a loaded model. `mmPerUnit` is 1000 for metre files. Throws if the model
@@ -109,8 +109,10 @@ function now(): number {
 /** Profiles by model URL, so a part analysed once is not analysed again in this session. */
 const profiles = new Map<string, PartProfile | null>();
 
+let lastMs: number | null = null;
+
 /** Milliseconds the last analysis took, for the e2e probe; null before any. */
-export let lastProfileMs: number | null = null;
+export const lastProfileMs = (): number | null => lastMs;
 
 /**
  * Analyses the model off the critical path (when the browser is idle, after the crate has
@@ -137,7 +139,7 @@ export function scheduleProfile(
     } catch (e) {
       console.warn("Part analysis failed; blocking follows the bounding box.", e);
     }
-    lastProfileMs = now() - started;
+    lastMs = now() - started;
     profiles.set(url, profile);
     onDone(url, profile);
   };

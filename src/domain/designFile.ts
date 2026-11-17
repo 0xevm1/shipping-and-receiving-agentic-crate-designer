@@ -1,22 +1,29 @@
 import { z } from "zod";
-import { version } from "../../package.json";
 import type { CrateDesign } from "./crate";
+import { RANKINGS, type Ranking } from "./design";
+import { hasKind, readEnvelope, writeEnvelope } from "./envelope";
+import { kg, mm, msg, type Message } from "./message";
+import { usableProfile, type PartProfile } from "./profile";
+import { decodeProfile, EncodedProfileSchema } from "./profileCodec";
 import { CrateSettingsSchema, Vec3Schema, type CrateSettings, type DesignPart, type Vec3 } from "./schema";
 import { describeShipment, planShipment, type ShipmentPlan } from "./shipment";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * The saved design file (#28, spec §6.4): a versioned, zod-validated JSON document that
- * holds everything needed to rebuild a crate: the part, the packing rules and the layout.
- * The summary is for people reading the file and for checking that the crate comes out the
- * same when it is opened again. Pure: no DOM, no I/O.
+ * The saved design file (spec §6.4): a versioned, zod-validated JSON document that holds
+ * everything needed to rebuild the same crate: the part (with its measured outline, which
+ * shaped blocking depends on), the packing rules, the ranking and the layout. The summary is
+ * for people reading the file and for checking that the crate comes out the same when it is
+ * opened again. Pure: no DOM, no I/O, no package metadata (the caller passes `app` and `savedAt`).
  */
 
 export const DESIGN_FILE_KIND = "crate-design";
-/** Bump when the format changes in a way older readers can't handle, and add a migration. */
-export const DESIGN_SCHEMA_VERSION = 1;
-export const APP_NAME = "crate-designer";
-export const APP_VERSION: string = version;
+/**
+ * Bump when the format changes in a way older readers can't handle, and add a migration.
+ * 2: the layout ranking and the part's measured outline joined the file, because the crate
+ * planned from a file depends on both.
+ */
+export const DESIGN_SCHEMA_VERSION = 2;
 
 export const DesignFilePartSchema = z.object({
   /** "catalog": the model ships with the app (/public/parts). "custom": the user supplies the GLB. */
@@ -31,6 +38,11 @@ export const DesignFilePartSchema = z.object({
   dimensions_mm: Vec3Schema,
   /** The GLB's file name. */
   model: z.string().endsWith(".glb"),
+  /**
+   * The part's measured outline (spec §7.5b), packed (`profileCodec`). Absent when the model
+   * had not been measured when the file was saved, and in files from before format 2.
+   */
+  outline: EncodedProfileSchema.refine((p) => decodeProfile(p) !== null, "the part outline is damaged").optional(),
 });
 export type DesignFilePart = z.infer<typeof DesignFilePartSchema>;
 
@@ -41,6 +53,8 @@ export const DesignFileSchema = z.object({
   savedAt: z.string(),
   part: DesignFilePartSchema,
   settings: CrateSettingsSchema,
+  /** How the recommended layout was chosen (spec §7.2); the layout lists and the "why" follow it. */
+  ranking: z.enum(RANKINGS),
   /** Key of the layout on screen when saved (`Layout.key`). */
   layoutKey: z.string().min(1),
   summary: z.object({
@@ -52,10 +66,15 @@ export const DesignFileSchema = z.object({
     /** Gross weight, kg, one decimal. */
     grossKg: z.number().positive(),
     /**
-     * Only for a batch split across crates (#25): each crate type's count and parts per
+     * Only for a batch split across crates: each crate type's count and parts per
      * crate. The rest of the summary then describes the crate type that was on screen.
      */
     shipment: z.array(z.object({ count: z.number().int().positive(), quantity: z.number().int().positive() })).min(1).optional(),
+    /**
+     * Set by the 1 to 2 migration: the file was written before part outlines were kept, so
+     * the summary may include shaped blocking that the file cannot reproduce on its own.
+     */
+    shapeUnknown: z.literal(true).optional(),
   }),
 });
 export type DesignFile = z.infer<typeof DesignFileSchema>;
@@ -64,29 +83,34 @@ export interface SerializeInput {
   part: DesignFilePart;
   settings: CrateSettings;
   layoutKey: string;
+  /** Defaults to the volume ranking. */
+  ranking?: Ranking;
   design: CrateDesign;
   /** The shipment plan the design belongs to; a split is recorded in the summary. */
   plan?: ShipmentPlan;
+  /** Who wrote the file; passed in so the domain does not read package metadata. */
+  app: { name: string; version: string };
   /** ISO timestamp; passed in so this stays pure. */
   savedAt: string;
 }
 
 /** The design as pretty-printed JSON, ending in a newline. */
-export function serializeDesign({ part, settings, layoutKey, design, plan, savedAt }: SerializeInput): string {
+export function serializeDesign({ part, settings, layoutKey, ranking = "volume", design, plan, app, savedAt }: SerializeInput): string {
   const file: DesignFile = {
     kind: DESIGN_FILE_KIND,
     schemaVersion: DESIGN_SCHEMA_VERSION,
-    app: { name: APP_NAME, version: APP_VERSION },
+    app: { name: app.name, version: app.version },
     savedAt,
     part: DesignFilePartSchema.parse(part),
     settings: CrateSettingsSchema.parse(settings),
+    ranking,
     layoutKey,
     summary: {
       ...summarize(design),
       ...(plan?.split ? { shipment: plan.crates.map((c) => ({ count: c.count, quantity: c.quantity })) } : {}),
     },
   };
-  return JSON.stringify(file, null, 2) + "\n";
+  return writeEnvelope(file);
 }
 
 function summarize(design: CrateDesign): DesignFile["summary"] {
@@ -101,44 +125,33 @@ function summarize(design: CrateDesign): DesignFile["summary"] {
 
 /** True for JSON that claims to be a design file (by `kind`), as opposed to a parts.json catalog. */
 export function isDesignFileJson(json: unknown): boolean {
-  return typeof json === "object" && json !== null && !Array.isArray(json) && (json as { kind?: unknown }).kind === DESIGN_FILE_KIND;
+  return hasKind(json, DESIGN_FILE_KIND);
 }
 
 export type ParseResult = { ok: true; file: DesignFile } | { ok: false; error: string };
 
-/**
- * Migrations from older versions, keyed by the version they read. Each returns the next
- * version's shape. Empty while there is only version 1.
- */
-const MIGRATIONS: Record<number, (json: Record<string, unknown>) => Record<string, unknown>> = {};
+const FORMAT = {
+  kind: DESIGN_FILE_KIND,
+  version: DESIGN_SCHEMA_VERSION,
+  label: "design file",
+  what: "a crate design",
+  versionKey: "schemaVersion",
+  migrations: {
+    // 1 to 2: files from before the ranking was recorded were all ranked by volume.
+    // The summary may have counted shaped blocks the file has no outline for.
+    1: (doc: Record<string, unknown>) => ({
+      ...doc,
+      ranking: "volume",
+      summary: typeof doc.summary === "object" && doc.summary !== null ? { ...doc.summary, shapeUnknown: true } : doc.summary,
+    }),
+  },
+};
 
-/** Reads a design file: JSON → version check → migrate → zod. Never throws. */
+/** Reads a design file: JSON, version check, migrations, then zod. Never throws. */
 export function parseDesignFile(text: string): ParseResult {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "This design file is not valid JSON." };
-  }
-  if (!isDesignFileJson(json)) return { ok: false, error: "This file is not a crate design." };
-  let doc = json as Record<string, unknown>;
-  let v = doc.schemaVersion;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
-    return { ok: false, error: "This design file has no valid schemaVersion." };
-  }
-  if (v > DESIGN_SCHEMA_VERSION) {
-    return {
-      ok: false,
-      error: `This design was saved by a newer version of the app (format ${v}; this app reads up to ${DESIGN_SCHEMA_VERSION}). Update the app to open it.`,
-    };
-  }
-  while (v < DESIGN_SCHEMA_VERSION) {
-    const migrate = MIGRATIONS[v];
-    if (!migrate) return { ok: false, error: `Design format ${v} can no longer be read.` };
-    doc = { ...migrate(doc), schemaVersion: v + 1 };
-    v += 1;
-  }
-  const r = DesignFileSchema.safeParse(doc);
+  const read = readEnvelope(text, FORMAT);
+  if (!read.ok) return read;
+  const r = DesignFileSchema.safeParse(read.doc);
   if (!r.success) {
     const issue = r.error.issues[0];
     return { ok: false, error: `This design file can't be read: ${issue.path.join(".") || "file"}: ${issue.message}.` };
@@ -146,47 +159,63 @@ export function parseDesignFile(text: string): ParseResult {
   return { ok: true, file: r.data };
 }
 
+/** The part outline a file carries, or undefined. */
+export function fileProfile(file: DesignFile): PartProfile | undefined {
+  return file.part.outline ? (decodeProfile(file.part.outline) ?? undefined) : undefined;
+}
+
 export interface RestoredDesign {
   settings: CrateSettings;
   /** The saved layout's key, or null (the recommended layout) when it no longer exists. */
   layoutKey: string | null;
-  /** Plain sentences on anything that came out differently from the saved design. */
-  notes: string[];
+  /** The ranking the design was saved with. */
+  ranking: Ranking;
+  /** Anything that came out differently from the saved design; its numbers stay data until shown in the selected units. */
+  notes: Message[];
   /** Which crate type of a split batch to show (0 for a single crate). */
   crateIndex: number;
 }
 
+const sizeMessage = (v: Vec3): Message => msg`${mm(v[0])} × ${mm(v[1])} × ${mm(v[2])}`;
+
 /**
  * Rebuilds a saved design for `part` (the catalog entry or the reloaded model) and checks it
- * against the saved summary. The saved layout is kept if it still exists; otherwise the
+ * against the saved summary. The part's outline and the ranking come from the file, so the
+ * crate is the one that was saved. The saved layout is kept if it still exists; otherwise the
  * recommended one is used and a note says so.
  */
 export function restoreDesign(file: DesignFile, part: DesignPart, standards: ShopStandards = DEFAULT_STANDARDS): RestoredDesign {
   const { settings } = file;
-  const notes: string[] = [];
-  const plan = planShipment(part, settings, file.layoutKey, standards);
+  const notes: Message[] = [];
+  const saved = fileProfile(file);
+  const shaped: DesignPart = part.profile || !saved ? part : { ...part, profile: saved };
+  const plan = planShipment(shaped, settings, file.layoutKey, standards, file.ranking);
   // The summary describes the crate type that was on screen: find it by its part count.
   const crateIndex = Math.max(0, plan.crates.findIndex((c) => c.quantity === file.summary.quantity));
   const result = plan.crates[crateIndex].result;
   const found = result.layouts.some((l) => l.key === file.layoutKey);
-  if (!found) notes.push(`The saved layout (${file.summary.layout}) no longer fits, so the recommended layout is shown.`);
-  const saved = file.summary.shipment ?? [{ count: 1, quantity: settings.quantity }];
-  const same =
-    saved.length === plan.crates.length && saved.every((c, i) => c.count === plan.crates[i].count && c.quantity === plan.crates[i].quantity);
+  if (!found) notes.push([`The saved layout (${file.summary.layout}) no longer fits, so the recommended layout is shown.`]);
+  const was = file.summary.shipment ?? [{ count: 1, quantity: settings.quantity }];
+  const same = was.length === plan.crates.length && was.every((c, i) => c.count === plan.crates[i].count && c.quantity === plan.crates[i].quantity);
   if (!same) {
-    const was = describeShipment({ crates: saved.map((c, i) => ({ ...c, label: String.fromCharCode(65 + i) })) });
-    notes.push(`The batch now ships as ${describeShipment(plan)} (saved: ${was}).`);
+    const text = describeShipment({ crates: was.map((c, i) => ({ ...c, label: String.fromCharCode(65 + i) })) });
+    notes.push([`The batch now ships as ${describeShipment(plan)} (saved: ${text}).`]);
   }
   const design = result.design;
   if (design && same) {
     const now = summarize(design);
-    const mm = (v: Vec3) => `${v.join(" × ")} mm`;
-    if (now.outsideMm.some((v, i) => v !== file.summary.outsideMm[i])) {
-      notes.push(`The crate is now ${mm(now.outsideMm)} outside (saved: ${mm(file.summary.outsideMm)}).`);
-    }
-    if (Math.abs(now.grossKg - file.summary.grossKg) > 0.1) {
-      notes.push(`Gross is now ${now.grossKg} kg (saved: ${file.summary.grossKg} kg).`);
+    const sizeDiffers = now.outsideMm.some((v, i) => v !== file.summary.outsideMm[i]);
+    const grossDiffers = Math.abs(now.grossKg - file.summary.grossKg) > 0.1;
+    if ((sizeDiffers || grossDiffers) && file.summary.shapeUnknown && !usableProfile(shaped)) {
+      // An older file does not carry the part's shape. Blocking then follows the bounding box
+      // until the model is measured, so the totals can differ without anything being wrong.
+      notes.push([
+        "This design was saved before the part's shape was kept in the file, so sizes and weights can differ slightly from the saved ones until the model is measured.",
+      ]);
+    } else {
+      if (sizeDiffers) notes.push(msg`The crate is now ${sizeMessage(now.outsideMm)} outside (saved: ${sizeMessage(file.summary.outsideMm)}).`);
+      if (grossDiffers) notes.push(msg`Gross is now ${kg(now.grossKg)} (saved: ${kg(file.summary.grossKg)}).`);
     }
   }
-  return { settings, layoutKey: found ? file.layoutKey : null, notes, crateIndex };
+  return { settings, layoutKey: found ? file.layoutKey : null, ranking: file.ranking, notes, crateIndex };
 }

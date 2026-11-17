@@ -7,7 +7,7 @@ const outside = (from: number[], to: number[]): DesignChange => ({ field: "outsi
 const panel = (from: number, to: number): DesignChange => ({ field: "panel", from, to });
 const floor = (from: number, to: number): DesignChange => ({ field: "floor", from, to });
 
-describe("changeSummary (#62)", () => {
+describe("changeSummary", () => {
   it("says nothing moved when nothing visible did", () => {
     expect(changeSummary([], "metric")).toBe(NO_CHANGE);
     expect(changeSummary([{ field: "payload", from: 10.1, to: 10.2 }], "metric")).toBe(NO_CHANGE);
@@ -42,5 +42,15 @@ describe("changeSummary (#62)", () => {
   it("names what changed when the construction did", () => {
     expect(changeSummary([panel(12, 15), floor(19, 25)], "metric")).toBe("Crate changed: wall plywood, floor");
     expect(changeSummary([panel(12, 15), floor(19, 25), { field: "skidCount", from: 3, to: 4 }], "metric")).toBe("Crate changed: wall plywood, floor, +1 more");
+  });
+});
+
+describe("weights in change notes", () => {
+  it("shows a move in whole units, and the new gross by the app's mass rule", () => {
+    // 47.4 to 52.3 kg: the detail is the size of the move, the summary quotes the gross.
+    expect(changeSummary([gross(47.4, 52.3)], "metric")).toBe("Gross 47 → 52 kg");
+    expect(changeSummary([gross(47.4, 52.3), outside([500, 500, 500], [600, 500, 500])], "metric")).toBe("Crate grew: 600 × 500 × 500 mm, 52.3 kg");
+    expect(changeSummary([gross(47.4, 52.3), { field: "payload", from: 10, to: 15 }], "imperial")).toBe("Crate heavier: 115 lb");
+    expect(changeSummary([gross(47.4, 52.3)], "imperial")).toBe("Gross 104 → 115 lb");
   });
 });

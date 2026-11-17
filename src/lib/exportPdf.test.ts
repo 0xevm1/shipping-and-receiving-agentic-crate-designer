@@ -12,7 +12,7 @@ const bracket = getPart("PART-001");
 
 function pdf(quantity: number, units: Units = "imperial") {
   const plan = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity }, null, DEFAULT_STANDARDS);
-  const doc = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units, generatedAt: NOW });
+  const doc = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units, ranking: "volume", generatedAt: NOW });
   const bytes = printableToPdf(doc);
   // The PDF is written uncompressed, so its text can be read back as Latin-1.
   return { doc, bytes, text: new TextDecoder("latin1").decode(bytes) };

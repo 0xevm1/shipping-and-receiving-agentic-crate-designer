@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getPart } from "./catalog";
-import { computeDesign, DEFAULT_SETTINGS } from "./design";
-import { bomToCsv, shipmentToCsv } from "./export";
-import { planShipment } from "./shipment";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
+import { getPart } from "@/domain/catalog";
+import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
+import { planShipment } from "@/domain/shipment";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "@/domain/standards";
+import { bomToCsv, shipmentToCsv } from "./csv";
 
 const part = getPart("PART-001");
 const design = computeDesign(part, { ...DEFAULT_SETTINGS, quantity: 4 }).design!;

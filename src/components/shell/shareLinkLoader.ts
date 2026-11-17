@@ -7,7 +7,7 @@ import { useDesigner } from "@/state/store";
 import { openDesignFile } from "./useLoadFiles";
 
 /**
- * Opens a share link (#14, spec §9): a design in the URL hash (`#design=…`). Called after the
+ * Opens a share link (spec §9): a design in the URL hash (`#design=…`). Called after the
  * saved standards are applied (so the design is rebuilt with them), and on `hashchange`.
  * - A catalog part opens through the same path as a design file.
  * - A custom part's GLB can't travel in a URL: the message names the file to load, and loading

@@ -1,8 +1,13 @@
 /**
- * Turns a design diff (`diffDesigns`, #39) into what the screen says: "Gross 16 → 20 kg",
+ * Turns a design diff (`diffDesigns`) into what the screen says: "Gross 16 → 20 kg",
  * or "No change to the crate". A change that rounds to the same text in the selected units
  * is dropped, so the note never claims "Gross 16 → 16 kg" and the Overview doesn't flash
  * a number that looks the same.
+ *
+ * Two weight rules, on purpose. A before → after detail uses whole units (`weightWhole`):
+ * its point is the size of the move, and "47.4 → 52.3 kg" would read as precision the
+ * estimate does not have. The summary names the crate's new gross, which is a figure to
+ * quote, so it uses the app's one mass rule (`weight`).
  */
 import type { DesignChange, DesignField } from "@/domain/diff";
 import { plywoodText, sectionText } from "./lumber";
@@ -49,7 +54,7 @@ function values(c: DesignChange, u: Units): { from: string; to: string; unit: st
     case "panel":
     case "floor":
     case "skid": {
-      // Imperial uses shop names (#15): "1/2″ → 5/8″" plywood, "4x4 → 4x6" skids.
+      // Imperial uses shop names: "1/2″ → 5/8″" plywood, "4x4 → 4x6" skids.
       const shop = (v: readonly number[]) => (v.length === 2 ? sectionText(v[0], v[1]) : plywoodText(v[0]));
       const f = (v: number | readonly number[]) => (imperial ? shop(list(v)) : list(v).join(" × "));
       return { from: f(c.from), to: f(c.to), unit: imperial ? "" : "mm" };
@@ -83,7 +88,7 @@ export function changeNote(changes: readonly DesignChange[], u: Units, max = 2):
 const volume = (v: number | readonly number[]) => list(v).reduce((a, b) => a * b, 1);
 
 /**
- * The short note the screen shows (#62): the outcome, not every before → after.
+ * The short note the screen shows: the outcome, not every before → after.
  *
  *   outside size changed   "Crate grew: 2176 × 936 × 831 mm, 878 kg" (or "shrank", or "resized"
  *                           when the length, width and height moved in opposite directions)

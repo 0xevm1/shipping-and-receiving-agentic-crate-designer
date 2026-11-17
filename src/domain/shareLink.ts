@@ -1,7 +1,7 @@
 import { parseDesignFile, type DesignFile, type ParseResult } from "./designFile";
 
 /**
- * Share links (#14, spec §9): the current design as a #28 design file, compact JSON encoded
+ * Share links (spec §9): the current design as a design file, compact JSON encoded
  * base64url in the URL hash (`#design=…`). The hash is never sent to a server, so a design
  * doesn't end up in server logs. Opening a link reads it back through `parseDesignFile`, so a
  * damaged or tampered link is refused with the same validation as a file. Pure.

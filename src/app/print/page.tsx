@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * The export document (#26): crate spec, build sheets and shipping labels for the design in
+ * The export document: crate spec, build sheets and shipping labels for the design in
  * the URL hash (`/print#d=…&u=imperial`), styled for Letter paper and the browser's "Save as
  * PDF". Opened from the Cut list tab's "Print / save PDF" button.
  */

@@ -1,5 +1,5 @@
 /**
- * US shop names for stock (#15): nominal lumber ("2x4") and plywood by its sold thickness
+ * US shop names for stock: nominal lumber ("2x4") and plywood by its sold thickness
  * ("3/4″"). Display and export only; the domain keeps sections in mm (spec §4).
  */
 import type { MemberKind } from "@/domain/crate";

@@ -7,7 +7,7 @@ import { ASSEMBLIES } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { ASSEMBLY_NAMES } from "@/domain/export";
 import { glbProblem } from "./loadPart";
-import { buildCrateScene, crateCentreMm, CRATE_NODE, exportCrateGlb, glbFileName, PARTS_NODE, type PartModel } from "./exportGlb";
+import { buildCrateScene, crateCentreMm, CRATE_NODE, exportCrateGlb, PARTS_NODE, type PartModel } from "./exportGlb";
 
 /**
  * GLTFExporter's binary path reads its Blobs with FileReader, which node lacks. A minimal
@@ -147,10 +147,6 @@ describe("GLB export (#27)", () => {
     const scene = buildCrateScene(design("PART-001", 4));
     scene.updateMatrixWorld(true);
     expect(new Box3().setFromObject(scene).getCenter(new Vector3()).length()).toBeLessThan(0.0005);
-  });
-
-  it("names the file like the cut list", () => {
-    expect(glbFileName("PART-001", 4)).toBe("crate-PART-001-x4.glb");
   });
 });
 

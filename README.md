@@ -152,8 +152,10 @@ tab at a time.
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
    standards** / **Load standards** move them between machines as a JSON file.
 9. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
-   through **Load a part** or a drop. It restores the part, rules and layout; for a custom
-   part, add its `.glb` in the same pick or drop. The format is in spec §6.5.
+   through **Load a part** or a drop. It restores the part, rules, ranking and layout, and the
+   part's measured shape, so the reopened crate, a share link, the print and the zip are all the
+   same crate; for a custom part, add its `.glb` in the same pick or drop. The format is in
+   spec §6.5.
 10. **Print the hand-off, or save it as a PDF** (#26): **Print / save PDF** in the Cut list tab
     opens the export document in a new tab and its print dialog (choose "Save as PDF"; Letter
     paper). It has three parts, in the selected units:

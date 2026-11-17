@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { parseDesignFile, type DesignFile, type DesignFilePart } from "./designFile";
+import { readEnvelope, writeEnvelope } from "./envelope";
 
 /**
- * The design library (#14, spec §9): named designs saved per part, so a repeat part gets the
- * same proven crate in one click. Each entry holds a #28 design file as is, plus a name, notes
- * and when it was saved. The same versioned envelope is stored in localStorage and exported as
+ * The design library (spec §9): named designs saved per part, so a repeat part gets the
+ * same proven crate in one click. Each entry holds a design file (§6.4) as is, plus a name,
+ * notes and when it was saved. The same versioned envelope is stored in localStorage and exported as
  * the library file. Pure: no DOM, no I/O.
  */
 
@@ -100,13 +101,18 @@ export function entriesForPart(entries: SavedDesign[], key: string): SavedDesign
 /** Adds imported entries after the existing ones; an id that is already saved is skipped. */
 export function mergeEntries(entries: SavedDesign[], incoming: SavedDesign[]) {
   const ids = new Set(entries.map((e) => e.id));
-  const added = incoming.filter((e) => !ids.has(e.id) && (ids.add(e.id), true));
+  const added: SavedDesign[] = [];
+  for (const e of incoming) {
+    if (ids.has(e.id)) continue;
+    ids.add(e.id);
+    added.push(e);
+  }
   return { entries: [...entries, ...added], added: added.length, duplicates: incoming.length - added.length };
 }
 
 /** The library as pretty-printed JSON, ending in a newline. */
 export function libraryToJson(entries: SavedDesign[]): string {
-  return JSON.stringify({ kind: LIBRARY_KIND, version: LIBRARY_VERSION, entries }, null, 2) + "\n";
+  return writeEnvelope({ kind: LIBRARY_KIND, version: LIBRARY_VERSION, entries });
 }
 
 const EntrySchema = z.object({
@@ -127,22 +133,9 @@ export type LibraryParse =
  * apply), and a bad entry is skipped with a reason rather than losing the rest.
  */
 export function parseLibrary(text: string): LibraryParse {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "This library file is not valid JSON." };
-  }
-  const doc = json as { kind?: unknown; version?: unknown; entries?: unknown } | null;
-  if (typeof doc !== "object" || doc === null || doc.kind !== LIBRARY_KIND) {
-    return { ok: false, error: "This file is not a design library." };
-  }
-  if (typeof doc.version !== "number" || !Number.isInteger(doc.version) || doc.version < 1) {
-    return { ok: false, error: "This design library has no valid version." };
-  }
-  if (doc.version > LIBRARY_VERSION) {
-    return { ok: false, error: `This design library was saved by a newer version of the app (format ${doc.version}).` };
-  }
+  const read = readEnvelope(text, { kind: LIBRARY_KIND, version: LIBRARY_VERSION, label: "library file", what: "a design library" });
+  if (!read.ok) return read;
+  const doc = read.doc;
   if (!Array.isArray(doc.entries)) return { ok: false, error: "This design library has no entries list." };
 
   const entries: SavedDesign[] = [];
