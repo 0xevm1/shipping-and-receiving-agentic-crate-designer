@@ -24,7 +24,6 @@ export default function PrintView() {
 
   useEffect(() => {
     if (!ok) return;
-    document.title = `${result.doc.title} · Crate Designer`;
     if (!print) return;
     let cancelled = false;
     // Wait for the fonts so the PDF doesn't use fallbacks.
@@ -38,6 +37,8 @@ export default function PrintView() {
 
   return (
     <div className="print-doc">
+      {/* The browser offers the title as the PDF's file name. React hoists this into <head>. */}
+      <title>{`${ok ? result.doc.title : "Print"} · Crate Designer`}</title>
       <div className="toolbar" role="toolbar" aria-label="Print">
         {ok ? (
           <>
