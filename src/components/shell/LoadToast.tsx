@@ -25,7 +25,7 @@ export function LoadToast() {
   }, [message, kind]);
 
   return (
-    <div className={`loadrow glass${kind === "error" ? " is-error" : ""}`}>
+    <div className={`loadrow glass${kind === "error" ? " is-error" : ""}`} data-testid="load-toast">
       <span className="loadmsg" role="status">
         {kind === "note" ? message : ""}
       </span>

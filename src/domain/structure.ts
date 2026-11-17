@@ -355,13 +355,7 @@ const BEARERS_PER_PART = 2;
  * thick as the widest gap and `BEARERS_PER_PART` bearers. `contentsKg` is the separators and
  * dunnage, which load the floor.
  */
-function estimateDeadLoad(
-  grid: StructureGrid,
-  m: StructureMaterials,
-  lid: LidPlan,
-  partGapMm: number,
-  standards: ShopStandards = DEFAULT_STANDARDS,
-): DeadLoad {
+function estimateDeadLoad(grid: StructureGrid, m: StructureMaterials, lid: LidPlan, partGapMm: number, standards: ShopStandards = DEFAULT_STANDARDS): DeadLoad {
   const [L, W, H] = grid.interior;
   const [a, , c] = grid.cellSize;
   const [nx, ny, nz] = grid.counts;

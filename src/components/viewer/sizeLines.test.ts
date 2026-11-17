@@ -35,7 +35,12 @@ describe("buildLines", () => {
     const some = buildLines(d, false, axis);
     expect(some.labels).toHaveLength(2);
     expect(some.anchors).toHaveLength(2);
-    const wanted = axis === "length" ? [d.layout.external[1], d.layout.external[2]] : axis === "width" ? [d.layout.external[0], d.layout.external[2]] : [d.layout.external[0], d.layout.external[1]];
+    const wanted =
+      axis === "length"
+        ? [d.layout.external[1], d.layout.external[2]]
+        : axis === "width"
+          ? [d.layout.external[0], d.layout.external[2]]
+          : [d.layout.external[0], d.layout.external[1]];
     expect(some.labels.map((l) => l.values[0])).toEqual(wanted);
     expect(new Set(some.labels.map((l) => l.where))).toEqual(new Set(where));
     expect(some.lines.front.length + some.lines.right.length).toBeLessThan(all.lines.front.length + all.lines.right.length);

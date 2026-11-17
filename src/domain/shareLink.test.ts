@@ -6,7 +6,15 @@ import { base64UrlDecode, base64UrlEncode, readShareHash, SHARE_PARAM, shareHash
 import { TEST_APP } from "./testFixtures";
 
 const p = parts.find((x) => x.id === "PART-002")!;
-const shaft: DesignFilePart = { source: "catalog", id: p.id, name: p.name, material: p.material, mass_kg: p.mass_kg, dimensions_mm: p.dimensions_mm, model: p.model };
+const shaft: DesignFilePart = {
+  source: "catalog",
+  id: p.id,
+  name: p.name,
+  material: p.material,
+  mass_kg: p.mass_kg,
+  dimensions_mm: p.dimensions_mm,
+  model: p.model,
+};
 
 function file(part: DesignFilePart = shaft): DesignFile {
   const settings = { ...DEFAULT_SETTINGS, quantity: 8, maxLayers: 3 };

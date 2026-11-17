@@ -33,7 +33,10 @@ const DOMAIN_PACKAGES = [
   { name: "zustand", message: "The domain is pure TypeScript: no stores (src/state owns them)." },
 ];
 const DOMAIN_PACKAGE_PATTERNS = [
-  { group: ["three/**", "react/**", "react-dom/**", "zustand/**", "@react-three/**", "next", "next/**"], message: "The domain is pure TypeScript: no rendering, framework or store packages." },
+  {
+    group: ["three/**", "react/**", "react-dom/**", "zustand/**", "@react-three/**", "next", "next/**"],
+    message: "The domain is pure TypeScript: no rendering, framework or store packages.",
+  },
 ];
 const BROWSER_GLOBALS = [
   "window",
@@ -86,7 +89,16 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
-        { paths: DOMAIN_PACKAGES.filter((p) => p.name !== "three"), patterns: [upLib, upState, upComponents, upApp, ...DOMAIN_PACKAGE_PATTERNS.map((p) => ({ ...p, group: p.group.filter((g) => !g.startsWith("three")) }))] },
+        {
+          paths: DOMAIN_PACKAGES.filter((p) => p.name !== "three"),
+          patterns: [
+            upLib,
+            upState,
+            upComponents,
+            upApp,
+            ...DOMAIN_PACKAGE_PATTERNS.map((p) => ({ ...p, group: p.group.filter((g) => !g.startsWith("three")) })),
+          ],
+        },
       ],
     },
   },

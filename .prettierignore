@@ -1,0 +1,16 @@
+# Generated, vendored or binary.
+node_modules
+.next
+.claude
+bun.lock
+next-env.d.ts
+public
+docs/design-handoff
+src/data
+docs/screenshots
+playwright-report
+test-results
+e2e/screenshots
+
+# Prose keeps its hand-set tables and wrapping.
+*.md

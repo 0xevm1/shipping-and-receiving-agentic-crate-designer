@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { BomLine } from "@/domain/crate";
-import { boardTooltipDetail, cautionNote, cautionVerdict, densityDelta, densityText, documentDate, elapsedText, hoursText, modelNote, savedDateText, usd, usdDelta } from "./format";
+import {
+  boardTooltipDetail,
+  cautionNote,
+  cautionVerdict,
+  densityDelta,
+  densityText,
+  documentDate,
+  elapsedText,
+  hoursText,
+  modelNote,
+  savedDateText,
+  usd,
+  usdDelta,
+} from "./format";
 
 describe("cautionVerdict", () => {
   it("is empty without cautions", () => {
@@ -12,9 +25,7 @@ describe("cautionVerdict", () => {
   });
 
   it("names two, and summarises more", () => {
-    expect(cautionVerdict(["Parts are not restrained", "Part mass is a stand-in"])).toBe(
-      "2 cautions: parts are not restrained and part mass is a stand-in",
-    );
+    expect(cautionVerdict(["Parts are not restrained", "Part mass is a stand-in"])).toBe("2 cautions: parts are not restrained and part mass is a stand-in");
     expect(cautionVerdict(["Parts are not restrained", "Part mass is a stand-in", "3D model does not match"])).toBe(
       "3 cautions: parts are not restrained and 2 more",
     );

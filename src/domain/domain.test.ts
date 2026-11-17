@@ -9,8 +9,7 @@ import { custom as customStandards, metricText as metric } from "./testFixtures"
 
 const { trailerMm: DRY_VAN_53FT_MM, ltlExcessiveLengthMm: LTL_EXCESSIVE_LENGTH_MM, cardboard: CARDBOARD_LIMITS } = DEFAULT_STANDARDS.limits;
 
-const design = (partId: string, patch: Partial<CrateSettings> = {}) =>
-  computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch });
+const design = (partId: string, patch: Partial<CrateSettings> = {}) => computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch });
 
 describe("catalog", () => {
   it("parses parts.json", () => {
@@ -33,32 +32,27 @@ describe("orientations", () => {
 });
 
 describe("computeDesign", () => {
-  it.each(parts.flatMap((p) => p.suggested_quantities.map((q) => [p.id, q] as const)))(
-    "%s × %i produces a crate holding every part",
-    (partId, quantity) => {
-      const { design: d } = design(partId, { quantity });
-      expect(d).not.toBeNull();
-      const { layout } = d!;
-      expect(layout.slots).toHaveLength(quantity);
-      // Every slot fits inside the interior.
-      for (const s of layout.slots) {
-        for (let axis = 0; axis < 3; axis++) {
-          expect(s.min[axis]).toBeGreaterThanOrEqual(0);
-          expect(s.min[axis] + layout.cellSize[axis]).toBeLessThanOrEqual(layout.interior[axis] + 1e-6);
-        }
+  it.each(parts.flatMap((p) => p.suggested_quantities.map((q) => [p.id, q] as const)))("%s × %i produces a crate holding every part", (partId, quantity) => {
+    const { design: d } = design(partId, { quantity });
+    expect(d).not.toBeNull();
+    const { layout } = d!;
+    expect(layout.slots).toHaveLength(quantity);
+    // Every slot fits inside the interior.
+    for (const s of layout.slots) {
+      for (let axis = 0; axis < 3; axis++) {
+        expect(s.min[axis]).toBeGreaterThanOrEqual(0);
+        expect(s.min[axis] + layout.cellSize[axis]).toBeLessThanOrEqual(layout.interior[axis] + 1e-6);
       }
-      expect(d!.grossKg).toBeGreaterThan(d!.payloadKg);
-    },
-  );
+    }
+    expect(d!.grossKg).toBeGreaterThan(d!.payloadKg);
+  });
 
   it("never overlaps two parts", () => {
     const { design: d } = design("PART-003", { quantity: 8 });
     const { slots, cellSize } = d!.layout;
     for (let i = 0; i < slots.length; i++) {
       for (let j = i + 1; j < slots.length; j++) {
-        const overlaps = [0, 1, 2].every(
-          (a) => slots[i].min[a] < slots[j].min[a] + cellSize[a] && slots[j].min[a] < slots[i].min[a] + cellSize[a],
-        );
+        const overlaps = [0, 1, 2].every((a) => slots[i].min[a] < slots[j].min[a] + cellSize[a] && slots[j].min[a] < slots[i].min[a] + cellSize[a]);
         expect(overlaps).toBe(false);
       }
     }
@@ -227,8 +221,7 @@ describe("checks", () => {
 describe("trailer limits", () => {
   const settings = { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: true };
   const probe: Vec3 = [3000, 800, 400];
-  const run = (dims: Vec3) =>
-    computeDesign({ id: "custom", name: "Big part", mass_kg: 50, dimensions_mm: dims }, settings).design!;
+  const run = (dims: Vec3) => computeDesign({ id: "custom", name: "Big part", mass_kg: 50, dimensions_mm: dims }, settings).design!;
   /** A single part sized so the crate's external size on `axis` is exactly `target` mm. */
   const crateWith = (axis: number, target: number) => {
     // The structure's allowance depends on the crate (a tall crate is heavier, so its skids

@@ -1,11 +1,4 @@
-import {
-  DEFAULT_STANDARDS,
-  sameStandards,
-  standardsFromJson,
-  standardsToJson,
-  STANDARDS_VERSION,
-  type ShopStandards,
-} from "@/domain/standards";
+import { DEFAULT_STANDARDS, sameStandards, standardsFromJson, standardsToJson, STANDARDS_VERSION, type ShopStandards } from "@/domain/standards";
 import { browserStorage, readJson, writeJson, type KeyValueStore } from "./persist";
 
 // Re-exported for existing importers; the primitives live in `persist.ts`.

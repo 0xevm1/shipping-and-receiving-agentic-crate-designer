@@ -321,11 +321,11 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
         `and screw each stacking cradle through the side walls. ${stopsText}`
       : stopsText
     : !has("blocking")
-    ? "No blocking posts: the gaps are too small to block (see the blocking check)."
-    : nz > 1
-      ? `Screw a blocking post into the gap on each side of every part. Lay a ${separator ? stockText(separator, u) : "plywood"} separator over each ` +
-        "full layer, load the next layer on it, and block it the same way."
-      : "Screw a blocking post into the gap on each side of every part, from the floor to the top of the part.";
+      ? "No blocking posts: the gaps are too small to block (see the blocking check)."
+      : nz > 1
+        ? `Screw a blocking post into the gap on each side of every part. Lay a ${separator ? stockText(separator, u) : "plywood"} separator over each ` +
+          "full layer, load the next layer on it, and block it the same way."
+        : "Screw a blocking post into the gap on each side of every part, from the floor to the top of the part.";
   out[4].text = "Screw the edge and cross cleats to the lid panel, set the lid on the walls and screw it down around the top.";
   return out;
 }
@@ -366,9 +366,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
     letter: type.label,
     count: type.count,
     quantity: type.quantity,
-    heading: split
-      ? `Crate ${type.label}: ${type.quantity} × ${part.name} · build ${type.count}`
-      : `Crate for ${type.quantity} × ${part.name}`,
+    heading: split ? `Crate ${type.label}: ${type.quantity} × ${part.name} · build ${type.count}` : `Crate for ${type.quantity} × ${part.name}`,
     spec: {
       rows: [
         { label: "Parts in the crate", value: `${type.quantity} × ${part.id}`, note: split ? `${type.count} of these crates` : undefined },
@@ -450,13 +448,7 @@ export type PrintableFromFile = { ok: true; doc: PrintableDesign; notes: string[
  * does the ranking, so the print is the crate that was saved and a custom part needs no model
  * to print. `notes` say, in `units`, what came out differently from the saved summary.
  */
-export function printableFromDesignFile(
-  text: string,
-  standards: ShopStandards,
-  units: Units,
-  generatedAt: string,
-  timeZone?: string,
-): PrintableFromFile {
+export function printableFromDesignFile(text: string, standards: ShopStandards, units: Units, generatedAt: string, timeZone?: string): PrintableFromFile {
   const parsed = parseDesignFile(text);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const { file } = parsed;
@@ -473,5 +465,9 @@ export function printableFromDesignFile(
   const { ranking } = file;
   const plan = planShipment(part, file.settings, file.layoutKey, standards, ranking);
   const { notes } = restoreDesign(file, part, standards);
-  return { ok: true, doc: buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone }), notes: notes.map((n: Message) => renderMessage(n, units)) };
+  return {
+    ok: true,
+    doc: buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone }),
+    notes: notes.map((n: Message) => renderMessage(n, units)),
+  };
 }

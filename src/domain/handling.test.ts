@@ -2,17 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getPart } from "./catalog";
 import type { Check, Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
-import {
-  analyseHandling,
-  centreOfGravity,
-  forkOpenings,
-  handlingChecks,
-  memberMasses,
-  offsetText,
-  partMasses,
-  placeTines,
-  type Handling,
-} from "./handling";
+import { analyseHandling, centreOfGravity, forkOpenings, handlingChecks, memberMasses, offsetText, partMasses, placeTines, type Handling } from "./handling";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
 import { custom, metricText as metric } from "./testFixtures";
@@ -34,7 +24,12 @@ const board = (kind: Member["kind"], min: Vec3, size: Vec3): Member => ({
 
 describe("centre of gravity", () => {
   it("is the mass-weighted mean of the points", () => {
-    expect(centreOfGravity([{ at: [0, 0, 0], kg: 1 }, { at: [100, 0, 0], kg: 3 }])).toEqual([75, 0, 0]);
+    expect(
+      centreOfGravity([
+        { at: [0, 0, 0], kg: 1 },
+        { at: [100, 0, 0], kg: 3 },
+      ]),
+    ).toEqual([75, 0, 0]);
     expect(centreOfGravity([])).toEqual([0, 0, 0]);
   });
 
@@ -50,7 +45,11 @@ describe("centre of gravity", () => {
   });
 
   it("lies on both centre lines of a symmetric crate", () => {
-    for (const [id, q] of [["PART-001", 4], ["PART-003", 8], ["PART-002", 2]] as const) {
+    for (const [id, q] of [
+      ["PART-001", 4],
+      ["PART-003", 8],
+      ["PART-002", 2],
+    ] as const) {
       const d = design(id, { quantity: q });
       const [L, W] = d.layout.interior;
       expect(d.handling.cogMm[0]).toBeCloseTo(L / 2, 6);
@@ -156,9 +155,7 @@ describe("handling checks", () => {
       "Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, either side of the centre of gravity.",
     );
     expect(check(checks, "pallet-jack")).toMatchObject({ level: "ok", title: "Pallet jack won't fit: use a forklift" });
-    expect(metric(check(checks, "pallet-jack").detail)).toBe(
-      "The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.",
-    );
+    expect(metric(check(checks, "pallet-jack").detail)).toBe("The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.");
   });
 
   it("come in a fixed order after the base rating", () => {
@@ -200,7 +197,9 @@ describe("handling checks", () => {
     const s = custom({ handling: { palletJack: { minClearMm: 90 }, forklift: { minClearMm: 95 } } });
     const d = design("PART-003", { quantity: 8 }, s);
     expect(check(d.checks, "pallet-jack")).toMatchObject({ level: "caution", title: "Pallet jack may not fit" });
-    expect(metric(check(d.checks, "pallet-jack").detail)).toBe("Pallet jack: enters from the ends, 89 mm clear under the floor, needs 90 mm. Use taller skids.");
+    expect(metric(check(d.checks, "pallet-jack").detail)).toBe(
+      "Pallet jack: enters from the ends, 89 mm clear under the floor, needs 90 mm. Use taller skids.",
+    );
     expect(check(d.checks, "forklift").level).toBe("caution");
   });
 

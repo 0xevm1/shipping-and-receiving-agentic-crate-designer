@@ -80,8 +80,12 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           {plan.split && <CrateTypePicker />}
           <p className="lede">
             {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}
-            <span className="hint-mouse">Point at a row to see where those boards go. Click it to keep them lit.</span>
-            <span className="hint-touch">Tap a row to light those boards in 3D and keep them lit. Tap it again to let go.</span>
+            <span className="hint-mouse" data-testid="hint-mouse">
+              Point at a row to see where those boards go. Click it to keep them lit.
+            </span>
+            <span className="hint-touch" data-testid="hint-touch">
+              Tap a row to light those boards in 3D and keep them lit. Tap it again to let go.
+            </span>
           </p>
         </>
       )}
@@ -106,7 +110,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                 {group.map((l) => {
                   const cells = (
                     <>
-                      <td>
+                      <td data-testid="cut-piece">
                         {whole ? (
                           l.label
                         ) : (
@@ -116,8 +120,10 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                           </button>
                         )}
                       </td>
-                      <td className="nominal">{stockText(l, units)}</td>
-                      <td data-unit={units === "metric" ? "mm" : undefined}>
+                      <td className="nominal" data-testid="cut-stock">
+                        {stockText(l, units)}
+                      </td>
+                      <td data-unit={units === "metric" ? "mm" : undefined} data-testid="cut-size">
                         {cutText(l, units)
                           .split(" × ")
                           .map((d, i) => (
@@ -127,7 +133,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                             </Fragment>
                           ))}
                       </td>
-                      <td>{l.qty}</td>
+                      <td data-testid="cut-qty">{l.qty}</td>
                     </>
                   );
                   // Shipment totals span crate types, so their rows don't light boards in the one crate on screen.

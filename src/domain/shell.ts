@@ -18,12 +18,7 @@ function spread(start: number, span: number, width: number, count: number): numb
 }
 
 /** Adds the base, walls and lid of a crate with this interior and construction. */
-export function addShell(
-  interior: Layout["interior"],
-  c: Construction,
-  add: AddMember,
-  standards: ShopStandards = DEFAULT_STANDARDS,
-): void {
+export function addShell(interior: Layout["interior"], c: Construction, add: AddMember, standards: ShopStandards = DEFAULT_STANDARDS): void {
   const { panelMm: t, floorMm, cleat, skid, skidCount, joist, baseMm } = c;
   const { thick: ct, wide: cw } = cleat;
   const [L, W, H] = interior;
@@ -41,9 +36,7 @@ export function addShell(
       add("joist", "lumber", baseTag("Floor joist"), [x, y0, -floorMm - joist.tall], [joist.wide, extW, joist.tall]),
     );
   }
-  spread(y0, extW, skid.wide, skidCount).forEach((y) =>
-    add("skid", "lumber", baseTag("Skid"), [x0, y, -baseMm], [extL, skid.wide, skid.tall]),
-  );
+  spread(y0, extW, skid.wide, skidCount).forEach((y) => add("skid", "lumber", baseTag("Skid"), [x0, y, -baseMm], [extL, skid.wide, skid.tall]));
 
   // Long side walls (−Y and +Y). Panels run the full outside length of the end walls.
   for (const side of [-1, 1] as const) {
@@ -54,9 +47,7 @@ export function addShell(
     // Perimeter frame + intermediate verticals.
     add("cleat", "lumber", tag("Side rail"), [-t, cleatY, 0], [L + 2 * t, ct, cw]);
     add("cleat", "lumber", tag("Side rail"), [-t, cleatY, H - cw], [L + 2 * t, ct, cw]);
-    spread(-t, L + 2 * t, cw, verticalCount(L + 2 * t)).forEach((x) =>
-      add("cleat", "lumber", tag("Side upright"), [x, cleatY, cw], [cw, ct, H - 2 * cw]),
-    );
+    spread(-t, L + 2 * t, cw, verticalCount(L + 2 * t)).forEach((x) => add("cleat", "lumber", tag("Side upright"), [x, cleatY, cw], [cw, ct, H - 2 * cw]));
   }
 
   // End walls (−X and +X). Their cleats wrap the corners over the side cleats.
@@ -67,9 +58,7 @@ export function addShell(
     add("end", "plywood", tag("End panel"), [panelX, 0, 0], [t, W, H]);
     add("cleat", "lumber", tag("End rail"), [cleatX, y0, 0], [ct, extW, cw]);
     add("cleat", "lumber", tag("End rail"), [cleatX, y0, H - cw], [ct, extW, cw]);
-    spread(y0, extW, cw, verticalCount(extW)).forEach((y) =>
-      add("cleat", "lumber", tag("End upright"), [cleatX, y, cw], [ct, cw, H - 2 * cw]),
-    );
+    spread(y0, extW, cw, verticalCount(extW)).forEach((y) => add("cleat", "lumber", tag("End upright"), [cleatX, y, cw], [ct, cw, H - 2 * cw]));
   }
 
   // Lid: panel plus a cleat frame on top, screwed down (removable for unpacking). When crates
@@ -80,7 +69,5 @@ export function addShell(
   add("lid", "plywood", lidTag("Lid panel"), [-t, -t, H], [L + 2 * t, W + 2 * t, t]);
   add("lid-cleat", "lumber", lidTag(edgeLabel), [-t, -t, H + t], [L + 2 * t, lw, lt]);
   add("lid-cleat", "lumber", lidTag(edgeLabel), [-t, W + t - lw, H + t], [L + 2 * t, lw, lt]);
-  spread(-t, L + 2 * t, lw, lidCount).forEach((x) =>
-    add("lid-cleat", "lumber", lidTag(crossLabel), [x, -t + lw, H + t], [lw, W + 2 * t - 2 * lw, lt]),
-  );
+  spread(-t, L + 2 * t, lw, lidCount).forEach((x) => add("lid-cleat", "lumber", lidTag(crossLabel), [x, -t + lw, H + t], [lw, W + 2 * t - 2 * lw, lt]));
 }

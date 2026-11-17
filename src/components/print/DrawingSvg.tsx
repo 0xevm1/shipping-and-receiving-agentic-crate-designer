@@ -82,7 +82,15 @@ function Dim({ dim, d, px }: { dim: DimLine; d: Drawing; px: (n: number) => numb
       <line x1={x} y1={-dim.from} x2={x} y2={-dim.to} {...stroke} />
       <line x1={x - tick} y1={-dim.from} x2={x + tick} y2={-dim.from} {...stroke} />
       <line x1={x - tick} y1={-dim.to} x2={x + tick} y2={-dim.to} {...stroke} />
-      <text x={x + px(10)} y={mid} fontSize={font} fontFamily="var(--mono)" dominantBaseline="middle" transform={`rotate(90 ${x + px(10)} ${mid})`} textAnchor="middle">
+      <text
+        x={x + px(10)}
+        y={mid}
+        fontSize={font}
+        fontFamily="var(--mono)"
+        dominantBaseline="middle"
+        transform={`rotate(90 ${x + px(10)} ${mid})`}
+        textAnchor="middle"
+      >
         {dim.text}
       </text>
     </g>

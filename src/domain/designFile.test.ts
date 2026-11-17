@@ -235,7 +235,8 @@ describe("design file: a split batch (#25)", () => {
     expect(json.summary.shipment).toEqual(plan.crates.map((c) => ({ count: c.count, quantity: c.quantity })));
     expect(json.summary.quantity).toBe(plan.crates[1].quantity);
     const one = planShipment(p, DEFAULT_SETTINGS);
-    const text = serializeDesign({ app: TEST_APP,
+    const text = serializeDesign({
+      app: TEST_APP,
       part: catalogFilePart(p.id),
       settings: DEFAULT_SETTINGS,
       layoutKey: one.crates[0].result.design!.layout.key,

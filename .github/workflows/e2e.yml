@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       filter:
-        description: "Spec files or a Playwright filter (empty runs the whole suite), e.g. e2e/05-cutlist.spec.ts or --project=desktop"
+        description: "Spec files or a Playwright filter (empty runs the whole suite), e.g. e2e/cut-list.spec.ts or --project=desktop"
         required: false
         default: ""
 

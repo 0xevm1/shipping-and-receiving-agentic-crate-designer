@@ -21,7 +21,7 @@
     and applied to the scene graph by `CrateViewer.tsx`'s root group.
 - **Keeping docs current:** when you change a rule, update the constant, its test and spec §7 in
   the same change.
-- **CI:** `.github/workflows/ci.yml` runs install, lint, typecheck, test and build (`checks`) on
+- **CI:** `.github/workflows/ci.yml` runs install, format check, lint, typecheck, test and build (`checks`) on
   every PR to `main`. A green run is required before merging (not enforced by GitHub on this
   private repo; see the README "Pull requests" note).
 - **End-to-end tests are opt-in.** The Playwright suite (`e2e/`, spec §10) is slow, so it is not in
@@ -30,4 +30,10 @@
   (`.github/workflows/e2e.yml`, `gh workflow run e2e.yml --ref <branch>`), or `bun run e2e`
   locally (in a parallel worktree set a distinct port, `E2E_PORT=33xx`; a local run reuses any
   server already listening on the port). For a UI change, put a screenshot of the change in the PR.
+- **Writing e2e specs:** name them by topic (`.narrow` / `.mobile` for other viewports, no number prefixes);
+  import locators, flows and `shot(target, name)` from `e2e/helpers/` instead of copying them; find things by
+  role, label or `data-testid`, never by CSS class; read expected numbers from `window.__crate` instead of
+  pinning domain values (unit tests own them); never sleep, wait on the probe; write screenshots only through
+  `shot` (they go to the git-ignored `e2e/screenshots/`, never `docs/screenshots/`).
+- **Formatting:** Prettier (`bun run format`; CI runs `format:check`).
 - **Work tracking:** GitHub issues in `0xevm1/shipping-ui`. Name branches `<type>/<issue>-<slug>`.

@@ -16,7 +16,6 @@ import {
 } from "./standards";
 import { custom, metricText as metric } from "./testFixtures";
 
-
 const design = (partId: string, standards: ShopStandards, patch: Partial<CrateSettings> = {}) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
 
@@ -303,7 +302,11 @@ describe("standards JSON", () => {
     ["another version", JSON.stringify({ kind: "crate-designer/shop-standards", version: 99, standards: {} }), /newer version.*99/],
     ["an envelope of another kind", JSON.stringify({ kind: "crate-design", version: 1, standards: {} }), /not a shop standards file/],
     ["an envelope with no kind", JSON.stringify({ version: 1, standards: {} }), /not a shop standards file/],
-    ["an invalid value", JSON.stringify({ kind: "crate-designer/shop-standards", version: 1, standards: { stock: { floorPlywoodMm: 0 } } }), /stock\.floorPlywoodMm/],
+    [
+      "an invalid value",
+      JSON.stringify({ kind: "crate-designer/shop-standards", version: 1, standards: { stock: { floorPlywoodMm: 0 } } }),
+      /stock\.floorPlywoodMm/,
+    ],
   ])("rejects %s", (_, text, message) => {
     const r = standardsFromJson(text);
     expect(r.ok).toBe(false);

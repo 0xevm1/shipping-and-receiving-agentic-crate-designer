@@ -22,11 +22,7 @@
           "name": "Machined steel bracket",
           "material": "4140 steel",
           "mass_kg": 21.5,
-          "dimensions_mm": [
-            360,
-            220,
-            258
-          ],
+          "dimensions_mm": [360, 220, 258],
           "model": "PART-001-machined-steel-bracket.glb"
         },
         "settings": {
@@ -41,11 +37,7 @@
         "summary": {
           "quantity": 4,
           "layout": "2 × 2 × 1, As modeled",
-          "outsideMm": [
-            932,
-            652,
-            497
-          ],
+          "outsideMm": [932, 652, 497],
           "grossKg": 134.9
         }
       }

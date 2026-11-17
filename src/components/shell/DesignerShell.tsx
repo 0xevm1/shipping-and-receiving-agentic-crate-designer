@@ -225,10 +225,10 @@ export function DesignerShell() {
         <ViewBar />
       </div>
       {!narrow && <Credit />}
-      {narrow && <div className="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
+      {narrow && <div className="scrim" data-testid="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
       <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} footer={narrow ? <Credit /> : undefined} />
       {dragging && (
-        <div className="dropveil">
+        <div className="dropveil" data-testid="drop-veil">
           <div className="glass card">Drop a .glb file to load the part</div>
         </div>
       )}
@@ -248,7 +248,7 @@ function Summary({ onOpen }: { onOpen: () => void }) {
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const totals = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   return (
-    <button type="button" className="glass summary" onClick={onOpen}>
+    <button type="button" className="glass summary" data-testid="summary" onClick={onOpen}>
       {design ? (
         <>
           <span>
@@ -279,7 +279,7 @@ function Tooltip() {
   if (!tip) return null;
   const left = Math.min(tip.x + 14, window.innerWidth - 260);
   return (
-    <div className="tip glass" style={{ left, top: tip.y + 16 }}>
+    <div className="tip glass" data-testid="hover-tip" style={{ left, top: tip.y + 16 }}>
       <b>{tip.title}</b>
       <span className="nominal">{tip.detail}</span>
     </div>

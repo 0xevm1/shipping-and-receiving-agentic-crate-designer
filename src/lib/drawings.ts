@@ -134,10 +134,7 @@ export function crateDrawings(design: CrateDesign, units: Units): Drawing[] {
     const [z0, z1] = cradleSolidAt(m, cutY);
     return rect([m.min[0], m.min[1], z0], [m.size[0], m.size[1], z1 - z0], 0, 2, memberKind(m));
   };
-  const side = [
-    ...members.filter((m) => spans(m, 1, cutY) || underRow(m)).map(sideRect),
-    ...row.map((s) => rect(s.min, [a, b, c], 0, 2, "part")),
-  ];
+  const side = [...members.filter((m) => spans(m, 1, cutY) || underRow(m)).map(sideRect), ...row.map((s) => rect(s.min, [a, b, c], 0, 2, "part"))];
   const inside = (along: "below" | "right", size: number): DimLine => ({ side: along, from: 0, to: size, text: cut(size, units) });
 
   return [
@@ -146,7 +143,9 @@ export function crateDrawings(design: CrateDesign, units: Units): Drawing[] {
     outside(design, "end", "End", units),
     finish(
       "section-plan",
-      cradled ? "Section A–A: plan through the bottom layer, showing the cradles and end stops" : "Section A–A: plan through the bottom layer, showing the blocking",
+      cradled
+        ? "Section A–A: plan through the bottom layer, showing the cradles and end stops"
+        : "Section A–A: plan through the bottom layer, showing the blocking",
       true,
       plan,
       () => [inside("below", L), inside("right", W)],

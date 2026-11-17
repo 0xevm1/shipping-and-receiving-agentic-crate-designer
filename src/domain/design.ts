@@ -90,8 +90,7 @@ export function rankByObjective(
     return { layout, index, d, hard: [fits && !fits(d) ? 1 : 0, layout.stable ? 0 : 1, blocked ? 0 : 1, surcharge ? 1 : 0] };
   });
   // Whole cents and whole lb: smaller differences are rounding, not a better crate.
-  const objective = (d: CrateDesign) =>
-    ranking === "cost" ? [Math.round(d.cost.totalUsd * 100)] : [d.freight.freightClass, Math.round(d.freight.grossLb)];
+  const objective = (d: CrateDesign) => (ranking === "cost" ? [Math.round(d.cost.totalUsd * 100)] : [d.freight.freightClass, Math.round(d.freight.grossLb)]);
   scored.sort((x, y) => {
     for (let i = 0; i < x.hard.length; i++) if (x.hard[i] !== y.hard[i]) return x.hard[i] - y.hard[i];
     const [ox, oy] = [objective(x.d), objective(y.d)];
@@ -143,8 +142,7 @@ export function rankLayouts(part: DesignPart, settings: CrateSettings, standards
       wallClearanceMm: settings.wallClearanceMm,
       separatorMm: construction.panelMm,
       // The base and lid are sized per layout, exactly as `designCrate` will build them.
-      structureAllowance: (grid) =>
-        structureAllowance(construction, planStructure(grid, materials, payloadKg, settings.partGapMm, standards)),
+      structureAllowance: (grid) => structureAllowance(construction, planStructure(grid, materials, payloadKg, settings.partGapMm, standards)),
       minInteriorMm: minInteriorMm(standards),
     },
     standards,
@@ -216,12 +214,7 @@ export type LayoutExplanation =
   /** Recommended under a cost or freight-density ranking. */
   | { kind: "ranked"; by: Exclude<Ranking, "volume"> };
 
-export function explainLayout(
-  layouts: Layout[],
-  shown: Layout,
-  standards: ShopStandards = DEFAULT_STANDARDS,
-  ranking: Ranking = "volume",
-): LayoutExplanation {
+export function explainLayout(layouts: Layout[], shown: Layout, standards: ShopStandards = DEFAULT_STANDARDS, ranking: Ranking = "volume"): LayoutExplanation {
   const [best, next] = layouts;
   if (layouts.length <= 1) return { kind: "only" };
   const pctMore = (l: Layout) => Math.round((l.externalVolumeM3 / best.externalVolumeM3 - 1) * 100);

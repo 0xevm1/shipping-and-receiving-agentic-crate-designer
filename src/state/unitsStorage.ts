@@ -17,9 +17,7 @@ export function loadUnits(storage: KeyValueStore | null = browserStorage()): Uni
     storage,
     UNITS_STORAGE_KEY,
     (text) =>
-      text === "metric" || text === "imperial"
-        ? { ok: true, value: text }
-        : { ok: false, error: `"${text}" is not a unit system, using ${DEFAULT_UNITS}.` },
+      text === "metric" || text === "imperial" ? { ok: true, value: text } : { ok: false, error: `"${text}" is not a unit system, using ${DEFAULT_UNITS}.` },
     null,
     "Saved units ignored:",
   );

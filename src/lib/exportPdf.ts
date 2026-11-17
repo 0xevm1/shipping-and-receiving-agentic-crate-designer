@@ -187,9 +187,7 @@ function rows(w: Writer, list: Row[], x: number, colW: number, y: number, draw: 
     const lh = draw ? w.textAt(r.label, y + h, { x, w: labelW, gray: GREY }) : w.height(r.label, { w: labelW });
     let vh = draw ? w.textAt(r.value, y + h, { x: x + labelW + 6, w: valueW, style: "bold" }) : w.height(r.value, { w: valueW, style: "bold" });
     if (r.note) {
-      vh += draw
-        ? w.textAt(r.note, y + h + vh, { x: x + labelW + 6, w: valueW, size: 7.5, gray: GREY })
-        : w.height(r.note, { w: valueW, size: 7.5 });
+      vh += draw ? w.textAt(r.note, y + h + vh, { x: x + labelW + 6, w: valueW, size: 7.5, gray: GREY }) : w.height(r.note, { w: valueW, size: 7.5 });
     }
     h += Math.max(lh, vh) + 3;
   }
@@ -283,7 +281,8 @@ function drawing(w: Writer, d: Drawing, x0: number, y0: number, boxW: number, bo
     const fill = rectFill(r, d.section);
     pdf.setFillColor(fill.gray, fill.gray, fill.gray);
     pdf.rect(box.x, box.y, box.w, box.h, "F");
-    if (fill.hatch) hatch(box, fill.hatch === "dense" ? 2.5 * Math.SQRT2 : 5 * Math.SQRT2, fill.hatch === "dense" ? -1 : 1, fill.hatch === "dense" ? 0.5 : 0.45);
+    if (fill.hatch)
+      hatch(box, fill.hatch === "dense" ? 2.5 * Math.SQRT2 : 5 * Math.SQRT2, fill.hatch === "dense" ? -1 : 1, fill.hatch === "dense" ? 0.5 : 0.45);
     pdf.setDrawColor(0);
     pdf.setLineWidth(r.kind === "part" ? 0.8 : 0.5);
     if (r.kind === "part") pdf.setLineDashPattern([3, 2], 0);
@@ -505,8 +504,28 @@ function endMarks(w: Writer, l: PrintableLabel, x0: number, y0: number, boxW: nu
   pdf.setLineWidth(1.5);
   pdf.circle(cx, cy, r, "FD");
   pdf.setFillColor(0, 0, 0);
-  pdf.lines([[0, -r], [K, 0, r, r - K, r, r]], cx, cy, [1, 1], "F", true);
-  pdf.lines([[0, r], [-K, 0, -r, -(r - K), -r, -r]], cx, cy, [1, 1], "F", true);
+  pdf.lines(
+    [
+      [0, -r],
+      [K, 0, r, r - K, r, r],
+    ],
+    cx,
+    cy,
+    [1, 1],
+    "F",
+    true,
+  );
+  pdf.lines(
+    [
+      [0, r],
+      [-K, 0, -r, -(r - K), -r, -r],
+    ],
+    cx,
+    cy,
+    [1, 1],
+    "F",
+    true,
+  );
   w.textAt("CENTRE OF GRAVITY", cy - 5, { x: cx + r + 6, w: 140, size: 10 });
 }
 

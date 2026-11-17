@@ -128,10 +128,6 @@
   margin-top: 14px;
   font-size: 12.5px;
 }
-.libraryRow :global(.linkbtn):disabled {
-  opacity: 0.45;
-  cursor: default;
-}
 
 .statusRow {
   display: flex;

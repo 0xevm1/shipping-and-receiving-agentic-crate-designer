@@ -54,8 +54,7 @@ function segmentHitsBox(a: Vec3, b: Vec3, box: Box): boolean {
 /** Points spread over a flat arrow lying on the ground: a 3 × 3 grid over its length and width. */
 export function arrowSamples(tip: Vec3, outward: 1 | -1, length: number, width: number): Vec3[] {
   const points: Vec3[] = [];
-  for (const along of [0.05, 0.5, 0.95])
-    for (const across of [-0.4, 0, 0.4]) points.push([tip[0] + outward * along * length, tip[1] + across * width, tip[2]]);
+  for (const along of [0.05, 0.5, 0.95]) for (const across of [-0.4, 0, 0.4]) points.push([tip[0] + outward * along * length, tip[1] + across * width, tip[2]]);
   return points;
 }
 

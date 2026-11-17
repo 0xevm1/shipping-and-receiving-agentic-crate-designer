@@ -41,12 +41,7 @@ export { resolveConstruction, structureAllowance, structureMaterials } from "./c
 export type { CrateDesign } from "./crateDesign";
 export { SHAPED_BLOCK } from "./dunnage";
 
-export function designCrate(
-  part: DesignPart,
-  settings: CrateSettings,
-  layout: Layout,
-  standards: ShopStandards = DEFAULT_STANDARDS,
-): CrateDesign {
+export function designCrate(part: DesignPart, settings: CrateSettings, layout: Layout, standards: ShopStandards = DEFAULT_STANDARDS): CrateDesign {
   const payloadKg = part.mass_kg * settings.quantity;
   const materials = resolveConstruction(settings, payloadKg, standards);
   const structure = planStructure(layout, structureMaterials(materials, standards), payloadKg, settings.partGapMm, standards);

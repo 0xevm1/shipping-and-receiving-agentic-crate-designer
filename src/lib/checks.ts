@@ -19,11 +19,7 @@ export function modelMatchesCatalog(part: Pick<LoadedPart, "catalogDims">, measu
  * Domain checks plus the ones that depend on the loaded file (model size,
  * missing mass), cautions first.
  */
-export function allChecks(
-  domain: Check[],
-  part: Pick<LoadedPart, "catalogDims" | "readAsMm" | "massAssumed">,
-  measured: Vec3 | null,
-): CheckItem[] {
+export function allChecks(domain: Check[], part: Pick<LoadedPart, "catalogDims" | "readAsMm" | "massAssumed">, measured: Vec3 | null): CheckItem[] {
   const items: CheckItem[] = [...domain];
   if (measured) {
     const size = dimsMessage(measured.map((v) => Math.round(v)));

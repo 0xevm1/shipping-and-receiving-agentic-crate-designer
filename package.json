@@ -10,9 +10,13 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
+    "e2e:docs-shots": "node scripts/docs-shots.mjs",
     "e2e:ui": "playwright test --ui",
     "preinstall": "node scripts/require-bun.mjs",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "knip"
   },
   "simple-git-hooks": {
     "pre-commit": "if [ -f scripts/pre-commit.mjs ]; then exec bun scripts/pre-commit.mjs; fi"
@@ -39,6 +43,8 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.6",
     "fake-indexeddb": "6.2.8",
+    "knip": "6.45.1",
+    "prettier": "3.10.1",
     "simple-git-hooks": "2.14.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",

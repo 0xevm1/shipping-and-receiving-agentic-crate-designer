@@ -14,7 +14,7 @@ vi.mock("@/lib/loadPart", () => ({
 
 const initial = useDesigner.getState();
 const file = (name: string) => ({ name }) as File;
-const deferred = <T,>() => {
+const deferred = <T>() => {
   let resolve!: (v: T) => void;
   const promise = new Promise<T>((r) => (resolve = r));
   return { promise, resolve };
@@ -66,7 +66,10 @@ describe("load ordering", () => {
     loadDesign.mockResolvedValueOnce({ message: "bad GLB" });
     await loadPickedFiles([file("w.glb")]);
     expect(useLibrary.getState().pendingShare).toBe(pending);
-    loadDesign.mockResolvedValueOnce({ ...outcomeFor("quick"), design: { settings: initial.settings, layoutKey: null, crateIndex: 0, ranking: initial.ranking } });
+    loadDesign.mockResolvedValueOnce({
+      ...outcomeFor("quick"),
+      design: { settings: initial.settings, layoutKey: null, crateIndex: 0, ranking: initial.ranking },
+    });
     await loadPickedFiles([file("w.glb")]);
     expect(useLibrary.getState().pendingShare).toBeNull();
     expect(loadDesign).toHaveBeenCalledTimes(2);

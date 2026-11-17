@@ -38,12 +38,12 @@ export function ChangeNote({
   const detail = show ? changeNote(last.changes, units, Infinity) : "";
   const hasDetail = show && detail !== text;
   return (
-    <div className={className ? `changenote ${className}` : "changenote"} role="status">
+    <div className={className ? `changenote ${className}` : "changenote"} role="status" data-testid="change-note">
       {/* `title` also keeps the full text where narrow screens cut the note to one line. */}
       {show && (
         <span key={last.id} title={hasDetail ? detail : text}>
           {text}
-          {hasDetail && <span className="sr-only">{`. Details: ${detail}`}</span>}
+          {hasDetail && <span className="sr-only" data-testid="change-note-detail">{`. Details: ${detail}`}</span>}
         </span>
       )}
     </div>
@@ -60,7 +60,7 @@ export function Flash({ on, className, children }: { on: readonly DesignField[];
   const hit = last !== null && visibleChanges(last.changes, units).some((c) => on.includes(c.field));
   if (!hit) return <span className={className}>{children}</span>;
   return (
-    <span key={last.id} className={className ? `${className} flash` : "flash"}>
+    <span key={last.id} className={className ? `${className} flash` : "flash"} data-testid="flash">
       {children}
     </span>
   );

@@ -126,18 +126,35 @@ export function buildLines(design: CrateDesign, withPart: boolean, hide: Axis | 
 
   if (hide !== "length") {
     dimension("front", La, Lb, ext[0], [
-      [[mn[0], mn[1], z], [mn[0], mn[1] - off - tick, z]],
-      [[mx[0], mn[1], z], [mx[0], mn[1] - off - tick, z]],
+      [
+        [mn[0], mn[1], z],
+        [mn[0], mn[1] - off - tick, z],
+      ],
+      [
+        [mx[0], mn[1], z],
+        [mx[0], mn[1] - off - tick, z],
+      ],
     ]);
   }
   if (hide !== "width") {
     dimension("right", Wa, Wb, ext[1], [
-      [[mx[0], mn[1], z], [mx[0] + off + tick, mn[1], z]],
-      [[mx[0], mx[1], z], [mx[0] + off + tick, mx[1], z]],
+      [
+        [mx[0], mn[1], z],
+        [mx[0] + off + tick, mn[1], z],
+      ],
+      [
+        [mx[0], mx[1], z],
+        [mx[0] + off + tick, mx[1], z],
+      ],
     ]);
   }
   if (hide !== "height") {
-    dimension("right", Wb, Hb, ext[2], [[[mx[0], mx[1], mx[2]], [mx[0] + off + tick, mx[1], mx[2]]]]);
+    dimension("right", Wb, Hb, ext[2], [
+      [
+        [mx[0], mx[1], mx[2]],
+        [mx[0] + off + tick, mx[1], mx[2]],
+      ],
+    ]);
   }
 
   if (withPart && layout.slots.length) {
@@ -148,9 +165,27 @@ export function buildLines(design: CrateDesign, withPart: boolean, hide: Axis | 
     const p = s0.min;
     const q: Vec3 = [p[0] + c[0], p[1] + c[1], p[2] + c[2]];
     const edges: [Seg, number][] = [
-      [[[p[0], p[1], q[2]], [q[0], p[1], q[2]]], c[0]],
-      [[[q[0], p[1], q[2]], [q[0], q[1], q[2]]], c[1]],
-      [[[q[0], p[1], p[2]], [q[0], p[1], q[2]]], c[2]],
+      [
+        [
+          [p[0], p[1], q[2]],
+          [q[0], p[1], q[2]],
+        ],
+        c[0],
+      ],
+      [
+        [
+          [q[0], p[1], q[2]],
+          [q[0], q[1], q[2]],
+        ],
+        c[1],
+      ],
+      [
+        [
+          [q[0], p[1], p[2]],
+          [q[0], p[1], q[2]],
+        ],
+        c[2],
+      ],
     ];
     const mids: Vec3[] = [];
     for (const [seg, value] of edges) {

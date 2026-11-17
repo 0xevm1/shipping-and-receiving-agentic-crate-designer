@@ -234,7 +234,10 @@ describe("cradles (#6) in the build sheet", () => {
   const shaft = getPart("PART-002");
   const build = (quantity: number) => {
     const plan = planShipment(shaft, { ...DEFAULT_SETTINGS, quantity }, null, DEFAULT_STANDARDS);
-    return { doc: buildPrintable({ part: shaft, plan, standards: DEFAULT_STANDARDS, units: "metric", ranking: "volume", generatedAt: NOW }), design: plan.crates[0].result.design! };
+    return {
+      doc: buildPrintable({ part: shaft, plan, standards: DEFAULT_STANDARDS, units: "metric", ranking: "volume", generatedAt: NOW }),
+      design: plan.crates[0].result.design!,
+    };
   };
 
   it("places floor cradles before the parts and stacking cradles and end stops after", () => {
@@ -247,7 +250,9 @@ describe("cradles (#6) in the build sheet", () => {
     expect(steps[3].text).toMatch(/stacking cradle/);
     expect(steps.reduce((n, s) => n + s.pieces.reduce((m, p) => m + p.qty, 0), 0)).toBe(design.bom.reduce((n, l) => n + l.qty, 0));
     expect(steps.reduce((n, s) => n + s.screws, 0)).toBe(design.screws);
-    expect(doc.crates[0].build.fasteners.map((f) => f.title)).toEqual(expect.arrayContaining(["Cradles to floor", "Stacking cradles through the side walls", "End stops"]));
+    expect(doc.crates[0].build.fasteners.map((f) => f.title)).toEqual(
+      expect.arrayContaining(["Cradles to floor", "Stacking cradles through the side walls", "End stops"]),
+    );
   });
 
   it("shows the cradles in Section A–A and Section B–B, cut down through the notch", () => {
@@ -309,7 +314,8 @@ describe("the document date", () => {
   it("is the date on the clock where it was made, in the print and the header", () => {
     const late = "2026-11-17T07:16:00.000Z";
     const plan = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }, null, DEFAULT_STANDARDS);
-    const make = (timeZone: string) => buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: late, timeZone });
+    const make = (timeZone: string) =>
+      buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: late, timeZone });
     expect(make("America/Los_Angeles").date).toBe("2026-11-16");
     expect(make("UTC").date).toBe("2026-11-17");
   });

@@ -7,11 +7,7 @@ import type { PartProfile } from "./profile";
  * in a right-handed, Z-up frame — the same convention as the source GLBs.
  */
 
-export const Vec3Schema = z.tuple([
-  z.number().positive(),
-  z.number().positive(),
-  z.number().positive(),
-]);
+export const Vec3Schema = z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]);
 export type Vec3 = [number, number, number];
 
 export const PartSchema = z.object({

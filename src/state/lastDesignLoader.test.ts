@@ -56,7 +56,10 @@ describe("reopening the last crate", () => {
 
   it("without the custom part's GLB, keeps the default part, names the file and waits for it", async () => {
     const saved = savedCatalogCrate();
-    const custom = { ...saved, design: { ...saved.design, part: { ...saved.design.part, source: "custom" as const, model: "widget_v2.glb", name: "Widget v2" } } };
+    const custom = {
+      ...saved,
+      design: { ...saved.design, part: { ...saved.design.part, source: "custom" as const, model: "widget_v2.glb", name: "Widget v2" } },
+    };
     const idb = new IDBFactory();
     await saveLastGlb("other.glb", new ArrayBuffer(8), idb);
     expect(await restoreLastDesign(custom, idb)).toBe(false);

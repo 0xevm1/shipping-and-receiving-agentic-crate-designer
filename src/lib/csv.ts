@@ -27,11 +27,7 @@ const ascii = (s: string) => s.replace(/ × /g, " x ");
 
 function csvRow(l: BomLine, u: Units): string {
   const imperial = u === "imperial";
-  const stock = !imperial
-    ? l.stock
-    : l.material === "plywood"
-      ? plywoodText(l.stockMm[0], " in")
-      : lumberText(l.stockMm, l.kind, " in");
+  const stock = !imperial ? l.stock : l.material === "plywood" ? plywoodText(l.stockMm[0], " in") : lumberText(l.stockMm, l.kind, " in");
   const cut = l.cutMm.map((v) => (imperial ? fraction(v, " in") : String(v))).join(" x ");
   return [`${ASSEMBLY_NAMES[l.assembly]}: ${l.label}`, l.material, stock, cut, l.qty].map(csvCell).join(",");
 }

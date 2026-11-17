@@ -36,6 +36,7 @@ export function SizeLabels() {
             labelElements[i] = el;
           }}
           className={l.inner ? "dim inner" : "dim"}
+          data-testid={l.inner ? "size-label-part" : "size-label"}
         >
           {labelText(l, units)}
         </div>

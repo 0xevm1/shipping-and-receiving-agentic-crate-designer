@@ -68,9 +68,7 @@ describe("library storage", () => {
   it("keeps the good entries when some are bad, with a warning", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = memoryStorage();
-    const json = JSON.parse(
-      libraryToJson([{ id: "a", name: "A", notes: "", savedAt: "2026-01-01", partKey: partKey(bracket), design: designFile(bracket) }]),
-    );
+    const json = JSON.parse(libraryToJson([{ id: "a", name: "A", notes: "", savedAt: "2026-01-01", partKey: partKey(bracket), design: designFile(bracket) }]));
     json.entries.push({ id: "b", name: "B", savedAt: "x", design: { kind: "crate-design", schemaVersion: 1 } });
     store.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(json));
     expect(loadLibrary(store).map((e) => e.id)).toEqual(["a"]);
@@ -101,7 +99,12 @@ describe("library storage", () => {
     const entry = { id: "a", name: "A", notes: "", savedAt: "2026-01-01", partKey: partKey(bracket), design: designFile(bracket) };
     expect(saveLibrary([entry], null)).toBe(false);
     expect(saveLibrary([], null)).toBe(false);
-    const full = { ...memoryStorage(), setItem: () => { throw new Error("quota"); } };
+    const full = {
+      ...memoryStorage(),
+      setItem: () => {
+        throw new Error("quota");
+      },
+    };
     expect(saveLibrary([entry], full)).toBe(false);
     expect(saveLibrary([entry], memoryStorage())).toBe(true);
   });

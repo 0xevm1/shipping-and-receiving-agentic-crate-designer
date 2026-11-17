@@ -7,7 +7,6 @@ import { planShipment } from "./shipment";
 import { DEFAULT_STANDARDS, standardsFromJson } from "./standards";
 import { custom, settings } from "./testFixtures";
 
-
 const design = (id = "PART-001", patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
   computeDesign(getPart(id), settings(patch), null, standards).design!;
 

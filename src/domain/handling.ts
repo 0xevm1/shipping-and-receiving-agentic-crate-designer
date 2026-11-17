@@ -176,7 +176,10 @@ export function analyseHandling(
   // The base the crate stands on: the skids' outline (or the whole footprint without skids).
   const skids = members.filter((m) => m.kind === "skid");
   const base = skids.length ? skids : members;
-  const { min: [bx0, by0, groundZ], max: [bx1, by1] } = memberBounds(base);
+  const {
+    min: [bx0, by0, groundZ],
+    max: [bx1, by1],
+  } = memberBounds(base);
   const heightMm = cogMm[2] - groundZ;
   const toEnd = Math.max(0, Math.min(cogMm[0] - bx0, bx1 - cogMm[0]));
   const toSide = Math.max(0, Math.min(cogMm[1] - by0, by1 - cogMm[1]));
@@ -196,7 +199,6 @@ export function analyseHandling(
     devices: [fit("forklift", openings, cogMm[1], h.forklift), fit("pallet-jack", openings, cogMm[1], h.palletJack)],
   };
 }
-
 
 /** "120 mm toward the left end and 40 mm toward the back", or null when it is under 1 mm both ways. */
 export function offsetText([dx, dy]: [number, number]): Message | null {

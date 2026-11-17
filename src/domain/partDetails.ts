@@ -12,7 +12,11 @@ export const PART_MATERIAL_MAX = 60;
 export const MATERIAL_SUGGESTIONS = ["6061-T6 aluminum", "4140 steel", "304 stainless steel"] as const;
 
 /** Trim, drop control characters and collapse runs of whitespace. */
-const tidy = (s: string) => s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+const tidy = (s: string) =>
+  s
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /**
  * A partial update. `material: ""` (or blank) clears the material, so the UI

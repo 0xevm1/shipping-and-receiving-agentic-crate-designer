@@ -32,12 +32,12 @@ export function PartHeader() {
   const match = modelMatchesCatalog(part, measured);
 
   return (
-    <header className="tl">
+    <header className="tl" data-testid="part-header">
       <div className="brandrow">
         <h1 className="brand">Crate Designer</h1>
         <span className="tagline">Shipping and receiving</span>
       </div>
-      <div className="partmeta">
+      <div className="partmeta" data-testid="part-meta">
         {part.catalogDims ? (
           <>
             <div>
@@ -83,9 +83,8 @@ function Gross() {
   return (
     <>
       {" "}
-      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}
-      ·{" "}
-      <span className="nw">
+      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits. */}·{" "}
+      <span className="nw" data-testid="crate-gross">
         <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units, true)}</Flash>
       </span>
     </>

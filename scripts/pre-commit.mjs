@@ -5,18 +5,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const LINTABLE = /\.(?:[cm]?[jt]sx?)$/;
 
-const staged = execFileSync(
-  "git",
-  ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
-  { encoding: "utf8" },
-)
+const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], { encoding: "utf8" })
   .split("\0")
   .filter((file) => LINTABLE.test(file));
 
 const steps = [
-  staged.length > 0
-    ? ["lint (staged files)", ["bunx", "eslint", "--no-warn-ignored", "--max-warnings=0", "--", ...staged]]
-    : null,
+  staged.length > 0 ? ["lint (staged files)", ["bunx", "eslint", "--no-warn-ignored", "--max-warnings=0", "--", ...staged]] : null,
   ["typecheck", ["bun", "run", "typecheck"]],
   ["unit tests", ["bun", "run", "test"]],
 ].filter(Boolean);

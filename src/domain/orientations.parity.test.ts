@@ -10,7 +10,11 @@ import type { Vec3 } from "./schema";
  */
 describe("orientations match three.js", () => {
   it("rotatedSize equals three.js's rotated bounding box", () => {
-    for (const size of [[1, 2, 3], [1530.25, 172, 90.5], [40, 40, 40]] as Vec3[]) {
+    for (const size of [
+      [1, 2, 3],
+      [1530.25, 172, 90.5],
+      [40, 40, 40],
+    ] as Vec3[]) {
       for (const o of ORIENTATIONS) {
         const half = new Vector3(...size).multiplyScalar(0.5);
         const box = new Box3(half.clone().negate(), half).applyMatrix4(new Matrix4().makeRotationFromEuler(new Euler(...o.euler)));

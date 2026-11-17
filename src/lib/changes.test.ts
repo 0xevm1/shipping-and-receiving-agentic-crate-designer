@@ -14,7 +14,13 @@ describe("changeSummary", () => {
   });
 
   it("summarises a size change as the outcome, with the new gross", () => {
-    const big: DesignChange[] = [gross(135, 878), outside([932, 652, 497], [2176, 936, 831]), panel(12, 15), floor(19, 25), { field: "skidCount", from: 3, to: 4 }];
+    const big: DesignChange[] = [
+      gross(135, 878),
+      outside([932, 652, 497], [2176, 936, 831]),
+      panel(12, 15),
+      floor(19, 25),
+      { field: "skidCount", from: 3, to: 4 },
+    ];
     expect(changeSummary(big, "metric")).toBe("Crate grew: 2176 × 936 × 831 mm, 878 kg");
     expect(changeSummary([outside([2176, 936, 831], [932, 652, 497]), gross(878, 135)], "metric")).toBe("Crate shrank: 932 × 652 × 497 mm, 135 kg");
   });

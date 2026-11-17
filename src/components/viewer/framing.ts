@@ -253,7 +253,10 @@ export function keepCrateInFreeArea(
   // World metres per px at the target's depth; the crate moves with the screen, the camera against it.
   const perPx = (2 * Math.tan(MathUtils.degToRad(camera.fov / 2)) * camera.position.distanceTo(target)) / size.height;
   camera.matrixWorld.extractBasis(basis[0], basis[1], basis[2]);
-  shift.copy(basis[0]).multiplyScalar(-dx * perPx).addScaledVector(basis[1], dy * perPx);
+  shift
+    .copy(basis[0])
+    .multiplyScalar(-dx * perPx)
+    .addScaledVector(basis[1], dy * perPx);
   camera.position.add(shift);
   target.add(shift);
   return true;

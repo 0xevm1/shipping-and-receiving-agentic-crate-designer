@@ -1,15 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import {
-  DEFAULT_STANDARDS,
-  mergeStandards,
-  parseStandards,
-  sameStandards,
-  standardsFromJson,
-  standardsToJson,
-  type ShopStandards,
-} from "@/domain/standards";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards, sameStandards, standardsFromJson, standardsToJson, type ShopStandards } from "@/domain/standards";
 import { downloadText } from "@/lib/download";
 import { groupDigits } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -65,8 +57,8 @@ export function ShopStandards() {
         {customised && <span className={styles.badge}>Customised</span>}
       </summary>
       <p className="lede">
-        The stock, thresholds, limits, rates and shop times every crate is designed to and costed with. Changes apply at once and are saved in this
-        browser. Sizes are in mm, weights in kg and times in minutes.
+        The stock, thresholds, limits, rates and shop times every crate is designed to and costed with. Changes apply at once and are saved in this browser.
+        Sizes are in mm, weights in kg and times in minutes.
       </p>
 
       {open &&

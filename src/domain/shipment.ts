@@ -87,8 +87,7 @@ export function planShipment(
   const total = settings.quantity;
   const inside = (l: Layout) => withinOutsideLimits(l.external, standards);
   // Gross within the smaller of the per-crate limit and the computed base rating (as a gross weight).
-  const fitsLimits = (d: CrateDesign, k: number) =>
-    inside(d.layout) && d.grossKg <= crateGrossLimitKg(d, standards) && (maxParts === 0 || k <= maxParts);
+  const fitsLimits = (d: CrateDesign, k: number) => inside(d.layout) && d.grossKg <= crateGrossLimitKg(d, standards) && (maxParts === 0 || k <= maxParts);
   const layoutMemo = new Map<number, Layout[]>();
   const memo = new Map<number, Candidate>();
 
@@ -178,15 +177,12 @@ export function planShipment(
   const least = [...options].sort((x, y) => x.volume - y.volume).find(feasible)?.volume ?? Infinity;
   const tie = least * (1 + standards.defaults.volumeTolerance);
   const full = Math.floor(total / kMax);
-  const best =
-    options
-      .filter((o) => o.volume <= tie)
-      .sort((x, y) => x.spread - y.spread || x.volume - y.volume || y.k - x.k)
-      .find(feasible) ?? { k: kMax, full, rest: total - full * kMax };
+  const best = options
+    .filter((o) => o.volume <= tie)
+    .sort((x, y) => x.spread - y.spread || x.volume - y.volume || y.k - x.k)
+    .find(feasible) ?? { k: kMax, full, rest: total - full * kMax };
 
-  const types: CrateType[] = [
-    { label: "A", count: best.full, quantity: best.k, result: ranked(candidate(best.k).result, best.k) },
-  ];
+  const types: CrateType[] = [{ label: "A", count: best.full, quantity: best.k, result: ranked(candidate(best.k).result, best.k) }];
   if (best.rest > 0) types.push({ label: "B", count: 1, quantity: best.rest, result: ranked(candidate(best.rest).result, best.rest) });
   // The user's layout pick applies to the first crate type that has that layout.
   const picked = types.findIndex((t) => t.result.layouts.some((l) => l.key === layoutKey));
@@ -207,13 +203,7 @@ export function crateGrossLimitKg(d: CrateDesign, standards: ShopStandards = DEF
 }
 
 /** `result` with the layout `key` designed, when it has that layout and it isn't already shown. */
-function withLayout(
-  result: DesignResult,
-  part: DesignPart,
-  settings: CrateSettings,
-  key: string | null | undefined,
-  standards: ShopStandards,
-): DesignResult {
+function withLayout(result: DesignResult, part: DesignPart, settings: CrateSettings, key: string | null | undefined, standards: ShopStandards): DesignResult {
   if (!key || !result.design || result.design.layout.key === key) return result;
   const layout = result.layouts.find((l) => l.key === key);
   return layout ? { ...result, design: designCrate(part, settings, layout, standards) } : result;
@@ -269,9 +259,7 @@ function crateLimitCheck(text: string, unmet: Message | null, standards: ShopSta
 
 /** "3 × crate A (64 each) + 1 × crate B (8)". */
 export function describeShipment(plan: { crates: Pick<CrateType, "label" | "count" | "quantity">[] }): string {
-  return plan.crates
-    .map((t) => `${t.count} × crate ${t.label} (${t.quantity}${t.count > 1 ? " each" : ""})`)
-    .join(" + ");
+  return plan.crates.map((t) => `${t.count} × crate ${t.label} (${t.quantity}${t.count > 1 ? " each" : ""})`).join(" + ");
 }
 
 interface ShipmentBom {

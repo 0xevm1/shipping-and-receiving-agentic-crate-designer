@@ -50,7 +50,6 @@ describe("lumber names", () => {
     expect(nominalLumber(30, 100)).toBeNull();
   });
 
-
   it("are used with a plain x in the base-rating check", () => {
     const d = designOf(getPart("PART-001"), { quantity: 40 });
     const text = metric(d.checks.find((c) => c.id === "base-rating")!.detail);

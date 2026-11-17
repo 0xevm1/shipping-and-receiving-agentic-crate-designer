@@ -43,17 +43,14 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
   // Each card's cost and freight against the recommendation. Only the cards on screen are
   // designed (about 1 ms for five). The React Compiler is not enabled, so memoize by hand: the
   // hover and flash re-renders would otherwise design every card again.
-  const scores = useMemo(
-    () => scoreLayouts(part, { ...settings, quantity }, [best, ...shown], standards),
-    [part, settings, quantity, best, shown, standards],
-  );
+  const scores = useMemo(() => scoreLayouts(part, { ...settings, quantity }, [best, ...shown], standards), [part, settings, quantity, best, shown, standards]);
 
   return (
     <>
       <h2>Ways to pack it</h2>
       <p className="lede">
-        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate
-        from above, then from the side.
+        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from above,
+        then from the side.
       </p>
       <div className="seg rank" role="group" aria-label="Rank layouts by">
         {RANKING_LABELS.map((r) => (
@@ -113,7 +110,7 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   if (!score || !best) return null;
   if (isBest) {
     return (
-      <span className="opt-delta">
+      <span className="opt-delta" data-testid="layout-delta">
         <span className="nw">{usd(score.costUsd)} to build</span>
         {" · "}
         <span className="nw">class {score.freightClass}</span>
@@ -126,7 +123,7 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   const density = densityDelta(score.densityLbFt3 - best.densityLbFt3, units);
   const sameClass = score.freightClass === best.freightClass;
   return (
-    <span className="opt-delta" title="Against the recommended layout">
+    <span className="opt-delta" data-testid="layout-delta" title="Against the recommended layout">
       <span className={`nw ${cost > 0 ? "worse" : cost < 0 ? "better" : ""}`}>{usdDelta(cost)}</span>
       {" · "}
       <span className={`nw ${sameClass ? "" : score.freightClass > best.freightClass ? "worse" : "better"}`}>
@@ -157,8 +154,8 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
         <>Ranked by crate cost: the recommended layout is the cheapest stable, fully blocked crate to build.</>
       ) : (
         <>
-          Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked
-          crates without an LTL length charge.
+          Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked crates without
+          an LTL length charge.
         </>
       );
     case "picked":

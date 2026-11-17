@@ -28,7 +28,10 @@ export async function openShareLink(initial: boolean) {
   const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
   if (!inCatalog) {
     useLibrary.getState().setPendingShare(file);
-    s.setLoadMessage(`This link needs ${file.part.model}. Load it (or drop it here) to open the ${file.settings.quantity} × ${file.part.name} design.`, "error");
+    s.setLoadMessage(
+      `This link needs ${file.part.model}. Load it (or drop it here) to open the ${file.settings.quantity} × ${file.part.name} design.`,
+      "error",
+    );
     return;
   }
   await openDesignFile(file);

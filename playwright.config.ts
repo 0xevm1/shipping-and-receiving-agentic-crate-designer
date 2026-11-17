@@ -1,7 +1,8 @@
+import { cpus } from "node:os";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * End-to-end UI tests (#34). `bun run e2e` builds the production app with the read-only
+ * End-to-end UI tests. `bun run e2e` builds the production app with the read-only
  * test hook (`NEXT_PUBLIC_E2E=1`, see `src/components/viewer/E2EProbe.tsx`) and serves it on
  * port 3320. Specs live in `e2e/`; screenshots go to `e2e/screenshots/` (git-ignored).
  *
@@ -11,6 +12,12 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const PORT = Number(process.env.E2E_PORT) || 3320;
 const baseURL = `http://localhost:${PORT}`;
+
+/**
+ * Local workers. Software WebGL is CPU-heavy, and several worktrees (or agents) often run a suite at once, so
+ * the default is a third of the cores, between 1 and 3, instead of every core. Set `E2E_WORKERS` to change it.
+ */
+const localWorkers = Math.max(1, Math.min(3, Math.floor(cpus().length / 3)));
 
 /** SwiftShader gives headless Chromium a software WebGL, so the 3D canvas really renders. */
 const webglArgs = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"];
@@ -24,8 +31,9 @@ export default defineConfig({
   retries: 0,
   // Software WebGL is CPU-heavy. The private repo's CI runner has 2 vCPUs, where two
   // SwiftShader workers starve each other's frames, so CI runs one, with more headroom.
-  workers: process.env.CI ? 1 : 4,
-  timeout: process.env.CI ? 120_000 : 45_000,
+  workers: process.env.CI ? 1 : Number(process.env.E2E_WORKERS) || localWorkers,
+  // `test.slow()` triples it for the long flows (a reload, several model loads).
+  timeout: process.env.CI ? 120_000 : 60_000,
   expect: { timeout: process.env.CI ? 20_000 : 10_000 },
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   use: {
@@ -43,12 +51,12 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
     {
-      // Below the 980 px breakpoint with a mouse (a small window or a tablet): the drawer layout (#42).
+      // Below the 980 px breakpoint with a mouse (a small window or a tablet): the drawer layout.
       name: "narrow",
       testMatch: /\.narrow\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 900, height: 900 } },
     },
-    // Phones (#42): touch, a mobile viewport and the drawer layout. Same specs at both sizes.
+    // Phones: touch, a mobile viewport and the drawer layout. Same specs at both sizes.
     {
       name: "mobile-390",
       testMatch: /\.mobile\.spec\.ts$/,

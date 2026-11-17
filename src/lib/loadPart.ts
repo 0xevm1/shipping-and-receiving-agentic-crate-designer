@@ -48,7 +48,11 @@ export function idFromFile(fileName: string): string {
 /** "PART-004-cast-iron-cover.glb" → "Cast iron cover"; a file called only ".glb" is "Part". */
 export function nameFromFile(fileName: string): string {
   const stem = idFromFile(fileName);
-  const words = stem.replace(/^PART-\d+-/i, "").replace(/[-_]+/g, " ").trim() || stem;
+  const words =
+    stem
+      .replace(/^PART-\d+-/i, "")
+      .replace(/[-_]+/g, " ")
+      .trim() || stem;
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
@@ -212,10 +216,7 @@ export async function loadDesign(
   } else {
     const glb = glbs.find((f) => f.name === saved.model) ?? (glbs.length === 1 ? glbs[0] : undefined);
     if (!glb) {
-      const why =
-        saved.source === "catalog"
-          ? `This design uses ${saved.id}, which isn't in the catalog.`
-          : `This design needs ${saved.model}.`;
+      const why = saved.source === "catalog" ? `This design uses ${saved.id}, which isn't in the catalog.` : `This design needs ${saved.model}.`;
       return { message: `${why} Choose its .glb together with the design file.` };
     }
     const read = await readGlb(glb);

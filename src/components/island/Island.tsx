@@ -98,16 +98,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           />
           {drawer && (
             <button type="button" className="iconbtn drawer-close" aria-label="Close the panel" onClick={drawer.onClose}>
-              <svg
-                viewBox="0 0 24 24"
-                width="22"
-                height="22"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
             </button>
@@ -135,13 +126,13 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             >
               {t.label}
               {t.id === "checks" && cautions > 0 && (
-                <span className="count">
+                <span className="count" data-testid="caution-count">
                   {cautions}
                   <span className="sr-only"> {cautions === 1 ? "caution" : "cautions"}</span>
                 </span>
               )}
               {t.id === "checks" && notes > 0 && (
-                <span className="count info">
+                <span className="count info" data-testid="note-count">
                   {notes}
                   <span className="sr-only"> {notes === 1 ? "note" : "notes"}</span>
                 </span>
