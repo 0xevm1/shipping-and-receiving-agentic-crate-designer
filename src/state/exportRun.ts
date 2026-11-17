@@ -58,7 +58,7 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
         })();
         const [{ name, zip }] = await Promise.all([work, reduce ? null : wait(MIN_BUSY_MS)]);
         downloadBytes(name, zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, "application/zip");
-        useDesigner.getState().markExported();
+        useView.getState().markExported();
         show({ kind: "done", name }, DONE_NOTE_MS);
       } catch (e) {
         console.error("Export failed", e);

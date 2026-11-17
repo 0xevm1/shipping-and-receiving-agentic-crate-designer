@@ -74,15 +74,15 @@ export function ViewBar() {
 
 /** "Showing 4 × side rail" while a cut-list group is pinned. */
 function PinBar() {
-  const pin = useDesigner((s) => s.pin);
-  const line = useDesigner((s) => s.result.design?.bom.find((l) => l.key === s.pin));
+  const pin = useView((s) => s.pin);
+  const line = useDesigner((s) => (pin ? s.result.design?.bom.find((l) => l.key === pin) : undefined));
   if (!pin || !line) return null;
   return (
     <div className={styles.pinBar}>
       <span>
         Showing {line.qty} × {line.label.toLowerCase()}
       </span>
-      <button type="button" onClick={() => useDesigner.getState().setPin(null)}>
+      <button type="button" onClick={() => useView.getState().setPin(null)}>
         Show everything
       </button>
     </div>

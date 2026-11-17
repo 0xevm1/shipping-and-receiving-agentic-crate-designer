@@ -75,7 +75,7 @@ export function DesignerShell() {
     const view = useView.getState();
     // A board tapped on a touch screen leaves its tooltip and hover behind.
     view.setTooltip(null);
-    useDesigner.getState().setHover(null);
+    view.setHover(null);
     view.setDrawerOpen(true);
   }, []);
   const closeDrawer = useCallback(() => useView.getState().setDrawerOpen(false), []);
@@ -89,7 +89,7 @@ export function DesignerShell() {
       if (e.key !== "Escape") return;
       const view = useView.getState();
       if (view.drawerOpen) view.setDrawerOpen(false);
-      else if (useDesigner.getState().pin) useDesigner.getState().setPin(null);
+      else if (view.pin) view.setPin(null);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -110,8 +110,8 @@ export function DesignerShell() {
   // drawer so the row shows. Rows pinned from the list itself are already in the open drawer.
   useEffect(() => {
     if (!narrow) return;
-    return useDesigner.subscribe((s, prev) => {
-      if (s.pin && s.pin !== prev.pin && !useView.getState().drawerOpen) openDrawer();
+    return useView.subscribe((s, prev) => {
+      if (s.pin && s.pin !== prev.pin && !s.drawerOpen) openDrawer();
     });
   }, [narrow, openDrawer]);
 

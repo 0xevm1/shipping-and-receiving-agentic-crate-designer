@@ -27,9 +27,9 @@ export function CutListTab({ design }: { design: CrateDesign }) {
   const quantity = useDesigner((s) => s.settings.quantity);
   const plan = useDesigner((s) => s.plan);
   const crateIndex = useDesigner((s) => s.crateIndex);
-  const pin = useDesigner((s) => s.pin);
-  const hoverKey = useDesigner((s) => s.hover?.key);
-  const { setHover, setPin } = useDesigner.getState();
+  const pin = useView((s) => s.pin);
+  const hoverKey = useView((s) => s.hover?.key);
+  const { setHover, setPin } = useView.getState();
   const [status, setStatus] = useState("");
   const [scope, setScope] = useState<"crate" | "shipment">("crate");
   const pinnedRow = useRef<HTMLTableRowElement>(null);
@@ -54,7 +54,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
     try {
       await action();
       setStatus(okMessage);
-      useDesigner.getState().markExported();
+      useView.getState().markExported();
     } catch {
       setStatus(failMessage);
     }

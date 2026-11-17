@@ -174,3 +174,53 @@ describe("view store: the 3D view", () => {
     expect(s().fit).toEqual({ nonce: nonce + 2, instant: true });
   });
 });
+
+describe("view store: hover and pin", () => {
+  beforeEach(() => useView.setState(initial, true));
+
+  it("setHover ignores a hover equal to the current one, so the scene isn't re-picked for nothing", () => {
+    const seen = vi.fn();
+    const off = useView.subscribe(seen);
+    s().setHover(null);
+    expect(seen).not.toHaveBeenCalled();
+    s().setHover({ key: "a", source: "3d" });
+    s().setHover({ key: "a", source: "3d" });
+    expect(seen).toHaveBeenCalledTimes(1);
+    s().setHover({ key: "a", source: "list" });
+    s().setHover({ assembly: "lid", source: "list" });
+    expect(seen).toHaveBeenCalledTimes(3);
+    s().setHover(null);
+    expect(s().hover).toBeNull();
+    off();
+  });
+
+  it("pins and unpins a line", () => {
+    s().setPin("a");
+    expect(s().pin).toBe("a");
+    s().setPin(null);
+    expect(s().pin).toBeNull();
+  });
+});
+
+describe("view store: time to design", () => {
+  beforeEach(() => useView.setState(initial, true));
+
+  it("runs from the clock start to the first export only", () => {
+    expect(s().designStartedAt).toBeNull();
+    s().markExported(5000); // before the clock starts: nothing to record
+    expect(s().designedInMs).toBeNull();
+    s().startDesignClock(1000);
+    s().startDesignClock(2000); // already running
+    expect(s().designStartedAt).toBe(1000);
+    s().markExported(73_000);
+    expect(s().designedInMs).toBe(72_000);
+    s().markExported(90_000); // later exports don't move it
+    expect(s().designedInMs).toBe(72_000);
+  });
+
+  it("never records a negative time", () => {
+    s().startDesignClock(5000);
+    s().markExported(1000);
+    expect(s().designedInMs).toBe(0);
+  });
+});

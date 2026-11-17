@@ -69,9 +69,9 @@ export default function CrateViewer() {
   const maxDistance = Math.max(MAX_DISTANCE_M, 4 * Math.max(...(scene?.layout.external ?? [0])) * MM_TO_M);
 
   const clearHover = () => {
-    const s = useDesigner.getState();
+    const s = useView.getState();
     if (s.hover?.source === "3d") s.setHover(null);
-    useView.getState().setTooltip(null);
+    s.setTooltip(null);
   };
 
   return (
@@ -95,7 +95,7 @@ export default function CrateViewer() {
         onPointerMissed={(e) => {
           const d = down.current;
           if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) > CLICK_SLOP_PX) return;
-          useDesigner.getState().setPin(null);
+          useView.getState().setPin(null);
           clearHover();
         }}
       >

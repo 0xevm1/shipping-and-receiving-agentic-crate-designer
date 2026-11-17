@@ -16,7 +16,7 @@ export function Scorecard({ design }: { design: CrateDesign }) {
   const units = useView((s) => s.units);
   const rate = useDesigner((s) => s.standards.labour.rateUsdPerHour);
   const plan = useDesigner((s) => (s.plan.split ? s.plan : null));
-  const designedInMs = useDesigner((s) => s.designedInMs);
+  const designedInMs = useView((s) => s.designedInMs);
   const { cost, labour, freight } = design;
   const lb = (v: number) => weightFromLb(v, units);
 

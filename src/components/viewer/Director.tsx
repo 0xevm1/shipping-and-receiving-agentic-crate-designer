@@ -143,7 +143,7 @@ export function Director({ active }: { active: boolean }) {
     const v = useView.getState();
     const reduce = reducedMotion();
 
-    if (s.result.design && !reduce && !dragging.current && !s.pin && !v.drawerOpen && (autoplay.on || isIdle())) {
+    if (s.result.design && !reduce && !dragging.current && !v.pin && !v.drawerOpen && (autoplay.on || isIdle())) {
       if (!autoplay.on || autoplay.step < 0) {
         autoplay.on = true;
         autoplay.turned = 0;

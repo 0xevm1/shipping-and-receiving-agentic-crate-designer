@@ -46,12 +46,12 @@ async function run(deps: StartupDeps): Promise<StartupSource> {
     try {
       const reopened = await deps.restore(saved, ticket);
       // A load the person started meanwhile has its own clock.
-      if (!reopened && ticket.current()) useDesigner.getState().startDesignClock();
+      if (!reopened && ticket.current()) useView.getState().startDesignClock();
     } finally {
       useView.getState().setRestoring(false);
     }
   } else {
-    useDesigner.getState().startDesignClock();
+    useView.getState().startDesignClock();
     await deps.openShare();
   }
   return source;

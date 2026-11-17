@@ -58,7 +58,7 @@ describe("startup source", () => {
     expect(await start()).toBe("share");
     expect(d.openShare).toHaveBeenCalledTimes(1);
     expect(d.restore).not.toHaveBeenCalled();
-    expect(s().designStartedAt).not.toBeNull();
+    expect(useView.getState().designStartedAt).not.toBeNull();
   });
 
   it("holds the scene back while restoring, then releases it", async () => {
@@ -69,12 +69,12 @@ describe("startup source", () => {
     finish(true);
     await done;
     expect(useView.getState().restoring).toBe(false);
-    expect(s().designStartedAt).toBeNull();
+    expect(useView.getState().designStartedAt).toBeNull();
   });
 
   it("starts the clock when the last design could not reopen", async () => {
     await createStartup(deps({ savedDesign: savedCrate, restore: async () => false }))();
-    expect(s().designStartedAt).not.toBeNull();
+    expect(useView.getState().designStartedAt).not.toBeNull();
   });
 
   it("leaves the clock to a load that superseded the restore", async () => {
@@ -86,6 +86,6 @@ describe("startup source", () => {
       },
     });
     await createStartup(d)();
-    expect(s().designStartedAt).toBeNull();
+    expect(useView.getState().designStartedAt).toBeNull();
   });
 });

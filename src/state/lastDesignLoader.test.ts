@@ -34,7 +34,7 @@ describe("reopening the last crate", () => {
 
   it("reopens a catalog crate with its rules, layout, tab and ranking, and leaves the clock stopped", async () => {
     const saved = savedCatalogCrate();
-    s().startDesignClock(1000);
+    v().startDesignClock(1000);
     expect(await restoreLastDesign(saved, new IDBFactory())).toBe(true);
     expect(s().settings).toMatchObject({ quantity: 8, maxLayers: 2 });
     expect(s().result.design?.layout.key).toBe(saved.design.layoutKey);
@@ -42,12 +42,12 @@ describe("reopening the last crate", () => {
     expect(s().ranking).toBe("cost");
     expect(v().loadMessage).toBe("");
     // Not newly loaded: no clock, so an export records no "Designed in" time.
-    expect(s().designStartedAt).toBeNull();
-    s().markExported(5000);
-    expect(s().designedInMs).toBeNull();
+    expect(v().designStartedAt).toBeNull();
+    v().markExported(5000);
+    expect(v().designedInMs).toBeNull();
     // A new part starts it again.
     s().setPart(s().part);
-    expect(s().designStartedAt).not.toBeNull();
+    expect(v().designStartedAt).not.toBeNull();
   });
 
   it("applies nothing when a later load started while it was reading", async () => {
