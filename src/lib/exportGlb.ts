@@ -1,7 +1,7 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Scene, Vector3, type Object3D } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { ASSEMBLIES, type CrateDesign, type MemberKind } from "@/domain/crate";
 import { partFinish } from "@/domain/partDetails";
 import type { Vec3 } from "@/domain/schema";

@@ -31,7 +31,7 @@ import { planStructure } from "./structure";
  */
 
 // The crate's public types and entry points, importable from this one path.
-export { ASSEMBLIES } from "./members";
+export { ASSEMBLIES, ASSEMBLY_NAMES } from "./members";
 export type { Assembly, Face, Member, MemberKind } from "./members";
 export type { BomLine, ScrewLine } from "./bom";
 export { screwSchedule } from "./bom";

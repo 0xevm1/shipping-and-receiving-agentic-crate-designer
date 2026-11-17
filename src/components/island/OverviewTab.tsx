@@ -2,7 +2,7 @@
 
 import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import type { DesignField } from "@/domain/diff";
-import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { countKind } from "@/domain/members";
 import { cautionVerdict, layoutName, usd } from "@/lib/format";
 import { plywoodLabel, sectionLabel } from "@/lib/lumber";

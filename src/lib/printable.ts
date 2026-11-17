@@ -14,7 +14,7 @@
  * Text follows the selected units: imperial by default, with fractional inches, nominal
  * lumber names and lb; metric when chosen. Formatted with the same helpers as the UI and CSV.
  */
-import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { longAxis } from "@/domain/cradles";
 import type { BomLine, Check, CrateDesign, Member, ScrewLine } from "@/domain/crate";
 import { screwSchedule } from "@/domain/crate";
