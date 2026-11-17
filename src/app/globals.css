@@ -1,3 +1,6 @@
+/* Cascade layers, lowest first: Tailwind's reset (theme, base), our base rules (`base`), the shared UI
+   primitives (`ui`, in ui.css). Unlayered CSS, the component modules, beats every layer. */
+@layer theme, base, ui, components, utilities;
 @import "tailwindcss";
 
 /*
@@ -72,109 +75,34 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
-button,
-input,
-select {
-  font: inherit;
-  color: inherit;
-}
-button {
-  cursor: pointer;
-}
-/* Number fields have their own steppers (or none): hide the browser's spinners everywhere. */
-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  display: none;
-}
-/* A disabled button or link-button dims the same way wherever it sits. */
-.btn:disabled,
-.linkbtn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-:focus-visible {
-  outline: 2px solid var(--sky);
-  outline-offset: 2px;
-}
-.mono {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-.muted {
-  color: var(--muted);
+@layer base {
+  button,
+  input,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    cursor: pointer;
+  }
+  /* Number fields have their own steppers (or none): hide the browser's spinners everywhere. */
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    display: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--sky);
+    outline-offset: 2px;
+  }
 }
 
-/* ---- Glass ---- */
-.glass {
-  background: linear-gradient(165deg, rgba(112, 184, 253, 0.16), rgba(0, 26, 51, 0.42));
-  -webkit-backdrop-filter: blur(16px) saturate(170%);
-  backdrop-filter: blur(16px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
-    0 18px 44px rgba(0, 10, 24, 0.45);
-}
-.card {
-  border-radius: 30px;
-}
-.seg {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 5px;
-  border-radius: 999px;
-}
-.seg button {
-  border: 0;
-  background: none;
-  padding: 8px 16px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--soft);
-  white-space: nowrap;
-}
-.seg button:hover {
-  color: var(--text);
-}
-.seg button[aria-pressed="true"],
-.seg button[aria-selected="true"] {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.15);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 1px 3px rgba(0, 0, 0, 0.3);
-}
-.pillbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 18px;
-  font: 500 12.5px/1.2 var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  border-radius: 999px;
-}
-.pillbtn:hover {
-  border-color: rgba(255, 255, 255, 0.35);
-}
-.pillbtn.small {
-  padding: 8px 14px;
-  font-size: 11.5px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.07);
-  flex: none;
-}
-.pillbtn.small:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-.btn,
+/* The Layouts tab's "Show all" button (moves to LayoutsTab.module.css). */
 .more {
+  width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
   background: var(--glass-weak);
@@ -183,63 +111,8 @@ input[type="number"]::-webkit-outer-spin-button {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-.more {
-  width: 100%;
-}
-.btn:hover,
 .more:hover {
   background: rgba(255, 255, 255, 0.13);
-}
-.linkbtn {
-  border: 0;
-  background: none;
-  padding: 0;
-  color: var(--gold);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.iconbtn {
-  border: 0;
-  background: none;
-  padding: 6px;
-  border-radius: 12px;
-  color: var(--soft);
-  display: grid;
-  place-items: center;
-  filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.6));
-}
-.iconbtn:hover {
-  color: #fff;
-}
-.switch {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 40px;
-  height: 24px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.16);
-  position: relative;
-  margin: 0;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex: none;
-}
-.switch::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.15s;
-}
-.switch:checked {
-  background: var(--gold);
-}
-.switch:checked::after {
-  transform: translateX(16px);
 }
 
 /* ---- Shell ---- */
@@ -895,11 +768,6 @@ h1.brand {
 .panel h2 {
   margin: 0 0 14px;
 }
-.panel p.lede {
-  margin: -6px 0 14px;
-  color: var(--muted);
-  font-size: 13px;
-}
 .panel h3 {
   font: 400 14px/1.3 var(--sans);
   color: var(--soft);
@@ -921,18 +789,6 @@ h1.brand {
   color: var(--muted);
   margin-left: 8px;
   letter-spacing: 0;
-}
-.line {
-  font-size: 14px;
-  color: var(--soft);
-  margin-top: 3px;
-}
-.line .mono {
-  color: var(--text);
-  font-size: 13.5px;
-}
-.line .mono.muted {
-  color: var(--muted);
 }
 /* The checks' verdict under the outside size: green when clear, a link to Checks when not. */
 .verdict {
@@ -1188,10 +1044,9 @@ h1.brand {
   letter-spacing: 0.04em;
   border-bottom: 1px solid rgba(255, 255, 255, 0.25);
 }
-.eyebrow-label,
 .tagline,
 .cut .grp td {
-  /* The small wide gold caps that head a group. Each user sets its own size and tracking. */
+  /* To be replaced by the `eyebrow-label` primitive in each component's module. */
   font-stretch: 125%;
   text-transform: uppercase;
   color: var(--gold);
@@ -1215,15 +1070,8 @@ h1.brand {
   background: rgba(255, 255, 255, 0.18);
   color: var(--text);
 }
-/* Times like "2 h 59 m": a monospace space is as wide as a digit, so pull the words together. */
-.tight {
-  word-spacing: -0.3em;
-}
 .rule .changenote {
   grid-column: 1 / -1;
-}
-.actions.spaced {
-  margin-top: 16px;
 }
 .cut .row td {
   padding: 6px;
@@ -1242,13 +1090,6 @@ h1.brand {
 .cut th:last-child {
   padding-right: 4px;
 }
-.nw {
-  white-space: nowrap;
-}
-/* Nominal lumber names ("4x4") keep a plain x: Inter's contextual alternates would draw ×. Real sizes use the × character. */
-.nominal {
-  font-feature-settings: "calt" 0;
-}
 @media (max-width: 430px) {
   /* Phones: "gross 304 lb" so the material, mass and gross share one line. */
   .crate-word {
@@ -1259,36 +1100,12 @@ h1.brand {
     clip-path: inset(50%);
   }
 }
-/* Visually hidden, still read by screen readers. */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
 .cut .row td:nth-child(2) {
   color: var(--muted);
   font-size: 12.5px;
 }
 .cut .row td:first-child .pick {
   white-space: nowrap;
-}
-/* Mouse wording by default, touch wording where there is no hover. */
-.hint-touch {
-  display: none;
-}
-@media (hover: none), (pointer: coarse) {
-  .hint-mouse {
-    display: none;
-  }
-  .hint-touch {
-    display: inline;
-  }
 }
 .cut .row:hover td,
 .cut .row.hl td {
@@ -1312,16 +1129,6 @@ h1.brand {
   display: block;
   font: 400 16px/1.3 var(--mono);
   color: var(--text);
-}
-.actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.actions .status {
-  font-size: 12.5px;
-  color: var(--muted);
 }
 
 /* Rules */
@@ -1426,19 +1233,6 @@ h1.brand {
   }
   .island {
     width: 420px;
-  }
-}
-
-/* The View popover's gesture hint, for a mouse or a touch screen. */
-.hint-touch {
-  display: none;
-}
-@media (pointer: coarse) {
-  .hint-mouse {
-    display: none;
-  }
-  .hint-touch {
-    display: inline;
   }
 }
 
@@ -1773,8 +1567,6 @@ h1.brand {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .switch,
-  .switch::after,
   .tl,
   .island,
   .drawer-open .island,
