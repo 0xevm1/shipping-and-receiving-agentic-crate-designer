@@ -359,6 +359,8 @@ bump `ENGINE_REVISION`.
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab; its inputs render only while the section is open (`ShopStandards.module.css`) |
 | `src/components/island/standardsFields.ts` | The typed table of editable standards (`StandardPath` is every numeric path in `ShopStandards`, so a typo fails to compile), `readStandard`, `standardPatch`; `standardsFields.test.ts` checks every path resolves and no hint carries ticket numbers |
 | `src/lib/fileNames.ts` | File names of the cut list CSV and the design file |
+| `src/lib/events.ts` | Live event types (#46 §3), shared by server and browser: `CRATE_EVENT_TYPES`, payload schemas (`parseEventPayload`, 4 KB cap), the NOTIFY payload and the SSE message (`JobEventMessageSchema`); `CRATE_EVENTS_CHANNEL` |
+| `src/lib/jobEvents.ts` | `subscribeJobEvents(jobId, onEvent)`: EventSource on `/api/v1/events` that resumes from the last id and delivers each event once |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
@@ -2337,7 +2339,10 @@ Docker, reached only from the server through `src/server/db/` (drizzle on postgr
 and generated files in S3-compatible blob storage. Slice 1 is in: the compose file, migrations
 in `db/migrations/`, the first tables (`org`, `part`, `part_model`, `design_job`,
 `configuration`, `artifact`, `event`, `shop_standard`, `idempotency_key`), each scoped by
-`org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Nothing
+`org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Slice 2
+adds live events: an `event` row written in the same transaction as the change NOTIFYs channel
+`crate_events`, one LISTEN connection per process fans out to `GET /api/v1/events?job=…` (SSE,
+resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Nothing
 in the UI reads or writes it yet: the browser storage above stays the source until the jobs API
 lands. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
 through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The

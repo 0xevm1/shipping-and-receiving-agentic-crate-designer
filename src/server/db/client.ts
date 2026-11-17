@@ -11,15 +11,16 @@ import postgres from "postgres";
 import { databaseUrl } from "./config";
 import { createRepository, type Database, type Repository } from "./repository";
 import * as schema from "./schema";
+import { createSystemQueries, type SystemQueries } from "./system";
 
-type Pool = { sql: postgres.Sql; db: Database; repo: Repository };
+type Pool = { sql: postgres.Sql; db: Database; repo: Repository; system: SystemQueries };
 const holder = globalThis as typeof globalThis & { __crateDesignerDb?: Pool };
 
 function pool(): Pool {
   if (!holder.__crateDesignerDb) {
     const sql = postgres(databaseUrl(), { max: Number(process.env.DB_POOL_MAX) || 10 });
     const db = drizzle({ client: sql, schema });
-    holder.__crateDesignerDb = { sql, db, repo: createRepository(db) };
+    holder.__crateDesignerDb = { sql, db, repo: createRepository(db), system: createSystemQueries(db) };
   }
   return holder.__crateDesignerDb;
 }
@@ -29,6 +30,9 @@ export const getDb = (): Database => pool().db;
 
 /** The org-scoped repository on the shared pool. */
 export const getRepository = (): Repository => pool().repo;
+
+/** Org-agnostic server queries (health ping, NOTIFY queue usage) on the shared pool. */
+export const getSystemQueries = (): SystemQueries => pool().system;
 
 /** Closes the pool (tests, graceful shutdown). */
 export async function closeDb(): Promise<void> {
