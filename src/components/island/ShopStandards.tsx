@@ -92,6 +92,13 @@ const GROUPS: Group[] = [
       { path: ["limits", "cardboard", "boxDimSumMm"], label: "Carton: L + W + H up to", unit: "mm" },
       { path: ["limits", "stackKg"], label: "Stack load per part", unit: "kg" },
       { path: ["limits", "baseRatingKg"], label: "Base rating", unit: "kg" },
+      {
+        path: ["limits", "perCrate", "maxGrossKg"],
+        label: "Max gross per crate",
+        unit: "kg",
+        hint: "A heavier batch is split across crates. Each crate also has to fit the trailer door and floor above.",
+      },
+      { path: ["limits", "perCrate", "maxParts"], label: "Max parts per crate", unit: "", step: 1, hint: "0 means no limit." },
       { path: ["limits", "stableHeightRatio"], label: "Stable height ratio", unit: "×", step: 0.1 },
       { path: ["limits", "lowUtilization"], label: "Mostly empty below", unit: "%", scale: 100 },
     ],

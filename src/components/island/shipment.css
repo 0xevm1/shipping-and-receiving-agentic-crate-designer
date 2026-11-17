@@ -1,0 +1,77 @@
+/*
+ * Shipment planning (#25): the "Ships as …" block at the top of the Overview and the crate
+ * type picker shared by the Overview, Layouts, Cut list and Checks. A plain stylesheet with
+ * `ship-` names, like shopStandards.css (the Tailwind turbopack rule drops module class names).
+ */
+
+.ship {
+  margin: 0 0 18px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.ship-eyebrow {
+  font: 600 11px/1.2 var(--wide, var(--sans));
+  font-stretch: 125%;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.ship-plan {
+  margin: 0;
+  font-size: 15px;
+  color: var(--soft);
+}
+.ship-plan b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ship-note {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ship-note.warn {
+  color: var(--gold);
+}
+
+.ship-each {
+  display: block;
+  margin-top: 3px;
+  font: 400 12.5px/1.2 var(--mono);
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.ship-seg {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 12px 0 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hair);
+}
+.ship .ship-seg {
+  margin-bottom: 0;
+}
+.ship-seg button {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 14px;
+}
+.ship-seg button small {
+  font: 400 11.5px/1.2 var(--mono);
+  color: var(--muted);
+}
+.ship-seg button[aria-pressed="true"] small {
+  color: var(--soft);
+}
+
+.cut-scope {
+  margin: 0 0 10px;
+}

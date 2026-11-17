@@ -3,6 +3,7 @@
 import type { CrateDesign } from "@/domain/crate";
 import { allChecks } from "@/state/checks";
 import { useDesigner } from "@/state/store";
+import { CrateTypePicker } from "./Shipment";
 
 /** Every rule of thumb, passed ones included, cautions first. */
 export function ChecksTab({ design }: { design: CrateDesign }) {
@@ -12,6 +13,7 @@ export function ChecksTab({ design }: { design: CrateDesign }) {
     <>
       <h2>Checks</h2>
       <p className="lede">Rules of thumb for a first pass. Heavy or unusual loads still need an engineering review.</p>
+      <CrateTypePicker />
       {allChecks(design.checks, part, measured).map((c) => (
         <div key={c.id} className={`check ${c.level}`}>
           <i />

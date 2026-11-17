@@ -39,6 +39,12 @@ export interface CrateSnapshot {
   units: string;
   panelsHidden: boolean;
   quantity: number;
+  /** The shipment plan's crate types (#25): one for a single crate. */
+  crateTypes: { label: string; count: number; quantity: number }[];
+  /** Index of the crate type on screen. */
+  crateIndex: number;
+  /** Parts in the crate on screen. */
+  crateParts: number | null;
   partId: string;
   massAssumed: boolean;
   /** Frames rendered since the scene mounted. */
@@ -86,6 +92,9 @@ function snapshot(): CrateSnapshot {
     units: s.units,
     panelsHidden: s.panelsHidden,
     quantity: s.settings.quantity,
+    crateTypes: s.plan.crates.map(({ label, count, quantity }) => ({ label, count, quantity })),
+    crateIndex: s.crateIndex,
+    crateParts: s.result.design?.layout.slots.length ?? null,
     partId: s.part.id,
     massAssumed: s.part.massAssumed,
     frames,

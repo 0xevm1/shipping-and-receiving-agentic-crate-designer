@@ -15,6 +15,7 @@ const PANELS: CrateSettings["panelThickness"][] = ["auto", 12, 15, 19];
 export function RulesTab({ design }: { design: CrateDesign }) {
   const settings = useDesigner((s) => s.settings);
   const suggested = useDesigner((s) => s.part.suggested_quantities);
+  const split = useDesigner((s) => s.plan.split);
   const units = useDesigner((s) => s.units);
   const standards = useDesigner((s) => s.standards);
   const minGap = standards.construction.minBlockingGapMm;
@@ -45,7 +46,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
             </button>
           ))}
         </div>
-        <small>One crate holds the whole batch.</small>
+        <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 
       <div className="rule">
