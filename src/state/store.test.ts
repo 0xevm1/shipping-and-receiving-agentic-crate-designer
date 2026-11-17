@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
+import type { PartProfile } from "@/domain/profile";
 import { catalogPart, useDesigner, type LoadedPart } from "./store";
 
 /** An unknown part as `loadPartFiles` builds it: stand-in mass, no material. */
@@ -128,5 +129,62 @@ describe("loadDesign (#28)", () => {
     expect(s().settings).toEqual(settings);
     expect(s().layoutKey).toBe(pick);
     expect(s().result.design?.layout.key).toBe(pick);
+  });
+});
+
+describe("setPartProfile (#16)", () => {
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    s().setPart(unknownPart);
+  });
+
+  /** The widget's profile: flat, except the −X face is set back 30 mm above half height. */
+  const profile = (): PartProfile => {
+    const face = (cols: number, rows: number, depth: (r: number) => number = () => 0) => ({
+      cols,
+      rows,
+      depth: Array.from({ length: cols * rows }, (_, i) => depth(Math.floor(i / cols))),
+    });
+    return {
+      version: 1,
+      sizeMm: [300, 200, 100],
+      cellMm: 5,
+      faces: {
+        "-x": face(40, 20, (r) => (r >= 10 ? 30 : 0)),
+        "+x": face(40, 20),
+        "-y": face(60, 20),
+        "+y": face(60, 20),
+        "-z": face(60, 40),
+        "+z": face(60, 40),
+      },
+    };
+  };
+
+  it("shapes the blocking and keeps the layout pick and the camera", () => {
+    const keys = s().result.layouts.map((l) => l.key);
+    s().setLayoutKey(keys[keys.length - 1]);
+    const fit = s().fit.nonce;
+    expect(s().result.design!.shapedBlocking).toBeUndefined();
+
+    s().setPartProfile("blob:widget", profile());
+    expect(s().part.profile).toBeDefined();
+    expect(s().result.design!.shapedBlocking).toBeDefined();
+    expect(s().layoutKey).toBe(keys[keys.length - 1]);
+    expect(s().fit.nonce).toBe(fit);
+  });
+
+  it("ignores a profile for a model that is no longer loaded, or a failed analysis", () => {
+    s().setPartProfile("blob:other", profile());
+    s().setPartProfile("blob:widget", null);
+    expect(s().part.profile).toBeUndefined();
+    expect(s().result.design!.shapedBlocking).toBeUndefined();
+  });
+
+  it("keeps the profile through a mass edit, and drops it with a new part", () => {
+    s().setPartProfile("blob:widget", profile());
+    s().setPartDetails({ name: "Housing", mass_kg: 12 });
+    expect(s().result.design!.shapedBlocking).toBeDefined();
+    s().setPart({ ...unknownPart, modelUrl: "blob:next" });
+    expect(s().result.design!.shapedBlocking).toBeUndefined();
   });
 });

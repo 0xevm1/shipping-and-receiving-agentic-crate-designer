@@ -217,6 +217,13 @@ tab at a time.
 - **Walls and lid:** plywood panels, each stiffened by a frame of 1×4 cleats.
 - **Inside:** wood holds the parts in place. Bearers lift the bottom layer, a plywood separator
   sits between layers, and blocking posts fill every gap.
+- **Shaped blocking (#16):** once a part's model is on screen, the app measures its outline from
+  each side (a depth grid per bounding-box face, about 5 ms). Posts then sit where the part is
+  solid, and shaped blocks reach into its recesses. For eight open-top housings (PART-003) the
+  blocking face touching the part goes from 10% to 63%, and the most a part can slide falls from
+  65 mm to 0, for 44 extra blocks. The Checks tab says "shaped to the part" with those numbers.
+  Slender parts lying flat sit in cradles instead (#6). Without the analysis, blocking follows
+  the bounding box as before. Spec §7.5b.
 - **Long parts sit in cradles** (#6, spec §7.5a): a slender part (longest side at least 3× its
   middle side, like the 1.53 m shaft) rests in notched wooden saddles across its length, one
   150 mm in from each end and at most 600 mm apart, with a round seat a quarter of the part's
@@ -265,7 +272,8 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 
 - **Packing uses bounding boxes.** Each part is treated as its axis-aligned bounding box. This is
   exact for boxy parts and wastes space on irregular ones, such as the open housing. There's no
-  nesting.
+  nesting. Blocking, though, is shaped to the part's measured outline once the model has been
+  analysed (#16).
 - **Units:** a domestic US shop floor, so the app opens in inches and pounds and names stock the
   way a crew does. Metric is one toggle away. The shop standards are still entered in mm and kg.
 - **Lumber sizes** are nominal US sizes, with actual dimensions in mm:
@@ -328,8 +336,8 @@ All of these live in one zod-validated object, `ShopStandards` (`src/domain/stan
 
 ```
 src/domain/        pure TypeScript, no React; all crate logic, unit-tested
-src/lib/           display units, cut-list formatting, part-file loading, the export document,
-                   the Export pill's .zip and PDF (tested)
+src/lib/           display units, cut-list formatting, part-file loading, part analysis for
+                   shaped blocking, the export document, the Export pill's .zip and PDF (tested)
 src/state/         zustand store; per-frame animation values; checks for the UI
 src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
 src/data/          parts.json catalog

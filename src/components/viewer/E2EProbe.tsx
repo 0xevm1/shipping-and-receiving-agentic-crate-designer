@@ -15,6 +15,7 @@ import { useFrame, useThree, type RootState } from "@react-three/fiber";
 import { useEffect } from "react";
 import { Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { lastProfileMs } from "@/lib/partProfile";
 import { anim, autoplay, isIdle, pulse } from "@/state/motion";
 import { currentMode, useDesigner } from "@/state/store";
 import { handlingMarks } from "./HandlingMarks";
@@ -59,6 +60,10 @@ export interface CrateSnapshot {
   pulses: number;
   /** Photons on screen in the last frame (#65). */
   photonsActive: number;
+  /** The design's blocking is shaped to a measured part profile (#16). */
+  shapedBlocking: boolean;
+  /** Milliseconds the last part analysis took in this page (#16); null before any. */
+  profileMs: number | null;
   /**
    * Centre of gravity (#8): the design's, crate-interior mm, and what the 3D view draws (`marker`
    * is the CoG mark's position, null while hidden; `arrows` the fork-entry arrows on screen).
@@ -117,6 +122,8 @@ function snapshot(): CrateSnapshot {
     frames,
     pulses: pulse.fired,
     photonsActive: pulse.active,
+    shapedBlocking: !!s.result.design?.shapedBlocking,
+    profileMs: lastProfileMs,
     cog: s.result.design
       ? {
           mm: [...s.result.design.centerOfGravityMm],
