@@ -36,7 +36,6 @@ export const PartsCatalogSchema = z.object({
   metadata_note: z.string().optional(),
   parts: z.array(PartSchema).min(1),
 });
-export type PartsCatalog = z.infer<typeof PartsCatalogSchema>;
 
 /**
  * The minimum a crate design needs to know about a part. Catalog parts satisfy
@@ -45,7 +44,7 @@ export type PartsCatalog = z.infer<typeof PartsCatalogSchema>;
  */
 export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm"> & {
   material?: string;
-  /** The measured outline (#16, spec §7.5b). Absent until the model is analysed: blocking then follows the bounding box. */
+  /** The measured outline (spec §7.5b). Absent until the model is analysed: blocking then follows the bounding box. */
   profile?: PartProfile;
 };
 
@@ -90,7 +89,7 @@ export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateS
   return CrateSettingsSchema.parse(next);
 }
 
-export type NumericSetting = (typeof NUMERIC_SETTINGS)[number];
+type NumericSetting = (typeof NUMERIC_SETTINGS)[number];
 
 /** A typed number that `normalizeSettings` did not take as given, so the UI can say why. */
 export interface SettingsAdjustment {

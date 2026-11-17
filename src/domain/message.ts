@@ -1,8 +1,8 @@
 /**
- * Check messages with their numbers kept as data (#62, spec §7.16).
+ * Check messages with their numbers kept as data (spec §7.16).
  *
- * The domain is unit-free (mm and kg). A check used to bake "2,489 mm" into its sentence, which
- * the units toggle then could not reach. A `Message` is the sentence as parts: plain text and
+ * The domain is unit-free (mm and kg), so a check cannot bake "2,489 mm" into its sentence: the
+ * units toggle could not reach it. A `Message` is the sentence as parts: plain text and
  * typed quantities. `renderMessage` in `src/lib/message.ts` turns it into a string for a
  * `Units` value at the edge (Checks tab, print spec, PDF, export text). Pure.
  */

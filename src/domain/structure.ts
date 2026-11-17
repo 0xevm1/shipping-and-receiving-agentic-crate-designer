@@ -1,7 +1,7 @@
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * Structural sizing (#7, spec §7.15): how many skids, of which section, whether the floor
+ * Structural sizing (spec §7.15): how many skids, of which section, whether the floor
  * needs joists, and how the lid is framed, from the load and the spans.
  *
  * Simple, conservative timber rules, in N and mm (so stresses are MPa = N/mm²). `f` is
@@ -41,7 +41,7 @@ export interface LaidSection {
   tall: number;
 }
 
-export type MemberCheckId =
+type MemberCheckId =
   | "skid-bending"
   | "skid-shear"
   | "skid-bearing"
@@ -53,7 +53,7 @@ export type MemberCheckId =
   | "lid-panel-bending";
 
 /** One structural check. */
-export interface MemberCheck {
+interface MemberCheck {
   id: MemberCheckId;
   /** "skid bending", for messages. */
   label: string;
@@ -64,7 +64,7 @@ export interface MemberCheck {
 }
 
 /** The dead weight above the skids, kg: all of it (on the skids) and the part inside (on the floor). */
-export interface DeadLoad {
+interface DeadLoad {
   allKg: number;
   contentsKg: number;
 }
@@ -83,7 +83,7 @@ export interface BaseInput {
   standards?: ShopStandards;
 }
 
-export interface BasePlan {
+interface BasePlan {
   skid: LaidSection;
   skidCount: number;
   /** Floor joists across the skids, or null. `wide` is along the crate (X), `tall` vertical. */
@@ -242,7 +242,7 @@ export function sizeBase(input: BaseInput): BasePlan {
   return plan(skids[skids.length - 1], nMax, true);
 }
 
-export interface LidInput {
+interface LidInput {
   /** Lid panel length (X) and width (Y), mm. */
   lidL: number;
   lidW: number;
@@ -252,7 +252,7 @@ export interface LidInput {
   standards?: ShopStandards;
 }
 
-export interface LidPlan {
+interface LidPlan {
   /** Section of the lid edge and cross members as laid: `wide` along X, `tall` vertical. */
   member: LaidSection;
   /** Cross members (the two edge members are extra). */
@@ -269,7 +269,7 @@ export interface LidPlan {
 }
 
 /** Lid checks for cross members `member` at pitch `p` across `lidW`, plywood `t` between them. */
-export function lidChecks(member: LaidSection, p: number, lidL: number, lidW: number, t: number, standards: ShopStandards = DEFAULT_STANDARDS): MemberCheck[] {
+function lidChecks(member: LaidSection, p: number, lidL: number, lidW: number, t: number, standards: ShopStandards = DEFAULT_STANDARDS): MemberCheck[] {
   const s = standards.structure;
   const area = lidL * lidW;
   const { wide: b, tall: h } = member;
@@ -281,7 +281,7 @@ export function lidChecks(member: LaidSection, p: number, lidL: number, lidW: nu
 
 /**
  * Sizes the lid. With `structure.lidStackKg` 0 (the default: crates aren't stacked) it is the
- * nominal frame, as before #7: cleats laid flat at `nominalCount`. Otherwise it tries flat
+ * nominal frame: cleats laid flat at `nominalCount`. Otherwise it tries flat
  * cleats down to half the nominal spacing, then joist stock on edge from the nominal count up
  * (keeping a member's width clear between members) until the members and the plywood between
  * them carry the stacked load.
@@ -316,7 +316,7 @@ export function frameCount(span: number, standards: ShopStandards = DEFAULT_STAN
 }
 
 /** What `planStructure` needs from a layout: its interior and grid, before the crate is drawn. */
-export interface StructureGrid {
+interface StructureGrid {
   interior: [number, number, number];
   cellSize: [number, number, number];
   counts: [number, number, number];
@@ -343,13 +343,19 @@ export interface StructurePlan {
   ratedPayloadKg: number;
 }
 
+/** Blocking posts the estimate allows each part: one on each of its four vertical sides. */
+const POSTS_PER_PART = 4;
+/** Bearers the estimate allows each part in the bottom layer: the two strips `addDunnage` lays under it. */
+const BEARERS_PER_PART = 2;
+
 /**
  * Upper bound on the crate's weight above the skids, from the layout alone, so the packer and
  * `designCrate` size the same base: plywood (floor, walls, lid, separators) and the wall and lid
- * framing exactly, and the dunnage as if every part had four full-height posts as thick as the
- * widest gap, and two bearers. `contentsKg` is the separators and dunnage, which load the floor.
+ * framing exactly, and the dunnage as if every part had `POSTS_PER_PART` full-height posts as
+ * thick as the widest gap and `BEARERS_PER_PART` bearers. `contentsKg` is the separators and
+ * dunnage, which load the floor.
  */
-export function estimateDeadLoad(
+function estimateDeadLoad(
   grid: StructureGrid,
   m: StructureMaterials,
   lid: LidPlan,
@@ -370,13 +376,15 @@ export function estimateDeadLoad(
   const wallFrame = (2 * (2 * (L + 2 * t) + frameCount(L + 2 * t, standards) * upright) + 2 * (2 * extW + frameCount(extW, standards) * upright)) * ct * cw;
   const lidFrame = (2 * (L + 2 * t) + lid.count * (W + 2 * t)) * lid.member.wide * lid.member.tall;
   const bw = standards.stock.blockWidthMm;
-  const dunnage = nx * ny * nz * (4 * bw * Math.max(partGapMm, clearX, clearY) * (clearZ + c + partGapMm) + 2 * a * bw * clearZ);
+  const postMm3 = bw * Math.max(partGapMm, clearX, clearY) * (clearZ + c + partGapMm);
+  const bearerMm3 = a * bw * clearZ;
+  const dunnage = nx * ny * nz * (POSTS_PER_PART * postMm3 + BEARERS_PER_PART * bearerMm3);
   const separators = (nz - 1) * L * W * t;
   const contentsKg = (separators * rho.plywood + dunnage * rho.lumber) / 1e9;
   return { allKg: contentsKg + (shellPly * rho.plywood + (wallFrame + lidFrame) * rho.lumber) / 1e9, contentsKg };
 }
 
-/** Sizes the base and lid for a layout (#7). Pure; the packer and `designCrate` both call it. */
+/** Sizes the base and lid for a layout. Pure; the packer and `designCrate` both call it. */
 export function planStructure(
   grid: StructureGrid,
   m: StructureMaterials,

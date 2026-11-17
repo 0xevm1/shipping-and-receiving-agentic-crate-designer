@@ -1,9 +1,10 @@
-import type { BomLine } from "./crate";
+import type { BomLine } from "./bom";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
+import { IN3_PER_FT3, LB_PER_KG, MM_PER_IN } from "./units";
 
 /**
- * What a crate costs to build and what it looks like to a freight booker (#17, spec §7.12).
+ * What a crate costs to build and what it looks like to a freight booker (spec §7.12).
  *
  * - **Labour:** build time from the cut list and the screw count, at the shop's minutes per
  *   step (`standards.labour`), times the labour rate.
@@ -15,12 +16,8 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  * Pure: everything is computed from the design's cut list, screws and outside size.
  */
 
-const LB_PER_KG = 2.20462;
-const MM_PER_IN = 25.4;
-const IN3_PER_FT3 = 1728;
-
-/** Assembly steps that don't depend on the layout: the base, four walls and the lid. */
-export const FIXED_ASSEMBLY_STEPS = 6;
+/** Assembly steps that don't depend on the layout: one for the base, one per wall (four) and one for the lid. */
+export const FIXED_ASSEMBLY_STEPS = 1 + 4 + 1;
 
 export interface LabourEstimate {
   /** What was counted. */
@@ -43,7 +40,7 @@ export interface LabourEstimate {
 
 /** Build time and labour cost for one crate. */
 export function estimateLabour(
-  bom: readonly (Pick<BomLine, "material" | "stock" | "cut" | "qty"> & Partial<Pick<BomLine, "notches">>)[],
+  bom: readonly Pick<BomLine, "material" | "stock" | "cut" | "qty" | "notches">[],
   screws: number,
   layers: number,
   standards: ShopStandards = DEFAULT_STANDARDS,
@@ -54,7 +51,7 @@ export function estimateLabour(
   const sizes = new Set<string>();
   for (const line of bom) {
     if (line.material === "plywood") plywoodCuts += line.qty;
-    else lumberCuts += line.qty * (1 + (line.notches ?? 0)); // each cradle notch is one more cut (#6)
+    else lumberCuts += line.qty * (1 + (line.notches ?? 0)); // each cradle notch is one more cut
     sizes.add(`${line.material}|${line.stock}|${line.cut}`);
   }
   const steps = FIXED_ASSEMBLY_STEPS + layers;

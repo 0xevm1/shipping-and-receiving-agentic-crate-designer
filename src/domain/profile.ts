@@ -1,9 +1,9 @@
-import type { Orientation } from "./orientations";
+import { rotationMatrix, type Mat3 } from "./orientations";
 import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 
 /**
- * Shaped blocking (#16, spec §7.5b): blocking that touches the part's real surfaces instead of
+ * Shaped blocking (spec §7.5b): blocking that touches the part's real surfaces instead of
  * its bounding box.
  *
  * The browser measures a **part profile** once per model (`src/lib/partProfile.ts`): for each of
@@ -46,24 +46,24 @@ export interface PartProfile {
 }
 
 /** Blocking within this of the surface counts as touching it. */
-export const CONTACT_TOLERANCE_MM = 2;
+const CONTACT_TOLERANCE_MM = 2;
 /** A recess shallower than this gets no shaped block: the post is close enough (a 1/4″ shim). */
-export const MIN_SHAPED_BLOCK_DEPTH_MM = 6;
+const MIN_SHAPED_BLOCK_DEPTH_MM = 6;
 /**
  * A recess deeper than this gets no shaped block: a longer block would be a cantilever reaching
  * into the part (over a low wall into an open top, say), not blocking.
  */
 export const MAX_SHAPED_BLOCK_DEPTH_MM = 100;
 /** Heights whose recess depths are within this of each other share one shaped block. */
-export const SHAPED_BAND_TOLERANCE_MM = 10;
+const SHAPED_BAND_TOLERANCE_MM = 10;
 /** Shaped blocks shorter than this (in height) are not worth cutting and are left out. */
-export const MIN_SHAPED_BLOCK_HEIGHT_MM = 19;
+const MIN_SHAPED_BLOCK_HEIGHT_MM = 19;
 /** A profile measured on a model this far (per axis) from the part's size is not used. */
-export const PROFILE_SIZE_TOLERANCE_MM = 1;
+const PROFILE_SIZE_TOLERANCE_MM = 1;
 
 /**
  * The profile to shape blocking with, or null: none measured, or measured on another size.
- * Layouts that use cradles (`usesCradles`, #6) have no blocking posts, so `designCrate` doesn't ask.
+ * Layouts that use cradles (`usesCradles`) have no blocking posts, so `designCrate` doesn't ask.
  */
 export function usableProfile(part: { dimensions_mm: Vec3; profile?: PartProfile | null }): PartProfile | null {
   const p = part.profile;
@@ -74,20 +74,6 @@ export function usableProfile(part: { dimensions_mm: Vec3; profile?: PartProfile
 
 // ---------------------------------------------------------------------------------------------
 // Rotating the profile into the crate
-
-type Mat3 = [[number, number, number], [number, number, number], [number, number, number]];
-
-/** The orientation as an integer rotation matrix (XYZ Euler, as three.js: R = Rx · Ry · Rz). */
-export function rotationMatrix(o: Pick<Orientation, "euler">): Mat3 {
-  const [a, b, c] = o.euler;
-  const r = (v: number) => Math.round(v);
-  const [ca, sa, cb, sb, cc, sc] = [r(Math.cos(a)), r(Math.sin(a)), r(Math.cos(b)), r(Math.sin(b)), r(Math.cos(c)), r(Math.sin(c))];
-  return [
-    [cb * cc, -cb * sc, sb],
-    [ca * sc + sa * sb * cc, ca * cc - sa * sb * sc, -sa * cb],
-    [sa * sc - ca * sb * cc, sa * cc + ca * sb * sc, ca * cb],
-  ];
-}
 
 /** Rᵀ · v: a crate-frame vector in the part's frame. */
 function toPart(m: Mat3, v: Vec3): Vec3 {
@@ -105,7 +91,7 @@ export interface Side {
  * columns along the side's horizontal axis, rows up the part's height, both from the slot's min
  * corner. `depth` is NaN where there is no material.
  */
-export interface SideGrid {
+interface SideGrid {
   cols: number;
   rows: number;
   /** Cell size along the side and up. */
@@ -172,7 +158,7 @@ function makeSideGrid(profile: PartProfile, layout: Pick<Layout, "orientation" |
 // Placing posts and shaped blocks
 
 /** A shaped block on one part face: heights from the part's bottom, and how far it reaches in. */
-export interface Band {
+interface Band {
   z0: number;
   z1: number;
   depth: number;
@@ -183,17 +169,17 @@ export interface Band {
  * shaped blocks it carries: `fillLow` on the face of the part on its low side (that part's +
  * face), `fillHigh` on the part on its high side (that part's − face).
  */
-export interface PostPlan {
+interface PostPlan {
   offset: number;
   fillLow: Band[];
   fillHigh: Band[];
 }
 
 /** Post plans per horizontal axis: at the low wall, at the high wall, and between two parts. */
-export interface ShapedBlocking {
+interface ShapedBlocking {
   axes: [AxisPlans, AxisPlans];
 }
-export interface AxisPlans {
+interface AxisPlans {
   wallLow: PostPlan;
   wallHigh: PostPlan;
   between: PostPlan;
@@ -318,7 +304,7 @@ function coveredCols(g: SideGrid, offset: number, w: number): [number, number] {
  * outside `MIN_SHAPED_BLOCK_DEPTH_MM`…`MAX_SHAPED_BLOCK_DEPTH_MM` deep, or under
  * `MIN_SHAPED_BLOCK_HEIGHT_MM` tall, get no block.
  */
-export function bands(g: SideGrid, offset: number, w: number): Band[] {
+function bands(g: SideGrid, offset: number, w: number): Band[] {
   const [c0, c1] = overlapCols(g, offset, w);
   const rowDepth: number[] = [];
   for (let r = 0; r < g.rows; r++) {

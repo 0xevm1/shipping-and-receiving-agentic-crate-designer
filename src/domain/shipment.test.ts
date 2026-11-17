@@ -1,19 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { catalog, getPart } from "./catalog";
-import { computeDesign, DEFAULT_SETTINGS } from "./design";
+import { computeDesign } from "./design";
 import { shipmentToCsv } from "./export";
 import { describeShipment, planShipment, shipmentBom, withinOutsideLimits, type ShipmentPlan } from "./shipment";
-import type { CrateSettings, DesignPart } from "./schema";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
+import type { DesignPart } from "./schema";
+import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
+import { custom, settings } from "./testFixtures";
 
-const settings = (patch: Partial<CrateSettings> = {}): CrateSettings => ({ ...DEFAULT_SETTINGS, ...patch });
 
-function custom(patch: DeepPartial<ShopStandards>): ShopStandards {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-}
 
 /** Every crate in the plan respects the per-crate limits. */
 function expectWithinLimits(plan: ShipmentPlan, standards: ShopStandards = DEFAULT_STANDARDS) {
