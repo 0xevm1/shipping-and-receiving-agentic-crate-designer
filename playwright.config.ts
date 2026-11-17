@@ -6,8 +6,10 @@ import { defineConfig, devices } from "@playwright/test";
  * port 3320. Specs live in `e2e/`; screenshots go to `e2e/screenshots/` (git-ignored).
  *
  * Set `E2E_SKIP_BUILD=1` to serve an existing e2e build instead (CI builds in its own step).
+ * Set `E2E_PORT` to use another port. Parallel worktrees need distinct ports, because a local run
+ * reuses whatever server is already listening and would otherwise test another branch's build.
  */
-const PORT = 3320;
+const PORT = Number(process.env.E2E_PORT) || 3320;
 const baseURL = `http://localhost:${PORT}`;
 
 /** SwiftShader gives headless Chromium a software WebGL, so the 3D canvas really renders. */
