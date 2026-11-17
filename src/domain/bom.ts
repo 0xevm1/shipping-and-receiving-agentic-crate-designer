@@ -1,5 +1,5 @@
 import { SCREWS_PER_CRADLE } from "./cradles";
-import { sortDesc, type Assembly, type Member, type MemberKind, type WoodMaterial } from "./members";
+import { sortDesc, type Assembly, type Member, type MemberKind, type MemberVariant, type WoodMaterial } from "./members";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
@@ -9,7 +9,12 @@ export interface BomLine {
   /** Unique per line; equals `bomKey` on its members. */
   key: string;
   assembly: Assembly;
+  /** The piece as the cut list shows it: `name`, plus a letter when the crate has several sizes of it. */
   label: string;
+  /** The boards' own piece name ("Shaped block"), as `Member.label` has it. */
+  name: string;
+  /** Set when the boards are a `MemberVariant`; only those pieces are lettered apart. */
+  variant?: MemberVariant;
   kind: MemberKind;
   material: WoodMaterial;
   /** e.g. "19 × 89" lumber section or "12 mm" plywood. */
@@ -42,11 +47,34 @@ export function buildBom(members: Member[]): BomLine[] {
     const line = lines.get(key);
     if (line) line.qty++;
     else {
-      const { assembly, label, kind, material } = m;
-      lines.set(key, { key, assembly, label, kind, material, stock, cut, stockMm, cutMm, qty: 1, ...(notches && { notches }) });
+      const { assembly, label, kind, material, variant } = m;
+      lines.set(key, { key, assembly, label, name: label, ...(variant && { variant }), kind, material, stock, cut, stockMm, cutMm, qty: 1, ...(notches && { notches }) });
     }
   }
-  return [...lines.values()];
+  return tellApart([...lines.values()]);
+}
+
+/**
+ * Lines of a variant piece that share an assembly and a name but differ in size (shaped blocks are
+ * cut to the part's outline, so a crate can have several sizes of "Shaped block") get a letter,
+ * largest cut first, so a cut list never has two rows that read the same. Ordinary pieces keep
+ * their name: their sizes are told apart by the stock and cut columns. Only the line's `label` changes: its
+ * key, its `name` and its boards' own `label` (what `variant` and the checks go by) stay as they
+ * were. Also used on a shipment's merged lines, where the sizes of every crate type are together.
+ */
+export function tellApart(lines: BomLine[]): BomLine[] {
+  const groups = Map.groupBy(lines, (l) => `${l.assembly}|${l.name}`);
+  for (const group of groups.values()) {
+    if (group.length < 2 || !group[0].variant) {
+      group[0].label = group[0].name;
+      continue;
+    }
+    const bySize = [...group].sort((p, q) => q.cutMm[0] - p.cutMm[0] || q.stockMm[0] - p.stockMm[0] || (p.key < q.key ? -1 : 1));
+    bySize.forEach((l, i) => {
+      l.label = `${l.name} ${i < 26 ? String.fromCharCode(65 + i) : i + 1}`;
+    });
+  }
+  return lines;
 }
 
 /** One line of the fastener schedule: where the screws go, how they are spaced, how many. */
