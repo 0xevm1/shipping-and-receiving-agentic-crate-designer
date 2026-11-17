@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { parts } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { serializeDesign } from "@/domain/designFile";
-import { catalogPart, type LoadedPart } from "@/state/store";
-import { designFilePart, glbProblem, loadPartFiles, nameFromFile, partsFromJson } from "./loadPart";
+import { catalogPart, useDesigner, type LoadedPart } from "@/state/store";
+import { designFilePart, glbProblem, idFromFile, loadPartFiles, nameFromFile, partsFromJson } from "./loadPart";
 
 const sample = (name: string) => {
   const b = readFileSync(`public/parts/${name}`);
@@ -44,6 +44,26 @@ describe("file helpers", () => {
   it("names a part from its file", () => {
     expect(nameFromFile("PART-004-cast-iron-cover.glb")).toBe("Cast iron cover");
     expect(nameFromFile("widget_v2.glb")).toBe("Widget v2");
+  });
+
+  it("never gives a part an empty id or name, even from a file called only .glb", () => {
+    expect(idFromFile(".glb")).toBe("part");
+    expect(nameFromFile(".glb")).toBe("Part");
+    expect(idFromFile("widget_v2.GLB")).toBe("widget_v2");
+    const file = serializeDesign({
+      app: APP,
+      part: { ...designFilePart(useDesigner.getState().part), source: "custom", id: idFromFile(".glb"), name: nameFromFile(".glb"), model: ".glb" },
+      settings: DEFAULT_SETTINGS,
+      layoutKey: computeDesign(useDesigner.getState().part, DEFAULT_SETTINGS).design!.layout.key,
+      design: computeDesign(useDesigner.getState().part, DEFAULT_SETTINGS).design!,
+      savedAt: "2026-11-16T00:00:00Z",
+    });
+    expect(JSON.parse(file).part).toMatchObject({ id: "part", name: "Part", model: ".glb" });
+  });
+
+  it("reads text that is not JSON as no entries", () => {
+    expect(partsFromJson("{oops")).toEqual([]);
+    expect(partsFromJson("null")).toEqual([]);
   });
 
   it("keeps only valid entries from a parts.json", () => {

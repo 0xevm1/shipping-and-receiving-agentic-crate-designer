@@ -1,7 +1,7 @@
 import type { CrateDesign } from "./crate";
 
 /**
- * What an edit changed in the crate (#39). One place compares the previous and the new
+ * What an edit changed in the crate. One place compares the previous and the new
  * design, so the header note and the Overview highlights agree on what moved.
  */
 

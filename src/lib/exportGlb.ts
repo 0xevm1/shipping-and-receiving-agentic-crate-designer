@@ -134,10 +134,5 @@ export function loadPartScene(url: string): Promise<Object3D> {
   return p;
 }
 
-/** "crate-PART-001-x4.glb", matching the cut-list CSV name. */
-export function glbFileName(partId: string, quantity: number): string {
-  return `crate-${partId}-x${quantity}.glb`;
-}
-
 // Kept for importers outside `src/lib`; the download helpers live in `./download`.
 export { downloadBytes } from "./download";

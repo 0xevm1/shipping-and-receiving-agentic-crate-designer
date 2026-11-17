@@ -1,5 +1,5 @@
 /**
- * The export document (#26) as a real PDF file, for the Export pill's .zip (#51).
+ * The export document as a real PDF file, for the Export pill's .zip.
  *
  * It lays out the same `PrintableDesign` the `/print` route renders, section for section:
  * crate spec (part, shipment plan, one section per crate type with size, weights, freight,
@@ -474,7 +474,7 @@ function upArrows(w: Writer, x: number, y: number, size: number) {
   pdf.rect(x + 6 * s, y + 74 * s, 68 * s, 6 * s, "F");
 }
 
-/** The crate's end: skids, fork arrows between them, and the centre of gravity when known. */
+/** The crate's end: skids, fork arrows between them, and the centre of gravity. */
 function endMarks(w: Writer, l: PrintableLabel, x0: number, y0: number, boxW: number, boxH: number) {
   const { pdf } = w;
   const s = Math.min(boxW / l.widthMm, (boxH - 50) / l.heightMm);
@@ -488,7 +488,7 @@ function endMarks(w: Writer, l: PrintableLabel, x0: number, y0: number, boxW: nu
   pdf.rect(x, y, W, H - skidH, "S");
   pdf.setFillColor(0, 0, 0);
   for (const k of l.skids) pdf.rect(x + k.y * s, y + H - skidH, k.w * s, skidH, "F");
-  // The openings the handling checks measured (#8), so the arrows match them.
+  // The openings the handling checks measured, so the arrows match them.
   const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   for (const g of gaps) {
     const cx = x + (g.from + g.to) / 2;
@@ -497,19 +497,17 @@ function endMarks(w: Writer, l: PrintableLabel, x0: number, y0: number, boxW: nu
     pdf.rect(cx - 4, y + H + 6 - 0.2, 8, 20, "F");
     w.textAt("FORKS", y + H + 30, { x: cx - 40, w: 80, size: 11, style: "bold", align: "center" });
   }
-  if (l.cogEnd) {
-    const cx = x + l.cogEnd.y * s;
-    const cy = y + H - l.cogEnd.z * s;
-    const r = 12;
-    const K = 0.5523 * r;
-    pdf.setFillColor(255, 255, 255);
-    pdf.setLineWidth(1.5);
-    pdf.circle(cx, cy, r, "FD");
-    pdf.setFillColor(0, 0, 0);
-    pdf.lines([[0, -r], [K, 0, r, r - K, r, r]], cx, cy, [1, 1], "F", true);
-    pdf.lines([[0, r], [-K, 0, -r, -(r - K), -r, -r]], cx, cy, [1, 1], "F", true);
-    w.textAt("CENTRE OF GRAVITY", cy - 5, { x: cx + r + 6, w: 140, size: 10 });
-  }
+  const cx = x + l.cogEnd.y * s;
+  const cy = y + H - l.cogEnd.z * s;
+  const r = 12;
+  const K = 0.5523 * r;
+  pdf.setFillColor(255, 255, 255);
+  pdf.setLineWidth(1.5);
+  pdf.circle(cx, cy, r, "FD");
+  pdf.setFillColor(0, 0, 0);
+  pdf.lines([[0, -r], [K, 0, r, r - K, r, r]], cx, cy, [1, 1], "F", true);
+  pdf.lines([[0, r], [-K, 0, -r, -(r - K), -r, -r]], cx, cy, [1, 1], "F", true);
+  w.textAt("CENTRE OF GRAVITY", cy - 5, { x: cx + r + 6, w: 140, size: 10 });
 }
 
 /** The whole document as PDF bytes (starting `%PDF-`). Pure apart from jsPDF itself. */

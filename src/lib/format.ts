@@ -4,7 +4,7 @@ import { lumberText, plywoodText } from "./lumber";
 import { cut, type Units } from "./units";
 
 /**
- * Metric: "19 × 89 lumber", "12 mm plywood". Imperial uses shop names (#15): "1x4",
+ * Metric: "19 × 89 lumber", "12 mm plywood". Imperial uses shop names: "1x4",
  * "1/2″ plywood", and "1 15/16″ × 3 1/2″ from 4x4" for blocking cut to the gap.
  */
 export function stockText(l: Pick<BomLine, "material" | "kind" | "stockMm">, u: Units): string {

@@ -1,5 +1,5 @@
 /**
- * Text ↔ value helpers for the part header's inline fields (#40). The store and the domain
+ * Text ↔ value helpers for the part header's inline fields. The store and the domain
  * stay in kg; the mass field shows and accepts lb when imperial units are selected.
  */
 import { LB_PER_KG, type Units } from "./units";

@@ -3,7 +3,7 @@ import { cradleProfile } from "@/domain/cradles";
 import type { Member } from "@/domain/crate";
 
 /**
- * A notched cradle (#6) as a solid: its profile (`cradleProfile`) extruded through the board's
+ * A notched cradle as a solid: its profile (`cradleProfile`) extruded through the board's
  * thickness. Domain mm, centred on the member's bounding-box centre, so it drops in where the
  * viewer's unit box would go (at scale 1 instead of scale = size).
  */

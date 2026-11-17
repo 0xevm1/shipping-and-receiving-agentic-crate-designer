@@ -3,9 +3,9 @@ import type { PrintableCrate, PrintableDesign, PrintableLabel, Row } from "@/lib
 import { DrawingSvg } from "./DrawingSvg";
 
 /**
- * The export document (#26) as Letter pages: the crate spec, a build sheet per crate type and a
+ * The export document as Letter pages: the crate spec, a build sheet per crate type and a
  * shipping label per crate type. A pure render of `PrintableDesign`: every number and sentence
- * comes from the model, so a PDF export (#51) can lay out the same content.
+ * comes from the model, so a PDF export can lay out the same content.
  */
 export function PrintDocument({ doc }: { doc: PrintableDesign }) {
   if (doc.problem) {
