@@ -24,7 +24,7 @@ const outsideLimitMm = z
   .number()
   .finite()
   .refine((v) => v === 0 || (v >= MAX_OUTSIDE_RANGE_MM.min && v <= MAX_OUTSIDE_RANGE_MM.max), {
-    message: `Leave empty for no limit, or enter ${MAX_OUTSIDE_RANGE_MM.min} to ${MAX_OUTSIDE_RANGE_MM.max.toLocaleString("en-US")} mm`,
+    message: "Leave empty for no limit, or enter a size from 200 mm (7.9 in) to 30,000 mm (98.4 ft)",
   })
   .default(0);
 
