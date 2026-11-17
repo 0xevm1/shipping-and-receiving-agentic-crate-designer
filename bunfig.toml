@@ -1,0 +1,3 @@
+[install]
+# Save exact versions on `bun add` (see #23).
+exact = true

@@ -1,5 +1,20 @@
 # Crate Designer
 
+<p align="center">
+  <a href="https://bun.sh"><img alt="Bun 1.3.5" src="https://img.shields.io/badge/Bun-1.3.5-F9F1E1?style=for-the-badge&labelColor=002548&logoColor=white&logo=bun"></a>
+  <a href="https://nextjs.org"><img alt="Next.js 16.4.6" src="https://img.shields.io/badge/Next.js-16.4.6-000000?style=for-the-badge&labelColor=002548&logoColor=white&logo=nextdotjs"></a>
+  <a href="https://react.dev"><img alt="React 19.3.0" src="https://img.shields.io/badge/React-19.3.0-149ECA?style=for-the-badge&labelColor=002548&logoColor=white&logo=react"></a>
+  <a href="https://www.typescriptlang.org"><img alt="TypeScript 5.9.3" src="https://img.shields.io/badge/TypeScript-5.9.3-3178C6?style=for-the-badge&labelColor=002548&logoColor=white&logo=typescript"></a>
+  <a href="https://threejs.org"><img alt="three.js r187" src="https://img.shields.io/badge/three.js-r187-049EF4?style=for-the-badge&labelColor=002548&logoColor=white&logo=threedotjs"></a>
+  <a href="https://r3f.docs.pmnd.rs"><img alt="React Three Fiber 9.8.2" src="https://img.shields.io/badge/React_Three_Fiber-9.8.2-F3A000?style=for-the-badge&labelColor=002548&logoColor=white&logo=react"></a>
+  <a href="https://drei.docs.pmnd.rs"><img alt="drei 10.7.9" src="https://img.shields.io/badge/drei-10.7.9-F3A000?style=for-the-badge&labelColor=002548&logoColor=white"></a>
+  <a href="https://zustand.docs.pmnd.rs"><img alt="Zustand 5.1.0" src="https://img.shields.io/badge/Zustand-5.1.0-453F39?style=for-the-badge&labelColor=002548&logoColor=white"></a>
+  <a href="https://zod.dev"><img alt="Zod 4.6.7" src="https://img.shields.io/badge/Zod-4.6.7-3E67B1?style=for-the-badge&labelColor=002548&logoColor=white&logo=zod"></a>
+  <a href="https://tailwindcss.com"><img alt="Tailwind CSS 4.3.3" src="https://img.shields.io/badge/Tailwind_CSS-4.3.3-06B6D4?style=for-the-badge&labelColor=002548&logoColor=white&logo=tailwindcss"></a>
+  <a href="https://vitest.dev"><img alt="Vitest 5.1.0" src="https://img.shields.io/badge/Vitest-5.1.0-6E9F18?style=for-the-badge&labelColor=002548&logoColor=white&logo=vitest"></a>
+  <a href="https://eslint.org"><img alt="ESLint 9.39.5" src="https://img.shields.io/badge/ESLint-9.39.5-4B32C3?style=for-the-badge&labelColor=002548&logoColor=white&logo=eslint"></a>
+</p>
+
 A browser app that designs **custom wooden shipping crates** for one or more identical
 machined parts. Pick a part and a quantity. The app packs the parts as compactly as it can,
 builds a crate around them from plywood, lumber and wood screws, and shows the result in 3D. It
@@ -24,13 +39,16 @@ bun run dev          # → http://localhost:3000
 | `bun run test` | Domain unit tests (vitest) |
 | `bun run lint` | ESLint |
 
-- **Requirements:** [Bun](https://bun.sh) 1.3+ for installing and running scripts (the lockfile
-  is `bun.lock`), and Node 20+, which Next.js runs on. Verified on Bun 1.3.5, Node 24,
-  Next.js 16.4, three.js r187.
+- **This project uses [Bun](https://bun.sh)** (1.3+) to install packages and run every script;
+  the lockfile is `bun.lock`. Next.js itself runs on Node 20+. Verified on Bun 1.3.5, Node 24,
+  Next.js 16.4 and three.js r187.
+- **Bun only:** a `preinstall` check (`scripts/require-bun.mjs`) stops `npm`, `yarn` or `pnpm`
+  installs with a message pointing to `bun install`.
 - **Use `bun run test`, not `bun test`.** `bun test` runs Bun's own test runner instead of
   vitest.
-- **No Bun?** `npm install && npm run dev` also works. It resolves fresh versions because
-  there's no `package-lock.json`.
+- **Pinned versions:** `package.json` lists exact versions only (#23), and `bunfig.toml` makes
+  `bun add` save exact versions too. To upgrade, bump a version deliberately
+  (`bun add three@0.188.0`), then run the tests, lint and build.
 - Nothing else is needed: no environment variables, backend or database. The sample GLBs are
   bundled in `public/parts/`.
 
