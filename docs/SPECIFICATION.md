@@ -120,7 +120,13 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
    localStorage ◀──▶ state/store.ts (zustand): part, settings, standards, layoutKey, view, hover, pin, …
    (standards only)      │  recompute() on every input change
                          ▼
-          domain/design.ts: computeDesign(part, settings, layoutKey?, standards?)
+          state/engineClient.ts ──postMessage──▶ state/engine.worker.ts (Web Worker; §5.1)
+                         │  (in-thread where there is no worker: SSR, tests)   │
+                         ▼                                                     ▼
+          engine/engine.ts: designShipment(request) → { plan, summary, engineVersion, inputHash }
+                         │
+                         ▼
+          domain/shipment.ts: planShipment → domain/design.ts: computeDesign(part, settings, layoutKey?, standards?)
                          │        (standards = ShopStandards, domain/standards.ts, §6.4)
            ┌─────────────┼───────────────────┐
            ▼             ▼                   ▼
@@ -143,7 +149,12 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 
   ```
   src/components/, src/app/   render; may import everything below
-  src/state/                  zustand stores and persistence; may import lib and domain
+  src/state/                  zustand stores and persistence, the engine's Web Worker and its
+                              client; may import engine, lib and domain
+  src/engine/                 the crate engine (§5.1): runs unchanged in a page, a Web Worker and
+                              Node; may import lib and domain; no DOM globals, no Node built-ins
+                              (its tests excepted), and not lib's browser-only modules
+                              (`lib/download`, `lib/partProfile`). A server or CLI imports it too
   src/lib/                    edge code: formatting, file loading, exports; may import domain
   src/domain/                 pure TypeScript, mm/kg, Z-up; imports nothing above it, and no
                               three, react, zustand or DOM globals
@@ -154,18 +165,86 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
   one (`LoadedPart` and `modelUrl` are in `lib/part.ts`; `checks.ts` is in `lib`).
 - **The domain layer is pure and synchronous.** It has no React, DOM or I/O, and it is fully
   unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the
-  store re-runs it on every input change.
+  store re-runs it on every input change, through the engine (§5.1), in a Web Worker.
 - **One store, two kinds of state.**
   - `src/state/store.ts` (zustand) holds everything the UI renders from: the part, settings,
     the shop standards (§6.4), the design result, units, tab, view targets, hover / pin, tooltip, panel
     visibility, the free-area insets, and a `fit` request counter for the camera. Any change to
     the part, settings, standards or layout key goes through `recompute()`, which also drops a pin whose
-    cut-list line no longer exists.
+    cut-list line no longer exists. The edit is stored at once; its plan lands when the engine's
+    worker answers (a few ms), with `designedFrom`, the inputs and stamp it was made from (§5.1).
   - `src/state/motion.ts` holds values that change every frame (eased explode distance, lid and
     front-wall opacity, idle auto-play bookkeeping, last-input time). They live outside React on
     purpose, so animation never re-renders the UI.
 - **The viewer is client-only.** Both canvases are loaded with `next/dynamic` and
   `{ ssr: false }` inside client components, because WebGL doesn't exist on the server.
+
+### 5.1 The crate engine (`src/engine/`, #46)
+
+One engine designs crates and builds their files, wherever it runs: the page, a Web Worker, and
+Node (a server or CLI, later). It is a facade over `src/domain` plus the file builders in
+`src/lib`, with no browser-only or Node-only imports at its top level; the lint rule for
+`src/engine` (§5) keeps it that way, and the parity test proves it.
+
+| Call (`src/engine/…`) | Does |
+|---|---|
+| `engine.ts` `designShipment(request)` | `planShipment` on a `DesignRequest`; returns `{ plan, summary, engineVersion, inputHash }`. Pure and synchronous; never throws for valid input |
+| `engine.ts` `cutList(request)` | The Cut list tab's CSV and file name (crate type or, for a split batch, the shipment), stamped |
+| `engine.ts` `inputHash(request)`, `summarize(plan)` | The stamp's hash; the headline numbers (outside size, gross, tare, screws, cost per crate type, totals, problem) |
+| `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped. Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
+| `glb.ts` | Runtime adapters for GLBs: `urlModelReader` (browser, `GLTFLoader` on the model URL, cached), `bytesModelReader` / `parseGlb` (any runtime, `GLTFLoader.parse` on bytes), `crateGlb` (`GLTFExporter`, adding a minimal `FileReader` where the runtime has none, as Node) |
+| `schemas.ts` | zod schemas for every call: `DesignRequestSchema` (part, settings, standards, layoutKey, ranking), `DesignResponseSchema`, `DesignSummarySchema`, `EngineStampSchema`, `CutListRequestSchema` / `CutListResponseSchema`, and the worker messages. The browser, server and CLI validate the same types; the page's own calls are typed and skip parsing |
+
+**Stamps.** Every engine output carries `engineVersion` and `inputHash`:
+
+- **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
+  `ENGINE_REVISION`, as `0.1.0+engine.1`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  anything that gives a different output for the same input (a rule, a constant, an algorithm, a
+  default standard, or the text of a generated file). A refactor that leaves every output
+  identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
+  to be re-written, bump.
+- **`inputHash`** = SHA-256 (hex) of the canonical JSON of
+  `{ v: 1, part, settings, standards, layoutKey, ranking }` (`engine.ts`, `canonical.ts`,
+  `sha256.ts`):
+  - `part` is the design fields only (`id`, `name`, `mass_kg`, `dimensions_mm`, `material`,
+    `profile`): a loaded part's model URL, file name, units and load facts are not inputs, so a
+    blob URL never changes the hash. The quantity is `settings.quantity`. `layoutKey` is the
+    user's pick (null for the recommended one).
+  - Canonical JSON: keys sorted at every depth, `undefined` properties left out, numbers in
+    JavaScript's shortest round-trip form with `-0` as `0`, typed arrays as arrays; NaN, ±Infinity,
+    functions and class instances throw.
+  - SHA-256 is a synchronous pure-TypeScript implementation, checked against the FIPS vectors and
+    Web Crypto, so the hash is the same in the page, the worker and Node.
+  - `v` is bumped if the hashed shape changes, so old and new hashes never collide. The engine
+    version is not in the hash: equal inputs hash the same across versions, and a server compares
+    both before trusting a result.
+  - File outputs (`cutList`, `buildBundleZip`) carry their design's stamp; their own options
+    (units, scope) are not hashed.
+
+**In the browser.** `src/state/engineClient.ts` runs the engine in a Web Worker
+(`src/state/engine.worker.ts`, bundled by Next.js from `new Worker(new URL(…, import.meta.url))`),
+started on the first edit. It is latest-wins: one request in flight; a newer one replaces one
+still waiting, so a burst of edits (a held arrow key on a slider) costs at most two designs.
+Where there is no worker (server rendering, vitest in Node or jsdom) or it fails (an error, a
+request that can't be cloned), it designs in the page instead, before returning, so the store
+and its tests stay synchronous there. The first design (the preloaded part) is made in the page.
+
+The store applies an edit at once, so its control never lags, and lands the design with the
+inputs it was made from (`designedFrom`, with the stamp) when the worker answers; the crate type
+to show and the `restoring` hold wait for the design. The e2e probe reports `quantity`, `partId`
+and `massAssumed` from `designedFrom`, so a spec that waits on them waits for the design too.
+
+**Downloads.** The Export pill builds its ZIP through `buildBundleZip` with `urlModelReader`; the
+PDF, ZIP and GLB code is loaded only then, and nothing goes to a server. The same call in Node
+takes `bytesModelReader(glbBytes)`.
+
+**Parity.** `parity.node.test.ts` (Node) and `parity.jsdom.test.ts` (jsdom) run the three sample
+parts at each suggested quantity and compare against one committed baseline,
+`src/engine/__snapshots__/parity.json`: the summary (outside size, gross, tare, screws, cost),
+the `inputHash`, a SHA-256 of the whole plan, and the cut-list CSVs. Both pass only if both
+runtimes give identical results, equal to the app's as the baseline was written. A change that
+moves any of it fails both; re-write the baseline with `bunx vitest run src/engine/parity -u` and
+bump `ENGINE_REVISION`.
 
 ### File map
 
@@ -229,12 +308,22 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url (the share link's encoding), plus the units (`printHash`, `readPrintHash`) |
 | `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles |
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
-| `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
+| `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate). The engine's `buildBundleZip` wires in the makers |
 | `src/lib/exportPdf.ts` | `printableToPdf`: the `PrintableDesign` as a vector PDF with jsPDF (#51); loaded only with `import()` |
 | `src/components/shell/ExportPill.tsx` | The green Export pill under the part header, its idle / busy / done / error states, and an amber dot with a tooltip and description ("2 cautions, see Checks") when the design has cautions; exporting is never blocked |
-| `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill; a success note clears after 8 s, an error after 15 s |
-| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
-| `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange` |
+| `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill (the engine's `buildBundleZip`, loaded on first use); a success note clears after 8 s, an error after 15 s |
+| `src/engine/engine.ts` | The crate engine (§5.1): `designShipment`, `cutList`, `inputHash`, `stamp`, `summarize` |
+| `src/engine/schemas.ts` | zod request and response schemas for the engine's calls, and the worker messages (§5.1) |
+| `src/engine/version.ts` | `ENGINE_REVISION` and `ENGINE_VERSION` (§5.1: when to bump) |
+| `src/engine/canonical.ts`, `sha256.ts` | Canonical JSON and a synchronous SHA-256, for `inputHash` |
+| `src/engine/glb.ts` | GLB adapters: `urlModelReader` (browser), `bytesModelReader` / `parseGlb` (any runtime), `crateGlb`, `ensureFileReader`; loaded with `import()` |
+| `src/engine/files.ts` | `buildBundleZip`: the Export package in any runtime, PDF / ZIP / GLB code loaded on first use |
+| `src/engine/parityCases.ts` | The browser / Node parity cases and the baseline text (`__snapshots__/parity.json`) |
+| `src/state/engineClient.ts` | `engine`: the page's engine client, a Web Worker with an in-thread fallback, latest-wins (`createEngineClient`) |
+| `src/state/engine.worker.ts` | The engine's Web Worker entry |
+| `src/state/fakeEngineWorker.ts` | A stand-in worker for tests (answers on `flush()`) |
+| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
+| `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange`; designs through the engine client, `designedFrom` (§5.1) |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
 | `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
 | `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
@@ -1388,8 +1477,9 @@ header repeats when it runs onto another page, and every page has "page i of n".
   the assembly order can run onto another page. No section is left out.
 - It is written uncompressed (the zip compresses it), so its text can be checked in tests.
 
-**Loading.** `jspdf` (about 125 KB gzipped) and the bundle code load with `import()` on the first
-click, never with the page. `fflate` (`zipSync`) zips.
+**Loading.** `jspdf` (about 125 KB gzipped), the bundle code and the GLB exporter load with
+`import()` on the first click, never with the page, through the engine's `buildBundleZip` (§5.1).
+`fflate` (`zipSync`) zips.
 
 **The pill** (§8.2): idle "Export specs"; busy "Exporting…" with a spinner, held for at least
 `MIN_BUSY_MS` (1.5 s) even when the work is faster, so the action registers; with
@@ -2189,7 +2279,22 @@ The ranking option (#17) is saved only as part of the last-opened crate; the tim
 
 ## 10. Invariants and tests
 
-`bun run test` runs vitest over `src/**/*.test.ts`.
+`bun run test` runs vitest over `src/**/*.test.ts`, in Node; a file can ask for jsdom with a
+`// @vitest-environment jsdom` first line.
+
+**The engine (`src/engine/*.test.ts`, §5.1)** checks: SHA-256 against the FIPS vectors and Web
+Crypto at every padding length; canonical JSON (key order, `-0`, refusals); `inputHash` is stable
+across key order, ignores the model URL and load facts, and changes with every design input,
+including a part outline; `designShipment` equals `planShipment` and survives a structured clone
+(the worker trip); the schemas accept the engine's own requests and responses and reject a
+damaged outline; `cutList` equals the Cut list tab's CSV; in Node, a sample GLB is read from its
+bytes, the crate GLB reads back at its outside size, and the whole Export ZIP is built with no
+browser or server. **Parity:** the same sample parts × suggested quantities in Node and jsdom
+match one baseline (summary, `inputHash`, plan hash, CSVs). `src/state/engineClient.test.ts`
+covers the in-thread fallback, latest-wins and falling back when the worker fails;
+`store.worker.test.ts` covers the store with a worker: an edit shows at once, its design lands
+with `designedFrom`, quick edits build on each other, a crate type waits for its plan, and the
+`restoring` hold waits for the reopened design.
 
 **`src/domain/domain.test.ts`** checks:
 
@@ -2644,7 +2749,8 @@ copies chosen shots there on request.
 - **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`) exposes a read-only
   `window.__crate` with `getState()` (typed as `CrateSnapshot`, so specs are checked at compile time): the mode from the
   view targets, view switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play, `idle` (no
-  deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, crate types, frame count, pulses,
+  deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity (and part id and stand-in mass, all
+  from the inputs the shown design was made from, `designedFrom`, §5.1), crate types, frame count, pulses,
   `shapedBlocking`, `profileMs` and the CoG and fork-arrow marks, and `canvasCoverage()` (share of canvas pixels
   drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`; `next.config.ts` always inlines the flag (`"0"` when unset),
   so normal builds drop the branch and don't bundle the module.
@@ -2717,6 +2823,7 @@ copies chosen shots there on request.
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
+| One crate engine (`src/engine`) for page, worker and Node; the page runs it in a Web Worker (#46) | The browser and a server can't disagree, and a sweep stays off the render thread. `src/engine` sits above `src/lib` because the builders are made of lib's formatting and print model | An edit's design lands a few ms after the edit, so the store holds `designedFrom` to say which inputs the design on screen belongs to |
 | Settings are clamped at the store, bad values rejected per field | A slider or typed value just past a limit should still do something useful; NaN or a wrong type has no sensible nearest value, so the last good one stays | A typed quantity that is clamped or rejected gets a short note by the field (#36); nothing else is typed |
 | `computeDesign` returns a `problem` instead of throwing | The UI can always explain an empty screen, in domain wording | One more field to check alongside `design` |
 | Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
