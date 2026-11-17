@@ -22,10 +22,12 @@ import { explainLayout, type LayoutExplanation, type Ranking } from "@/domain/de
 import { fileProfile, parseDesignFile, restoreDesign } from "@/domain/designFile";
 import type { Message } from "@/domain/message";
 import type { Layout } from "@/domain/packing";
-import type { DesignPart } from "@/domain/schema";
+import type { CrateSettings, DesignPart } from "@/domain/schema";
 import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
-import { costsArePlaceholder, type ShopStandards } from "@/domain/standards";
-import type { QuantitySweep, SweepConstraint } from "@/domain/sweep";
+import { CONSTRAINT_TEXT, explainRecommendation } from "@/domain/explainRecommendation";
+import { costsArePlaceholder, PLACEHOLDER_COST_NOTE, type ShopStandards } from "@/domain/standards";
+import type { QuantitySweep } from "@/domain/sweep";
+import { explanationText, type ExplanationText } from "./explanation";
 import { renderMessage } from "./message";
 import { allChecks } from "@/lib/checks";
 import { crateDrawings, type Drawing } from "./drawings";
@@ -134,6 +136,8 @@ export interface PrintableQuantity {
   rows: Row[];
   /** "Costs use the shipped placeholder rates …", or null when the shop entered its own. */
   costNote: string | null;
+  /** Why the sweep recommends its quantity, as the Rules tab says it (spec §7.16), when the rules were given. */
+  why: ExplanationText | null;
 }
 
 /** The engine's stamp (spec §5.1), printed in the footer and the PDF's keywords. */
@@ -174,6 +178,8 @@ export interface PrintableInput {
   timeZone?: string;
   /** The part's quantity sweep (spec §7.16): adds the quantity rationale. */
   sweep?: QuantitySweep | null;
+  /** The settings the plan was made with: the sweep's packing rules, for explaining it. */
+  settings?: CrateSettings;
   /** The engine's stamp, when the engine builds the document. */
   stamp?: PrintableStamp;
 }
@@ -435,20 +441,6 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   };
 }
 
-/** The hard rule that stopped a crate, in a few words (spec §7.16). */
-export const CONSTRAINT_TEXT: Record<SweepConstraint, string> = {
-  door: "trailer door and floor",
-  stable: "stability",
-  blocking: "room to block the parts",
-  "base-rating": "base rating",
-  "max-gross": "per-crate gross limit",
-  "max-parts": "per-crate part limit",
-};
-
-/** Said wherever a crate cost is shown while the cost inputs are the shipped placeholders. */
-export const PLACEHOLDER_COST_NOTE =
-  "Costs use the shipped placeholder wood and screw prices and shop times (shop standards): good for comparing designs, not for a quote.";
-
 /** True when the plan's crate is the sweep's recommendation: its quantity and its layout, in one crate type. */
 export function isRecommended(plan: ShipmentPlan, sweep: QuantitySweep | null | undefined): boolean {
   const rec = sweep?.recommendation;
@@ -457,7 +449,8 @@ export function isRecommended(plan: ShipmentPlan, sweep: QuantitySweep | null | 
 }
 
 /** The quantity section: the recommendation, its rationale and the constraint that stopped a larger crate. */
-function quantitySection(plan: ShipmentPlan, sweep: QuantitySweep, standards: ShopStandards, u: Units): PrintableQuantity | null {
+function quantitySection(input: PrintableInput, sweep: QuantitySweep): PrintableQuantity | null {
+  const { plan, standards, units: u, settings, part } = input;
   const rec = sweep.recommendation;
   if (!rec || plan.problem) return null;
   const recommended = isRecommended(plan, sweep);
@@ -484,7 +477,20 @@ function quantitySection(plan: ShipmentPlan, sweep: QuantitySweep, standards: Sh
     rationale: renderMessage(rec.rationale, u),
     rows,
     costNote: costsArePlaceholder(standards) ? PLACEHOLDER_COST_NOTE : null,
+    why: recommendationWhy(sweep, standards, settings, !!part.profile, u),
   };
+}
+
+/** The explanation of the sweep's recommendation in `u`, or null without the rules it was swept under. */
+export function recommendationWhy(
+  sweep: QuantitySweep | null,
+  standards: ShopStandards,
+  settings: CrateSettings | undefined,
+  measured: boolean,
+  u: Units,
+): ExplanationText | null {
+  const e = sweep && settings ? explainRecommendation(sweep, standards, settings, { measured }) : null;
+  return e && explanationText(e, u);
 }
 
 /** The whole hand-off document for a plan, in the selected units. Pure. */
@@ -519,7 +525,7 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
     },
     crates,
     problem: plan.problem ? `${plan.problem.title}. ${renderMessage(plan.problem.detail, u)}` : null,
-    ...(input.sweep ? { quantity: quantitySection(plan, input.sweep, input.standards, u) } : {}),
+    ...(input.sweep ? { quantity: quantitySection(input, input.sweep) } : {}),
     ...(input.stamp ? { stamp: { engineVersion: input.stamp.engineVersion, inputHash: input.stamp.inputHash }, createdAt: generatedAt } : {}),
   };
 }

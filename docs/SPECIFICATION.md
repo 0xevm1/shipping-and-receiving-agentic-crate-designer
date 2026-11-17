@@ -258,7 +258,7 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
 
 - **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
-  `ENGINE_REVISION`, as `0.1.0+engine.3`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  `ENGINE_REVISION`, as `0.1.0+engine.5`. **Rule:** bump `ENGINE_REVISION` in the same change as
   anything that gives a different output for the same input (a rule, a constant, an algorithm, a
   default standard, or the text of a generated file). A refactor that leaves every output
   identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
@@ -403,6 +403,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
 | `src/domain/sweep.ts` | Choosing the best quantity (#46, §7.16): `sweepQuantities()` (the curve over 1–200 per crate, hard checks first, cost per part, the recommendation and shortlist), `planTotal()` and `evenSplit()` (total-quantity mode), `FreightRatesSchema` / `freightCostUsd()` (caller-supplied rates) |
 | `src/domain/totalPlan.ts` | `explainTotalPlan()`: why a total ships as so many crates (§7.16), from the curve; `splitOutcome()`, `planText()` |
+| `src/domain/explainRecommendation.ts` | Why the sweep recommends its quantity (§7.16): `explainRecommendation()` (five sections, the cost lines, the shortlist and the curve, from the sweep alone), `CONSTRAINT_TEXT` |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file, the library, the shop standards file and the last-design entry |
@@ -454,6 +455,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/engine/artifacts.ts` | `buildArtifact` (one stamped GLB, PDF or CSV), `buildMultiBundleZip` (Download all), `sweepFor`, the manifest types (§7.17) |
 | `src/engine/artifactCases.ts` | The artifact parity cases: each sample part at its recommended quantity, and the CSV baseline text (`__snapshots__/artifacts-csv.txt`) |
 | `src/lib/comparison.ts`, `comparisonPdf.ts` | The multi-configuration comparison summary (`buildComparison`, pure) and its one-sheet PDF (`comparisonToPdf`, jsPDF through `exportPdf.ts`'s `Writer`) |
+| `src/lib/explanation.ts` | `explanationText()`: the explanation as text in the selected units, shared by the Rules tab, both PDFs and the API |
 | `src/state/downloadAll.ts` | `useDownloadAll`: the Download all run beside the Export pill (`run(configs?)`; default `defaultConfigs`: the design on screen plus the job's saved configurations (`savedConfigRequests`), else the sweep's shortlist (`shortlistConfigs`)) |
 | `src/server/artifacts/` | Server-built files (#46 slice 6): `configurationArtifact`, `jobBundle`, `createBundleHandler` (`service.ts`), build-once storage (`store.ts` `storeOnce`: single flight, advisory lock, object then row then `artifact.ready`), the part model from blob storage (`model.ts`) |
 | `src/lib/api/artifacts.ts` | Artifact and bundle response schemas, `artifactHref` / `bundleHref` / `parseConfigsParam` (client-safe) |
@@ -477,6 +479,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/state/store.ts` | `useDesigner`: the design store (part, settings, layout pick, standards, ranking, plan and result) and its actions; `autoRecommend` / `onRecommendation` / `applyRecommendation` (§7.16); designs through the engine client, `designedFrom` (§5.1); emits a `DesignEdit` when each design lands; `whenDesigned` |
 | `src/state/viewStore.ts` | `useView`: the view store (tab, 3D view, hover / pin, tooltip, panels, drawer, insets, `fit`, load message, `restoring`, `lastChange`, the time-to-design clock, units); reacts to `DesignEdit`; `currentMode()` |
 | `src/state/designEvents.ts` | `DesignEdit`, `onDesignEdit` / `emitDesignEdit` and `ChangeSource`: how the design store tells the view store what changed |
+| `src/components/island/RecommendationWhy.tsx` | **Why this crate?** under the best-quantity hint: the explanation's sections, cost table, cost-per-part curve and shortlist (§7.16) |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
 | `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; (§9) |
 | `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
@@ -847,7 +850,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   "schemaVersion": 3,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
-  "engine": { "version": "0.1.0+engine.3", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
+  "engine": { "version": "0.1.0+engine.5", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -1938,7 +1941,10 @@ the quantity setting's maximum):
 4. **Score = cost per part moved** = (crate cost + freight cost) ÷ `q`, where crate cost is
    `cost.totalUsd` (wood, screws and labour, §7.12). The cheapest passing layout is the point's
    crate. When none passes, the point is not `ok` and records the first designed layout's failing
-   rule (`binding`) and that check's text (`reason`): the curve shows why.
+   rule (`binding`) and that check's text (`reason`): the curve shows why. Every point records
+   `layoutsDesigned` (0 when step 1 failed it) and `layoutsPassed`, and a passing point's crate
+   carries its cost by part (`cost`: `woodUsd`, `fastenersUsd` with `screws`, `labourUsd` with
+   `buildMin`; they add up to `crateCostUsd`), so the recommendation can be explained (below).
 
 **Freight dollars only from the caller.** `FreightRates` (`FreightRatesSchema`) is a rate sheet:
 USD per cwt by NMFC class (`{ "65": 30, … }`) and a per-crate `minimumUsd`. A crate's freight is
@@ -1950,7 +1956,9 @@ always shows the crate-only score.
 
 **Recommendation and ties.** The `ok` points sorted by `compareSweepPoints`: the lower score to the
 cent per part, then **fewer crates** (the larger `q`), then **denser freight** (lb/ft³). The first
-is the recommendation; the first `SWEEP_SHORTLIST_SIZE` (**5**) are the shortlist. Its rationale
+is the recommendation; the first `SWEEP_SHORTLIST_SIZE` (**5**) are the shortlist. When the runner-up
+scores the same to the cent, the recommendation's `tieBreak` says which rule ordered them
+(`fewer-crates` or `denser-freight`; `tieBreakBetween`), else null. Its rationale
 names the score and **what stopped a larger crate**: the first failing quantity above it, with its
 rule and text (`stoppedBy`), and whether larger passing crates cost more per part (`costLimited`).
 With the defaults the sample parts are stopped by the base rating or the 1,000 kg gross limit
@@ -2008,6 +2016,39 @@ engine's latest-wins sweep lane rather than replacing each other's requests. A r
 change is swept `SWEEP_DELAY_MS` (**250 ms**) after the last one; a new part, or its measured
 outline, at once.
 
+**Explaining the recommendation (`explainRecommendation`, `src/domain/explainRecommendation.ts`).**
+The shipping PM has to be able to see *why* a quantity was picked, so
+`explainRecommendation(sweep, standards, rules, { measured })` turns the sweep into five plain
+sections, built only from the sweep's own data and the standards it used (no invented numbers;
+null when there is no recommendation):
+
+1. **What was compared:** quantities 1 to `maxQuantity`, up to the layouts per quantity designed in
+   full and how many crates that was and how many passed, the quantities ruled out without
+   designing (a monotonic limit), and how many quantities passed and failed, by rule.
+2. **How it is scored:** cost per part moved = (crate cost + freight) ÷ parts; the recommended
+   crate's `costLines` (wood, fasteners with the screw count and price, labour with the build time
+   and rate, crate cost, freight, per part). Freight is **"Not priced"** without rates, never a
+   dollar figure; with rates it is the crate's charge. `PLACEHOLDER_COST_NOTE` while
+   `costsArePlaceholder(standards)`.
+3. **Why this quantity:** its score against the runner-up, the shortlist as `ranking` (score and the
+   difference from the pick), the tie-break when it decided (`tieBreak`), and `curve`: quantities 1
+   to `EXPLANATION_CURVE_TAIL` (**4**) past the last passing (or stopping) quantity, for a chart.
+4. **What stopped a larger crate:** constraint-limited, "The next size up, 35 per crate, fails a
+   hard check: the base rating." and the failing check's own text (with its numbers); cost-limited,
+   the best larger passing quantity and how much more per part, then the first larger quantity to
+   fail a hard check; or nothing up to `maxQuantity`.
+5. **What it takes into account:** the hard checks with the limits used (trailer door and floor,
+   stability ratio, blocking gap, base rating load factor, gross limit, part limit, all from the
+   shop standards), one part number per crate, wood and basic fasteners only, domestic truck
+   freight, the packing rules (upright or not, layers, gaps), and whether blocking follows the
+   measured outline or the part's box (the measured outline can change the answer).
+
+Lengths and masses stay `Message` quantities; `explanationText(e, units)` (`src/lib/explanation.ts`)
+renders it once for every reader: the Rules tab's **Why this crate?**, the crate spec PDF's quantity
+section and the comparison PDF's "Why this quantity" (§7.17), and `recommendation.explanation` in the
+`POST /api/v1/designs` answer (metric; docs/QUEUE.md). Tested for every sample part, upright and
+not, with and without freight rates (`explainRecommendation.test.ts`).
+
 **Recommended on load.** Loading a part shows the recommended quantity and crate without the user
 choosing one. When a **new part** is loaded (a picked or dropped GLB, catalog or not: `setPart`),
 the store marks it `autoRecommend` and the part opens at its first suggested quantity until the
@@ -2023,13 +2064,17 @@ the layout, the ranking, the shop standards or the part's name, material or mass
 `autoRecommend`), including an edit between the first result and the measured one. A design that
 is **opened** keeps its own settings: the last design restored at startup (`restoreDesign`), a
 saved design from the library, an imported design file and a share link (`loadDesign`) never set
-`autoRecommend`. The preloaded default part (PART-001 × 4, when there is nothing to restore) is
-not a load either and keeps its default quantity. **A change of the file's units or up axis**
-(§4, `setPartFrame`) on a part whose rules are still the load's or the recommendation's (no edit
-by the person since it was loaded: `onRecommendation`) starts it again, even after it settled: a
-quantity swept for a misread size means nothing, and the corrected file then opens at the crate the
-same part in the right units gets. After an edit, the person's rules are kept. The e2e hook
-reports it (`autoRecommend`: `waiting`, `measuring` or null, and `recommended`, §10).
+`autoRecommend`. The preloaded default part **is** treated as a load when startup finds nothing to
+restore (no share link and no last design, or a last design that could not reopen): `createStartup`
+calls `recommendOnStartup`, and applies a sweep result for it that arrived before startup decided,
+so a first-time visitor sees PART-001 at its recommendation, not at its first suggested quantity. A
+damaged share link falls back to the default part at its default quantity. **A change of the
+file's units or up axis** (§4, `setPartFrame`) on a part whose rules are still the load's or the
+recommendation's (no edit by the person since it was loaded, or since the first visit's
+recommendation: `onRecommendation`, which `recommendOnStartup` sets too) starts it again, even
+after it settled: a quantity swept for a misread size means nothing, and the corrected file then
+opens at the crate the same part in the right units gets. After an edit, the person's rules are
+kept. The e2e hook reports it (`autoRecommend`: `waiting`, `measuring` or null, and `recommended`, §10).
 
 ### 7.17 Artifacts and the multi-configuration bundle (`src/engine/artifacts.ts`, #46)
 
@@ -2048,7 +2093,7 @@ boards only).
 |---|---|---|---|
 | `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
 | `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
-| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.3, input …` before the column names |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.5, input …` before the column names |
 
 A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
 
@@ -2057,7 +2102,9 @@ rates) for the request's part and rules, and the PDF's **Quantity per crate** se
 - whether this crate **is the recommendation** (`isRecommended`: one crate type whose quantity and
   layout are the recommendation's) — "Recommended: 34 per crate" — or not — "20 per crate; the
   sweep recommends 34";
-- the sweep's rationale (the score in crate cost per part and what limits it);
+- the sweep's rationale (the score in crate cost per part and what limits it), then **"Why this
+  crate?"** as the Rules tab shows it (`explanationText`, §7.16): the five sections, the recommended
+  crate's cost and the best quantities;
 - **the constraint that stopped a larger crate**: "35 per crate fails the base rating" with the
   failing check's text, or "Nothing up to 200 per crate";
 - "Freight: Not priced" (no rates, so no freight dollars), and, while any cost input is the
@@ -2095,8 +2142,8 @@ entries carry `generatedAt`.
 `comparisonToPdf`): the part; a table with a row per configuration — folder, quantity per crate
 ("30 / 20" for a split), crates, outside size and gross (crate A), crate cost per part, and a note
 (Recommended; the split; the hard rule a quantity fails, with its reason; or how much more per part
-than the recommendation); then **Why this quantity**: the recommendation, its rationale and the
-constraint that stopped a larger crate. It always says freight is not priced, and says when costs
+than the recommendation); then **Why this quantity**: the recommendation, its rationale, the
+constraint that stopped a larger crate, and the five sections of §7.16's explanation. It always says freight is not priced, and says when costs
 are placeholders. **No freight dollar figure appears** in the PDFs or the manifest: the sweep is run
 without rates (`costBasis: "crate-only"`).
 
@@ -2258,7 +2305,7 @@ The canvas fills the window. Four regions float above it:
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
-| **Rules** | Quantity (a − / input / + capsule, the 18 px glyphs being the intended look, and under it the part's suggested quantities as their own labelled group, #62; the one matching the stepper is outlined in gold, not filled), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part opens at the recommendation; dimmed while a rule change waits to be swept), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Rules** | Quantity (a − / input / + capsule, the 18 px glyphs being the intended look, and under it the part's suggested quantities as their own labelled group, #62; the one matching the stepper is outlined in gold, not filled), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part, or the preloaded one on a first visit, opens at the recommendation; dimmed while a rule change waits to be swept; and **Why this crate?**, a disclosure (`aria-expanded`) that opens the explanation inline, in the drawer too: what was compared, how it is scored with the recommended crate's cost table (freight "Not priced"), why this quantity with a cost-per-part curve over quantity (log scale; passing quantities as a line, the pick as a gold dot, failing quantities as red ticks; each quantity has a hover title) and the shortlist table, what stopped a larger crate, and what it takes into account), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
@@ -3195,7 +3242,10 @@ failed analysis), ignores a result for another part or a second one before measu
 the file's units or up axis waits for the recommendation for the new size (also once settled), but
 not once the rules were edited; an edit before the result (quantity, a rule, the layout, the ranking,
 the mass, the standards, or after the first result) is kept; and `loadDesign` / `restoreDesign`
-keep their own quantity. **`src/state/partLoader.test.ts`** checks which loads wait for it: a
+keep their own quantity. **`src/state/startup.test.ts`** also checks that the preloaded part opens at its recommendation
+when there is nothing to restore (or the last design can't reopen), applying a result that arrived
+first, while a reopened crate or a share link keeps its own settings.
+**`src/state/partLoader.test.ts`** checks which loads wait for it: a
 picked GLB does, a design file or `openDesignFile` (saved designs, share links) doesn't.
 **`src/state/store.worker.test.ts`** runs the store with its engine in a stand-in worker: an edit
 shows at once and its design (and the view's reaction) when the engine answers, quick edits build
@@ -3413,7 +3463,11 @@ copies chosen shots there on request.
   so normal builds drop the branch and don't bundle the module.
 
 - **Specs** (a `.narrow` or `.mobile` suffix means that project; the rest run on desktop):
-  - `first-load`: PART-001 × 4 loads with the header sentence, "model matches catalog", the heading and a drawn canvas.
+  - `first-load`: PART-001 opens at its recommended quantity (read from the probe) with the header sentence, "model matches
+    catalog", the heading, a drawn canvas and **In use** on Rules. `openApp` waits for that recommendation (`{ measured:
+    false }` on a page that stops the outline analysis); a spec about a particular crate sets its quantity (`setQuantity`).
+  - `recommendation-why` (and `.mobile`, in the drawer): **Why this crate?** opens the five sections, the cost table with
+    freight "Not priced", the best-quantities table and the cost curve, and closes again.
   - `island`: each tab's contents (Overview chain and weight bars, Layouts cards, Cut list groups, Rules controls); the tab
     strip is one tab stop with arrows, Home and End and a labelled panel; the scroll fade; one island height on every tab.
   - `rules`: quantity resizes the crate; a typed 500 clamps to 200 with a note; Reset rules keeps the quantity.

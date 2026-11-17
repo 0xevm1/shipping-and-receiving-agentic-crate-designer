@@ -100,6 +100,15 @@ describe("rankConfigurations: the headless answer", () => {
     expect(noRates.recommendation!.rationale).toMatch(/no freight rates given/);
   });
 
+  it("explains the recommendation in plain sentences, freight priced only with rates (§7.16)", () => {
+    const why = report.recommendation!.explanation;
+    expect(why.quantity).toBe(report.recommendation!.quantityPerCrate);
+    expect(why.sections.map((s) => s.id)).toEqual(["compared", "score", "pick", "limit", "considerations"]);
+    expect(why.costLines.find((l) => l.label === "Freight")!.value).toMatch(/^\$/);
+    const plain = rankConfigurations(request()).recommendation!.explanation;
+    expect(plain.costLines.find((l) => l.label === "Freight")!.value).toBe("Not priced");
+  });
+
   it("says what is wrong instead of throwing for a part it can't design for", () => {
     const bad = rankConfigurations(request({ part: { ...getPart("PART-001"), mass_kg: -1 } }));
     expect(bad.problem).not.toBeNull();

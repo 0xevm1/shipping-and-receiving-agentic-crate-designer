@@ -65,6 +65,10 @@ describe("artifacts in Node", () => {
     expect(pdf).toContain(`Recommended: ${rec.quantity} per crate`);
     if (rec.stoppedBy) expect(pdf).toContain(`${rec.stoppedBy.quantity} per crate fails the`);
     expect(pdf).toContain("placeholder");
+    // "Why this crate?" as the Rules tab says it (§7.16).
+    for (const t of ["WHAT WAS COMPARED", "HOW IT IS SCORED", `WHY ${rec.quantity} PER CRATE`, "WHAT STOPPED A LARGER CRATE", "WHAT IT TAKES INTO ACCOUNT"])
+      expect(pdf).toContain(t);
+    expect(pdf).toContain("Not priced");
 
     // The CSV has its stamp line.
     const csv = new TextDecoder().decode((await buildArtifact("csv", req, null)).bytes);
@@ -161,6 +165,7 @@ describe("artifacts in Node", () => {
     for (const f of folders) expect(comparison).toContain(f);
     expect(comparison).toContain("Why this quantity");
     expect(comparison).toContain("Constraint that stopped a larger crate");
+    expect(comparison).toContain("WHAT STOPPED A LARGER CRATE");
     expect(comparison).toContain("Freight is not priced");
     expect(comparison).toContain("placeholder");
     expect(comparison).not.toMatch(/freight[^)]{0,40}\$\d/i);

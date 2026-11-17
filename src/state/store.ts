@@ -119,6 +119,13 @@ export interface DesignerState {
   addCatalogParts: (parts: Part[]) => void;
   /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
   setRanking: (ranking: Ranking) => void;
+  /**
+   * Marks the part on screen as waiting for its recommendation (`autoRecommend`), as `setPart`
+   * does for a new part: the preloaded default part, when startup finds nothing to restore
+   * (spec §7.16 "Recommended on load"). Called once, before anything can be edited. Its rules
+   * then count as the recommendation's (`onRecommendation`), so a units or up-axis change re-recommends.
+   */
+  recommendOnStartup: () => void;
 }
 
 const DEFAULT_PART_ID = "PART-001";
@@ -380,6 +387,10 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     },
     setRanking: (ranking) => {
       if (ranking !== get().ranking) recompute({ ranking, layoutKey: null, ...EDITED }, "layout");
+    },
+    recommendOnStartup: () => {
+      const { part, autoRecommend } = get();
+      if (!autoRecommend) set({ autoRecommend: { modelUrl: part.modelUrl, applied: false }, onRecommendation: true });
     },
   };
 });

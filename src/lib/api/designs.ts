@@ -72,6 +72,15 @@ export const MessageSchema = z.array(
   ]),
 );
 
+/** `ExplanationText` (src/lib/explanation.ts): the recommendation explained in plain sentences. */
+export const ExplanationSchema = z.object({
+  quantity: z.int().positive(),
+  headline: z.string(),
+  sections: z.array(z.object({ id: z.enum(["compared", "score", "pick", "limit", "considerations"]), title: z.string(), lines: z.array(z.string()) })),
+  costLines: z.array(z.object({ label: z.string(), detail: z.string().nullable(), value: z.string(), total: z.boolean() })),
+  ranking: z.array(z.object({ quantity: z.int().positive(), perPart: z.string(), vsPick: z.string(), picked: z.boolean() })),
+});
+
 /** One shortlisted quantity, designed in full. Best first; rank 1 is the recommendation. */
 export const RankedConfigurationSchema = z.object({
   rank: z.int().min(1),
@@ -114,6 +123,8 @@ export const DesignsResponseSchema = z.object({
       rationale: z.string(),
       stoppedBy: z.object({ quantity: z.int().positive(), binding: z.enum(SWEEP_CONSTRAINTS), reason: z.string() }).nullable(),
       costLimited: z.boolean(),
+      /** "Why this crate?" as the Rules tab says it, in metric (spec §7.16 "Explaining the recommendation"). */
+      explanation: ExplanationSchema,
     })
     .nullable(),
   configurations: z.array(RankedConfigurationSchema),

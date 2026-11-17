@@ -16,8 +16,16 @@ function curve(maxQuantity: number, cost: (q: number) => number, max = maxQuanti
     curve: Array.from({ length: maxQuantity }, (_, i) => {
       const q = i + 1;
       return q <= max
-        ? { quantity: q, ok: true, binding: null, reason: null, crate: { ...crate, crateCostUsd: cost(q), scoreUsdPerPart: cost(q) / q, freightUsd: null } }
-        : { quantity: q, ok: false, binding: "max-gross" as const, reason: [`Too heavy at ${q}.`], crate: null };
+        ? {
+            quantity: q,
+            ok: true,
+            binding: null,
+            reason: null,
+            crate: { ...crate, crateCostUsd: cost(q), scoreUsdPerPart: cost(q) / q, freightUsd: null },
+            layoutsDesigned: 1,
+            layoutsPassed: 1,
+          }
+        : { quantity: q, ok: false, binding: "max-gross" as const, reason: [`Too heavy at ${q}.`], crate: null, layoutsDesigned: 0, layoutsPassed: 0 };
     }),
     shortlist: [],
     recommendation: null,

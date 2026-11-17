@@ -15,6 +15,7 @@
  */
 import { jsPDF } from "jspdf";
 import type { DimLine, Drawing, DrawingRect } from "./drawings";
+import type { ExplanationText } from "./explanation";
 import type { PrintableCrate, PrintableDesign, PrintableLabel, PrintableQuantity, PrintableStamp, Row } from "./printable";
 
 /** US Letter in points, with the print route's 0.5″ margins. */
@@ -85,7 +86,7 @@ export interface PdfHead {
   createdAt?: string;
 }
 
-/** "Engine 0.1.0+engine.3 · input 3f2a…", the footer and keywords line. */
+/** "Engine 0.1.0+engine.5 · input 3f2a…", the footer and keywords line. */
 export const stampText = (s: PrintableStamp) => `Engine ${s.engineVersion} · input ${s.inputHash}`;
 
 /** A cursor over the pages, with the header of the sheet being written repeated on overflow. */
@@ -277,7 +278,31 @@ function quantitySpec(w: Writer, q: PrintableQuantity) {
   w.para(q.heading, { style: "bold" }, 2);
   w.para(q.rationale);
   twoCols(w, { title: "The sweep", rows: q.rows }, null);
-  if (q.costNote) w.para(q.costNote, { gray: GREY, size: 8 });
+  if (q.why) explanationPdf(w, q.why);
+  // The explanation says it in "How it is scored".
+  else if (q.costNote) w.para(q.costNote, { gray: GREY, size: 8 });
+}
+
+/**
+ * "Why this crate?" as the Rules tab shows it (spec §7.16): each section's sentences, with the
+ * recommended crate's cost and the best quantities after "How it is scored".
+ */
+export function explanationPdf(w: Writer, x: ExplanationText) {
+  for (const s of x.sections) {
+    w.ensure(48);
+    w.y += w.h3(s.title);
+    for (const line of s.lines) w.para(line);
+    if (s.id === "score") {
+      twoCols(
+        w,
+        { title: `Cost of ${x.quantity} per crate`, rows: x.costLines.map((l) => ({ label: l.label, value: l.value, note: l.detail ?? undefined })) },
+        {
+          title: "Best quantities, cost per part",
+          rows: x.ranking.map((r) => ({ label: `${r.quantity} per crate`, value: r.perPart, note: r.picked ? "the recommendation" : `${r.vsPick} a part` })),
+        },
+      );
+    }
+  }
 }
 
 /** One drawing in a box, as `DrawingSvg` draws it: black on white, sections hatched, parts dashed. */

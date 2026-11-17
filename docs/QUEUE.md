@@ -152,7 +152,8 @@ curl -s http://localhost:3000/api/v1/designs \
 ```
 
 The answer: `engineVersion`, `inputHash` (of the sweep's inputs), `part`, `basis`
-(`crate-only` without rates), `recommendation` (`quantityPerCrate`, `rationale`, `stoppedBy`),
+(`crate-only` without rates), `recommendation` (`quantityPerCrate`, `rationale`, `stoppedBy`, and
+`explanation`: the Rules tab's "Why this crate?" in metric text, spec §7.16),
 `configurations` (the shortlist, best first; each with its own design `inputHash`, `settings`,
 cost per part, crate and freight cost, gross, outside size, screws and `crates`), `total`,
 `curve` (every quantity 1–200: `ok`, the binding rule, the score) and `problem`, plus `model`

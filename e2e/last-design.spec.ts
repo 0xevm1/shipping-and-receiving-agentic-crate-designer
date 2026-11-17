@@ -20,6 +20,7 @@ import {
   shot,
   tab,
   triangleGlb,
+  waitForRecommended,
   waitForScene,
 } from "./helpers";
 
@@ -170,9 +171,10 @@ test("corrupt saved data opens the default part without an error", async ({ page
   page.on("pageerror", (e) => errors.push(e));
   page.on("console", (m) => m.type() === "warning" && warnings.push(m.text()));
   await reloadApp(page);
-  const s = await crate(page);
+  // Nothing to restore: the default part, opened at its recommendation (spec §7.16).
+  const s = await waitForRecommended(page);
   expect(s.partId).toBe("PART-001");
-  expect(s.quantity).toBe(4);
+  expect(s.quantity).toBe(s.recommended);
   expect(s.tab).toBe("overview");
   await expect(loadMessage(page)).toHaveCount(0);
   expect(errors).toEqual([]);

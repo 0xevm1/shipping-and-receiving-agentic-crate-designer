@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { DEFAULT_SETTINGS } from "@/domain/design";
+import { explainRecommendation } from "@/domain/explainRecommendation";
 import { CrateSettingsSchema } from "@/domain/schema";
 import { ShopStandardsSchema } from "@/domain/standards";
 import { FreightRatesSchema, planTotal, SWEEP_MAX_QUANTITY, sweepQuantities, type QuantitySweep, type TotalPlan } from "@/domain/sweep";
 import type { DesignsResponse, RankedConfiguration } from "@/lib/api/designs";
 import { explainTotalPlan } from "@/domain/totalPlan";
+import { explanationText } from "@/lib/explanation";
 import { metricText } from "@/lib/message";
 import { canonicalJson } from "./canonical";
 import { designPartOf, designShipment } from "./engine";
@@ -129,6 +131,7 @@ export function rankConfigurations(req: SweepRequest, swept: SweepResponse = run
           rationale: metricText(rec.rationale),
           stoppedBy: rec.stoppedBy ? { quantity: rec.stoppedBy.quantity, binding: rec.stoppedBy.binding, reason: metricText(rec.stoppedBy.reason) } : null,
           costLimited: rec.costLimited,
+          explanation: explanationText(explainRecommendation(sweep, req.standards, req.rules, { measured: !!req.part.profile })!, "metric"),
         }
       : null,
     configurations,

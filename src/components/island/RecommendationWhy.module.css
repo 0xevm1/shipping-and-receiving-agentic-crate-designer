@@ -1,0 +1,154 @@
+/* "Why this crate?" under the best-quantity hint on the Rules tab (spec §7.16). */
+
+.why {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hair);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--soft);
+}
+
+.headline {
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+.section {
+  margin-top: 12px;
+}
+.section p {
+  margin: 4px 0 0;
+}
+
+/* On the `eyebrow-label` primitive: longhands, because `font` would reset the stretch. */
+.title {
+  margin: 0;
+  font-family: var(--wide);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+}
+
+.table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.table th,
+.table td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hair);
+  text-align: left;
+  font-weight: 400;
+  vertical-align: baseline;
+}
+.table thead th {
+  font-size: 11px;
+  color: var(--muted);
+}
+.table td {
+  font-family: var(--mono);
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 10px;
+  color: var(--text);
+}
+.table tbody th small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.table tr[data-total] th,
+.table tr[data-total] td {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.curve {
+  margin: 10px 0 0;
+}
+.curve svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.axis {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+.grid {
+  stroke: var(--hair);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.tick {
+  fill: var(--muted);
+  font: 400 10px var(--mono);
+}
+.line {
+  fill: none;
+  stroke: var(--sky);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.fail {
+  stroke: var(--red);
+  stroke-width: 1.5;
+}
+.pick {
+  fill: var(--gold);
+  stroke: var(--navy);
+  stroke-width: 2;
+}
+.hit {
+  fill: transparent;
+}
+.hit:hover {
+  fill: rgba(255, 255, 255, 0.06);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.axisNote {
+  margin-left: auto;
+}
+.keyLine,
+.keyPick,
+.keyFail {
+  display: inline-block;
+}
+.keyLine {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--sky);
+}
+.keyPick {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.keyFail {
+  width: 2px;
+  height: 9px;
+  background: var(--red);
+}
+.table thead th:not(:first-child) {
+  text-align: right;
+}

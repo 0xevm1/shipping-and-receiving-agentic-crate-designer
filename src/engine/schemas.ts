@@ -51,7 +51,7 @@ export type DesignRequest = z.infer<typeof DesignRequestSchema>;
 
 /** What every engine output carries (spec §5.1). */
 export const EngineStampSchema = z.object({
-  /** `ENGINE_VERSION`: package version plus engine revision ("0.1.0+engine.3"). */
+  /** `ENGINE_VERSION`: package version plus engine revision ("0.1.0+engine.5"). */
   engineVersion: z.string().min(1),
   /** SHA-256 (hex) of the canonical request: `inputHash()`. */
   inputHash: z.string().regex(/^[0-9a-f]{64}$/),

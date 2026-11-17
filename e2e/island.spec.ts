@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { crate, cutRows, island, layoutCards, mmText, openApp, openTab, panel, pickedLayout, setUnits, shot, tab } from "./helpers";
+import { crate, cutRows, island, layoutCards, mmText, openApp, openTab, panel, pickedLayout, setUnits, shot, tab, useRecommendedLayout } from "./helpers";
 
 /** The island's tabs: what each shows, and how the tab strip works from the keyboard. */
 
@@ -27,7 +27,8 @@ test("Layouts shows cards with the recommended one picked", async ({ page }) => 
   await expect(panel(page).getByRole("heading", { name: "Ways to pack it" })).toBeVisible();
   // Layout cards only: the Rank by toggle has pressed buttons too.
   await expect(pickedLayout(page)).toHaveCount(1);
-  await expect(pickedLayout(page)).toContainText("recommended");
+  // The app opens at the sweep's crate (cheapest per part); back to the ranking's recommended layout.
+  await useRecommendedLayout(page);
   await expect(pickedLayout(page)).toContainText(mmText((await crate(page)).outside!));
   expect(await layoutCards(page).count()).toBeGreaterThan(1);
   await shot(page, "island-layouts");
@@ -45,7 +46,7 @@ test("Cut list groups boards by assembly", async ({ page }) => {
 
 test("Rules shows the packing controls", async ({ page }) => {
   await openTab(page, "Rules");
-  await expect(panel(page).getByLabel("Quantity")).toHaveValue("4");
+  await expect(panel(page).getByLabel("Quantity")).toHaveValue(String((await crate(page)).quantity));
   await expect(panel(page).getByLabel("Keep parts upright")).toBeVisible();
   await expect(panel(page).getByRole("group", { name: "Most layers allowed" })).toBeVisible();
   await expect(panel(page).getByLabel("Gap between parts")).toBeVisible();

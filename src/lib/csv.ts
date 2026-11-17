@@ -66,7 +66,7 @@ export function shipmentToCsv(part: DesignPart, plan: ShipmentPlan, u: Units): s
 
 /**
  * The cut list with the engine's stamp (spec §5.1) as one more `#` line, after the description and
- * before the column names: "# Engine 0.1.0+engine.3, input 3f2a…".
+ * before the column names: "# Engine 0.1.0+engine.5, input 3f2a…".
  */
 export function stampCsv(csv: string, stamp: { engineVersion: string; inputHash: string }): string {
   const lines = csv.split("\n");

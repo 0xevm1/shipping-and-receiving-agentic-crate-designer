@@ -12,9 +12,11 @@ import {
   FreightRatesSchema,
   hardFailure,
   planTotal,
+  SWEEP_LAYOUTS_PER_QUANTITY,
   SWEEP_MAX_QUANTITY,
   SWEEP_SHORTLIST_SIZE,
   sweepQuantities,
+  tieBreakBetween,
   type FreightRates,
   type QuantitySweep,
   type SweepCrate,
@@ -204,6 +206,7 @@ describe("ties", () => {
   const crate = (score: number, density: number): SweepCrate => ({
     layoutKey: "k",
     crateCostUsd: score,
+    cost: { woodUsd: score, fastenersUsd: 0, screws: 0, labourUsd: 0, buildMin: 0 },
     freightUsd: null,
     scoreUsdPerPart: score,
     grossKg: 1,
@@ -219,6 +222,8 @@ describe("ties", () => {
     binding: null,
     reason: null,
     crate: crate(score, density),
+    layoutsDesigned: 1,
+    layoutsPassed: 1,
   });
 
   it("go to the lower cost per part, to the cent", () => {
@@ -229,6 +234,35 @@ describe("ties", () => {
   });
   it("then to denser freight", () => {
     expect(compareSweepPoints(point(4, 10, 20), point(4, 10, 12))).toBeLessThan(0);
+  });
+  it("are reported on the recommendation only when the tie-break decided it", () => {
+    expect(tieBreakBetween(point(4, 10.0), point(8, 10.02))).toBeNull();
+    expect(tieBreakBetween(point(8, 10.001), point(4, 10.004))).toBe("fewer-crates");
+    expect(tieBreakBetween(point(4, 10, 20), point(4, 10, 12))).toBe("denser-freight");
+    expect(tieBreakBetween(point(4, 10), undefined)).toBeNull();
+  });
+  it("PART-003 lying down: 42 and 36 per crate cost the same to the cent, so 42 (fewer crates) wins", () => {
+    const rec = sweepQuantities(getPart("PART-003"), settings({ keepUpright: false })).recommendation!;
+    expect(rec.quantity).toBe(42);
+    expect(rec.tieBreak).toBe("fewer-crates");
+  });
+});
+
+describe("what the curve records for explaining it (§7.16)", () => {
+  it.each(sweeps)("$p.id (upright $keepUpright): the cost breakdown adds up and the layout counts are bounded", ({ sweep }) => {
+    for (const point of sweep.curve) {
+      expect(point.layoutsPassed).toBeLessThanOrEqual(point.layoutsDesigned);
+      expect(point.layoutsDesigned).toBeLessThanOrEqual(SWEEP_LAYOUTS_PER_QUANTITY);
+      if (point.ok) {
+        const c = point.crate!.cost;
+        expect(point.layoutsPassed).toBeGreaterThan(0);
+        expect(c.woodUsd + c.fastenersUsd + c.labourUsd).toBeCloseTo(point.crate!.crateCostUsd, 9);
+        expect(c.screws).toBeGreaterThan(0);
+        expect(c.buildMin).toBeGreaterThan(0);
+      } else expect(point.layoutsPassed).toBe(0);
+    }
+    // Over the gross limit on the parts alone: failed without designing.
+    expect(sweep.curve[SWEEP_MAX_QUANTITY - 1].layoutsDesigned).toBe(0);
   });
 });
 
@@ -284,6 +318,8 @@ describe("total-quantity mode (planTotal)", () => {
         binding: null,
         reason: null,
         crate: { ...sweeps[0].sweep.recommendation!.crate, crateCostUsd: 10 * (i + 1), scoreUsdPerPart: 10 },
+        layoutsDesigned: 1,
+        layoutsPassed: 1,
       })),
       shortlist: [],
       recommendation: null,
