@@ -85,6 +85,80 @@ function lidRatingCheck(d: CrateDesign): Check<"lid"> | null {
   return { id: "lid", level: "caution", title: "Lid can't take the stacking load", detail };
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * Panels bigger than a sheet (spec §7.5c): an info row saying how many seams the crate has and
+ * the rule they follow, and a caution row for a panel the sheet is too small to splice.
+ */
+function splicingChecks(d: CrateDesign, standards: ShopStandards): Check<"spliced">[] {
+  const { spliced, unsplit, seams } = d.splices;
+  const { width, length } = standards.stock.sheetMm;
+  const sheet = dimsMessage([width, length]);
+  const out: Check<"spliced">[] = [];
+  if (unsplit.length) {
+    const names = joinMessages(
+      unsplit.map((u) => msg`${u.name.toLowerCase()} ${dimsMessage(u.sizeMm)}`),
+      ", ",
+    );
+    out.push({
+      id: "spliced",
+      level: "caution",
+      title: "Panels bigger than a sheet can't be split",
+      detail: msg`The ${names} won't fit a ${sheet} sheet, and a piece must be at least two cleats wide (${mm(2 * d.construction.cleat.wide)}) to take a joint cleat. Enter a bigger sheet in Shop standards.`,
+    });
+  }
+  if (seams > 0) {
+    const groups = new Map<string, { name: string; sizeMm: number[]; pieces: number; seams: number; count: number }>();
+    for (const p of spliced) {
+      const g = groups.get(`${p.name}|${p.sizeMm}`);
+      if (g) g.count++;
+      else groups.set(`${p.name}|${p.sizeMm}`, { ...p, count: 1 });
+    }
+    const list = joinMessages(
+      [...groups.values()].map((g) => {
+        const each = g.count > 1 ? " each" : "";
+        const name = g.count > 1 ? `${g.count} ${g.name.toLowerCase()}s` : g.name.toLowerCase();
+        return msg`${name} ${dimsMessage(g.sizeMm)}: ${plural(g.pieces, "piece")}, ${plural(g.seams, "seam")}${each}`;
+      }),
+      "; ",
+    );
+    const c = d.construction.cleat;
+    out.push({
+      id: "spliced",
+      level: "info",
+      title: `Panels are spliced: ${plural(seams, "seam")}`,
+      detail: msg`Bigger than a ${sheet} sheet, so cut in pieces that fit (a sheet can be turned): ${list}. Each seam sits on an upright, cross cleat, joist or skid when one is within reach; otherwise a joint cleat (${sectionName(c.thick, c.wide)}) is screwed behind it.`,
+    });
+  }
+  return out;
+}
+
+/** Lumber longer than the shop stocks (spec §7.5c): skids and rails of a long crate. Lumber is not spliced. */
+function lumberLengthCheck(d: CrateDesign, standards: ShopStandards): Check<"lumber-length"> | null {
+  const max = standards.stock.maxLumberLengthMm;
+  const over = new Map<string, { label: string; mm: number; count: number }>();
+  for (const m of d.members) {
+    const len = Math.max(...m.size);
+    if (m.material !== "lumber" || len <= max) continue;
+    const key = `${m.label}|${Math.round(len)}`;
+    const o = over.get(key);
+    if (o) o.count++;
+    else over.set(key, { label: m.label.toLowerCase(), mm: len, count: 1 });
+  }
+  if (!over.size) return null;
+  const list = joinMessages(
+    [...over.values()].map((o) => msg`${o.count > 1 ? `${o.count} ` : ""}${o.label}${o.count > 1 ? "s" : ""} ${mm(o.mm)}`),
+    ", ",
+  );
+  return {
+    id: "lumber-length",
+    level: "caution",
+    title: "Lumber longer than the stock",
+    detail: msg`${list} long, over the ${mm(max)} lumber the shop stocks. Boards aren't spliced in this design: order longer lumber, splice them by hand, or pick a shorter layout.`,
+  };
+}
+
 /** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
 export function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings, standards: ShopStandards): Check[] {
   const checks: Check[] = [];
@@ -178,6 +252,10 @@ export function evaluateChecks(d: CrateDesign, part: DesignPart, settings: Crate
   checks.push(baseRatingCheck(d, standards));
   const lidCheck = lidRatingCheck(d);
   if (lidCheck) checks.push(lidCheck);
+
+  checks.push(...splicingChecks(d, standards));
+  const longLumber = lumberLengthCheck(d, standards);
+  if (longLumber) checks.push(longLumber);
 
   checks.push(...handlingChecks(d.handling, standards));
 

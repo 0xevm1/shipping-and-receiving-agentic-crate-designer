@@ -77,6 +77,13 @@ export const ShopStandardsSchema = z
        * tall. Also the lid joists when crates are stacked.
        */
       joistMm: SectionSchema,
+      /**
+       * Plywood sheet size. Panels bigger than a sheet (turned either way) are spliced from pieces
+       * that fit (spec §7.5c). Absent in standards saved before it existed: those read as 4 × 8 ft.
+       */
+      sheetMm: z.object({ width: mm(300, 6000), length: mm(300, 6000) }).default({ width: 1220, length: 2440 }),
+      /** Longest lumber the shop stocks; a longer board raises a check (lumber is not spliced). Absent in older standards: 16 ft. */
+      maxLumberLengthMm: mm(500, 20000).default(4880),
     }),
     /** What a new crate starts with, and what Reset rules goes back to. */
     defaults: z.object({
@@ -283,6 +290,8 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     panelPlywoodMm: { light: 12, medium: 15, heavy: 19 },
     blockWidthMm: 89, // cut from 2×4 / 4×4
     joistMm: { thick: 38, wide: 89 }, // 2×4 on edge
+    sheetMm: { width: 1220, length: 2440 }, // 4 × 8 ft plywood
+    maxLumberLengthMm: 4880, // 16 ft
   },
   defaults: { partGapMm: 50, wallClearanceMm: 50, maxLayers: 2, volumeTolerance: 0.03 },
   construction: {

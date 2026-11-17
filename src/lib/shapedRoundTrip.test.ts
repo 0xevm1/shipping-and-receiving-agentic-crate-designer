@@ -210,13 +210,15 @@ describe("the ranking travels with the design", () => {
   });
 
   it("the sweep's recommended crate says it is the recommendation, not a pick by hand, and how the list is ranked", () => {
+    // With sheets that need no seams, so the cheapest layout per part is not also the smallest by volume.
+    const NO_SEAMS = { ...DEFAULT_STANDARDS, stock: { ...DEFAULT_STANDARDS.stock, sheetMm: { width: 6000, length: 6000 } } };
     const { part } = savedDesign("PART-001", 4);
-    const sweep = sweepQuantities(part, { ...DEFAULT_SETTINGS, quantity: 1 }, DEFAULT_STANDARDS);
+    const sweep = sweepQuantities(part, { ...DEFAULT_SETTINGS, quantity: 1 }, NO_SEAMS);
     const rec = sweep.recommendation!;
-    const plan = planShipment(part, { ...DEFAULT_SETTINGS, quantity: rec.quantity }, rec.crate.layoutKey, DEFAULT_STANDARDS, "volume");
+    const plan = planShipment(part, { ...DEFAULT_SETTINGS, quantity: rec.quantity }, rec.crate.layoutKey, NO_SEAMS, "volume");
     // Ranked by volume, the list's top is another layout than the one cheapest per part.
     expect(plan.crates[0].result.layouts[0].key).not.toBe(rec.crate.layoutKey);
-    const doc = buildPrintable({ part, plan, sweep, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: NOW });
+    const doc = buildPrintable({ part, plan, sweep, standards: NO_SEAMS, units: "imperial", ranking: "volume", generatedAt: NOW });
     expect(doc.crates[0].spec.layout.why).toMatch(/^Recommended: cheapest per part\. .* ranked by volume, where it ships/);
     expect(doc.crates[0].spec.layout.why).not.toMatch(/picked by hand/);
   });

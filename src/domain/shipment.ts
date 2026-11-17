@@ -6,6 +6,7 @@ import type { CrateDesign } from "./crateDesign";
 import { computeDesign, rankByObjective, rankLayouts, type DesignProblem, type DesignResult, type Ranking } from "./design";
 import { dimsMessage, joinMessages, kg, mm, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
+import { sheetsFromAreas, type SheetsNeeded } from "./sheets";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
@@ -383,6 +384,8 @@ interface ShipmentBom {
   lines: BomLine[];
   plywoodM2: number;
   lumberM: number;
+  /** Plywood sheets for every crate together: the pieces' area by thickness is summed first, so crates share offcuts. */
+  sheets: SheetsNeeded;
   screws: number;
 }
 
@@ -392,9 +395,13 @@ export function shipmentBom(plan: ShipmentPlan): ShipmentBom {
   let plywoodM2 = 0;
   let lumberM = 0;
   let screws = 0;
+  const areas = new Map<number, number>();
+  let sheetBasis: SheetsNeeded | null = null;
   for (const t of plan.crates) {
     const d = t.result.design;
     if (!d) continue;
+    sheetBasis ??= d.sheets;
+    for (const l of d.sheets.lines) areas.set(l.thicknessMm, (areas.get(l.thicknessMm) ?? 0) + l.areaM2 * t.count);
     for (const l of d.bom) {
       const line = lines.get(l.key);
       if (line) line.qty += l.qty * t.count;
@@ -410,5 +417,6 @@ export function shipmentBom(plan: ShipmentPlan): ShipmentBom {
   all.forEach((l, i) => firstSeen.set(`${l.assembly}|${l.name}`, firstSeen.get(`${l.assembly}|${l.name}`) ?? i));
   const order = (l: BomLine) => firstSeen.get(`${l.assembly}|${l.name}`)!;
   if (plan.crates.length > 1) all.sort((x, y) => order(x) - order(y));
-  return { lines: all, plywoodM2, lumberM, screws };
+  const sheets = sheetBasis ? sheetsFromAreas(areas, sheetBasis.sheetMm, sheetBasis.allowance) : sheetsFromAreas(areas, { width: 1220, length: 2440 });
+  return { lines: all, plywoodM2, lumberM, sheets, screws };
 }

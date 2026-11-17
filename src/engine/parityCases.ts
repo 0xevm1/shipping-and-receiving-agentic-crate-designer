@@ -62,11 +62,18 @@ const FORK_ENTRY_CASES = [
   { part: "PART-001", quantity: 1, forkEntry: "fourWay" },
 ] as const;
 
+/** Long crates whose floor, walls and lid are bigger than a 4 × 8 ft sheet, so the engine splices them (#107). */
+const SPLICE_CASES = [
+  { part: "PART-002", quantity: 42 },
+  { part: "PART-003", quantity: 32 },
+] as const;
+
 export function parityCases(): ParityCase[] {
   type Run = { part: string; quantity: number; total?: number; sizeLimitMm?: (typeof SIZE_LIMIT_CASE)["sizeLimitMm"]; forkEntry?: ForkEntry };
   const runs: Run[] = [
     ...catalog.parts.flatMap((p) => p.suggested_quantities.map((quantity) => ({ part: p.id, quantity }))),
     SIZE_LIMIT_CASE,
+    ...SPLICE_CASES,
     ...FORK_ENTRY_CASES,
     ...TOTAL_CASES.map(({ part, total }) => ({ part, quantity: total, total })),
   ];

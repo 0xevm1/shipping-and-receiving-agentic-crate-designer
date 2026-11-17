@@ -10,6 +10,7 @@ import { materialTotals } from "./materials";
 import type { AddMember, Member } from "./members";
 import type { Layout } from "./packing";
 import { restraint, usableProfile } from "./profile";
+import { sheetsNeeded } from "./sheets";
 import type { CrateSettings, DesignPart } from "./schema";
 import { addShell } from "./shell";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -49,7 +50,7 @@ export function designCrate(part: DesignPart, settings: CrateSettings, layout: L
   const add: AddMember = (kind, material, tag, min, size, cradle) => {
     if (size.every((s) => s > 0.5)) members.push({ kind, material, ...tag, bomKey: "", min, size, ...(cradle && { cradle }) });
   };
-  addShell(layout.interior, construction, add, standards);
+  const splices = addShell(layout.interior, construction, add, standards);
 
   // Slender parts lying flat sit in notched cradles; everything else is blocked,
   // shaped to the part when it has a measured profile.
@@ -80,6 +81,8 @@ export function designCrate(part: DesignPart, settings: CrateSettings, layout: L
     grossKg,
     plywoodM2,
     lumberM,
+    sheets: sheetsNeeded(members, standards),
+    splices,
     screws,
     materialCostUsd,
     labour,

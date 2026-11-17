@@ -81,8 +81,9 @@ interface CradleProfile {
  * schedule, the shaped-blocking summary). Labels are for people and can be renamed; this is not.
  * - `shaped-block`: a `blocking` board cut to reach into a recess of the part (spec §7.5b).
  * - `stacking-cradle`: a `cradle` between layers, screwed through the side walls (spec §7.5a).
+ * - `joint-cleat`: a cleat (or lid cleat) behind a seam where a panel bigger than a sheet is spliced (spec §7.5c).
  */
-export type MemberVariant = "shaped-block" | "stacking-cradle";
+export type MemberVariant = "shaped-block" | "stacking-cradle" | "joint-cleat";
 
 export interface Member {
   kind: MemberKind;

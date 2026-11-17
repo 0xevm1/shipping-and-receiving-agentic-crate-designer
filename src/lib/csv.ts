@@ -4,6 +4,7 @@ import type { DesignPart } from "@/domain/schema";
 import { describeShipment, shipmentBom, type ShipmentPlan } from "@/domain/shipment";
 import { lumberText, plywoodText } from "./lumber";
 import { groupThousands } from "./format";
+import { sheetRows } from "./sheets";
 import { formatMass } from "./partFields";
 import { shipmentFigures } from "./shipmentFigures";
 import { dims, fraction, lengthUnit, weight, type Units } from "./units";
@@ -49,7 +50,7 @@ export function bomToCsv(part: DesignPart, design: CrateDesign, u: Units): strin
     columns(u),
   ];
   const rows = design.bom.map((l) => csvRow(l, u));
-  return [...header, ...rows, `Wood screws (approx),fastener,,,${design.screws}`].join("\n") + "\n";
+  return [...header, ...rows, ...sheetRows(design.sheets, u), `Wood screws (approx),fastener,,,${design.screws}`].join("\n") + "\n";
 }
 
 /**
@@ -65,7 +66,7 @@ export function shipmentToCsv(part: DesignPart, plan: ShipmentPlan, u: Units): s
         `# Shipment of ${f.parts} x ${part.id} ${part.name}: ${groupThousands(describeShipment(plan)).replace(/×/g, "x")}`,
         `# Part ${part.material ?? "material not given"}, ${partMass(part.mass_kg, u)} each`,
         `# ${f.crates} crates, gross ${f.gross} in all; quantities are for every crate`,
-        `# Wood for every crate: plywood ${plain(f.plywood)}, lumber ${f.lumber}, ${f.screws} wood screws`,
+        `# Wood for every crate: plywood ${plain(f.plywood)}, lumber ${f.lumber}, ${f.sheets} plywood sheets, ${f.screws} wood screws`,
         `# Crate cost ${f.cost} (wood, screws and labour), ${f.labour} of labour`,
         `# Freight: ${f.freight.replace(/ · /g, ", ")}; ${f.dimWeight} dimensional weight in all`,
         UNITS_LINE[u],
@@ -79,7 +80,7 @@ export function shipmentToCsv(part: DesignPart, plan: ShipmentPlan, u: Units): s
         columns(u),
       ];
   const rows = all.lines.map((l) => csvRow(l, u));
-  return [...header, ...rows, `Wood screws (approx),fastener,,,${all.screws}`].join("\n") + "\n";
+  return [...header, ...rows, ...sheetRows(all.sheets, u), `Wood screws (approx),fastener,,,${all.screws}`].join("\n") + "\n";
 }
 
 /**

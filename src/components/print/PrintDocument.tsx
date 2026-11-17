@@ -177,7 +177,7 @@ function BuildSheet({ doc, crate: c }: { doc: PrintableDesign; crate: PrintableC
         </table>
         <div className="stock-totals">
           {c.build.totals.map((t) => (
-            <div key={t.label}>
+            <div key={t.label} title={t.note}>
               <b>{t.value}</b> {t.label.toLowerCase()}
             </div>
           ))}
