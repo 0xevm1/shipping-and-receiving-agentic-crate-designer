@@ -94,7 +94,9 @@ export async function buildArtifact(kind: ArtifactKind, req: ArtifactRequest, re
   if (kind === "csv") {
     if (plan.problem || !plan.crates[0]?.result.design) throw noCrate();
     const out = cutList({ ...design, units, scope: plan.split ? "shipment" : "crate", crateIndex: req.crateIndex ?? 0 }, plan);
-    return done(kind, new TextEncoder().encode(stampCsv(out.csv, st)), out.fileName, st);
+    // The Cut list tab's name, with the part id made file-name safe like the other files (a ZIP path never gains a folder).
+    const fileName = `${stem}${out.fileName.slice(`crate-${part.id}-x${settings.quantity}`.length)}`;
+    return done(kind, new TextEncoder().encode(stampCsv(out.csv, st)), fileName, st);
   }
   if (kind === "glb") {
     const type = plan.crates[req.crateIndex ?? 0] ?? plan.crates[0];

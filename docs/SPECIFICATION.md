@@ -194,14 +194,16 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 | `engine.ts` `designShipment(request)` | `planShipment` on a `DesignRequest`; returns `{ plan, summary, engineVersion, inputHash }`. Pure and synchronous; never throws for valid input |
 | `engine.ts` `cutList(request)` | The Cut list tab's CSV and file name (crate type or, for a split batch, the shipment), stamped |
 | `engine.ts` `inputHash(request)`, `summarize(plan)` | The stamp's hash; the headline numbers (outside size, gross, tare, screws, cost per crate type, totals, problem) |
-| `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped. Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
+| `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped (every file in it carries the stamp). Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
+| `artifacts.ts` `buildArtifact(kind, request, reader)` | One artifact (`glb`, `pdf`, `csv`) for one configuration: `{ bytes, contentType, fileName, engineVersion, inputHash, sha256 }` (§7.17) |
+| `artifacts.ts` `buildMultiBundleZip(configs, reader, options)` | Download all: a ZIP with a folder per configuration, `manifest.json` and `comparison.pdf` (§7.17) |
 | `glb.ts` | Runtime adapters for GLBs: `urlModelReader` (browser, `GLTFLoader` on the model URL, cached), `bytesModelReader` / `parseGlb` (any runtime, `GLTFLoader.parse` on bytes), `crateGlb` (`GLTFExporter`, adding a minimal `FileReader` where the runtime has none, as Node) |
 | `schemas.ts` | zod schemas for every call: `DesignRequestSchema` (part, settings, standards, layoutKey, ranking), `DesignResponseSchema`, `DesignSummarySchema`, `EngineStampSchema`, `CutListRequestSchema` / `CutListResponseSchema`, and the worker messages. The browser, server and CLI validate the same types; the page's own calls are typed and skip parsing |
 
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
 
 - **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
-  `ENGINE_REVISION`, as `0.1.0+engine.1`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  `ENGINE_REVISION`, as `0.1.0+engine.2`. **Rule:** bump `ENGINE_REVISION` in the same change as
   anything that gives a different output for the same input (a rule, a constant, an algorithm, a
   default standard, or the text of a generated file). A refactor that leaves every output
   identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
@@ -221,8 +223,12 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
   - `v` is bumped if the hashed shape changes, so old and new hashes never collide. The engine
     version is not in the hash: equal inputs hash the same across versions, and a server compares
     both before trusting a result.
-  - File outputs (`cutList`, `buildBundleZip`) carry their design's stamp; their own options
-    (units, scope) are not hashed.
+  - File outputs (`cutList`, `buildBundleZip`, `buildArtifact`) carry their design's stamp; their
+    own options (units, scope, crate type, time) are not hashed. The stamp is also written
+    **inside** every file the engine builds (§7.17): the GLB's scene `extras`, the PDF's keywords
+    and page footer, a `# Engine …, input …` line in the CSV, `engine` in `design.json`, and two
+    lines of `README.txt`. `cutList`'s own CSV text (the Cut list tab's download, the parity
+    baseline) has no stamp line.
 
 **In the browser.** `src/state/engineClient.ts` runs the engine in a Web Worker
 (`src/state/engine.worker.ts`, bundled by Next.js from `new Worker(new URL(…, import.meta.url))`),
@@ -326,6 +332,10 @@ bump `ENGINE_REVISION`.
 | `src/engine/canonical.ts`, `sha256.ts` | Canonical JSON and a synchronous SHA-256, for `inputHash` |
 | `src/engine/glb.ts` | GLB adapters: `urlModelReader` (browser), `bytesModelReader` / `parseGlb` (any runtime), `crateGlb`, `ensureFileReader`; loaded with `import()` |
 | `src/engine/files.ts` | `buildBundleZip`: the Export package in any runtime, PDF / ZIP / GLB code loaded on first use |
+| `src/engine/artifacts.ts` | `buildArtifact` (one stamped GLB, PDF or CSV), `buildMultiBundleZip` (Download all), `sweepFor`, the manifest types (§7.17) |
+| `src/engine/artifactCases.ts` | The artifact parity cases: each sample part at its recommended quantity, and the CSV baseline text (`__snapshots__/artifacts-csv.txt`) |
+| `src/lib/comparison.ts`, `comparisonPdf.ts` | The multi-configuration comparison summary (`buildComparison`, pure) and its one-sheet PDF (`comparisonToPdf`, jsPDF through `exportPdf.ts`'s `Writer`) |
+| `src/state/downloadAll.ts` | `useDownloadAll`: the Download all run beside the Export pill (`run(configs?)`; default: the design on screen plus the sweep's shortlist, `shortlistConfigs`) |
 | `src/engine/parityCases.ts` | The browser / Node parity cases and the baseline text (`__snapshots__/parity.json`) |
 | `src/state/engineClient.ts` | `engine`: the page's engine client, a Web Worker with an in-thread fallback, latest-wins (`createEngineClient`) |
 | `src/state/engine.worker.ts` | The engine's Web Worker entry |
@@ -666,6 +676,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
+  "engine": { "version": "0.1.0+engine.2", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -1515,6 +1526,13 @@ cautions still exports (no confirm dialog), but the pill carries an amber dot, a
 `aria-describedby` note such as "1 caution, see Checks". The zip replaced #27's
 "Download 3D model (.glb)" and its "Include parts" switch; its GLB always includes the parts.
 
+**Stamps and the quantity (#46).** Built by the engine, every file in the package carries
+`engineVersion` and `inputHash` (§5.1): the GLB's scene `extras`, the PDF's keywords and a footer
+line on every page, a `# Engine …` line in each CSV, `engine` in `design.json` and two README lines.
+The PDF also has a **Quantity per crate** section after the part (§7.17), and its creation date
+is the export time and its file id comes from the hash, so equal inputs at the same time give
+equal bytes.
+
 ### 7.14 Centre of gravity and handling (`src/domain/handling.ts`, #8)
 
 `analyseHandling(members, layout, partKg, standards)` reads the finished crate: the members
@@ -1751,6 +1769,88 @@ which sets the quantity and the recommended layout. Loading a part does not chan
 (it still starts at the first suggested quantity). The recommendation can move once the model's
 profile is measured (§7.5b), since shaped blocking changes the crate.
 
+### 7.17 Artifacts and the multi-configuration bundle (`src/engine/artifacts.ts`, #46)
+
+The files a configuration leaves the building with, built by the same engine code in the page and
+in Node, so the server's artifact routes (`/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`,
+`bundle.zip`, later) store exactly the bytes the browser would make. A **configuration** is a
+`DesignRequest` (part, settings with the quantity, standards, layout pick, ranking).
+
+**`buildArtifact(kind, request, reader)`** returns `{ kind, bytes, contentType, fileName,
+engineVersion, inputHash, sha256 }`. `request` may add `units` (imperial when absent),
+`crateIndex`, `generatedAt`, `timeZone`, and a precomputed `sweep` or `plan`. `reader` is the GLB
+adapter (§5.1: `urlModelReader` in the browser, `bytesModelReader(bytes)` in Node; null gives the
+boards only).
+
+| Kind | File | Content type | Stamp inside |
+|---|---|---|---|
+| `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
+| `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.2, input …` before the column names |
+
+A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
+
+**Quantity rationale in the PDF (#26 follow-up).** The engine runs the sweep (§7.16, no freight
+rates) for the request's part and rules, and the PDF's **Quantity per crate** section says:
+- whether this crate **is the recommendation** (`isRecommended`: one crate type whose quantity and
+  layout are the recommendation's) — "Recommended: 34 per crate" — or not — "20 per crate; the
+  sweep recommends 34";
+- the sweep's rationale (the score in crate cost per part and what limits it);
+- **the constraint that stopped a larger crate**: "35 per crate fails the base rating" with the
+  failing check's text, or "Nothing up to 200 per crate";
+- "Freight: Not priced" (no rates, so no freight dollars), and, while any cost input is the
+  shipped placeholder (`costsArePlaceholder(standards)`: wood prices, screw price or labour still
+  equal `DEFAULT_STANDARDS`), "Costs use the shipped placeholder … not for a quote".
+
+The `/print` route has no sweep and shows no quantity section.
+
+**`buildMultiBundleZip(configs, reader, { units, generatedAt, timeZone })`** gives one ZIP:
+
+```
+crates-PART-001-6-configs.zip
+├─ 01-x4/                        the configurations in the order given, duplicates (equal inputHash) once
+│  ├─ crate-PART-001-x4.glb      one per crate type of a split batch
+│  ├─ crate-PART-001-x4.pdf
+│  └─ crate-PART-001-x4.csv      the cut list (…-shipment.csv for a split batch)
+├─ 02-x34-recommended/           "-recommended" marks the sweep's recommendation
+│  └─ …
+├─ comparison.pdf                the comparison summary
+└─ manifest.json
+```
+
+A configuration with no crate gets its folder with the PDF only. **`manifest.json`**:
+`{ kind: "crate-designer/bundle", version: 1, engineVersion, bundleHash, created, units, part:
+{ id, name }, costBasis: "crate-only", placeholderCosts, recommendation: { quantity, layoutKey,
+crateCostUsdPerPart, rationale, stoppedBy: { quantity, constraint, reason } | null } | null,
+configurations: [{ folder, engineVersion, inputHash, quantity, layoutKey, layout, ranking,
+recommended, split, crates, perCrate, outsideMm, grossKg, crateCostUsdPerPart, problem, files }],
+files }`. Every file entry is `{ path, kind, contentType, bytes, sha256 }`; `files` lists
+`comparison.pdf` (the manifest doesn't list itself). `bundleHash` is the SHA-256 of the
+configurations' input hashes joined by newlines; it is the comparison PDF's `inputHash`. The ZIP
+entries carry `generatedAt`.
+
+**`comparison.pdf`** (`buildComparison` in `src/lib/comparison.ts`, laid out by
+`comparisonToPdf`): the part; a table with a row per configuration — folder, quantity per crate
+("18 / 16" for a split), crates, outside size and gross (crate A), crate cost per part, and a note
+(Recommended; the split; the hard rule a quantity fails, with its reason; or how much more per part
+than the recommendation); then **Why this quantity**: the recommendation, its rationale and the
+constraint that stopped a larger crate. It always says freight is not priced, and says when costs
+are placeholders. **No freight dollar figure appears** in the PDFs or the manifest: the sweep is run
+without rates (`costBasis: "crate-only"`).
+
+**Download all (browser).** Beside the Export pill (§8.2), an outlined pill **Download all**
+builds this ZIP in the page (`useDownloadAll`, `src/state/downloadAll.ts`): `run(configs?)` takes
+any plain array of `DesignRequest`s, so a job's saved configurations can feed it; without one it
+bundles the design on screen and the sweep's shortlist (`shortlistConfigs(current, sweepFor(current))`,
+each shortlist quantity at its layout with the same rules). The sweep, PDF, ZIP and GLB code load
+with `import()` on the first click; nothing goes to a server. States and timings are the Export
+pill's: "Bundling…" with a spinner (at least 1.5 s unless reduced motion), then "Downloaded
+crates-PART-001-6-configs.zip" in its own `role="status"` note, or one plain error sentence.
+
+**Known gap:** `planShipment` (§7.10) decides whether to split by the volume-best layout, while the
+sweep judges the layout it picked, so PART-001's recommended 34 per crate plans as a split (18 + 16)
+when set as the quantity. The PDF and comparison then say the crate is not the recommendation.
+
 ## 8. UI
 
 The design source of truth is `docs/design-handoff/` (`HANDOFF.md` and a runnable prototype).
@@ -1840,7 +1940,8 @@ The canvas fills the window. Four regions float above it:
     framing. The **Export pill** (#51) stays in the header under the part lines, 44 px tall,
     rather than moving into the drawer: it is one tap away without opening anything, it belongs
     to the part and crate the header describes, and the top inset is measured, so the crate
-    moves down to make room. Its status note sits beside it, or wraps under it.
+    moves down to make room. Its status note sits beside it, or wraps under it. **Download all**
+    (§7.17), an outlined pill of the same shape, sits after it in the same row.
   - **Hamburger** (top right, 48 px, "Crate details"): opens the drawer. It has `aria-expanded`
     and `aria-controls="island"`.
   - **Drawer:** the island, full height at the right edge, `min(88vw, 440px)` wide, over a
@@ -2376,6 +2477,22 @@ covers the in-thread fallback, latest-wins and falling back when the worker fail
 `store.worker.test.ts` covers the store with a worker: an edit shows at once, its design lands
 with `designedFrom`, quick edits build on each other, a crate type waits for its plan, and the
 `restoring` hold waits for the reopened design.
+
+**Artifacts (`src/engine/artifacts.node.test.ts`, `artifacts.jsdom.test.ts`, §7.17):** in Node,
+for each sample part at its recommended quantity and layout, with `bytesModelReader`, every
+artifact kind is built and stamped (`sha256` matches the bytes); the GLB reloads with `parseGlb`,
+carries the stamp in `userData`, holds every part, and its crate is the outside size within 1 mm on
+each axis; the PDF holds the hash, the quantity line (recommended, or "the sweep recommends") and
+the constraint that stopped a larger crate; the CSV has its stamp line. The same PDF input and time
+give the same bytes. The multi-configuration bundle (PART-002, current design plus shortlist and a
+duplicate) has a folder per unique configuration with GLB, PDF and CSV, a manifest whose sizes and
+hashes match the ZIP's files and whose input hashes match the engine's, one recommended folder, and
+a comparison PDF with every folder, the rationale and constraint, "Freight is not priced", the
+placeholder note and no freight dollars. **CSV parity:** Node and jsdom both match
+`__snapshots__/artifacts-csv.txt` (the engine version replaced by `<engine>`).
+`src/state/downloadAll.test.ts` checks the default configurations and that `run` takes any array.
+`files.test.ts` checks the stamp in each file of the Export package; `standards.test.ts` checks
+`costsArePlaceholder`.
 
 **`src/domain/domain.test.ts`** checks:
 
