@@ -24,6 +24,9 @@ test("a typed quantity over 200 is clamped to 200", async ({ page }) => {
   const qty = panel(page).getByLabel("Quantity");
   await qty.fill("500");
   await pollCrate(page, (s) => s.quantity).toBe(200);
+  // #36: a polite note by the field says what happened.
+  await expect(panel(page).getByRole("status").filter({ hasText: "Quantity is 1–200; set to 200" })).toBeVisible();
+  await shot(page, "03-rules-clamp-note");
   await qty.blur();
   await expect(qty).toHaveValue("200");
 });
