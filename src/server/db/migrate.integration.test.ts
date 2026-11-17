@@ -4,7 +4,20 @@ import { dropDatabase, ensureDatabase, migrateDatabase } from "./migrate";
 import { DEFAULT_ORG_ID } from "./org";
 import { scratchDatabaseUrl } from "./testing";
 
-const TABLES = ["artifact", "configuration", "design_job", "event", "idempotency_key", "job_configuration", "org", "part", "part_model", "shop_standard"];
+const TABLES = [
+  "api_key",
+  "artifact",
+  "configuration",
+  "design_job",
+  "event",
+  "idempotency_key",
+  "job_configuration",
+  "org",
+  "part",
+  "part_model",
+  "queue_job",
+  "shop_standard",
+];
 
 describe("db:migrate", () => {
   const url = scratchDatabaseUrl("migrate");

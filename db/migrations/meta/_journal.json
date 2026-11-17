@@ -29,6 +29,13 @@
       "when": 1794912667791,
       "tag": "0003_job_configuration",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794913901477,
+      "tag": "0004_queue_api_keys",
+      "breakpoints": true
     }
   ]
 }

@@ -93,6 +93,10 @@ const API_ERROR_CODES = [
   "too_large",
   "not_found",
   "internal",
+  /** 401: no API key, or one that is unknown or revoked (src/server/auth.ts, docs/QUEUE.md). */
+  "unauthorized",
+  /** 503: the engine worker pool isn't available on this server. */
+  "unavailable",
   // Jobs and configurations (src/lib/api/jobs.ts, docs/API.md):
   /** 409: the save was made by another engine; the client reloads to get the server's. */
   "engine_version_mismatch",

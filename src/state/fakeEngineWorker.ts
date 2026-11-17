@@ -1,4 +1,4 @@
-import { designShipment } from "@/engine/engine";
+import { runWorkerRequest } from "@/engine/run";
 import type { WorkerRequest, WorkerResponse } from "@/engine/schemas";
 import type { WorkerLike } from "./engineClient";
 
@@ -20,8 +20,8 @@ export class FakeEngineWorker implements WorkerLike {
   /** Answers every waiting request, in order (each answer may send the next). */
   flush() {
     while (this.inbox.length) {
-      const { id, request } = this.inbox.shift()!;
-      this.onmessage?.({ data: structuredClone({ id, ok: true, output: designShipment(request) }) });
+      const msg = this.inbox.shift()!;
+      this.onmessage?.({ data: structuredClone(runWorkerRequest(msg)) });
     }
   }
 

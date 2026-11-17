@@ -45,7 +45,10 @@ Next.js on the host. [`docs/POSTGRES.md`](docs/POSTGRES.md) covers the data stor
 | `bun run db:migrate` / `db:reset` / `db:psql` | Apply `db/migrations/` / drop and re-migrate the database / open `psql` on it |
 | `bun run db:generate` | Write the next migration after changing `src/server/db/schema.ts` |
 | `bun run test:integration` | Integration tests against the Docker Postgres (`*.integration.test.ts`; run `infra:up` first) |
-| `bun run build && bun run start` | Production build and serve |
+| `bun run build && bun run start` | Production build and serve (`build` also bundles the server's engine worker thread, `engine:build`) |
+| `bun run worker` | The background job worker: claims queued sweeps from Postgres and runs them on worker threads ([docs/QUEUE.md](docs/QUEUE.md)) |
+| `bun run crate -- part.glb --mass 21.5` | The command line: best quantity, ranked crates and files for a part ([Command line](#command-line)) |
+| `bun run apikey:create -- --name x` | Create an API key for scripts (`apikey:list`, `apikey:revoke -- --id …`) |
 | `bun run test` | Unit tests (vitest); no database needed |
 | `bun run e2e` | End-to-end UI tests (Playwright): builds the app with the test hook, serves it on port 3320 (`E2E_PORT` changes it), runs every flow and saves screenshots to the git-ignored `e2e/screenshots/`. First run `bunx playwright install chromium` once. Locally it uses 1 to 3 workers (`E2E_WORKERS`). `bun run e2e:ui` opens Playwright's UI mode; `bun run e2e:docs-shots` copies chosen shots into `docs/screenshots/` |
 | `bun run format` / `bun run format:check` | Prettier (`.prettierrc`: 160 columns); CI runs the check |
@@ -73,6 +76,33 @@ Next.js on the host. [`docs/POSTGRES.md`](docs/POSTGRES.md) covers the data stor
   pre-commit hook don't need it. No environment variables are needed: the defaults match
   `docker-compose.yml`, and `.env.example` lists what `.env.local` can override. The sample GLBs
   are bundled in `public/parts/`.
+
+## Command line
+
+`bun run crate` designs the crate for a part without the browser: the best quantity per crate,
+the ranked shortlist and, with `--total`, how N parts ship. It calls the app's API
+(`POST /api/v1/designs`), or with `--offline` runs the same engine in its own process.
+
+```bash
+bun run apikey:create -- --name my-laptop          # once; prints the key
+export CRATE_API_KEY=cdk_…
+bun run crate -- public/parts/PART-001-machined-steel-bracket.glb --mass 21.5 --total 40 --out ./out
+bun run crate -- part.glb --mass 21.5 --total 40 --out ./out --offline   # no server, no database
+```
+
+| Option | |
+|---|---|
+| `--mass <kg>` | Mass of one part (required; never read from the mesh) |
+| `--total <n>` | Total parts to ship: adds the even split over crates |
+| `--material`, `--density`, `--name` | Part facts, as for an upload |
+| `--freight-rates <json or @file>` | LTL rates, `{"usdPerCwtByClass": {"70": 41.5}, "minimumUsd": 95}`; without them no freight dollars appear |
+| `--out <dir>` | Output directory (default `./crate-out`) |
+| `--offline` | Run the engine here; also writes the crate GLB, PDF, cut list, `design.json` and README |
+| `--api <url>`, `--key <key>` | API base URL and key (default `$CRATE_API_URL` or `http://localhost:3000`, `$CRATE_API_KEY`) |
+
+Both modes write `designs.json` (ranked configurations, recommendation and rationale, the 1–200
+curve, the total plan) and `ranking.csv`. The API needs a key from scripts; the app's own pages
+don't. Details, the job queue and the worker threads: [docs/QUEUE.md](docs/QUEUE.md).
 
 ## Pull requests
 
@@ -387,8 +417,11 @@ src/engine/        the crate engine, may import lib and domain: one API (design,
                    stamped with engineVersion and inputHash (spec §5.1, §7.17)
 src/state/         may import engine, lib and domain: zustand stores, persistence, loading
                    flows, the engine's Web Worker and its client, per-frame animation values
-src/server/        server-only (Postgres via drizzle, S3 blob storage, #46), may import engine,
-                   lib and domain; only src/app/ may import it (Route Handlers in src/app/api/v1/)
+src/server/        server-only (Postgres via drizzle, S3 blob storage, the job queue, the engine's
+                   worker_threads pool, API keys, #46), may import engine, lib and domain; only
+                   src/app/ may import it (Route Handlers in src/app/api/v1/)
+src/cli/           bun run crate (#46): may import engine, lib and domain; talks to the API, or
+                   runs the engine in-process with --offline
 src/components/    may import everything below except src/server/: shell/ (overlays), island/
                    (tabs), viewer/ (three.js via react-three-fiber); src/app/ is the same layer
 ```
@@ -410,7 +443,8 @@ public/            also site.webmanifest and its 192/512 icons (tab icons: src/a
 e2e/               Playwright end-to-end UI tests (bun run e2e)
 db/migrations/     SQL migrations written by drizzle-kit (bun run db:generate)
 infra/             blob emulator bucket setup (CORS) for docker-compose.yml
-docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, design-handoff/
+scripts/           infra, worker (job queue), apikey, blob-gc, pre-commit
+docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, QUEUE.md, design-handoff/
 ```
 
 ## Docs
@@ -425,6 +459,9 @@ docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, desig
   storage: object keys, the part upload API, presigned downloads, orphan cleanup. Pointing the
   `BLOB_*` variables at real AWS S3, Cloudflare R2 or GCS (S3 XML API with HMAC keys) works
   without code changes.
+- [`docs/QUEUE.md`](docs/QUEUE.md): the Postgres job queue (SKIP LOCKED, NOTIFY, leases,
+  retries, dead letter), the engine's worker threads, `POST /api/v1/designs`, API keys and the
+  `bun run crate` command line.
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 

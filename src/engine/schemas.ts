@@ -4,6 +4,7 @@ import { FACE_IDS } from "@/domain/profile";
 import { CrateSettingsSchema, PartSchema, Vec3Schema } from "@/domain/schema";
 import type { ShipmentPlan } from "@/domain/shipment";
 import { ShopStandardsSchema } from "@/domain/standards";
+import type { SweepRequest, SweepResponse } from "./sweep";
 
 /**
  * Requests and responses of the engine's calls (spec §5.1), shared by every caller: the
@@ -111,6 +112,13 @@ export const CutListResponseSchema = EngineStampSchema.extend({
 });
 export type CutListResponse = z.infer<typeof CutListResponseSchema>;
 
+/** The calls the browser's engine worker runs: request and response per op. */
+export interface WorkerOps {
+  design: { request: DesignRequest; output: DesignResponse };
+  sweep: { request: SweepRequest; output: SweepResponse };
+}
+export type WorkerOp = keyof WorkerOps;
+
 /** Messages between the browser's engine client and its Web Worker (`src/state/engine.worker.ts`). */
-export type WorkerRequest = { id: number; op: "design"; request: DesignRequest };
-export type WorkerResponse = { id: number; ok: true; output: DesignResponse } | { id: number; ok: false; error: string };
+export type WorkerRequest = { [K in WorkerOp]: { id: number; op: K; request: WorkerOps[K]["request"] } }[WorkerOp];
+export type WorkerResponse = { id: number; ok: true; output: WorkerOps[WorkerOp]["output"] } | { id: number; ok: false; error: string };

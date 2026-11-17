@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { designShipment } from "@/engine/engine";
 import { parityRequest } from "@/engine/parityCases";
 import type { DesignResponse } from "@/engine/schemas";
+import { runSweep, SweepRulesSchema, type SweepRequest, type SweepResponse } from "@/engine/sweep";
 import { createEngineClient } from "./engineClient";
 import { FakeEngineWorker } from "./fakeEngineWorker";
 
 const req = (q: number) => parityRequest("PART-001", q);
+const sweepReq = (maxQuantity: number): SweepRequest => {
+  const { part, settings, standards } = req(1);
+  return { part, rules: SweepRulesSchema.parse(settings), standards, maxQuantity };
+};
 
 describe("engine client", () => {
   beforeEach(() => void vi.spyOn(console, "warn").mockImplementation(() => {}));
@@ -35,7 +40,7 @@ describe("engine client", () => {
     const client = createEngineClient(() => worker);
     const got: number[] = [];
     for (const q of [1, 2, 3, 4]) client.design(req(q), (out) => got.push(out.summary.quantity));
-    expect(worker.inbox.map((m) => m.request.settings.quantity)).toEqual([1]);
+    expect(worker.inbox.map((m) => (m.op === "design" ? m.request.settings.quantity : null))).toEqual([1]);
     worker.flush();
     expect(got).toEqual([1, 4]);
   });
@@ -78,5 +83,36 @@ describe("engine client", () => {
     const other = createEngineClient(() => throwing);
     other.design(req(2), (out) => got.push(out.summary.quantity));
     expect(got).toEqual([1, 2]);
+  });
+
+  it("sweeps on a lane of its own: latest-wins, and never behind a design", () => {
+    const worker = new FakeEngineWorker();
+    const client = createEngineClient(() => worker);
+    const designs: number[] = [];
+    const sweeps: number[] = [];
+    client.design(req(4), (out) => designs.push(out.summary.quantity));
+    for (const maxQuantity of [10, 20, 30]) client.sweep(sweepReq(maxQuantity), (out) => sweeps.push(out.sweep.maxQuantity));
+    // One of each in flight; the 20 was replaced by the 30 before it was sent.
+    expect(worker.inbox.map((m) => m.op)).toEqual(["design", "sweep"]);
+    worker.flush();
+    expect(designs).toEqual([4]);
+    expect(sweeps).toEqual([10, 30]);
+  });
+
+  it("sweeps in this thread, before returning, where there is no worker", () => {
+    const client = createEngineClient();
+    let got: SweepResponse | null = null;
+    client.sweep(sweepReq(12), (out) => (got = out));
+    expect(got).toEqual(runSweep(sweepReq(12)));
+  });
+
+  it("finishes a waiting sweep in this thread when the worker fails", () => {
+    const worker = new FakeEngineWorker();
+    const client = createEngineClient(() => worker);
+    const sweeps: number[] = [];
+    client.sweep(sweepReq(5), (out) => sweeps.push(out.sweep.maxQuantity));
+    client.sweep(sweepReq(6), (out) => sweeps.push(out.sweep.maxQuantity));
+    worker.fail();
+    expect(sweeps).toEqual([5, 6]);
   });
 });

@@ -15,9 +15,14 @@ Storage and events are described in [POSTGRES.md](POSTGRES.md), GLB uploads and 
 - **JSON in, JSON out.** Bodies are `application/json` (uploads: `multipart/form-data`). Anything
   else is `415`. Every response is `Cache-Control: private, no-store`.
 - **Units:** mm and kg, as in the rest of the app (spec §4). Timestamps are ISO 8601 with offset.
-- **Org.** There are no accounts yet: every request acts for the default org, through
+- **Org.** There are no accounts yet: the UI's routes act for the default org, through
   `callerOrg(request)` in `src/server/auth.ts`, the one place auth will plug in. Another org's
   job, part or configuration answers exactly like a missing one (`404`).
+- **API keys.** Routes scripts call (`POST /designs`) use `authenticate(request, …)` from the same
+  file: `Authorization: Bearer <key>` (from `bun run apikey:create`) gives the key's org; the
+  app's own pages (`Sec-Fetch-Site: same-origin`) act for the default org without one; anything
+  else is `401 unauthorized`. A malformed, unknown or revoked key is `401` even from the UI. See
+  [QUEUE.md](QUEUE.md#api-keys).
 - **Idempotency.** `POST /jobs`, `POST /jobs/:id/configs` and `PATCH /jobs/:id` take an optional
   `Idempotency-Key` header (1 to 200 visible ASCII characters), a client-generated id per change.
   The first request's status and body are stored with the key (`idempotency_key` table, in the
@@ -36,6 +41,7 @@ Every error has the same shape (`ApiErrorSchema`):
 | Status | `code` | When | Client should |
 |---|---|---|---|
 | 400 | `invalid_request` | The body doesn't match the schema; an unusable `Idempotency-Key` | Fix the request |
+| 401 | `unauthorized` | `POST /designs` without an API key from outside the app, or with a malformed, unknown or revoked one | Send a valid `Authorization: Bearer <key>` |
 | 404 | `not_found` | No such job / part / catalog entry, or it belongs to another org; a malformed id | Treat as gone |
 | 409 | `engine_version_mismatch` | A saved configuration was designed by another engine version. The body also has `engineVersion`, the server's (`EngineMismatchErrorSchema`) | **Reload** the page to get the server's engine, then save again |
 | 409 | `version_conflict` | `PATCH` named a `version` the job has moved past. The body also has `job`, as it is now (`VersionConflictErrorSchema`) | Show what changed; let the user apply theirs again on the new version |
@@ -44,6 +50,7 @@ Every error has the same shape (`ApiErrorSchema`):
 | 422 | `result_mismatch` | The server recomputed a configuration and got another `inputHash` (`field: "inputHash"`) or summary (`field: "summary"`) | Don't retry as is; reload (a tampered or corrupt result) |
 | 422 | `invalid_request` | A selection that isn't one of the job's configurations; a design with no crate | Show the message |
 | 422 | `idempotency_conflict` | The `Idempotency-Key` was used for a different request | Use a new key per change |
+| 503 | `unavailable` | The engine's worker threads aren't available on this server (`/designs`) | Try later |
 | 500 | `internal` | Anything else, database unreachable included. The message is generic; details go to the server log | Treat as offline and try later |
 
 The browser treats network errors, timeouts and every 5xx as *offline*: it stops saving and keeps
@@ -59,10 +66,11 @@ designing, without showing an error (`src/state/jobApi.ts`).
 | `GET` | `/jobs/:id` | Snapshot: job, part, configurations, artifacts, `lastEventId` |
 | `POST` | `/jobs/:id/configs` | Save a configuration made in the browser; the server recomputes it first |
 | `PATCH` | `/jobs/:id` | Change the selection (recommendation), status, notes or total quantity, at a `version` |
+| `POST` | `/designs` | Stateless headless calculation: a GLB and the part's facts in, the ranked configurations, recommendation, 1–200 curve and (with `total`) the even split out. Nothing saved; needs an API key from scripts. Runs on the engine's worker threads ([QUEUE.md](QUEUE.md#post-apiv1designs)) |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
 | `GET` | `/health` | Database and event-listener liveness |
 
-Coming in other slices of #46: `POST /designs` (stateless headless design), artifact downloads
+Coming in other slices of #46: artifact downloads
 (`/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`) and `GET /jobs/:id/bundle.zip`.
 
 ### `POST /api/v1/jobs`
@@ -85,12 +93,13 @@ identity are serialised with an advisory lock. Otherwise a new job is created: `
 Response (`CreateJobResponseSchema`): `{ job: Job, created: boolean }`, where `Job` is
 `{ id, partId, status, totalQuantity, selectedConfigurationId, notes, version, createdAt, updatedAt }`.
 
-**Server-side sweep.** Opening a job doesn't run the quantity sweep on the server yet. That
-belongs to the job-queue slice, which registers an `onJobCreated` hook
-(`src/server/jobs/hooks.ts`): hooks run inside the creating transaction, before `job.created`, so
-an enqueued sweep commits with the job; the worker later saves `precomputed` configurations and
-emits `configs.ready`. Until then the browser runs the sweep itself (spec §7.16) and saves what the
-user keeps.
+**Server-side sweep.** Opening a job queues its quantity sweep: an `onJobCreated` hook
+(`src/server/queue/register.ts`) runs inside the creating transaction, before `job.created`, so
+the queue row commits with the job. A queue worker (`bun run worker`, [QUEUE.md](QUEUE.md)) then
+runs it on worker threads, saves the shortlist as `precomputed` configurations, sets the job to
+`ready` with the recommendation selected (unless a selection was already made; this bumps the
+job's `version`), and emits `configs.ready`. With no worker running the sweep stays queued; the
+browser still runs its own sweep for the Rules hint (spec §7.16).
 
 ### `GET /api/v1/jobs/:id`
 
@@ -173,7 +182,9 @@ Writes emit events in the same transaction, as its last statements (POSTGRES.md 
 | `POST /jobs` creating a job | `job.created` | the job | `partId` |
 | `POST /jobs/:id/configs` adding a configuration to the job | `config.added` | the job | `configurationId`, `inputHash` |
 | `PATCH /jobs/:id` moving the selection | `recommendation.changed` | the job | `configurationId` (null when cleared) |
-| The job queue (later slice) | `configs.ready`, `artifact.ready`, `job.error` | the job | see POSTGRES.md |
+| The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash` |
+| The queue, when a sweep is dead-lettered | `job.error` | the job | `message` (generic; the cause is in `queue_job.last_error`) |
+| Artifacts (later slice) | `artifact.ready` | the job | see POSTGRES.md |
 | A deploy with a new engine (later slice) | `engine.updated` | none (org-wide) | `engineVersion` |
 
 The browser re-reads the snapshot when a job event arrives (several at once cause one read), and

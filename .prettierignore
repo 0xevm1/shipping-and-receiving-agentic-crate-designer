@@ -19,3 +19,4 @@ src/**/__snapshots__
 
 # drizzle-kit output; `bun run db:generate` writes it and CI diffs it.
 db/migrations
+.engine-worker

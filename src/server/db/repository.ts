@@ -6,6 +6,7 @@
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { type OrgContext, requireOrg } from "./org";
+import { createQueueStore } from "./queue";
 import * as schema from "./schema";
 import { artifact, type ConfigurationOrigin, configuration, designJob, event, idempotencyKey, jobConfiguration, part, partModel } from "./schema";
 
@@ -347,6 +348,9 @@ export function createRepository(db: Executor) {
           .limit(limit);
       },
     },
+
+    /** The job queue (#46 slice 7, src/server/db/queue.ts), on this executor: an enqueue inside `inTransaction` commits with it. */
+    queue: createQueueStore(db),
 
     blobRefs: {
       /**

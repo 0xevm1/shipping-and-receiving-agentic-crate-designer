@@ -1,8 +1,8 @@
 /**
- * What happens when a job opens (#46). The server-side sweep (`engine.sweep`, then
- * `configs.ready`) belongs to the job-queue slice: it registers a hook here that enqueues the
- * sweep, and this slice doesn't run one. Until then the browser runs the sweep itself
- * (`useBestQuantity`) and saves what the user keeps through `POST /jobs/:id/configs`.
+ * What happens when a job opens (#46). The job queue registers a hook here that enqueues the
+ * server-side sweep (`src/server/queue/register.ts`; the worker then saves the shortlist and emits
+ * `configs.ready`, docs/QUEUE.md). The browser still sweeps for its own hint (`useBestQuantity`)
+ * and saves what the user keeps through `POST /jobs/:id/configs`.
  *
  * Hooks run inside the transaction that creates the job, before its `job.created` event, so an
  * enqueue commits (or rolls back) with the job. Keep them to a few statements: no engine work and

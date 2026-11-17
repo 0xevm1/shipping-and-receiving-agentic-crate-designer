@@ -18,7 +18,7 @@ import { ENGINE_VERSION } from "./version";
 const INPUT_HASH_SCHEMA = 1;
 
 /** The fields of a part the engine designs from; a loaded part's model URL, file name and load facts are not inputs. */
-const designPartOf = (p: DesignPart): DesignPart => ({
+export const designPartOf = (p: DesignPart): DesignPart => ({
   id: p.id,
   name: p.name,
   mass_kg: p.mass_kg,
