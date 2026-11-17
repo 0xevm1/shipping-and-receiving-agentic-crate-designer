@@ -143,7 +143,22 @@ tab at a time.
 9. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
    through **Load a part** or a drop. It restores the part, rules and layout; for a custom
    part, add its `.glb` in the same pick or drop. The format is in spec §6.5.
-10. **Split a big batch across crates** (#25). When one crate would be over the per-crate
+10. **Print the hand-off, or save it as a PDF** (#26): **Print / save PDF** in the Cut list tab
+    opens the export document in a new tab and its print dialog (choose "Save as PDF"; Letter
+    paper). It has three parts, in the selected units:
+    - **Crate spec** for the PM and logistics: the part, quantity, outside size, gross, tare and
+      payload, volume, dimensional weight and density in lb/ft³, the layout and why it won,
+      the runner-up, and every check.
+    - **Build sheet** for the shop: top, front and end views and two sections through the load,
+      drawn from the design's boards; the cut list grouped by stock with totals; a fastener
+      schedule; and the assembly order (base → walls → load parts → blocking and separators →
+      lid).
+    - **Shipping label** for the dock: part number, quantity, gross weight, THIS SIDE UP and
+      the fork-entry marks.
+
+    A split batch gets the plan, then a spec, build sheet and label per crate type. The design
+    travels in the link itself, so nothing is uploaded. Spec §7.11.
+11. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
     most one smaller remainder crate. The plan uses the fewest crates, then the least outside
@@ -212,7 +227,7 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
   $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
   quoting.
-- **Labour is a placeholder model** (spec §7.11): $35/h, 0.75 min per lumber cut, 3 min per
+- **Labour is a placeholder model** (spec §7.12): $35/h, 0.75 min per lumber cut, 3 min per
   plywood piece, 2 min per distinct cut size, 0.15 min (9 s) per screw, 6 min per assembly step
   (base, four walls, lid, dunnage per layer) and 15 min handling per crate. Screws are $8 per
   100. For PART-001 × 4 that is 2 h 43 m and $95 of labour on $91 of material: a $186 crate.
@@ -248,7 +263,7 @@ All of these live in one zod-validated object, `ShopStandards` (`src/domain/stan
 
 ```
 src/domain/        pure TypeScript, no React; all crate logic, unit-tested
-src/lib/           display units, cut-list formatting, part-file loading (tested)
+src/lib/           display units, cut-list formatting, part-file loading, the export document (tested)
 src/state/         zustand store; per-frame animation values; checks for the UI
 src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
 src/data/          parts.json catalog

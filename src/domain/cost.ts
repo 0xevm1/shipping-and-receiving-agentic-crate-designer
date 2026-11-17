@@ -3,7 +3,7 @@ import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * What a crate costs to build and what it looks like to a freight booker (#17, spec §7.11).
+ * What a crate costs to build and what it looks like to a freight booker (#17, spec §7.12).
  *
  * - **Labour:** build time from the cut list and the screw count, at the shop's minutes per
  *   step (`standards.labour`), times the labour rate.

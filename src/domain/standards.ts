@@ -110,7 +110,7 @@ export const ShopStandardsSchema = z
       screwCostUsdPer100: z.number().finite().min(0).max(1000),
     }),
     /**
-     * Shop labour (#17, spec §7.11): the hourly rate and the minutes each step of building a
+     * Shop labour (#17, spec §7.12): the hourly rate and the minutes each step of building a
      * crate takes. Build time = cuts + set-ups + screws + assembly steps + handling.
      */
     labour: z.object({
@@ -129,7 +129,7 @@ export const ShopStandardsSchema = z
       /** Minutes per crate for moving, marking and staging it. */
       handlingMin: minutes(0, 480),
     }),
-    /** Freight terms for domestic LTL (#17, spec §7.11). */
+    /** Freight terms for domestic LTL (#17, spec §7.12). */
     freight: z.object({
       /** Dimensional-weight divisor, cubic inches per lb (139 is the common domestic divisor). */
       dimDivisorIn3PerLb: z.number().finite().min(50).max(500),
@@ -217,7 +217,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
   },
   /**
    * Placeholder shop times and rate (#17), for comparing designs, not quoting. A shop should
-   * time a few crates and enter its own. Worked example in spec §7.11.
+   * time a few crates and enter its own. Worked example in spec §7.12.
    */
   labour: {
     rateUsdPerHour: 35,

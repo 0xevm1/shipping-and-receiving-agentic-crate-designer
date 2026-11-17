@@ -108,7 +108,7 @@ export interface CrateDesign {
   screws: number;
   /** Plywood and lumber only (`rates.costUsdPerM3`); `cost` adds screws and labour. */
   materialCostUsd: number;
-  /** Build time and labour cost (#17, spec §7.11). */
+  /** Build time and labour cost (#17, spec §7.12). */
   labour: LabourEstimate;
   /** Wood + screws + labour (#17). */
   cost: CrateCost;
@@ -373,24 +373,50 @@ function buildBom(members: Member[]): BomLine[] {
   return [...lines.values()];
 }
 
+/** One line of the fastener schedule (#26): where the screws go, how they are spaced, how many. */
+export interface ScrewLine {
+  id: "skids" | "side-cleats" | "end-cleats" | "walls-to-floor" | "corners" | "bearers" | "blocking" | "lid-cleats" | "lid-to-walls";
+  /** The sub-assembly the screws are driven in, for the build order. */
+  assembly: Assembly;
+  /** "Floor to skids". */
+  title: string;
+  /** Spacing rule; the spacing in mm (null for a fixed count per piece). */
+  everyMm: number | null;
+  /** "along each skid, plus 1", "per bearer". */
+  rule: string;
+  qty: number;
+}
+
 /**
- * Wood screws at the standard spacings (`rates.screwSpacingMm`; defaults: cleats every 150 mm,
- * panel joints every 200 mm, skids every 300 mm), plus 2 per block.
+ * The screw estimate line by line (spec §7.6), at the standard spacings (`rates.screwSpacingMm`;
+ * defaults: cleats every 150 mm, panel joints every 200 mm, skids every 300 mm), plus 2 per
+ * block or bearer. `CrateDesign.screws` is the sum. Lines with no screws are left out.
  */
-function estimateScrews(members: Member[], interior: Vec3, standards: ShopStandards): number {
+export function screwSchedule(members: Member[], interior: Vec3, standards: ShopStandards = DEFAULT_STANDARDS): ScrewLine[] {
   const [L, W, H] = interior;
   const every = standards.rates.screwSpacingMm;
-  let screws = 0;
-  for (const m of members) {
-    const length = Math.max(...m.size);
-    if (m.kind === "cleat" || m.kind === "lid-cleat") screws += Math.ceil(length / every.cleat) + 1;
-    else if (m.kind === "skid") screws += Math.ceil(length / every.skid) + 1;
-    else if (m.kind === "blocking" || m.kind === "bearer") screws += 2;
-  }
-  const perimeter = 2 * (L + W);
-  screws += Math.ceil(perimeter / every.panelJoint) * 2; // walls to floor, lid to walls
-  screws += Math.ceil(H / every.panelJoint) * 4; // four vertical corners
-  return screws;
+  const along = (match: (m: Member) => boolean, spacing: number) =>
+    members.filter(match).reduce((n, m) => n + Math.ceil(Math.max(...m.size) / spacing) + 1, 0);
+  const count = (kind: MemberKind) => members.filter((m) => m.kind === kind).length;
+  const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
+  const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a;
+  const lines: ScrewLine[] = [
+    { id: "skids", assembly: "base", title: "Floor to skids", everyMm: every.skid, rule: "along each skid, plus 1", qty: along((m) => m.kind === "skid", every.skid) },
+    { id: "side-cleats", assembly: "sides", title: "Side wall cleats to panels", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("sides"), every.cleat) },
+    { id: "end-cleats", assembly: "ends", title: "End wall cleats to panels", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("ends"), every.cleat) },
+    { id: "walls-to-floor", assembly: "sides", title: "Walls to floor", everyMm: every.panelJoint, rule: "around the base", qty: joint },
+    { id: "corners", assembly: "sides", title: "Wall corners", everyMm: every.panelJoint, rule: "up each of the 4 corners", qty: Math.ceil(H / every.panelJoint) * 4 },
+    { id: "bearers", assembly: "inside", title: "Bearers to floor", everyMm: null, rule: "2 per bearer", qty: count("bearer") * 2 },
+    { id: "blocking", assembly: "inside", title: "Blocking posts", everyMm: null, rule: "2 per post", qty: count("blocking") * 2 },
+    { id: "lid-cleats", assembly: "lid", title: "Lid cleats to lid panel", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("lid"), every.cleat) },
+    { id: "lid-to-walls", assembly: "lid", title: "Lid to walls", everyMm: every.panelJoint, rule: "around the top", qty: joint },
+  ];
+  return lines.filter((l) => l.qty > 0);
+}
+
+/** Total wood screws: the sum of `screwSchedule`. */
+function estimateScrews(members: Member[], interior: Vec3, standards: ShopStandards): number {
+  return screwSchedule(members, interior, standards).reduce((n, l) => n + l.qty, 0);
 }
 
 /** The default 53' dry van limits (`limits.trailerMm`); the checks read the standards. */

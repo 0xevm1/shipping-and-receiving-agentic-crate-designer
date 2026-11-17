@@ -1,0 +1,205 @@
+import { describe, expect, it } from "vitest";
+import { getPart } from "@/domain/catalog";
+import { screwSchedule } from "@/domain/crate";
+import { DEFAULT_SETTINGS } from "@/domain/design";
+import { parseDesignFile, serializeDesign } from "@/domain/designFile";
+import { planShipment } from "@/domain/shipment";
+import { DEFAULT_STANDARDS } from "@/domain/standards";
+import { buildPrintable, printableFromDesignFile, ASSEMBLY_STEPS, type PrintableDesign } from "./printable";
+import { printHash, readPrintHash } from "./printLink";
+
+const bracket = getPart("PART-001");
+const NOW = "2026-11-16T12:00:00.000Z";
+
+function printable(quantity: number, units: "imperial" | "metric" = "imperial", extra: Partial<typeof DEFAULT_SETTINGS> = {}): PrintableDesign {
+  const settings = { ...DEFAULT_SETTINGS, quantity, ...extra };
+  const plan = planShipment(bracket, settings, null, DEFAULT_STANDARDS);
+  return buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units, generatedAt: NOW });
+}
+
+describe("PrintableDesign (#26)", () => {
+  const doc = printable(4);
+  const [crate] = doc.crates;
+
+  it("has the spec, build sheet and label for one crate", () => {
+    expect(doc.problem).toBeNull();
+    expect(doc.shipment.split).toBe(false);
+    expect(doc.shipment.text).toBeNull();
+    expect(doc.crates).toHaveLength(1);
+    expect(doc.title).toBe("Crate for 4 × Machined steel bracket");
+    expect(crate.spec.rows.map((r) => r.label)).toEqual(["Parts in the crate", "Outside (L × W × H)", "Gross", "Tare (empty crate)", "Payload", "Volume"]);
+    expect(crate.spec.rows[1].value).toBe("36.7 × 25.7 × 19.6 in");
+    expect(crate.spec.rows[1].note).toBe("932 × 652 × 497 mm");
+    expect(crate.build.drawings.map((d) => d.id)).toEqual(["top", "front", "end", "section-plan", "section-side"]);
+    expect(crate.label.partId).toBe("PART-001");
+    expect(crate.label.quantity).toBe("4 PCS");
+  });
+
+  it("lists the part, freight terms and units in imperial", () => {
+    expect(doc.part.find((r) => r.label === "Mass each")?.value).toBe("47.4 lb");
+    const freight = Object.fromEntries(crate.spec.freight.map((r) => [r.label, r.value]));
+    // The design's own freight terms (#17): 37 × 26 × 20 in ÷ 139 → 139 lb, class 65.
+    expect(freight["Dimensional weight"]).toBe("139 lb");
+    expect(freight["Density"]).toBe("26.7 lb/ft³");
+    expect(freight["Freight class"]).toBe("65");
+    expect(crate.label.gross).toMatch(/^\d+ LB$/);
+  });
+
+  it("follows metric units, keeping density in lb/ft³", () => {
+    const m = printable(4, "metric");
+    expect(m.crates[0].spec.rows[1].value).toBe("932 × 652 × 497 mm");
+    const freight = Object.fromEntries(m.crates[0].spec.freight.map((r) => [r.label, r]));
+    expect(freight["Dimensional weight"].value).toMatch(/^\d+ kg$/);
+    expect(freight["Density"].value).toMatch(/lb\/ft³$/);
+    expect(freight["Density"].note).toMatch(/kg\/m³$/);
+    expect(m.crates[0].label.gross).toMatch(/^\d+ KG$/);
+    expect(m.crates[0].build.cutList.some((g) => g.stock === "19 × 89 lumber")).toBe(true);
+  });
+
+  it("shows the design's freight class (#17), and a centre of gravity when it has one (#8)", () => {
+    const settings = { ...DEFAULT_SETTINGS, quantity: 4 };
+    const plan = planShipment(bracket, settings);
+    const d = plan.crates[0].result.design!;
+    Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, centerOfGravityMm: [400, 300, 150] });
+    const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", generatedAt: NOW });
+    expect(withExtras.crates[0].spec.freight.find((r) => r.label === "Freight class")?.value).toBe("85");
+    expect(withExtras.crates[0].label.cogMm).toEqual([400, 300, 150]);
+    expect(crate.label.cogMm).toBeNull();
+  });
+
+  it("explains the chosen layout and names the runner-up", () => {
+    expect(crate.spec.layout.chosen).toMatch(/^2 × 2, one layer/);
+    expect(crate.spec.layout.why).toMatch(/recommended layout/);
+    expect(crate.spec.layout.runnerUp).toMatch(/more volume|same volume/);
+  });
+
+  it("lists every check, cautions first, with pass / caution / info", () => {
+    const ids = crate.spec.checks.map((c) => c.id);
+    expect(ids).toEqual(expect.arrayContaining(["door", "stable", "blocking", "base-rating"]));
+    expect(crate.spec.checks.find((c) => c.id === "door")?.levelText).toBe("Pass");
+    const caution = printable(4, "imperial", { partGapMm: 10 });
+    expect(caution.crates[0].spec.checks[0]).toMatchObject({ id: "blocking", levelText: "Caution" });
+  });
+
+  it("groups the cut list by stock with totals that match the cut list", () => {
+    const groups = crate.build.cutList;
+    expect(groups.map((g) => g.stock)).toEqual(expect.arrayContaining(["3/4″ plywood", "1/2″ plywood", "4x4", "1x4"]));
+    // Each stock appears once; every cut-list piece is in exactly one group.
+    expect(new Set(groups.map((g) => g.stock)).size).toBe(groups.length);
+    const design = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!;
+    const pieces = groups.reduce((n, g) => n + g.pieces, 0);
+    expect(pieces).toBe(design.bom.reduce((n, l) => n + l.qty, 0));
+    for (const g of groups) expect(g.pieces).toBe(g.lines.reduce((n, l) => n + l.qty, 0));
+    expect(groups.find((g) => g.stock === "4x4")?.total).toMatch(/^\d+ ft$/);
+    expect(groups.find((g) => g.stock === "1/2″ plywood")?.total).toMatch(/^\d+ ft²$/);
+    expect(crate.build.totals.find((r) => r.label === "Wood screws")?.value).toBe(`~${design.screws}`);
+  });
+
+  it("has a fastener schedule that adds up to the screw estimate", () => {
+    const design = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!;
+    expect(crate.build.fastenerTotal).toBe(design.screws);
+    expect(crate.build.fasteners.reduce((n, f) => n + f.qty, 0)).toBe(design.screws);
+    expect(crate.build.fasteners.map((f) => f.title)).toEqual(expect.arrayContaining(["Floor to skids", "Blocking posts", "Lid to walls"]));
+    // Spacings follow the units: 300 mm is 11 13/16″.
+    expect(crate.build.fasteners.find((f) => f.title === "Floor to skids")?.rule).toBe("1 every 11 13/16″ along each skid, plus 1");
+    const sum = screwSchedule(design.members, design.layout.interior).reduce((n, l) => n + l.qty, 0);
+    expect(sum).toBe(design.screws);
+  });
+
+  it("orders assembly base → walls → load parts → blocking and separators → lid", () => {
+    expect(crate.build.steps.map((s) => s.title)).toEqual([...ASSEMBLY_STEPS]);
+    expect(crate.build.steps.map((s) => s.title)).toEqual(["Base", "Walls", "Load the parts", "Blocking and separators", "Lid"]);
+    expect(crate.build.steps.reduce((n, s) => n + s.screws, 0)).toBe(crate.build.fastenerTotal);
+    expect(crate.build.steps[0].pieces.map((p) => p.piece)).toEqual(expect.arrayContaining(["Floor", "Skid"]));
+    expect(crate.build.steps[3].pieces.some((p) => p.piece === "Blocking post")).toBe(true);
+    expect(crate.build.steps[4].pieces.some((p) => p.piece === "Lid panel")).toBe(true);
+    // Every cut-list piece is placed by exactly one step.
+    const design = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!;
+    expect(crate.build.steps.reduce((n, s) => n + s.pieces.reduce((m, p) => m + p.qty, 0), 0)).toBe(design.bom.reduce((n, l) => n + l.qty, 0));
+  });
+
+  it("mentions layer separators when the parts are stacked", () => {
+    const stacked = printable(8);
+    const step = stacked.crates[0].build.steps[3];
+    expect(step.pieces.some((p) => p.piece === "Layer separator")).toBe(true);
+    expect(step.text).toMatch(/separator/);
+  });
+
+  it("draws the views from the members, dimensioned", () => {
+    const design = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!;
+    const [L, W, H] = design.layout.external;
+    const top = crate.build.drawings.find((d) => d.id === "top")!;
+    expect(top.width).toBeCloseTo(L, 3);
+    expect(top.height).toBeCloseTo(W, 3);
+    const front = crate.build.drawings.find((d) => d.id === "front")!;
+    expect(front.height).toBeCloseTo(H, 3);
+    expect(front.dims.map((d) => d.text)).toEqual(["36 11/16″", "19 9/16″"]);
+    const plan = crate.build.drawings.find((d) => d.id === "section-plan")!;
+    expect(plan.rects.filter((r) => r.kind === "part")).toHaveLength(4);
+    expect(plan.rects.filter((r) => r.kind === "dunnage").length).toBeGreaterThan(0);
+    const side = crate.build.drawings.find((d) => d.id === "section-side")!;
+    expect(side.rects.some((r) => r.kind === "part")).toBe(true);
+  });
+
+  it("gives the label fork entry at the skid ends", () => {
+    expect(crate.label.skids.length).toBe(planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!.construction.skidCount);
+    expect(crate.label.forkEntry).toBe("Fork entry from the ends");
+  });
+});
+
+describe("split shipments (#25) in the PrintableDesign", () => {
+  const doc = printable(200);
+
+  it("states the plan and has one spec, build sheet and label per crate type", () => {
+    expect(doc.shipment.split).toBe(true);
+    expect(doc.shipment.text).toMatch(/^Ships as \d+ × crate A \(\d+ each\) \+ 1 × crate B \(\d+\)$/);
+    expect(doc.crates.map((c) => c.letter)).toEqual(["A", "B"]);
+    const parts = doc.crates.reduce((n, c) => n + c.count * c.quantity, 0);
+    expect(parts).toBe(200);
+    for (const c of doc.crates) {
+      expect(c.heading).toMatch(new RegExp(`^Crate ${c.letter}: ${c.quantity} × Machined steel bracket`));
+      expect(c.build.steps).toHaveLength(5);
+      expect(c.label.crate).toMatch(new RegExp(`^CRATE ${c.letter}`));
+      expect(c.spec.checks.some((k) => k.id === "crate-limit")).toBe(true);
+    }
+    expect(doc.shipment.rows.find((r) => r.label === "Crates")?.value).toBe(String(doc.crates.reduce((n, c) => n + c.count, 0)));
+  });
+});
+
+describe("the print link", () => {
+  const settings = { ...DEFAULT_SETTINGS, quantity: 4 };
+  const plan = planShipment(bracket, settings);
+  const design = plan.crates[0].result.design!;
+  const text = serializeDesign({
+    part: { source: "catalog", ...bracket, model: bracket.model },
+    settings,
+    layoutKey: design.layout.key,
+    design,
+    plan,
+    savedAt: NOW,
+  });
+
+  it("round-trips the design file and the units through the hash, URL-safe", () => {
+    const hash = printHash(text, "metric", true);
+    expect(hash).toMatch(/^#d=[A-Za-z0-9_-]+&u=metric&print=1$/);
+    expect(readPrintHash(hash)).toEqual({ ok: true, text, units: "metric", print: true });
+    expect(readPrintHash(printHash(text, "imperial"))).toMatchObject({ units: "imperial", print: false });
+  });
+
+  it("refuses a missing or broken hash, and reads unknown units as none", () => {
+    expect(readPrintHash("")).toMatchObject({ ok: false });
+    expect(readPrintHash("#d=%%%")).toMatchObject({ ok: false });
+    expect(readPrintHash("#d=" + printHash(text, "imperial").slice(3).replace("&u=imperial", "") + "&u=furlongs")).toMatchObject({ ok: true, units: null });
+  });
+
+  it("rebuilds the same document from the design file", () => {
+    const file = parseDesignFile(text);
+    expect(file.ok).toBe(true);
+    const r = printableFromDesignFile(text, DEFAULT_STANDARDS, "imperial", NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.notes).toEqual([]);
+    expect(r.doc).toEqual(printable(4));
+    expect(printableFromDesignFile("{", DEFAULT_STANDARDS, "imperial", NOW)).toMatchObject({ ok: false });
+  });
+});

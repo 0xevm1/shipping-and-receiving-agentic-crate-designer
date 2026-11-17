@@ -122,7 +122,7 @@ describe("freightClassFor (NMFC 13-sub density scale)", () => {
   });
 });
 
-describe("the design's cost, labour and freight (spec §7.11 worked example)", () => {
+describe("the design's cost, labour and freight (spec §7.12 worked example)", () => {
   it("PART-001 × 4 with the default standards", () => {
     const d = design();
     expect(d.labour.counts).toEqual({ lumberCuts: 47, plywoodCuts: 6, cutSizes: 11, screws: 202, steps: 7 });

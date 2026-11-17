@@ -149,7 +149,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
-| `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.11, #17) |
+| `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (an export edge, formatted with `src/lib`), `downloadText()`, `ASSEMBLY_NAMES` |
@@ -165,6 +165,11 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
 | `src/lib/changes.ts` | A design diff as screen text: "Gross 16 → 20 kg" or "No change to the crate" |
+| `src/lib/printable.ts` | The export document's model (#26, §7.11): `buildPrintable` (plan → `PrintableDesign`), `printableFromDesignFile`, freight terms, the cut list by stock, fasteners, assembly steps and the label |
+| `src/lib/drawings.ts` | `crateDrawings`: top, front and end views and two sections projected from the members, as data in mm |
+| `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url, plus the units (`printHash`, `readPrintHash`) |
+| `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles |
+| `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
@@ -310,7 +315,7 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
   - `labour` (`LabourEstimate`: counts, minutes per activity, `totalMin`, `hours`, `costUsd`),
     `cost` (`CrateCost`: `woodUsd`, `fastenersUsd`, `materialUsd`, `labourUsd`, `totalUsd`) and
     `freight` (`FreightTerms`: `grossLb`, `outsideIn`, `volumeFt3`, `dimWeightLb`,
-    `dimDivisorIn3PerLb`, `densityLbFt3`, `freightClass`) (#17, §7.11)
+    `dimDivisorIn3PerLb`, `densityLbFt3`, `freightClass`) (#17, §7.12)
   - `freightClass`, `densityLbFt3` and `dimWeightLb`: the same freight values at the top level,
     for exports and the build sheet (#26)
   - `checks[]`
@@ -364,15 +369,15 @@ whatever the display units.
 | `densityKgM3 {plywood, lumber}` | 600, 480 | Tare weight |
 | `costUsdPerM3 {plywood, lumber}` | 1100, 650 | `materialCostUsd` (placeholders) |
 | `screwSpacingMm {cleat, skid, panelJoint}` | 150, 300, 200 | Screw estimate |
-| `screwCostUsdPer100` | 8 | Fasteners in the crate cost (§7.11, #17; placeholder) |
-| **`labour`** — shop times and rate (§7.11, #17; placeholders) | | |
+| `screwCostUsdPer100` | 8 | Fasteners in the crate cost (§7.12, #17; placeholder) |
+| **`labour`** — shop times and rate (§7.12, #17; placeholders) | | |
 | `rateUsdPerHour` | 35 | Labour cost = build hours × rate |
 | `lumberCutMin`, `plywoodCutMin` | 0.75, 3 | Minutes per lumber piece and per plywood piece |
 | `setupMin` | 2 | Minutes per distinct cut size (a saw set-up) |
 | `screwMin` | 0.15 | Minutes per screw (9 s) |
 | `assemblyStepMin` | 6 | Minutes per assembly step: base, four walls, lid, dunnage per layer |
 | `handlingMin` | 15 | Minutes per crate: moving, marking, staging |
-| **`freight`** — LTL terms (§7.11, #17) | | |
+| **`freight`** — LTL terms (§7.12, #17) | | |
 | `dimDivisorIn3PerLb` | 139 | Dimensional weight = outside in³ / divisor |
 
 **Validation.** Every number is finite and inside a sane range (for example cleat spacing
@@ -646,13 +651,17 @@ Each member is tagged where it is created:
 - **Cost:** `Σ volume × rate`, with plywood at $1,100/m³ and lumber at $650/m³
   (`rates.costUsdPerM3`). The shipped values are **placeholders**, good only for comparing
   designs; a shop can enter its own prices. This is `materialCostUsd`, the wood only (the
-  Overview's "$ of wood"); `cost` adds screws and labour (§7.11).
+  Overview's "$ of wood"); `cost` adds screws and labour (§7.12).
 - **Screws** (spacings from `rates.screwSpacingMm`: `cleat` 150, `skid` 300, `panelJoint` 200):
   - each cleat: `ceil(len/150)+1`
   - each skid: `ceil(len/300)+1`
   - each block or bearer: 2
   - walls-to-floor plus lid-to-walls: `2·ceil(2(L+W)/200)`
   - corners: `4·ceil(H/200)`
+  - `screwSchedule(members, interior, standards)` returns these line by line (floor to skids,
+    side and end wall cleats, walls to floor, corners, bearers, blocking, lid cleats, lid to
+    walls), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
+    `screws` is its sum, so the estimate is unchanged.
 - **BOM:** members are grouped by `(assembly, label, stock, cut)`; that string is the line's
   `key` and each member's `bomKey`.
   - **Plywood:** stock is `"{thickness} mm"` and cut is `"{largest} × {second}"`.
@@ -669,7 +678,7 @@ Each member is tagged where it is created:
     from 4x4` blocking) and cuts as `36 11/16 in` or `35 3/16 in x 14 1/8 in`.
   - **Metric** is as before plus the units line: `# Units: mm and kg`, stock as `19 × 89` or
     `12 mm`, cuts in whole mm (`1082`, `932 x 652`).
-  - The build sheet / PDF (#26) should follow the same rule: the selected units, imperial by
+  - The export document (#26, §7.11) follows the same rule: the selected units, imperial by
     default, with the same names (`src/lib/lumber.ts`).
 
 ### 7.7 Checks
@@ -825,7 +834,92 @@ takes about 150 ms. The tests fail above 200 ms and 500 ms.
 selected type unchanged. `setCrateIndex(i)` switches type (clears the pin and hover, re-frames,
 records no change note). An edit keeps the type while the new plan has it, else shows A.
 
-### 7.11 Cost, labour and freight (`src/domain/cost.ts`, #17)
+### 7.11 Export document (`PrintableDesign`, #26)
+
+The PM's hand-off: logistics books freight from the crate spec, the shop builds from the build
+sheet, and the dock ships with the label. It is a print-styled route, `/print`, saved as a PDF
+with the browser's "Save as PDF". There is no server, and every drawing is vector SVG.
+
+**Model.** `buildPrintable({ part, plan, standards, units, generatedAt })` in
+`src/lib/printable.ts` is pure and unit-tested. It turns a shipment plan (§7.10) into a
+`PrintableDesign` of rows, sentences, tables and drawing data, already formatted in the selected
+units. The print page only renders it (`src/components/print/PrintDocument.tsx`), so a
+programmatic PDF export (#51) can build the same model and lay it out itself.
+`printableFromDesignFile(text, standards, units, generatedAt)` rebuilds it from a design file
+(§6.5) the way reopening the file does, and also returns the reopen notes.
+
+**Pages**, in print order (Letter, 0.5″ margins, a page break between sheets):
+
+1. **Crate spec** (PM and logistics): the part (id, name, material, mass each, quantity). For a
+   split batch, the plan follows ("Ships as 6 × crate A (30 each) + 1 × crate B (20)", crates,
+   parts, gross and volume in all, and `unmet` if any). Then there is **one section per crate
+   type** with:
+   - parts in the crate, outside L × W × H, gross, tare and payload (each with the other units
+     under it), and volume;
+   - **freight:** dimensional weight (outside L × W × H in cubic inches ÷ 139, the common
+     domestic divisor `DIM_DIVISOR_IN3_PER_LB`, rounded up; in kg when metric), billable weight
+     (the larger of gross and dimensional), and density in **lb/ft³** (gross ÷ outside volume,
+     with kg/m³ under it when metric). A **freight class** row appears only when the design
+     carries a `freightClass` (#17 adds it);
+   - the layout on screen, why it won (`explainLayout`, worded as in the Layouts tab), and the
+     runner-up (the next layout in rank order, with its size, volume and the difference);
+   - every check (the domain checks plus the stand-in mass caution), cautions first, marked
+     Pass, Caution or Info.
+2. **Build sheet**, one per crate type, on two pages:
+   - **Drawings** (`crateDrawings`, `src/lib/drawings.ts`), projected from the design's
+     members, never from the 3D view:
+     - outside **top**, **front** (from −Y) and **end** (from +X), painted far to near, each
+       with its overall length and its height or width;
+     - **Section A–A**, a plan cut halfway up the bottom layer: walls, uprights and blocking
+       posts are cut and hatched, parts are dashed, and the interior L and W are dimensioned;
+     - **Section B–B**, a side cut through the front row of parts: blocking, separators, lid
+       and floor are cut, the bearers under the row are seen beyond the cut, and the interior
+       L and H are dimensioned.
+
+     Dimensions are shop sizes: fractional inches to 1/16″, or whole mm.
+   - **Cut list by stock:** the crate's cut list regrouped by stock name (`stockText`). Each
+     group lists its pieces with assembly, cut and quantity, plus the group's piece count and
+     its running length (lumber) or area (plywood). Plywood, lumber and screw totals follow.
+   - **Fasteners:** `screwSchedule` line by line, with each spacing in the selected units, and
+     the total (equal to the screw estimate).
+   - **Assembly order:** 1 Base, 2 Walls, 3 Load the parts (bearers first), 4 Blocking and
+     separators (layer by layer when stacked), 5 Lid. Each step has a sentence, the pieces it
+     uses and its screws. Every cut-list piece is in exactly one step, and the steps' screws
+     sum to the schedule's total.
+3. **Shipping label**, one page per crate type:
+   - part number and name, quantity ("4 PCS"), and outside size;
+   - gross weight in the selected units, with the other units under it;
+   - "THIS SIDE UP" with the ISO 780 two-arrow mark;
+   - the crate type and count, for a split batch;
+   - the crate's end, with the skids and **fork-entry arrows** between them ("FORK ENTRY FROM
+     THE ENDS");
+   - a **centre-of-gravity** mark when the design carries `centerOfGravityMm` (#8 adds it).
+     Until then the label has no CoG mark.
+
+**How the design reaches the page.** The Cut list's **Print / save PDF** serializes the design
+on screen as a design file (§6.5, `serializeDesign`) and opens
+`/print#d={base64url}&u={units}&print=1` in a new tab (`src/lib/printLink.ts`). The print tab
+reads the hash and rebuilds the plan with **this browser's saved shop standards** (the file holds
+none, as when reopening it). It renders the document, waits for the fonts and calls
+`window.print()`. The toolbar (screen only) has its own Print / save PDF button and says that
+⌘P / Ctrl+P works too. The hash is used rather than `sessionStorage` because:
+
+- it needs nothing from the opener, so a reload or a bookmarked tab still works, and tests can
+  open the route directly;
+- it never reaches a server;
+- it is the same file format a share link (#14) can use, and the file is small (about 1 KB of
+  base64).
+
+Without a design, or with a damaged one, the page says how to open it. Any reopen notes (a
+changed plan or size under other standards) show above the document, on screen only.
+
+**Print CSS** (`src/app/print/print.css`, imported only by the route and scoped to
+`.print-doc`): `@page { size: letter; margin: 0.5in }`, `break-after: page` per sheet, and
+`break-inside: avoid` on spec sections, cut-list groups, steps and figures. It is black on
+white; the label's crate-type bar is the only filled block (`print-color-adjust: exact`). On
+screen, each sheet is an 8.5 × 11 in white page on grey.
+
+### 7.12 Cost, labour and freight (`src/domain/cost.ts`, #17)
 
 The stakeholder metrics are **total crate cost** and **potential freight cost**, with **time to
 design** as a reference. `designCrate` computes all three parts below for every crate; every
@@ -932,14 +1026,14 @@ hadrian.co**, read from its live CSS:
   To use real Söhne, license it and point `--font-sans`, `--font-wide` and the mono variable at
   `next/font/local` in `src/app/layout.tsx`.
 - All values are in `src/app/globals.css`.
-- **App icons (#58):** the mark is a navy gear with an isometric crate cut out of it and a gold
-  `#D9A938` lid. The supplied artwork is used as is; regenerate it from the master SVG rather
-  than editing the rasters.
-  - `src/app/icon.svg` is the master (64 × 64 viewBox), navy `#0C2548` with no dark-mode
-    variant, so on very dark tab bars the gold lid carries the mark.
+- **App icons (#58):** the mark is a white gear with an isometric crate in it: navy `#0C2548`
+  sides and a gold `#D9A938` lid. The supplied artwork is used as is; regenerate it from the
+  master SVG rather than editing the rasters.
+  - `src/app/icon.svg` is the master (64 × 64 viewBox) and has no dark-mode variant. The white
+    gear reads on dark tab bars; on white ones the navy and gold crate carries the mark.
   - The rasters (`src/app/favicon.ico` at 16/32/48, `icon1.png` at 96, `apple-icon.png` at 180
-    and the manifest's 192 and 512 PNGs) are rendered in the same navy, so browsers that fall
-    back to the ICO match the SVG. They are transparent and fill the canvas edge to edge.
+    and the manifest's 192 and 512 PNGs) match the SVG. They are transparent and fill the canvas
+    edge to edge by choice (no padding), so iOS shows them on its own background.
   - Next's metadata file conventions generate the `<link rel="icon">` and
     `<link rel="apple-touch-icon">` tags; don't add them by hand.
   - `public/site.webmanifest` ("Crate Designer", short name "Crates", navy theme and
@@ -1009,9 +1103,9 @@ The canvas fills the window. Four regions float above it:
 
 | Tab | Contents |
 |---|---|
-| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. Then the **Scorecard** (#17, §7.11): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; for a split, the whole shipment's cost, labour and dimensional weight; after the first export, "Designed in 1 m 12 s". A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D |
+| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; for a split, the whole shipment's cost, labour and dimensional weight; after the first export, "Designed in 1 m 12 s". A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
-| **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV). For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
+| **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
 | **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a count badge on the tab when there are cautions |
 
@@ -1296,7 +1390,7 @@ lower max gross gives more crates; a layout pick applies to its crate type; spli
 a caution; 200 parts plan fast; the shipment cut list multiplies, merges and groups pieces, and
 its CSV has the plan header.
 
-**`src/domain/cost.test.ts`** checks cost, labour and freight (#17, §7.11): the labour sum (cuts by
+**`src/domain/cost.test.ts`** checks cost, labour and freight (#17, §7.12): the labour sum (cuts by
 material, set-ups once per size across assemblies, screws, steps, handling) and the labour
 standards; wood + screws + labour; outside inches rounded up (914.4 mm is exactly 36 in), volume,
 dimensional weight rounded up to the lb (139 in³ is 1 lb, 140 is 2) with the standard's divisor;
@@ -1371,6 +1465,25 @@ checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), n
 names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
 design restored from the bundled catalog, a custom design without its GLB naming the file,
 other JSON still read as a catalog, and plain messages for a bad design or bad JSON.
+
+**`src/lib/printable.test.ts`** checks the export document (#26, §7.11):
+
+- For PART-001 × 4: the spec rows; the imperial outside size with the metric size under it;
+  the dimensional weight and the lb/ft³ density; no freight class until a design carries one
+  (then it shows, and so does a centre of gravity); why the layout won and the runner-up.
+- Every check is listed with Pass / Caution; a 10 mm gap puts the blocking caution first.
+- The cut list is grouped once per stock, with piece counts that match the cut list and ft /
+  ft² totals.
+- The fastener schedule sums to the screw estimate, with spacings in inches.
+- The five assembly steps come in order, place every piece once and sum to the screws, with
+  separators when the parts are stacked.
+- The drawings' sizes equal the outside size, and Section A–A has four parts and blocking. The
+  label has the skids.
+- Metric text: mm, kg, kg/m³ and `19 × 89 lumber`.
+- A split batch (200) has the plan, and one spec, five-step build sheet and label per crate
+  type, each with `crate-limit`.
+- The print hash round-trips the file and the units URL-safely and refuses a missing or damaged
+  hash. The document rebuilt from the file equals the one built from the plan.
 
 **`src/lib/exportGlb.test.ts`** round-trips the GLB export (#27) for each sample part: export
 with `GLTFExporter`, re-load with `GLTFLoader`, and check that the boards' bounds (parts
@@ -1499,6 +1612,23 @@ HTML report as `playwright-report`.
     `/site.webmanifest` has name "Crate Designer", start URL `/`, theme `#002548` and two icon
     srcs that return PNGs; the HTML head has the title and the manifest, icon and
     apple-touch-icon links.
+  - `16-export-bundle` (#26):
+    - Print / save PDF in the Cut list opens `/print#d=…&u=imperial&print=1` in a new tab,
+      which calls `window.print()` once (stubbed to a counter).
+    - The crate spec has the part, 47.4 lb, 36.7 × 25.7 × 19.6 in with 932 × 652 × 497 mm, the
+      dimensional weight, lb/ft³, no freight class, the layout reason, the runner-up and the
+      checks.
+    - The build sheet has the five drawings ("Front" dimensioned 36 11/16″). The cut list page
+      has 3/4″ and 1/2″ plywood, 4x4 and 1x4, the fasteners and the five steps in order.
+    - The label has PART-001, 4 PCS, lb, THIS SIDE UP and the fork marks.
+    - In metric: mm, 21.5 kg, kg/m³, `19 × 89 lumber` and KG.
+    - 200 brackets print the plan, plus a spec section, build sheet, cut list and label per
+      crate type.
+    - Each case makes a PDF with `page.pdf()` (Chromium) and checks that it is a non-empty PDF
+      with enough pages. `/print` without a design explains itself.
+    - One screenshot per page: `26-spec`, `26-build-drawings`, `26-build-cutlist`, `26-label`,
+      `26-spec-metric`, `26-split-spec` and `26-split-build-b`, plus the PDFs, in
+      `e2e/screenshots/`.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 
@@ -1534,6 +1664,8 @@ HTML report as `playwright-report`.
 | Labour from counted work (cuts, set-ups, screws, steps, handling) at editable minutes (#17) | Every count already exists in the design, so the model explains itself and a shop can calibrate it by timing a few crates | Placeholder minutes; no learning curve or batch effect for many identical crates |
 | Ranking option re-ranks with hard constraints first; volume stays the default | Cost or freight must never buy a crate that tips or leaves parts loose; the default keeps every existing result | Re-ranking designs every layout (5–15 ms); the density ranking also avoids the LTL length charge, a judgement call |
 | `materialCostUsd` stays wood only; `cost` holds the full breakdown | Existing callers, tests and the "$ of wood" line keep their meaning | Two cost fields to read correctly |
+| The export document is a print route plus the browser's "Save as PDF", rendered from a pure `PrintableDesign` (#26) | No server and no PDF library; vector output for free; the model is tested once, and a programmatic PDF (#51) can reuse it | Page breaks are the browser's; the user picks "Save as PDF" in the dialog |
+| The print route gets the design as a design file in the URL hash, not through `sessionStorage` | Works on reload and when opened directly, never leaves the browser, and reuses the #28 format a share link can use | It uses the printing browser's saved shop standards, not the opener's in-memory ones (in the same browser these are the same) |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
 
 ## 12. Known limitations and roadmap
@@ -1550,7 +1682,8 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |
 | #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds |
 | #8 | Centre of gravity and forklift handling |
-| #9 | Printable shop-floor build sheet |
+| #9 | Printable shop-floor build sheet (superseded by #26) |
+| #26 | Export bundle: the crate spec, build sheet and shipping label as a printable PDF (§7.11). A one-click PDF file is #51 |
 | #10 | Edge-case and input hardening |
 | #11 | Explain why a layout was chosen (closed; `explainLayout` landed with #20) |
 | #12 | Flag when a wooden crate is overkill (for example, light aluminum that a carton would do) |
@@ -1558,7 +1691,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #14 | Shareable design via URL |
 | #15 | Imperial units by default with a metric toggle, nominal lumber names, CSV in the selected units |
 | #16 | Geometry-aware blocking for irregular parts |
-| #17 | Design scorecard (§7.11): crate cost (material + labour), build time, freight class, density and dimensional weight; Layouts deltas and a ranking option; time to design |
+| #17 | Design scorecard (§7.12): crate cost (material + labour), build time, freight class, density and dimensional weight; Layouts deltas and a ranking option; time to design |
 | #19 | Shop standards configuration (§6.4). Stock, defaults, thresholds, limits, material rates and (with #17) the labour rate and shop times |
 | #20 | UX redesign: full-bleed scene, glass island, tabbed detail |
 
