@@ -2,9 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { dims, lengthUnit, weight } from "@/lib/units";
+import { dims, groupDigits, lengthUnit, weight } from "@/lib/units";
 import { INPUT_EVENTS, onInputEvent } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { useWholeShipment } from "@/state/totalPlan";
 import { useView } from "@/state/viewStore";
 import { Island, ISLAND_ID } from "../island/Island";
 import { SizeLabels } from "../viewer/SizeLabels";
@@ -257,7 +258,8 @@ function Summary({ onOpen }: { onOpen: () => void }) {
   const problem = useDesigner((s) => s.result.problem);
   const units = useView((s) => s.units);
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
-  const totals = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
+  const shipment = useWholeShipment();
+  const totals = shipment.total || shipment.plan.split ? shipment.plan.totals : null;
   return (
     <button type="button" className={`glass ${styles.summary}`} data-testid="summary" onClick={onOpen}>
       {design ? (
@@ -269,7 +271,7 @@ function Summary({ onOpen }: { onOpen: () => void }) {
             </Flash>
           </span>
           <span>
-            <span className={`eyebrow-label ${styles.label}`}>{totals ? `Gross, ${totals.crates} crates` : "Gross"}</span>
+            <span className={`eyebrow-label ${styles.label}`}>{totals ? `Gross, ${groupDigits(totals.crates)} crates` : "Gross"}</span>
             <Flash on={["gross"]} className={styles.value}>
               {weight(totals ? totals.grossKg : design.grossKg, units, true)}
             </Flash>

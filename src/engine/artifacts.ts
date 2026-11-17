@@ -56,7 +56,7 @@ export interface Artifact extends EngineStamp {
 }
 
 /** Requests that differ only in quantity, layout pick or ranking share one sweep. */
-const sweepKey = (req: DesignRequest) => inputHash({ ...req, settings: { ...req.settings, quantity: 1 }, layoutKey: null, ranking: "volume" });
+const sweepKey = (req: DesignRequest) => inputHash({ ...req, settings: { ...req.settings, quantity: 1 }, layoutKey: null, ranking: "volume", total: null });
 
 /** The quantity sweep (spec §7.16) for a request's part and rules. No freight rates, so no freight dollars. */
 export function sweepFor(req: DesignRequest): QuantitySweep {
@@ -84,20 +84,20 @@ const done = (kind: ArtifactKind, bytes: Uint8Array, fileName: string, st: Engin
  * Throws `NoCrateError` for a GLB or CSV when there is no crate (§7.9); the PDF then says why.
  */
 export async function buildArtifact(kind: ArtifactKind, req: ArtifactRequest, read: PartModelReader | null): Promise<Artifact> {
-  const { part, settings, standards, layoutKey, ranking } = req;
-  const design: DesignRequest = { part, settings, standards, layoutKey, ranking };
+  const { part, settings, standards, layoutKey, ranking, total } = req;
+  const design: DesignRequest = { part, settings, standards, layoutKey, ranking, ...(total ? { total } : {}) };
   const st = stamp(design);
   const plan = req.plan ?? designShipment(design).plan;
   const units = req.units ?? "imperial";
   const { bundleStem, NoCrateError } = await import("@/lib/exportBundle");
-  const stem = bundleStem(part.id, settings.quantity);
+  const stem = bundleStem(part.id, plan.totals.parts);
   const noCrate = () => new NoCrateError(plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : "There is no crate to export.");
 
   if (kind === "csv") {
     if (plan.problem || !plan.crates[0]?.result.design) throw noCrate();
-    const out = cutList({ ...design, units, scope: plan.split ? "shipment" : "crate", crateIndex: req.crateIndex ?? 0 }, plan);
+    const out = cutList({ ...design, units, scope: plan.split || plan.total !== undefined ? "shipment" : "crate", crateIndex: req.crateIndex ?? 0 }, plan);
     // The Cut list tab's name, with the part id made file-name safe like the other files (a ZIP path never gains a folder).
-    const fileName = `${stem}${out.fileName.slice(`crate-${part.id}-x${settings.quantity}`.length)}`;
+    const fileName = `${stem}${out.fileName.slice(`crate-${part.id}-x${plan.totals.parts}`.length)}`;
     return done(kind, new TextEncoder().encode(stampCsv(out.csv, st)), fileName, st);
   }
   if (kind === "glb") {
@@ -137,6 +137,8 @@ export interface ManifestConfiguration {
   engineVersion: string;
   inputHash: string;
   quantity: number;
+  /** Set when the configuration is a job's total quantity (#140): `quantity` is then the parts to ship and `perCrate` its crate types' quantities. */
+  total?: number;
   /** The layout pick (null: the recommended layout for the ranking). */
   layoutKey: string | null;
   /** The layout the crate (crate A) was made with. */
@@ -252,7 +254,7 @@ export async function buildMultiBundleZip(configs: DesignRequest[], read: PartMo
     const plan = designShipment(req).plan;
     const sweep = sweepOf(req);
     const recommended = isRecommended(plan, sweep);
-    const folder = `${pad(i + 1, unique.length)}-x${req.settings.quantity}${recommended ? "-recommended" : ""}`;
+    const folder = `${pad(i + 1, unique.length)}-x${plan.totals.parts}${recommended ? "-recommended" : ""}`;
     const base: ArtifactRequest = { ...req, units, generatedAt, timeZone: options.timeZone, sweep, plan };
     const files: ManifestFile[] = [];
     const hasCrate = !plan.problem && plan.crates.every((t) => t.result.design);
@@ -272,7 +274,8 @@ export async function buildMultiBundleZip(configs: DesignRequest[], read: PartMo
     rows.push({
       folder,
       ...st,
-      quantity: req.settings.quantity,
+      quantity: plan.totals.parts,
+      ...(plan.total ? { total: plan.total } : {}),
       layoutKey: req.layoutKey,
       layout: first?.layout.key ?? null,
       ranking: req.ranking,

@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import type { QuantitySweep } from "@/domain/sweep";
+import { withTotal } from "@/engine/request";
 import type { DesignRequest } from "@/engine/schemas";
 import { downloadBytes } from "@/lib/download";
 import { type SavedConfig, useJobSync } from "./jobSync";
 import { DONE_NOTE_MS, ERROR_NOTE_MS, MIN_BUSY_MS, type ExportState } from "./exportRun";
 import { useDesigner } from "./store";
+import { totalPlanViewNow, totalSplitOf } from "./totalPlan";
 import { useView } from "./viewStore";
 import { models } from "@/lib/modelRegistry";
 
@@ -78,7 +80,10 @@ export const useDownloadAll = create<{ state: ExportState; run: (configs?: Desig
       set({ state: { kind: "busy" } });
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       // The design as it is now, whatever is edited while the files are made.
-      const current = currentRequest(s);
+      // With Parts to ship set (#140) every configuration is the job's whole shipment (`withTotal`), so the
+      // bundle holds it once, whatever per-crate quantities the shortlist or the saved configurations had.
+      const total = totalSplitOf(totalPlanViewNow());
+      const current = withTotal(currentRequest(s), total);
       const saved = useJobSync.getState().configs;
       const { units } = useView.getState();
       const at = new Date().toISOString();
@@ -87,7 +92,8 @@ export const useDownloadAll = create<{ state: ExportState; run: (configs?: Desig
       try {
         const work = (async () => {
           const [{ buildMultiBundleZip, sweepFor }, { urlModelReader }] = await Promise.all([import("@/engine/artifacts"), import("@/engine/glb")]);
-          return buildMultiBundleZip(configs ?? defaultConfigs(current, saved, () => sweepFor(current)), urlModelReader, { units, generatedAt: at });
+          const list = configs ?? defaultConfigs(current, saved, () => sweepFor(current));
+          return buildMultiBundleZip(total ? list.map((r) => withTotal(r, total)) : list, urlModelReader, { units, generatedAt: at });
         })();
         const [{ name, zip }] = await Promise.all([work, reduce ? null : wait(MIN_BUSY_MS)]);
         downloadBytes(name, zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, "application/zip");
