@@ -17,10 +17,9 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let noteTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
- * The one export run behind both the Export pill (#51) and the View popover's Export (#77): one
- * click downloads `crate-<part>-x<qty>.zip` (`src/lib/exportBundle.ts`, loaded on first use).
- * Both controls read this state, so either shows "Exporting…" and the same outcome, and a second
- * click while busy does nothing.
+ * The one export run behind the Export pill (#51): one click downloads
+ * `crate-<part>-x<qty>.zip` (`src/lib/exportBundle.ts`, loaded on first use). A second click
+ * while busy does nothing.
  */
 export const useExportRun = create<{ state: ExportState; run: () => Promise<void> }>((set, get) => ({
   state: { kind: "idle" },

@@ -105,8 +105,17 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                   const cells = (
                     <>
                       <td>{l.label}</td>
-                      <td>{stockText(l, units)}</td>
-                      <td>{cutText(l, units)}</td>
+                      <td className="nominal">{stockText(l, units)}</td>
+                      <td>
+                        {cutText(l, units)
+                          .split(" × ")
+                          .map((d, i) => (
+                            <Fragment key={i}>
+                              {i > 0 && " × "}
+                              <span className="nw">{d}</span>
+                            </Fragment>
+                          ))}
+                      </td>
                       <td>{l.qty}</td>
                     </>
                   );

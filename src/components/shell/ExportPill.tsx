@@ -11,7 +11,7 @@ import { exportNote, useExportRun } from "./exportRun";
  * Idle → busy ("Exporting…" with a spinner, held for at least 1.5 s; with reduced motion, no
  * spin and no hold) → "Downloaded crate-PART-001-x4.zip", or a plain error. The note is a
  * `role="status"` live region, so screen readers hear the outcome. The run and its state are
- * shared with the View popover's Export (#77, `exportRun.ts`).
+ * kept in `exportRun.ts`.
  */
 export function ExportPill() {
   const canExport = useDesigner((s) => !!s.result.design && !s.plan.problem);

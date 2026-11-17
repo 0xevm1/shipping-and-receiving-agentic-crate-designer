@@ -2,7 +2,7 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { CircleGeometry, DoubleSide, MeshBasicMaterial, Shape, ShapeGeometry, type Group } from "three";
+import { Box2, CircleGeometry, DoubleSide, MeshBasicMaterial, Shape, ShapeGeometry, Vector2, Vector3, type Group, type Mesh } from "three";
 import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
 import { anim } from "@/state/motion";
@@ -12,15 +12,28 @@ import { EXPLODE_WALL_MM, explodeOffset } from "./scene";
 const ARROW = "#f3a000";
 /** Stencils sit this far off the outside faces, so they never z-fight with the boards, mm. */
 const STENCIL_GAP_MM = 3;
-/** How far outside the end the arrow's tip stops, mm. */
-const ARROW_GAP_MM = 60;
+/**
+ * How far outside the end the arrow's tip stops, mm. The width size label sits on the same
+ * centre line, `110 + 5 %` of the longest side beyond the end (`buildLines`), and a label is a
+ * fixed-size pill over a crate that scales to fit, so it covers about a third of that side in
+ * mm. The tip starts beyond both (#62), so the arrow and the "25.7 in" label never overlap.
+ */
+export function arrowGapMm(external: readonly number[]): number {
+  const longest = Math.max(...external);
+  return 110 + 0.05 * longest + 0.33 * longest + 60;
+}
 const noRaycast = () => null;
 
 /**
  * What the handling marks drew, for the e2e test hook (#8). `cog` is the CoG the stencils mark,
  * or null when none are drawn (#87). Written on mount, never read by the scene.
  */
-export const handlingMarks = { cog: null as Vec3 | null, arrows: 0 };
+export const handlingMarks = {
+  cog: null as Vec3 | null,
+  arrows: 0,
+  /** The near-end arrow's screen box, CSS px (only measured in `NEXT_PUBLIC_E2E` builds, #62). */
+  arrowBox: null as { left: number; top: number; right: number; bottom: number } | null,
+};
 
 /** Arrow pointing +X in the XY plane, tip at the origin. */
 function arrowShape(length: number, width: number): Shape {
@@ -59,6 +72,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
   const cog = handling.cogMm;
   const minus = useRef<Group>(null);
   const plus = useRef<Group>(null);
+  const nearArrow = useRef<Mesh>(null);
   const faceRefs = useRef<Partial<Record<Face, Group | null>>>({});
 
   const lo = [0, 1, 2].map((i) => Math.min(...design.members.map((m) => m.min[i])));
@@ -90,7 +104,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
   const arrows = useMemo(() => {
     const out = handling.openings.map((o) => {
       const width = Math.min(o.width * 0.7, 220);
-      const length = Math.min(600, Math.max(250, 0.3 * layout.external[0]));
+      const length = Math.min(320, Math.max(180, 0.17 * layout.external[0]));
       return { y: o.y + o.width / 2, geometry: new ShapeGeometry(arrowShape(length, width)) };
     });
     return out;
@@ -103,6 +117,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
     return () => {
       handlingMarks.cog = null;
       handlingMarks.arrows = 0;
+      handlingMarks.arrowBox = null;
     };
   }, [cog, arrows, showCog]);
 
@@ -122,7 +137,19 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
     [arrows, arrowMat],
   );
 
-  useFrame(() => {
+  useFrame(({ camera, size }) => {
+    if (process.env.NEXT_PUBLIC_E2E && nearArrow.current && arrows[0]) {
+      // Test hook: where the near-end arrow lands on screen, to check it clears the width label.
+      nearArrow.current.updateWorldMatrix(true, false);
+      const box = new Box2();
+      const bounds = arrows[0].geometry.boundingBox ?? (arrows[0].geometry.computeBoundingBox(), arrows[0].geometry.boundingBox!);
+      for (const x of [bounds.min.x, bounds.max.x])
+        for (const y of [bounds.min.y, bounds.max.y]) {
+          const p = new Vector3(x, y, 0).applyMatrix4(nearArrow.current.matrixWorld).project(camera);
+          box.expandByPoint(new Vector2(((p.x + 1) / 2) * size.width, ((1 - p.y) / 2) * size.height));
+        }
+      handlingMarks.arrowBox = { left: box.min.x, top: box.min.y, right: box.max.x, bottom: box.max.y };
+    }
     const out = EXPLODE_WALL_MM * anim.explode;
     minus.current?.position.set(-out, 0, 0);
     plus.current?.position.set(out, 0, 0);
@@ -131,6 +158,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
 
   // Just above the ground so the arrows never z-fight with the floor grid.
   const z = ground + 2;
+  const gap = arrowGapMm(layout.external);
   return (
     <group>
       {showCog &&
@@ -145,16 +173,17 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
         ))}
       <group ref={minus}>
         {arrows.map((a, i) => (
-          <mesh key={i} geometry={a.geometry} material={arrowMat} position={[x0 - ARROW_GAP_MM, a.y, z]} renderOrder={11} raycast={noRaycast} />
+          <mesh key={i} geometry={a.geometry} material={arrowMat} position={[x0 - gap, a.y, z]} renderOrder={11} raycast={noRaycast} />
         ))}
       </group>
       <group ref={plus}>
         {arrows.map((a, i) => (
           <mesh
             key={i}
+            ref={i === 0 ? nearArrow : undefined}
             geometry={a.geometry}
             material={arrowMat}
-            position={[x1 + ARROW_GAP_MM, a.y, z]}
+            position={[x1 + gap, a.y, z]}
             rotation={[0, 0, Math.PI]}
             renderOrder={11}
             raycast={noRaycast}

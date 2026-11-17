@@ -6,7 +6,7 @@
  */
 import type { DesignChange, DesignField } from "@/domain/diff";
 import { plywoodText, sectionText } from "./lumber";
-import { dims, lengthUnit, weightWhole, type Units } from "./units";
+import { dims, lengthUnit, weight, weightWhole, type Units } from "./units";
 
 export const NO_CHANGE = "No change to the crate";
 
@@ -78,4 +78,48 @@ export function changeNote(changes: readonly DesignChange[], u: Units, max = 2):
   });
   const more = shown.length - max;
   return parts.join(", ") + (more > 0 ? `, +${more} more` : "");
+}
+
+const volume = (v: number | readonly number[]) => list(v).reduce((a, b) => a * b, 1);
+
+/**
+ * The short note the screen shows (#62): the outcome, not every before → after.
+ *
+ *   outside size changed   "Crate grew: 2176 × 936 × 831 mm, 878 kg" (or "shrank", or "resized"
+ *                           when the length, width and height moved in opposite directions)
+ *   gross / parts only     "Crate heavier: 20 kg" (or "lighter")
+ *   one other change       its own detail, which is already short: "Wall plywood 1/2″ → 5/8″"
+ *   several other changes  "Crate changed: wall plywood, floor, +1 more"
+ *   nothing visible        "No change to the crate"
+ *
+ * The weight is the new gross, shown only when the gross moved. `changeNote` has the full
+ * detail; the note's `title` and screen-reader text carry it.
+ */
+export function changeSummary(changes: readonly DesignChange[], u: Units): string {
+  const shown = visibleChanges(changes, u);
+  if (shown.length === 0) return NO_CHANGE;
+  const by = (f: DesignField) => changes.find((c) => c.field === f);
+  const text = (f: DesignField) => shown.find((t) => t.field === f);
+
+  const gross = text("gross");
+  const grossTail = gross ? `, ${weight(num(by("gross")!.to), u)}` : "";
+
+  const outside = text("outside");
+  if (outside) {
+    const c = by("outside")!;
+    const [fromL, toL] = [list(c.from), list(c.to)];
+    const up = toL.some((v, i) => v > fromL[i]);
+    const down = toL.some((v, i) => v < fromL[i]);
+    // Mixed moves (longer but lower) are judged by the volume they enclose.
+    const verb = up && down ? (volume(c.to) >= volume(c.from) ? "grew" : "shrank") : up ? "grew" : "shrank";
+    return `Crate ${verb}: ${outside.to} ${outside.unit}${grossTail}`;
+  }
+  if (shown.length === 1) return changeNote(changes, u);
+  if (gross && shown.every((t) => t.field === "gross" || t.field === "payload" || t.field === "tare")) {
+    const c = by("gross")!;
+    return `Crate ${num(c.to) > num(c.from) ? "heavier" : "lighter"}: ${weight(num(c.to), u)}`;
+  }
+  const labels = shown.slice(0, 2).map((t) => t.label.toLowerCase());
+  const more = shown.length - 2;
+  return `Crate changed: ${labels.join(", ")}${more > 0 ? `, +${more} more` : ""}`;
 }

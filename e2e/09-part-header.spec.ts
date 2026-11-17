@@ -148,7 +148,10 @@ test("a mass edit updates the header gross, notes the change and flashes the Ove
   await massField(page).fill("14.71");
   await massField(page).press("Enter");
   await expect(header(page)).toContainText("kg each · crate gross 20.3 kg");
-  await expect(note(page)).toHaveText("Gross 16 → 20 kg, parts 10 → 15 kg");
+  await expect(note(page)).toHaveText(/^Crate heavier: 20.3 kg/);
+  // The full before → after is on hover (title) and in screen-reader text (#62).
+  await expect(note(page).locator("span").first()).toHaveAttribute("title", "Gross 16 → 20 kg, parts 10 → 15 kg");
+  await expect(note(page).locator(".sr-only")).toHaveText(". Details: Gross 16 → 20 kg, parts 10 → 15 kg");
   // The changed values carry the highlight: the header gross and the Overview gross and parts.
   await expect(header(page).locator(".flash")).toHaveText("20.3 kg");
   await expect(panel(page).locator(".flash").first()).toBeVisible();
@@ -189,7 +192,7 @@ test("imperial: mass is shown and entered in lb, stored in kg", async ({ page })
   await mass.fill("30");
   await mass.press("Enter");
   await expect(mass).toHaveValue("30");
-  await expect(note(page)).toContainText(/Gross \d+ → \d+ lb/);
+  await expect(note(page)).toContainText(/Crate (heavier|lighter): \d+ lb/);
   await openTab(page, "Overview");
   await expect(panel(page)).toContainText("30 lb, material not given");
   await mass.press("ArrowUp");

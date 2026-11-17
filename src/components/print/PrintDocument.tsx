@@ -158,7 +158,7 @@ function BuildSheet({ doc, crate: c }: { doc: PrintableDesign; crate: PrintableC
           {c.build.cutList.map((g) => (
             <tbody key={g.stock}>
               <tr className="stock-head">
-                <td colSpan={2}>{g.stock}</td>
+                <td colSpan={2} className="nominal">{g.stock}</td>
                 <td>{g.total}</td>
                 <td className="n">{g.pieces}</td>
               </tr>
@@ -208,9 +208,9 @@ function BuildSheet({ doc, crate: c }: { doc: PrintableDesign; crate: PrintableC
                 <li key={s.n}>
                   <b>{s.title}</b>
                   {s.screws > 0 && <span className="screws"> · {s.screws} screws</span>}
-                  <p>{s.text}</p>
+                  <p className="nominal">{s.text}</p>
                   {s.pieces.length > 0 && (
-                    <p className="pieces">{s.pieces.map((p) => `${p.qty} × ${p.piece.toLowerCase()} (${p.stock}, ${p.cut})`).join("; ")}</p>
+                    <p className="pieces nominal">{s.pieces.map((p) => `${p.qty} × ${p.piece.toLowerCase()} (${p.stock}, ${p.cut})`).join("; ")}</p>
                   )}
                 </li>
               ))}
