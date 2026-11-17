@@ -324,6 +324,14 @@ describe("GET /jobs/:id/bundle.zip", () => {
     expect((await readyEvents(jobId)).some((e) => e.payload.bundleId === q.bundleId)).toBe(true);
   });
 
+  it("builds files of the sweep's precomputed configurations too (the queue drained the job's sweep above)", async () => {
+    const precomputed = (await t.repo.configurations.listForJob(DEFAULT_ORG, jobId)).filter((c) => c.origin === "precomputed");
+    expect(precomputed.length).toBeGreaterThan(0);
+    const res = await getFile(jobId, precomputed[0]!.id, "crate.glb");
+    expect(res.status).toBe(200);
+    expect(ArtifactUrlResponseSchema.parse(await body(res))).toMatchObject({ kind: "glb", inputHash: precomputed[0]!.inputHash });
+  });
+
   it("refuses unknown configurations (404) and a job with nothing saved (422)", async () => {
     await expect404(await getBundle(jobId, "?configs=00000000-0000-4000-8000-00000000dead"));
     const empty = await t.repo.jobs.create(DEFAULT_ORG, { partId: (await t.repo.parts.list(DEFAULT_ORG))[0]!.id, totalQuantity: null });

@@ -10,7 +10,7 @@
  */
 import { z } from "zod";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
-import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
+import { DEFAULT_SWEEP_RULES, sweepDesignRequest, type SweepRequest } from "@/engine/sweep";
 import { emitEvent } from "../events/emit";
 import { type OrgContext, orgContext } from "../db/org";
 import type { QueueJob } from "../db/queue";
@@ -101,17 +101,21 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
       total: job.totalQuantity,
     };
     const report = await pool.run("designs", req);
+    // Stored like a configuration saved from the browser (docs/API.md): the whole DesignRequest, so
+    // the server can rebuild it (artifacts, "Use"), and the engine's DesignSummary of it.
+    const requests = report.configurations.map((c) => sweepDesignRequest(req, c.quantityPerCrate, c.layoutKey));
+    const designs = await Promise.all(requests.map((r) => pool.run("design", r)));
     signal.throwIfAborted();
 
     return inTransaction(db, async (tx) => {
       const ids: string[] = [];
-      for (const c of report.configurations) {
+      for (const [i, c] of report.configurations.entries()) {
         const { row } = await tx.configurations.save(org, {
           inputHash: c.inputHash,
           quantityPerCrate: c.quantityPerCrate,
           layout: c.layoutKey,
-          settings: c.settings,
-          resultSummary: { ...c, settings: undefined, sweepInputHash: report.inputHash },
+          settings: requests[i],
+          resultSummary: designs[i]!.summary,
           score: c.scoreUsdPerPart,
           engineVersion: report.engineVersion,
         });
