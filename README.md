@@ -30,14 +30,23 @@ invariants) is in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 git clone git@github.com:0xevm1/shipping-ui.git
 cd shipping-ui
 bun install
-bun run dev          # → http://localhost:3000
+bun run dev          # Docker must be running → http://localhost:3000
 ```
+
+`bun run dev` starts Postgres and an S3-compatible blob emulator in Docker
+(`docker-compose.yml`), migrates the database, prints the emulator's console URL and then starts
+Next.js on the host. [`docs/POSTGRES.md`](docs/POSTGRES.md) covers the data store, the scripts,
+`.env.local` and the overrides for running several worktrees at once.
 
 | Command | What it does |
 |---|---|
-| `bun run dev` | Dev server with hot reload |
+| `bun run dev` | `infra:up`, `db:migrate`, then the dev server with hot reload (`bun run dev:app` skips the Docker steps) |
+| `bun run infra:up` / `infra:down` | Start (and wait for) / stop Postgres and the blob emulator; `db:up` / `db:down` are aliases |
+| `bun run db:migrate` / `db:reset` / `db:psql` | Apply `db/migrations/` / drop and re-migrate the database / open `psql` on it |
+| `bun run db:generate` | Write the next migration after changing `src/server/db/schema.ts` |
+| `bun run test:integration` | Integration tests against the Docker Postgres (`*.integration.test.ts`; run `infra:up` first) |
 | `bun run build && bun run start` | Production build and serve |
-| `bun run test` | Domain unit tests (vitest) |
+| `bun run test` | Unit tests (vitest); no database needed |
 | `bun run e2e` | End-to-end UI tests (Playwright): builds the app with the test hook, serves it on port 3320 (`E2E_PORT` changes it), runs every flow and saves screenshots to the git-ignored `e2e/screenshots/`. First run `bunx playwright install chromium` once. Locally it uses 1 to 3 workers (`E2E_WORKERS`). `bun run e2e:ui` opens Playwright's UI mode; `bun run e2e:docs-shots` copies chosen shots into `docs/screenshots/` |
 | `bun run format` / `bun run format:check` | Prettier (`.prettierrc`: 160 columns); CI runs the check |
 | `bun run knip` | Unused files, exports and dependencies (a report; it has known findings) |
@@ -59,16 +68,22 @@ bun run dev          # → http://localhost:3000
   commit runs ESLint on the staged files, `bun run typecheck` and `bun run test` (4-6 s), and
   the output names the step that failed. It works in `git worktree`s too. In an emergency, skip it
   with `git commit --no-verify`; CI still runs every check.
-- Nothing else is needed: no environment variables, backend or database. The sample GLBs are
-  bundled in `public/parts/`.
+- **Docker** (Docker Desktop, or Engine with the compose plugin) runs Postgres and the blob
+  emulator for `bun run dev` and the integration tests. `bun run build`, `bun run test` and the
+  pre-commit hook don't need it. No environment variables are needed: the defaults match
+  `docker-compose.yml`, and `.env.example` lists what `.env.local` can override. The sample GLBs
+  are bundled in `public/parts/`.
 
 ## Pull requests
 
 Every pull request to `main`, and every push to `main`, runs
-[CI](.github/workflows/ci.yml): one job, **`checks`**, which does
-`bun install --frozen-lockfile`, Prettier check, lint, typecheck, unit tests and build.
+[CI](.github/workflows/ci.yml): **`checks`**, which does `bun install --frozen-lockfile`,
+Prettier check, `docker compose config`, lint, typecheck, unit tests and build; and
+**`integration`**, which checks that `db/migrations/` matches the schema, starts Postgres and the
+blob emulator from `docker-compose.yml`, migrates an empty database and runs
+`bun run test:integration`.
 
-**A green `checks` run is required before merging.** GitHub can't enforce this on a private
+**Green `checks` and `integration` runs are required before merging.** GitHub can't enforce this on a private
 repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api` command
 that adds a ruleset requiring the job on `main` once the repo is upgraded or made public.
 
@@ -263,12 +278,12 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **A database and accounts.** The shop standards, the display units, the design library and
+- **Accounts.** The shop standards, the display units, the design library and
   the last-opened crate are saved in the browser's `localStorage` (and the last loaded `.glb` in
   IndexedDB), per browser, under versioned keys; bad data is
   skipped with a warning). Designs also move as JSON files (one design, or the whole library)
-  and share links. The plan for a real store, SQLite WASM on OPFS, is in
-  [`docs/DATA_STORE.md`](docs/DATA_STORE.md); spec §9 has the details.
+  and share links. The shared store is Postgres (#46), being built in slices:
+  [`docs/POSTGRES.md`](docs/POSTGRES.md); spec §9 has the details.
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
 
@@ -358,11 +373,14 @@ src/lib/           edge code, may import domain: display units, cut-list formatt
                    export document, the Export pill's .zip and PDF (tested)
 src/state/         may import lib and domain: zustand stores, persistence, loading flows,
                    per-frame animation values
-src/components/    may import everything below: shell/ (overlays), island/ (tabs), viewer/
-                   (three.js via react-three-fiber); src/app/ is the same layer
+src/server/        server-only (Postgres via drizzle, #46), may import lib and domain; only
+                   src/app/ may import it
+src/components/    may import everything below except src/server/: shell/ (overlays), island/
+                   (tabs), viewer/ (three.js via react-three-fiber); src/app/ is the same layer
 ```
 
-Imports point down only (components and app, then state, then lib, then domain). ESLint enforces
+Imports point down only (components and app, then state, then lib, then domain; src/server/
+beside state, used only by src/app/). ESLint enforces
 it (`eslint.config.mjs`, `bun run lint`), including for type-only imports and tests.
 
 ```
@@ -370,16 +388,17 @@ src/data/          parts.json catalog
 public/parts/      GLB models
 public/            also site.webmanifest and its 192/512 icons (tab icons: src/app/icon.svg etc.)
 e2e/               Playwright end-to-end UI tests (bun run e2e)
-docs/              SPECIFICATION.md, DATA_STORE.md, schema.sql, design-handoff/
+db/migrations/     SQL migrations written by drizzle-kit (bun run db:generate)
+infra/             blob emulator bucket setup (CORS) for docker-compose.yml
+docs/              SPECIFICATION.md, POSTGRES.md, design-handoff/
 ```
 
 ## Docs
 
 - [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md): the full spec covering the data model,
   algorithms, construction rules, invariants, decisions and roadmap.
-- [`docs/DATA_STORE.md`](docs/DATA_STORE.md): the client-side persistence plan (SQLite WASM on
-  OPFS).
-- [`docs/schema.sql`](docs/schema.sql): the proposed tables.
+- [`docs/POSTGRES.md`](docs/POSTGRES.md): the Postgres data store: tables, org scoping,
+  scripts, environment and ports.
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 
