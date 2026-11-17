@@ -4,7 +4,8 @@ import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import type { DesignField } from "@/domain/diff";
 import { ASSEMBLY_NAMES } from "@/domain/export";
 import { layoutName } from "@/lib/format";
-import { dims, dimsOther, fraction, lengthUnit, partWeight, volume, weight } from "@/lib/units";
+import { plywoodText, sectionText } from "@/lib/lumber";
+import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { ShipmentSummary, shipmentStyles } from "./Shipment";
@@ -24,8 +25,9 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
   const posts = count("blocking");
   const bearers = count("bearer");
   const separators = count("separator");
-  const mm = (v: number) => (imperial ? fraction(v) : `${v} mm`);
-  const section = (a: number, b: number) => (imperial ? `${fraction(a)} × ${fraction(b)}` : `${a} × ${b}`);
+  // Imperial uses shop names (#15): "1/2″" plywood, "1x4" cleats, "4x4" skids.
+  const ply = (v: number) => (imperial ? plywoodText(v) : `${v} mm`);
+  const section = (a: number, b: number) => (imperial ? sectionText(a, b) : `${a} × ${b}`);
   const maxAssembly = Math.max(...Object.values(design.tareKgByAssembly));
 
   return (
@@ -58,12 +60,12 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
         <Step name="Layout" value={layout.counts.join(" × ")} flash={["grid"]}>
           {layoutName(layout)}. Inside is {dims(layout.interior, units)} {lengthUnit(units)}
         </Step>
-        <Step name="Walls and lid" value={`${mm(c.panelMm)} ply`} flash={["panel"]}>
+        <Step name="Walls and lid" value={`${ply(c.panelMm)} ply`} flash={["panel"]}>
           {auto ? "Sized for the load" : "Set by hand"}, stiffened with {section(c.cleat.thick, c.cleat.wide)} cleats
         </Step>
         <Step name="Base" value={`${c.skidCount} skids`} flash={["skidCount"]}>
           <Flash on={["skid"]}>{section(c.skid.wide, c.skid.tall)}</Flash> skids under a{" "}
-          <Flash on={["floor"]}>{mm(c.floorMm)}</Flash> floor, open for forklift tines
+          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines
         </Step>
         <Step name="Blocking" value={`${posts} posts`}>
           {bearers} bearer{bearers === 1 ? "" : "s"} underneath

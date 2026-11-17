@@ -101,7 +101,7 @@ describe("lastChange", () => {
     expect(s().lastChange?.source).toBe("rules");
     expect(s().lastChange?.changes.map((x) => x.field)).toContain("grid");
     const before = s().lastChange;
-    s().setUnits("imperial");
+    s().setUnits("metric", null);
     expect(s().lastChange).toBe(before);
     s().setLayoutKey(s().result.layouts[s().result.layouts.length - 1].key);
     expect(s().lastChange?.source).toBe("layout");

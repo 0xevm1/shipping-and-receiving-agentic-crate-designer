@@ -1,10 +1,10 @@
 import { DesignerShell } from "@/components/shell/DesignerShell";
-import { StandardsLoader } from "@/components/shell/StandardsLoader";
+import { SavedStateLoader } from "@/components/shell/SavedStateLoader";
 
 export default function Home() {
   return (
     <>
-      <StandardsLoader />
+      <SavedStateLoader />
       <DesignerShell />
     </>
   );

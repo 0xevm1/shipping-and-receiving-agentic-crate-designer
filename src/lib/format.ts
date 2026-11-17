@@ -1,12 +1,15 @@
 import type { BomLine } from "@/domain/crate";
 import type { Layout } from "@/domain/packing";
-import { cut, fraction, type Units } from "./units";
+import { lumberText, plywoodText } from "./lumber";
+import { cut, type Units } from "./units";
 
-/** "19 × 89 lumber", "12 mm plywood", or the imperial equivalents. */
-export function stockText(l: BomLine, u: Units): string {
-  if (l.material === "plywood") return u === "imperial" ? `${fraction(l.stockMm[0])} plywood` : `${l.stockMm[0]} mm plywood`;
-  const section = u === "imperial" ? l.stockMm.map(fraction).join(" × ") : l.stockMm.join(" × ");
-  return `${section} lumber`;
+/**
+ * Metric: "19 × 89 lumber", "12 mm plywood". Imperial uses shop names (#15): "1x4",
+ * "1/2″ plywood", and "1 15/16″ × 3 1/2″ from 4x4" for blocking cut to the gap.
+ */
+export function stockText(l: Pick<BomLine, "material" | "kind" | "stockMm">, u: Units): string {
+  if (l.material === "plywood") return u === "imperial" ? `${plywoodText(l.stockMm[0])} plywood` : `${l.stockMm[0]} mm plywood`;
+  return u === "imperial" ? lumberText(l.stockMm, l.kind) : `${l.stockMm.join(" × ")} lumber`;
 }
 
 export function cutText(l: BomLine, u: Units): string {

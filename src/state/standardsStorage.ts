@@ -14,10 +14,10 @@ import {
  */
 export const STANDARDS_STORAGE_KEY = `crate-designer.shop-standards.v${STANDARDS_VERSION}`;
 
-type KeyValueStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type KeyValueStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 /** The browser's localStorage, or null on the server or when it is blocked. */
-function browserStorage(): KeyValueStore | null {
+export function browserStorage(): KeyValueStore | null {
   try {
     return typeof window !== "undefined" && window.localStorage ? window.localStorage : null;
   } catch {

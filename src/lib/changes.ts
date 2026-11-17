@@ -5,7 +5,8 @@
  * a number that looks the same.
  */
 import type { DesignChange, DesignField } from "@/domain/diff";
-import { dims, fraction, lengthUnit, weight, type Units } from "./units";
+import { plywoodText, sectionText } from "./lumber";
+import { dims, lengthUnit, weight, type Units } from "./units";
 
 export const NO_CHANGE = "No change to the crate";
 
@@ -48,7 +49,9 @@ function values(c: DesignChange, u: Units): { from: string; to: string; unit: st
     case "panel":
     case "floor":
     case "skid": {
-      const f = (v: number | readonly number[]) => list(v).map((x) => (imperial ? fraction(x) : String(x))).join(" × ");
+      // Imperial uses shop names (#15): "1/2″ → 5/8″" plywood, "4x4 → 4x6" skids.
+      const shop = (v: readonly number[]) => (v.length === 2 ? sectionText(v[0], v[1]) : plywoodText(v[0]));
+      const f = (v: number | readonly number[]) => (imperial ? shop(list(v)) : list(v).join(" × "));
       return { from: f(c.from), to: f(c.to), unit: imperial ? "" : "mm" };
     }
     case "skidCount":
