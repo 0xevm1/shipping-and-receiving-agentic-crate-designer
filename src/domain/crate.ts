@@ -1,5 +1,6 @@
 import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTerms, type LabourEstimate } from "./cost";
 import { addCradleDunnage, SCREWS_PER_CRADLE, STACKING_CRADLE_LABEL, usesCradles, type CradleProfile } from "./cradles";
+import { analyseHandling, handlingChecks, type Handling } from "./handling";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, type ShopStandards } from "./standards";
@@ -92,7 +93,20 @@ export interface BomLine {
 }
 
 export interface Check {
-  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "cardboard" | "crate-limit";
+  id:
+    | "door"
+    | "oversize"
+    | "blocking"
+    | "stack"
+    | "stable"
+    | "base-rating"
+    | "cog-offset"
+    | "cog-tip"
+    | "forklift"
+    | "pallet-jack"
+    | "utilization"
+    | "cardboard"
+    | "crate-limit";
   /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
   level: "ok" | "caution" | "info";
   title: string;
@@ -126,6 +140,13 @@ export interface CrateDesign {
   densityLbFt3: number;
   /** `freight.dimWeightLb`. */
   dimWeightLb: number;
+  /**
+   * Combined centre of gravity of the crate and the parts (#8, spec §7.14), in the crate-interior
+   * frame of `members` (origin at the interior min corner, on top of the floor; Z up).
+   */
+  centerOfGravityMm: Vec3;
+  /** Centre of gravity, tip angle and fork openings (#8, `handling.ts`). */
+  handling: Handling;
   /** Every rule, passed or not, in a fixed order. */
   checks: Check[];
 }
@@ -250,6 +271,8 @@ export function designCrate(
   const grossKg = payloadKg + tareKg;
   const labour = estimateLabour(bom, screws, layout.counts[2], standards);
   const freight = freightTerms(grossKg, layout.external, standards);
+  // Read-only over the finished members and part placements (#8).
+  const handling = analyseHandling(members, layout, part.mass_kg, standards);
 
   const design: CrateDesign = {
     layout,
@@ -270,6 +293,8 @@ export function designCrate(
     freightClass: freight.freightClass,
     densityLbFt3: freight.densityLbFt3,
     dimWeightLb: freight.dimWeightLb,
+    centerOfGravityMm: handling.cogMm,
+    handling,
     checks: [],
   };
   design.checks = evaluateChecks(design, part, settings, standards);
@@ -542,6 +567,8 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
       ? { id: "base-rating", level: "caution", title: `Over ${rating} gross`, detail: "Needs heavier skids and floor joists than this design includes." }
       : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under ${rating}, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
   );
+
+  checks.push(...handlingChecks(d.handling, standards));
 
   if (eL > lim.ltlExcessiveLengthMm) {
     const ft = Math.round((lim.ltlExcessiveLengthMm / 304.8) * 10) / 10;

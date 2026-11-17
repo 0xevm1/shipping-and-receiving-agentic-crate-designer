@@ -60,11 +60,18 @@ describe("PrintableDesign (#26)", () => {
     const settings = { ...DEFAULT_SETTINGS, quantity: 4 };
     const plan = planShipment(bracket, settings);
     const d = plan.crates[0].result.design!;
+    // The design's own CoG (#8), on the end view from the outside bottom-left corner.
+    expect(crate.label.cogMm).toEqual(d.centerOfGravityMm);
+    const { panelMm, cleat, floorMm, skid } = d.construction;
+    expect(crate.label.cogEnd!.y).toBeCloseTo(d.centerOfGravityMm[1] + panelMm + cleat.thick, 6);
+    expect(crate.label.cogEnd!.z).toBeCloseTo(d.centerOfGravityMm[2] + floorMm + skid.tall, 6);
+    expect(crate.label.cogEnd!.y).toBeCloseTo(d.layout.external[1] / 2, 6);
     Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, centerOfGravityMm: [400, 300, 150] });
     const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", generatedAt: NOW });
     expect(withExtras.crates[0].spec.freight.find((r) => r.label === "Freight class")?.value).toBe("85");
     expect(withExtras.crates[0].label.cogMm).toEqual([400, 300, 150]);
-    expect(crate.label.cogMm).toBeNull();
+    Object.assign(d, { centerOfGravityMm: [NaN, 0, 0] });
+    expect(buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", generatedAt: NOW }).crates[0].label.cogEnd).toBeNull();
   });
 
   it("explains the chosen layout and names the runner-up", () => {
@@ -144,6 +151,11 @@ describe("PrintableDesign (#26)", () => {
   it("gives the label fork entry at the skid ends", () => {
     expect(crate.label.skids.length).toBe(planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!.construction.skidCount);
     expect(crate.label.forkEntry).toBe("Fork entry from the ends");
+    // The arrows go in the openings the handling checks measured (#8): between the two skids.
+    const [a, b] = crate.label.skids;
+    expect(crate.label.openings).toHaveLength(1);
+    expect(crate.label.openings[0].y).toBeCloseTo(a.y + a.w, 6);
+    expect(crate.label.openings[0].y + crate.label.openings[0].w).toBeCloseTo(b.y, 6);
   });
 });
 

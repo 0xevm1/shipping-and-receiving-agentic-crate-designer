@@ -276,10 +276,8 @@ function EndMarks({ label: l }: { label: PrintableLabel }) {
   const H = l.heightMm * s;
   const skidH = l.skidTallMm * s;
   const pad = 30;
-  const gaps = l.skids
-    .slice(0, -1)
-    .map((k, i) => ({ from: (k.y + k.w) * s, to: l.skids[i + 1].y * s }))
-    .filter((g) => g.to - g.from > 4);
+  // The openings the handling checks measured (#8), so the arrows match them.
+  const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   return (
     <svg className="end-marks" viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad + 40}`} width="100%" role="img" aria-label="Crate end with fork entry marks">
       <rect x="0" y="0" width={W} height={H - skidH} fill="#fff" stroke="#000" strokeWidth="2" />

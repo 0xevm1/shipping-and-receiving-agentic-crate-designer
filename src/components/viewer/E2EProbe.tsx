@@ -7,7 +7,7 @@
  * The 3D scene can't be read from the DOM, so this exposes `window.__crate`:
  * - `getState()`: a plain snapshot (copies, never live objects) of the view mode, camera,
  *   hover / pin keys, the eased `anim` values, the crate's outside size and the dimension-line
- *   pulse counters (#65).
+ *   pulse counters (#65), and the centre of gravity and fork-entry marks (#8).
  * - `canvasCoverage()`: the share of canvas pixels the scene drew on, proving WebGL renders.
  * Nothing here writes to the store or the scene.
  */
@@ -17,6 +17,7 @@ import { Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { anim, autoplay, isIdle, pulse } from "@/state/motion";
 import { currentMode, useDesigner } from "@/state/store";
+import { handlingMarks } from "./HandlingMarks";
 
 export interface CrateSnapshot {
   /** Mode from the view targets, or null for a custom mix. */
@@ -58,6 +59,11 @@ export interface CrateSnapshot {
   pulses: number;
   /** Photons on screen in the last frame (#65). */
   photonsActive: number;
+  /**
+   * Centre of gravity (#8): the design's, crate-interior mm, and what the 3D view draws (`marker`
+   * is the CoG mark's position, null while hidden; `arrows` the fork-entry arrows on screen).
+   */
+  cog: { mm: [number, number, number]; marker: [number, number, number] | null; arrows: number } | null;
 }
 
 declare global {
@@ -111,6 +117,13 @@ function snapshot(): CrateSnapshot {
     frames,
     pulses: pulse.fired,
     photonsActive: pulse.active,
+    cog: s.result.design
+      ? {
+          mm: [...s.result.design.centerOfGravityMm],
+          marker: handlingMarks.cog ? [...handlingMarks.cog] : null,
+          arrows: handlingMarks.arrows,
+        }
+      : null,
   };
 }
 
