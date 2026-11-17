@@ -182,7 +182,7 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 
 ## Command line
 
-`bun run crate` (`src/cli/`); the README has the usage.
+`bun run crate` (`src/cli/`); [GUIDE.md](GUIDE.md#command-line) has the usage.
 
 - **Through the API** (default): `POST /api/v1/designs` with the key from `--key` or
   `CRATE_API_KEY`, at `--api` or `CRATE_API_URL` (default `http://localhost:3000`). Writes
