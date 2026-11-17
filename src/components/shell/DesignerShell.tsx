@@ -315,7 +315,7 @@ function Tooltip() {
   return (
     <div className="tip glass" style={{ position: "fixed", left, top: tip.y + 16 }}>
       <b>{tip.title}</b>
-      <span>{tip.detail}</span>
+      <span className="nominal">{tip.detail}</span>
     </div>
   );
 }

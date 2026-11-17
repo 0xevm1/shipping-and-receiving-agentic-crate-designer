@@ -1,7 +1,7 @@
 "use client";
 
 import type { DesignField } from "@/domain/diff";
-import { changeNote, visibleChanges } from "@/lib/changes";
+import { changeNote, changeSummary, visibleChanges } from "@/lib/changes";
 import { useDesigner, type ChangeSource } from "@/state/store";
 
 /**
@@ -18,13 +18,17 @@ export function ChangeNote({ sources, className }: { sources: readonly ChangeSou
   const last = useDesigner((s) => s.lastChange);
   const units = useDesigner((s) => s.units);
   const show = last && sources.includes(last.source);
-  const text = show ? changeNote(last.changes, units) : "";
+  const text = show ? changeSummary(last.changes, units) : "";
+  // The full before → after: on hover (`title`) and for screen readers (visually hidden text).
+  const detail = show ? changeNote(last.changes, units, Infinity) : "";
+  const hasDetail = show && detail !== text;
   return (
     <div className={className ? `changenote ${className}` : "changenote"} role="status">
-      {/* `title` keeps the full text where narrow screens cut the note to one line (#42). */}
+      {/* `title` also keeps the full text where narrow screens cut the note to one line (#42). */}
       {show && (
-        <span key={last.id} title={text}>
+        <span key={last.id} title={hasDetail ? detail : text}>
           {text}
+          {hasDetail && <span className="sr-only">{`. Details: ${detail}`}</span>}
         </span>
       )}
     </div>

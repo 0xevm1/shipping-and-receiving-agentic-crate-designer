@@ -409,6 +409,22 @@ h1.brand {
   display: inline-block;
   animation: change-note 5s ease-in forwards;
 }
+/*
+ * The header's and the island's change notes are one line, cut with an ellipsis rather than
+ * wrapped; the full text is in the title (#62). (The Rules tab's clamp note may wrap.)
+ * On desktop the header note stops short of the island instead of running under it.
+ */
+.tl .changenote > span,
+.island-note > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.tl .changenote > span {
+  max-width: calc(100vw - var(--pad) - 500px);
+}
 @keyframes change-note {
   0%,
   70% {
@@ -431,6 +447,8 @@ h1.brand {
   border-radius: 999px;
   background: rgba(0, 26, 51, 0.72);
   font-style: normal;
+  /* The note ignores the pointer, but its pill answers hover so the full text shows (#62). */
+  pointer-events: auto;
 }
 .flash {
   border-radius: 3px;
@@ -1019,7 +1037,44 @@ h1.brand {
 }
 .cut .row td:nth-last-child(-n + 2) {
   font: 400 13px/1.3 var(--mono);
+}
+/* Qty never wraps and keeps room on its right; the cut wraps between its dimensions (#62). */
+.cut .row td:last-child {
   white-space: nowrap;
+  padding-right: 4px;
+  min-width: 2.5ch;
+}
+.cut th:last-child {
+  padding-right: 4px;
+}
+.nw {
+  white-space: nowrap;
+}
+/* Nominal lumber names ("4x4") keep a plain x: Inter's contextual alternates would draw ×. Real sizes use the × character (#62). */
+.nominal {
+  font-feature-settings: "calt" 0;
+}
+@media (max-width: 430px) {
+  /* Phones: "gross 304 lb" so the material, mass and gross share one line (#62). */
+  .crate-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+/* Visually hidden, still read by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .cut .row td:nth-child(2) {
   color: var(--muted);
@@ -1504,5 +1559,98 @@ h1.brand {
   .changenote > span,
   .exportspin {
     animation: none;
+  }
+}
+
+/*
+ * Touch sizing (#62): on a coarse pointer or below the drawer breakpoint, the controls inside
+ * the island's panels have a hit area of at least 44 px (WCAG 2.5.5 target size). Desktop with a
+ * mouse is unchanged. The visible glyphs stay the same size; the hit area grows around them.
+ */
+@media (max-width: 980px), (pointer: coarse) {
+  .panel button,
+  .panel .seg button,
+  .panel summary {
+    min-height: 44px;
+  }
+  .panel .seg button {
+    min-width: 44px;
+  }
+  .rule input[type="range"] {
+    height: 44px;
+    margin: 0;
+    cursor: pointer;
+  }
+  .rule input[type="range"]::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  .rule input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  .rule .switch {
+    /* A taller hit area around the same drawn switch. */
+    width: 52px;
+    height: 32px;
+    border-radius: 16px;
+  }
+  .rule .switch::after {
+    top: 4px;
+    left: 4px;
+    width: 24px;
+    height: 24px;
+  }
+  .rule .switch:checked::after {
+    transform: translateX(20px);
+  }
+  .qty .step {
+    width: 44px;
+  }
+  .qty input {
+    width: 56px;
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .panel input:not([type="range"]):not([type="checkbox"]):not([type="file"]),
+  .panel select {
+    min-height: 44px;
+    font-size: 16px; /* also stops iOS Safari zooming the page on focus */
+  }
+}
+
+/* Narrow: the cut list's stock names may wrap, so the Qty column keeps its room (#62). */
+@media (max-width: 980px) {
+  .cut .row td:nth-child(2) {
+    white-space: normal;
+  }
+  .cut .row td,
+  .cut th {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .cut .row td:last-child,
+  .cut th:last-child {
+    padding-right: 2px;
+  }
+}
+@media (max-width: 980px), (pointer: coarse) {
+  /* The drawn switch is 52 × 32; this brings its hit area to 44 px tall. */
+  .rule .switch::before {
+    content: "";
+    position: absolute;
+    inset: -6px -2px;
+  }
+  /* Touch-sized quantity controls are wider than a phone drawer's row: the label sits above them. */
+  .rule:has(> .qty) {
+    grid-template-columns: 1fr;
+  }
+  .rule:has(> .qty) > .qty {
+    justify-self: start;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+  .qty input {
+    width: 48px;
   }
 }

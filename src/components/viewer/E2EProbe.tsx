@@ -68,7 +68,13 @@ export interface CrateSnapshot {
    * Centre of gravity (#8): the design's, crate-interior mm, and what the 3D view draws (`marker`
    * is the CoG mark's position, null while hidden; `arrows` the fork-entry arrows on screen).
    */
-  cog: { mm: [number, number, number]; marker: [number, number, number] | null; arrows: number } | null;
+  cog: {
+    mm: [number, number, number];
+    marker: [number, number, number] | null;
+    arrows: number;
+    /** The near-end (+X) arrow's screen box in CSS px, from the last frame; null before one (#62). */
+    arrowBox: { left: number; top: number; right: number; bottom: number } | null;
+  } | null;
 }
 
 declare global {
@@ -129,6 +135,7 @@ function snapshot(): CrateSnapshot {
           mm: [...s.result.design.centerOfGravityMm],
           marker: handlingMarks.cog ? [...handlingMarks.cog] : null,
           arrows: handlingMarks.arrows,
+          arrowBox: handlingMarks.arrowBox ? { ...handlingMarks.arrowBox } : null,
         }
       : null,
   };

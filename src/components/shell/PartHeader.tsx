@@ -83,7 +83,11 @@ function Gross() {
   return (
     <>
       {" "}
-      · crate gross <Flash on={["gross"]}>{weight(gross, units)}</Flash>
+      {/* One unbreakable group; on phones "crate" is visually dropped (still read) so the line fits (#62). */}
+      ·{" "}
+      <span className="nw">
+        <span className="crate-word">crate </span>gross <Flash on={["gross"]}>{weight(gross, units)}</Flash>
+      </span>
     </>
   );
 }

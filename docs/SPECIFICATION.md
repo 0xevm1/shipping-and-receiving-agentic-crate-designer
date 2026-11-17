@@ -93,7 +93,9 @@ buildable crate design and cut list in under a minute, without needing CAD.
 
   The Cut list, Overview ("stiffened with 1x4 cleats", "4x4 skids under a 3/4″ floor"), Rules
   (plywood buttons and the Auto note), 3D tooltips and change notes all use these names; metric
-  is unchanged.
+  is unchanged. Nominal names keep a plain `x`: the spans that show them carry `.nominal`
+  (`font-feature-settings: "calt" 0`), because Inter's contextual alternates would draw "4x4"
+  as "4×4" (#62). Real dimensions ("932 × 652 × 497") use the true `×` character.
 - **Rotations** are XYZ-order Euler angles in multiples of π/2. Packing and rendering both use
   three.js `Euler`/`Matrix4` (`orientations.ts`), so packed bounding boxes always match the
   rendered models.
@@ -173,7 +175,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached by model URL |
 | `src/lib/currentDesign.ts` | `currentDesignFile()`: the design on screen as a design file (§6.5), for the library and share links |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
-| `src/lib/changes.ts` | A design diff as screen text: "Gross 16 → 20 kg" or "No change to the crate" |
+| `src/lib/changes.ts` | A design diff as screen text: `changeSummary` ("Crate grew: 2176 × 936 × 831 mm, 878 kg"), `changeNote` (the full "Gross 16 → 20 kg, outside … → … mm") or "No change to the crate" (#62) |
 | `src/lib/printable.ts` | The export document's model (#26, §7.11): `buildPrintable` (plan → `PrintableDesign`), `printableFromDesignFile`, freight terms, the cut list by stock, fasteners, assembly steps and the label |
 | `src/lib/drawings.ts` | `crateDrawings`: top, front and end views and two sections projected from the members, as data in mm |
 | `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url, plus the units (`printHash`, `readPrintHash`) |
@@ -1548,7 +1550,9 @@ The canvas fills the window. Four regions float above it:
     so the page never scrolls. The viewport is `viewport-fit=cover` (`layout.tsx`) and the
     overlays keep clear of notches with `env(safe-area-inset-*)`.
   - **Header** (top left): the title at 24 px without the tagline, and the part sentence at
-    11.5 px. Lines wrap between phrases, not inside a value. The header's change note floats
+    11.5 px. Lines wrap between phrases, not inside a value: "crate gross 304 lb" is one
+    unbreakable group, and under 430 px "crate" is visually dropped (still read by screen
+    readers) so material, mass and gross share a line (#62). The header's change note floats
     under it on one line with an ellipsis (full text in its `title`), so it doesn't move the
     framing. The **Export pill** (#51) stays in the header under the part lines, 44 px tall,
     rather than moving into the drawer: it is one tap away without opening anything, it belongs
@@ -1572,7 +1576,10 @@ The canvas fills the window. Four regions float above it:
     opens upward from the right edge, is at most `100vw − 24px` wide and scrolls inside when
     the screen is short. Its gesture hint names pinch and two-finger drag on touch screens.
   - **Touch targets** are at least 44 px: hamburger, close, Load a part, tabs, panel buttons,
-    the bar's controls and the popover's switches.
+    the bar's controls and the popover's switches. Inside the panels (#62), under the 980 px
+    breakpoint or with a coarse pointer, every button, number and text field, summary and the
+    Rules sliders (44 px tall, larger thumb), quantity stepper and switch (hit area padded to
+    44 px) have at least 44 px hit targets; the desktop look is unchanged.
   - **Tap a board:** pins its row and switches to Cut list as on desktop (§8.4), and the shell
     opens the drawer at that row. Closing it keeps the pin and its pin bar.
   - **Idle auto-play** holds while the drawer is open (§8.4).
@@ -1590,7 +1597,7 @@ The canvas fills the window. Four regions float above it:
 |---|---|
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; for a split, the whole shipment's cost, labour and dimensional weight; after the first export, "Designed in 1 m 12 s". A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
-| **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
+| **Cut list** | Grouped by assembly. Piece, stock, cut, qty (the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions and, on narrow screens, stock names wrap, so Qty is always fully inside the panel, #62). Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
 | **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a count badge on the tab when there are cautions |
 
@@ -1670,9 +1677,13 @@ open question for the user (see #20).
     the faces turned to the camera show them, and each moves out with its wall when exploded.
   - **Fork entry:** a flat gold arrow on the ground at each end (−X and +X) for every opening
     between the skids (`design.handling.openings`), pointing in. They are depth-tested and slide
-    out with the end walls when exploded, as the length line does.
+    out with the end walls when exploded, as the length line does. The tip stops beyond the
+    width size label, which sits on the same centre line (`arrowGapMm`: the label's 110 mm + 5 %
+    of the longest side, plus a third of that side for the fixed-size pill, plus 60 mm), so the
+    arrow and "25.7 in" never overlap, closed or exploded, on a desktop or a phone (#62).
   - Neither can be hovered or clicked (no raycast) and neither calls `markInput`, so they never
-    count as input (#64). The e2e hook reports them as `cog { mm, marker, arrows }`.
+    count as input (#64). The e2e hook reports them as `cog { mm, marker, arrows, arrowBox }`
+    (`arrowBox`: the near-end arrow's screen box in CSS px).
 - **Size lines:**
   - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
     the back right corner. Their groups slide out with the walls when exploded; the numbers stay
@@ -1807,11 +1818,23 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
   `setPartDetails` (source `name`, `material` or `mass`), `setSettings` / `resetRules` (`rules`)
   and `setLayoutKey` (`layout`). Loading a part, a units change, or a design that became a problem
   doesn't set one. It clears after `CHANGE_NOTE_MS` (5 s).
-- **The note** (`ChangeNote`, `role="status"`): "Gross 16 → 20 kg", up to two changes then
-  "+N more", or "No change to the crate". Changes that format the same in the selected units are
-  dropped (`visibleChanges`), so it never says "16 → 16 kg". It sits under the header for part
-  edits and over the foot of the island's part view for rules and layout edits. It fades over its
-  last 1.5 s.
+- **The note** (`ChangeNote`, `role="status"`) shows a short summary of the outcome
+  (`changeSummary`, #62), in the selected units:
+  - the outside size changed: "Crate grew: 2176 × 936 × 831 mm, 878 kg" (or "shrank"; a mix of
+    longer and lower is judged by the enclosed volume), with the new gross when it moved;
+  - only the weights moved: "Crate heavier: 20 kg" (or "lighter");
+  - one other change: its own detail, which is already short ("Wall plywood 1/2″ → 5/8″");
+  - several other changes: "Crate changed: wall plywood, floor, +1 more";
+  - nothing visible: "No change to the crate".
+
+  The full before → after (`changeNote`: every change, "Gross 135 → 878 kg, outside 932 × 652 ×
+  497 → 2176 × 936 × 831 mm, …") is the note's `title` (hover) and a visually hidden
+  ("`.sr-only`") ". Details: …" for screen readers. Changes that format the same in the selected
+  units are dropped (`visibleChanges`), so it never says "16 → 16 kg". The header's and the
+  island's notes are one line with an ellipsis (`white-space: nowrap`); the header's stops short
+  of the island on desktop. The note sits under the header for part edits and over the foot of
+  the island's part view for rules and layout edits (its pill takes the pointer so the title
+  shows). It fades over its last 1.5 s.
 - **Highlights** (`Flash`): changed values in the header gross and the Overview (outside size,
   gross, payload, layout grid, wall plywood, skids, floor, empty crate) flash gold for 1.2 s.
 - **`prefers-reduced-motion`:** no flash and no fade; the note still shows, then goes.
@@ -2246,6 +2269,11 @@ lb → kg → lb round trips, ↑ / ↓ steps in either unit with a floor, the f
 change note text ("Gross 16 → 20 kg", lb and inch fractions, "+N more", and "No change to the
 crate" when the changes round away).
 
+**`src/lib/changes.test.ts`** checks `changeSummary` (#62): grew and shrank with the new gross
+in metric and imperial, a mixed move judged by volume, the weight left out when the gross did not
+move, a lone small change keeping its detail, heavier and lighter, "Crate changed: …, +N more",
+and "No change to the crate".
+
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions, including the edges (0, under
 and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into the next inch) and the
 CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
@@ -2413,7 +2441,8 @@ HTML report as `playwright-report`.
     box, the sky focus underline and ↑ / Shift+↓ steps; an invalid mass shows its reason (gold,
     `aria-describedby`), Enter doesn't save it and Escape reverts, and blur restores a blanked
     name; a 1 mm part (generated GLB) at 10 → 14.71 kg updates the header to "crate gross
-    20 kg", notes "Gross 16 → 20 kg, parts 10 → 15 kg" and highlights the Overview (motion on);
+    20 kg", notes "Crate heavier: 20 kg" (the title and the hidden text carry "Gross 16 → 20 kg,
+    parts 10 → 15 kg", #62) and highlights the Overview (motion on);
     +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
     shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
     `09-header-*`.
@@ -2479,6 +2508,17 @@ HTML report as `playwright-report`.
     check keeps the bounding-box text. Screenshots `26-shaped-checks`, `26-shaped-open`,
     `26-shaped-exploded`, `26-bbox-checks`, `26-bbox-open` and `26-bbox-exploded` (copies in
     `docs/screenshots/16-shaped-blocking/`).
+  - `27-ui-review-layout` (#62; desktop, plus `.mobile` at 390 and 360): quantity 200 gives the
+    note "Crate grew: … mm, … kg" (under 50 characters, the title has "Gross … → … kg, outside
+    932 × 652 × 497 → …", the hidden text "Details: …") and in imperial "Crate shrank: … in, … lb";
+    the header note at quantity 200 is one line and stops short of the island (and inside the
+    screen on phones), "crate gross" is not split across lines on phones; the cut list's Qty
+    column ends inside the panel's padding with no sideways scroll, metric and imperial (phones:
+    imperial); the skid stock reads "4x4" with `calt` off while the cut and the Overview sizes
+    keep "×"; on phones every control in the Rules tab, and every button and field in the other
+    tabs, is at least 44 px (the switch's hit area too); and the near-end fork arrow's screen box
+    (`cog.arrowBox`) shares no pixels with the width label, closed and exploded. Screenshots
+    `27-*` (copies in `docs/screenshots/62-layout-viewer/`).
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one

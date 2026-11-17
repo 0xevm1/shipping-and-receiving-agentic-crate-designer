@@ -65,11 +65,21 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           {layoutName(layout)}. Inside is {dims(layout.interior, units)} {lengthUnit(units)}
         </Step>
         <Step name="Walls and lid" value={`${ply(c.panelMm)} ply`} flash={["panel"]}>
-          {auto ? "Sized for the load" : "Set by hand"}, stiffened with {section(c.cleat.thick, c.cleat.wide)} cleats
+          {auto ? "Sized for the load" : "Set by hand"}, stiffened with <span className="nominal">{section(c.cleat.thick, c.cleat.wide)}</span> cleats
         </Step>
         <Step name="Base" value={`${c.skidCount} skids`} flash={["skidCount"]}>
-          <Flash on={["skid"]}>{section(c.skid.wide, c.skid.tall)}</Flash> skids under a{" "}
-          {c.joist && `${c.joist.count} ${section(c.joist.wide, c.joist.tall)} joists and a `}
+          <Flash on={["skid"]} className="nominal">
+            {section(c.skid.wide, c.skid.tall)}
+          </Flash>{" "}
+          skids under a{" "}
+          {c.joist && (
+            <>
+              <span className="nominal">
+                {c.joist.count} {section(c.joist.wide, c.joist.tall)}
+              </span>{" "}
+              joists and a{" "}
+            </>
+          )}
           <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
         </Step>
         {cradles > 0 ? (
