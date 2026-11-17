@@ -278,10 +278,13 @@ already delivered.
 
 ### `GET /api/v1/health`
 
-`200 {"ok": true, "db": {"ok", "latencyMs"}, "notificationQueue": {"usage", "alert"}, "events": …}`
+`200 {"ok": true, "db": {"ok", "latencyMs"}, "notificationQueue": {"usage", "alert"}, "events": …, "eventLoop": …}`
 when the database answers within 2 s, `503` with `ok: false` when it doesn't. `events` is this
-process's listener status (null until something subscribes). The offline queue (slice 7a) uses
-it as its liveness check.
+process's listener status (null until something subscribes). `eventLoop` is this process's
+event-loop delay (`mean`, `p50`, `p99`, `max` in ms) and utilisation (0–1) over the last 1 s
+window (`src/server/eventLoop.ts`; null on the very first request): every SSE stream and save
+shares that loop, so it is the first thing to rise under load ([LOAD_TEST.md](LOAD_TEST.md)).
+The offline queue (slice 7a) uses the endpoint as its liveness check.
 
 ### Limits
 
@@ -302,6 +305,10 @@ it as its liveness check.
   notifications catches up by id.
 - **Long-lived connections.** SSE needs a long-running Node server (no serverless or edge) and a
   proxy that doesn't buffer and has an idle timeout above the 15 s heartbeat.
+- **Measured capacity.** One process carried ~60 saves/s and ~1000 delivered events/s with the
+  default pool of 10 (p95 under 1 s, nothing lost); the event-ordering lock caps event commits at
+  ~220–330/s per database. Method, numbers and the threshold for swapping the `EventBus` for a
+  broker: [LOAD_TEST.md](LOAD_TEST.md), spec §9.1.
 
 ### Tests
 

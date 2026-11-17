@@ -425,6 +425,8 @@ docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, desig
   storage: object keys, the part upload API, presigned downloads, orphan cleanup. Pointing the
   `BLOB_*` variables at real AWS S3, Cloudflare R2 or GCS (S3 XML API with HMAC keys) works
   without code changes.
+- [`docs/LOAD_TEST.md`](docs/LOAD_TEST.md): the saves-and-live-events load test (`bun run load`),
+  its measured limits, and when to move off LISTEN/NOTIFY.
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 

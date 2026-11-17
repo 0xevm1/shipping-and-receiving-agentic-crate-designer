@@ -60,7 +60,7 @@ designing, without showing an error (`src/state/jobApi.ts`).
 | `POST` | `/jobs/:id/configs` | Save a configuration made in the browser; the server recomputes it first |
 | `PATCH` | `/jobs/:id` | Change the selection (recommendation), status, notes or total quantity, at a `version` |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
-| `GET` | `/health` | Database and event-listener liveness |
+| `GET` | `/health` | Database and event-listener liveness, NOTIFY queue usage, event-loop lag |
 
 Coming in other slices of #46: `POST /designs` (stateless headless design), artifact downloads
 (`/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`) and `GET /jobs/:id/bundle.zip`.
