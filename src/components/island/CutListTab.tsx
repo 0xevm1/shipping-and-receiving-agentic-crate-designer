@@ -7,6 +7,7 @@ import { serializeDesign } from "@/domain/designFile";
 import { describeShipment, shipmentBom } from "@/domain/shipment";
 import { cutText, stockText } from "@/lib/format";
 import { designFilePart } from "@/lib/loadPart";
+import { PRINT_PATH, printHash } from "@/lib/printLink";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { CrateTypePicker, shipmentStyles } from "./Shipment";
@@ -45,6 +46,16 @@ export function CutListTab({ design }: { design: CrateDesign }) {
     : whole
       ? `crate-${part.id}-x${quantity}-shipment.csv`
       : `crate-${part.id}-x${quantity}-crate-${crateType.label}.csv`;
+  /** The design file (§6.5) for the design on screen: the download, and the print link (#26). */
+  const designText = () =>
+    serializeDesign({
+      part: designFilePart(part),
+      settings: useDesigner.getState().settings,
+      layoutKey: design.layout.key,
+      design,
+      plan,
+      savedAt: new Date().toISOString(),
+    });
 
   return (
     <>
@@ -177,17 +188,8 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           className="btn"
           title="Save the part, rules and layout to open again with Load a part"
           onClick={() => {
-            const { settings } = useDesigner.getState();
             try {
-              const text = serializeDesign({
-                part: designFilePart(part),
-                settings,
-                layoutKey: design.layout.key,
-                design,
-                plan,
-                savedAt: new Date().toISOString(),
-              });
-              downloadText(`crate-design-${part.id}-x${quantity}.json`, text, "application/json");
+              downloadText(`crate-design-${part.id}-x${quantity}.json`, designText(), "application/json");
               setStatus("Design downloaded.");
             } catch {
               setStatus("Download is blocked here.");
@@ -195,6 +197,18 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           }}
         >
           Download design (.json)
+        </button>
+        <button
+          type="button"
+          className="btn"
+          title="Crate spec, build sheet and shipping label, ready to print or save as PDF"
+          onClick={() => {
+            // The design travels in the URL hash (src/lib/printLink.ts); the new tab opens the print dialog.
+            const tab = window.open(`${PRINT_PATH}${printHash(designText(), units, true)}`, "_blank");
+            setStatus(tab ? "Print view opened in a new tab." : "The new tab was blocked. Allow pop-ups for this site and try again.");
+          }}
+        >
+          Print / save PDF
         </button>
         <span className="status" role="status">
           {status}
