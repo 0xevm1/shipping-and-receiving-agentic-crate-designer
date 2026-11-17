@@ -156,7 +156,7 @@ const NO_LAYOUT: DesignProblem = {
 };
 
 /** The first reason the part or settings can't be designed for, or null when they can. */
-function inputProblem(part: DesignPart, settings: CrateSettings, standards: ShopStandards): DesignProblem | null {
+export function inputProblem(part: DesignPart, settings: CrateSettings, standards: ShopStandards): DesignProblem | null {
   const dims = part.dimensions_mm;
   if (!Array.isArray(dims) || dims.length !== 3 || !dims.every((v) => Number.isFinite(v) && v > 0)) {
     return {
