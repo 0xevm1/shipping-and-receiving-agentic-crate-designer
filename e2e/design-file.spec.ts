@@ -79,7 +79,10 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
   await expect(header(page)).toContainText("PART-002");
   await setQuantity(page, 8);
   await openTab(page, "Layouts");
+  const before = (await crate(page)).outside;
   await otherLayout(page).first().click();
+  // The picked layout's design lands from the engine's worker a moment after the click.
+  await pollCrate(page, (s) => s.outside).not.toEqual(before);
   const picked = (await crate(page)).outside;
   await openTab(page, "Cut list");
   const cutList = await cutTable(page).innerText();

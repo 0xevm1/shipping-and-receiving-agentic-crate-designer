@@ -36,7 +36,7 @@ test("a catalog GLB fills in its mass and material", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
 
   await expect(header(page)).toContainText("PART-002 · Long steel shaft");
-  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross \d+(\.\d)? kg/);
+  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross [\d,]+(\.\d)? kg/);
   // Catalog parts are read-only: the same sentence, with no fields.
   await expect(header(page).locator("input")).toHaveCount(0);
   await expect(header(page)).toContainText("model matches catalog");
@@ -49,7 +49,7 @@ test("a catalog GLB fills in its mass and material", async ({ page }) => {
 
 test("a new part opens at the recommended quantity and layout, and says so", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
-  await expect(island(page).getByTestId("change-note")).toHaveText(/^Set to the recommended \d+ per crate$/);
+  await expect(island(page).getByTestId("change-note")).toContainText(/^Set to the recommended \d+ per crate\. Details: /);
   const s = await waitForRecommended(page);
   expect(s.recommended).not.toBeNull();
   expect(s.quantity).toBe(s.recommended);
