@@ -1,5 +1,5 @@
 import { designCrate, type BomLine, type Check, type CrateDesign } from "./crate";
-import { computeDesign, rankLayouts, type DesignProblem, type DesignResult } from "./design";
+import { computeDesign, rankByObjective, rankLayouts, type DesignProblem, type DesignResult, type Ranking } from "./design";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -35,6 +35,12 @@ export interface ShipmentTotals {
   /** Sum of every crate's outside volume. */
   volumeM3: number;
   materialCostUsd: number;
+  /** Every crate's total build cost: wood, screws and labour (#17). */
+  costUsd: number;
+  /** Every crate's build time. */
+  labourHours: number;
+  /** Sum of every crate's dimensional weight, lb. */
+  dimWeightLb: number;
 }
 
 export interface ShipmentPlan {
@@ -71,6 +77,7 @@ export function planShipment(
   settings: CrateSettings,
   layoutKey?: string | null,
   standards: ShopStandards = DEFAULT_STANDARDS,
+  ranking: Ranking = "volume",
 ): ShipmentPlan {
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
   const total = settings.quantity;
@@ -104,6 +111,16 @@ export function planShipment(
     return c;
   };
 
+  /**
+   * A crate type's layouts re-ranked by the ranking option (#17), with the per-crate limits as
+   * a hard constraint ahead of stability and blocking. The split itself is chosen by volume.
+   */
+  const ranked = (result: DesignResult, k: number): DesignResult => {
+    if (ranking === "volume" || !result.design) return result;
+    const r = rankByObjective(part, { ...settings, quantity: k }, result.layouts, ranking, standards, (d) => fitsLimits(d, k));
+    return { ...result, layouts: r.layouts, design: r.designs.get(r.layouts[0].key) ?? result.design };
+  };
+
   const single = computeDesign(part, settings, null, standards);
   if (!single.design) return plan([{ label: "A", count: 1, quantity: total, result: single }], null, standards);
   // Reuse the design already made, unless its layout had to be skipped for the trailer.
@@ -114,13 +131,13 @@ export function planShipment(
   const whole = candidate(total);
   if (whole.fits || total === 1) {
     // One crate: exactly `computeDesign`, unless a layout had to be skipped for the trailer.
-    const result = withLayout(whole.result, part, settings, layoutKey, standards);
+    const result = withLayout(ranked(whole.result, total), part, settings, layoutKey, standards);
     return plan([{ label: "A", count: 1, quantity: total, result }], null, standards);
   }
 
   if (!candidate(1).fits) {
     const unmet = `One part alone is over the per-crate limit (${limitText(standards)}), so each part ships in its own crate.`;
-    const result = withLayout(candidate(1).result, part, { ...settings, quantity: 1 }, layoutKey, standards);
+    const result = withLayout(ranked(candidate(1).result, 1), part, { ...settings, quantity: 1 }, layoutKey, standards);
     return plan([{ label: "A", count: total, quantity: 1, result }], unmet, standards);
   }
 
@@ -163,9 +180,9 @@ export function planShipment(
       .find(feasible) ?? { k: kMax, full, rest: total - full * kMax };
 
   const types: CrateType[] = [
-    { label: "A", count: best.full, quantity: best.k, result: candidate(best.k).result },
+    { label: "A", count: best.full, quantity: best.k, result: ranked(candidate(best.k).result, best.k) },
   ];
-  if (best.rest > 0) types.push({ label: "B", count: 1, quantity: best.rest, result: candidate(best.rest).result });
+  if (best.rest > 0) types.push({ label: "B", count: 1, quantity: best.rest, result: ranked(candidate(best.rest).result, best.rest) });
   // The user's layout pick applies to the first crate type that has that layout.
   const picked = types.findIndex((t) => t.result.layouts.some((l) => l.key === layoutKey));
   if (picked >= 0) {
@@ -209,6 +226,9 @@ function plan(types: CrateType[], unmet: string | null, standards: ShopStandards
       grossKg: sum((d) => d.grossKg),
       volumeM3: sum((d) => d.layout.externalVolumeM3),
       materialCostUsd: sum((d) => d.materialCostUsd),
+      costUsd: sum((d) => d.cost.totalUsd),
+      labourHours: sum((d) => d.labour.hours),
+      dimWeightLb: sum((d) => d.dimWeightLb),
     },
     unmet,
     problem: types[0].result.problem,

@@ -105,12 +105,19 @@ tab at a time.
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one
-   won.
+   won. Each card also shows what it costs to build and its freight class against the
+   recommendation ("+$26 · same class 65"), and **Rank by** re-ranks by **Crate cost** or
+   **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
+   cost or freight; Volume is the default.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
    labels. The real part models sit in each slot. Left alone for 6 s, the crate slowly turns and
    cycles through the modes.
 5. **Read off the build data:**
-   - **Overview:** outside size, gross weight, how it's built, and crate weight by assembly
+   - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost
+     (material and labour), build time, the estimated LTL freight class with its density in
+     lb/ft³, and the dimensional weight; for a split batch, the whole shipment's cost. Then how
+     it's built, and crate weight by assembly. After the first export (cut list, design file
+     or 3D model) a note says how long the design took: "Designed in 1 m 12 s"
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
@@ -126,7 +133,9 @@ tab at a time.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
-   stack and base-rating limits, and densities, material costs and screw spacing. A change
+   stack and base-rating limits, densities, material costs, screw spacing and screw price,
+   the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
+   crate), and the dimensional-weight divisor. A change
    re-designs the crate at once (for example, a higher plywood cost raises the Overview's
    "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
@@ -134,7 +143,22 @@ tab at a time.
 9. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
    through **Load a part** or a drop. It restores the part, rules and layout; for a custom
    part, add its `.glb` in the same pick or drop. The format is in spec §6.5.
-10. **Split a big batch across crates** (#25). When one crate would be over the per-crate
+10. **Print the hand-off, or save it as a PDF** (#26): **Print / save PDF** in the Cut list tab
+    opens the export document in a new tab and its print dialog (choose "Save as PDF"; Letter
+    paper). It has three parts, in the selected units:
+    - **Crate spec** for the PM and logistics: the part, quantity, outside size, gross, tare and
+      payload, volume, dimensional weight and density in lb/ft³, the layout and why it won,
+      the runner-up, and every check.
+    - **Build sheet** for the shop: top, front and end views and two sections through the load,
+      drawn from the design's boards; the cut list grouped by stock with totals; a fastener
+      schedule; and the assembly order (base → walls → load parts → blocking and separators →
+      lid).
+    - **Shipping label** for the dock: part number, quantity, gross weight, THIS SIDE UP and
+      the fork-entry marks.
+
+    A split batch gets the plan, then a spec, build sheet and label per crate type. The design
+    travels in the link itself, so nothing is uploaded. Spec §7.11.
+11. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
     most one smaller remainder crate. The plan uses the fewest crates, then the least outside
@@ -215,6 +239,20 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
   $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
   quoting.
+- **Labour is a placeholder model** (spec §7.12): $35/h, 0.75 min per lumber cut, 3 min per
+  plywood piece, 2 min per distinct cut size, 0.15 min (9 s) per screw, 6 min per assembly step
+  (base, four walls, lid, dunnage per layer) and 15 min handling per crate. Screws are $8 per
+  100. For PART-001 × 4 that is 2 h 43 m and $95 of labour on $91 of material: a $186 crate.
+  Time a few real crates and enter the shop's own numbers.
+- **Freight is in booking terms, not dollars:** gross lb, outside ft³ (inches rounded up),
+  dimensional weight at **139 in³/lb**, density in lb/ft³ and an **estimated** NMFC class from
+  the 13-sub density scale in force since July 2025. A carrier can class some commodities
+  differently or re-class on inspection.
+- **Time to design, manual baseline (an assumption to correct):** designing one crate by hand
+  (measure the part, sketch the crate, work out the cut list and screws, price it) is taken to
+  take the PM **about 45 minutes** per new part or quantity. The app's "Designed in …" note,
+  from loading the part to the first export, is the number to compare with. Tell us the real
+  figure and we'll update this line.
 - **Part masses** come from the catalog as given, or from the user for unknown files (as do
   their name and material). They are
   never derived from mesh volume.
@@ -237,7 +275,7 @@ All of these live in one zod-validated object, `ShopStandards` (`src/domain/stan
 
 ```
 src/domain/        pure TypeScript, no React; all crate logic, unit-tested
-src/lib/           display units, cut-list formatting, part-file loading (tested)
+src/lib/           display units, cut-list formatting, part-file loading, the export document (tested)
 src/state/         zustand store; per-frame animation values; checks for the UI
 src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
 src/data/          parts.json catalog

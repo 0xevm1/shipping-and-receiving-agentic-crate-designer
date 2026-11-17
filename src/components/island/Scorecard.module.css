@@ -1,0 +1,62 @@
+/*
+ * The design scorecard (#17) on the Overview: crate cost, build time, freight class and
+ * dimensional weight as four tiles, then short notes. A CSS module, using the tokens in
+ * globals.css.
+ */
+
+.card {
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.eyebrow {
+  font: 500 11px/1.2 var(--wide);
+  font-stretch: 125%;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin: 0;
+}
+
+.grid dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.grid dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.grid dd.value {
+  font: 400 20px/1.25 var(--mono);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.note b {
+  font-weight: 500;
+  color: var(--soft);
+}
+
+.clock {
+  color: var(--sky);
+  font-family: var(--mono);
+}

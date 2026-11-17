@@ -9,13 +9,14 @@ import { CrateSettingsSchema } from "./schema";
  * built from the same rules. `DEFAULT_STANDARDS` holds the values the app shipped
  * with; with them, every design is exactly what it was before.
  *
- * Units are fixed and in the field names' comments: mm, kg, kg/m³, USD/m³.
+ * Units are fixed and in the field names' comments: mm, kg, kg/m³, USD/m³, minutes, USD/h, in³/lb.
  * Values that are geometry rather than house rules (the 0.5 mm smallest board, bearer
  * positions at 20% and 80%, at least two skids and two uprights) stay in the code.
  */
 
 const mm = (min: number, max: number) => z.number().finite().min(min).max(max);
 const kg = (min: number, max: number) => z.number().finite().min(min).max(max);
+const minutes = (min: number, max: number) => z.number().finite().min(min).max(max);
 
 /** A lumber section, actual size in mm (e.g. a 1×4 is 19 × 89). */
 const SectionSchema = z.object({
@@ -105,6 +106,33 @@ export const ShopStandardsSchema = z
       costUsdPerM3: z.object({ plywood: z.number().finite().min(0).max(100000), lumber: z.number().finite().min(0).max(100000) }),
       /** One screw every this many mm along each board. */
       screwSpacingMm: z.object({ cleat: mm(25, 2000), skid: mm(25, 2000), panelJoint: mm(25, 2000) }),
+      /** Wood screws, USD per 100 (#17). Part of the material cost. */
+      screwCostUsdPer100: z.number().finite().min(0).max(1000),
+    }),
+    /**
+     * Shop labour (#17, spec §7.12): the hourly rate and the minutes each step of building a
+     * crate takes. Build time = cuts + set-ups + screws + assembly steps + handling.
+     */
+    labour: z.object({
+      /** Loaded shop labour rate, USD per hour. */
+      rateUsdPerHour: z.number().finite().min(0).max(1000),
+      /** Minutes per lumber piece cut to length (measure, mark, cut). */
+      lumberCutMin: minutes(0, 60),
+      /** Minutes per plywood piece cut from a sheet (rip and cross-cut). */
+      plywoodCutMin: minutes(0, 60),
+      /** Minutes per distinct cut size: setting a stop or fence. */
+      setupMin: minutes(0, 60),
+      /** Minutes per wood screw driven. */
+      screwMin: minutes(0, 10),
+      /** Minutes per assembly step: base, each wall, lid, and the dunnage for each layer. */
+      assemblyStepMin: minutes(0, 240),
+      /** Minutes per crate for moving, marking and staging it. */
+      handlingMin: minutes(0, 480),
+    }),
+    /** Freight terms for domestic LTL (#17, spec §7.12). */
+    freight: z.object({
+      /** Dimensional-weight divisor, cubic inches per lb (139 is the common domestic divisor). */
+      dimDivisorIn3PerLb: z.number().finite().min(50).max(500),
     }),
   })
   .superRefine((s, ctx) => {
@@ -184,7 +212,27 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     /** Placeholder rates for a rough cost comparison between designs. */
     costUsdPerM3: { plywood: 1100, lumber: 650 },
     screwSpacingMm: { cleat: 150, skid: 300, panelJoint: 200 },
+    /** Placeholder: a bulk box of #8 × 2 1/2" exterior wood screws, about $8 per 100. */
+    screwCostUsdPer100: 8,
   },
+  /**
+   * Placeholder shop times and rate (#17), for comparing designs, not quoting. A shop should
+   * time a few crates and enter its own. Worked example in spec §7.12.
+   */
+  labour: {
+    rateUsdPerHour: 35,
+    lumberCutMin: 0.75,
+    plywoodCutMin: 3,
+    setupMin: 2,
+    screwMin: 0.15,
+    assemblyStepMin: 6,
+    handlingMin: 15,
+  },
+  /**
+   * 139 in³/lb is the dimensional-weight divisor most US carriers publish for domestic
+   * shipments (parcel daily rates and many LTL tariffs that apply dim weight).
+   */
+  freight: { dimDivisorIn3PerLb: 139 },
 });
 
 /** Smallest interior on any axis: room for the top and bottom rails of a wall without overlap. */

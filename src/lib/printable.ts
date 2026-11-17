@@ -1,0 +1,405 @@
+/**
+ * The export document (#26): the PM's hand-off as one pure model, `PrintableDesign`, built
+ * from a shipment plan. The print route (`src/app/print`) is a plain render of it; a later
+ * PDF export (#51) can build the same model and lay it out programmatically.
+ *
+ * Three audiences, in print order:
+ * - **Crate spec** (PM and logistics): part, quantity, outside size, weights, volume, freight
+ *   terms, the layout and why it won, every check; for a split batch, the plan and one spec
+ *   per crate type.
+ * - **Build sheet** per crate type (shop): drawings, the cut list by stock, fasteners, and the
+ *   assembly order base → walls → load parts → blocking and separators → lid.
+ * - **Shipping label** per crate type (dock).
+ *
+ * Text follows the selected units (#15): imperial by default, with fractional inches, nominal
+ * lumber names and lb; metric when chosen. Formatted with the same helpers as the UI and CSV.
+ */
+import { ASSEMBLY_NAMES } from "@/domain/export";
+import type { Assembly, BomLine, Check, CrateDesign, ScrewLine } from "@/domain/crate";
+import { screwSchedule } from "@/domain/crate";
+import { explainLayout, type LayoutExplanation } from "@/domain/design";
+import { parseDesignFile, restoreDesign } from "@/domain/designFile";
+import type { Layout } from "@/domain/packing";
+import type { DesignPart, Vec3 } from "@/domain/schema";
+import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
+import type { ShopStandards } from "@/domain/standards";
+import { allChecks } from "@/state/checks";
+import { crateDrawings, type Drawing } from "./drawings";
+import { cutText, describeLayout, stockText } from "./format";
+import { formatMass } from "./partFields";
+import { area, cut, dims, dimsOther, LB_PER_KG, lengthUnit, run, volume, weight, type Units } from "./units";
+
+/** A labelled value, with an optional second line (the other units, or how it was worked out). */
+export interface Row {
+  label: string;
+  value: string;
+  note?: string;
+}
+
+export interface PrintableCheck {
+  id: string;
+  level: Check["level"];
+  levelText: "Pass" | "Caution" | "Info";
+  title: string;
+  detail: string;
+}
+
+export interface CutGroup {
+  /** "4x4", "1/2″ plywood", "19 × 89 lumber". */
+  stock: string;
+  material: BomLine["material"];
+  lines: { piece: string; assembly: string; cut: string; qty: number }[];
+  pieces: number;
+  /** Running length (lumber) or area (plywood) of this stock. */
+  total: string;
+}
+
+export interface Fastener {
+  title: string;
+  rule: string;
+  qty: number;
+}
+
+export const ASSEMBLY_STEPS = ["Base", "Walls", "Load the parts", "Blocking and separators", "Lid"] as const;
+
+export interface AssemblyStep {
+  n: number;
+  title: (typeof ASSEMBLY_STEPS)[number];
+  text: string;
+  pieces: { piece: string; stock: string; cut: string; qty: number }[];
+  screws: number;
+}
+
+export interface PrintableLabel {
+  partId: string;
+  partName: string;
+  /** "4 PCS". */
+  quantity: string;
+  /** "297 LB" in the selected units, and the other units. */
+  gross: string;
+  grossOther: string;
+  /** "CRATE A · 6 CRATES OF THIS TYPE" for a split batch, else null. */
+  crate: string | null;
+  outside: string;
+  forkEntry: string;
+  /** End view for the marks, in mm from the crate's outside bottom-left corner. */
+  widthMm: number;
+  heightMm: number;
+  skidTallMm: number;
+  skids: { y: number; w: number }[];
+  /** The centre of gravity, once the design has one (#8); null until then. */
+  cogMm: Vec3 | null;
+  /** The centre of gravity on the end view, from the bottom-left corner; null until #8. */
+  cogEnd: { y: number; z: number } | null;
+}
+
+export interface PrintableCrate {
+  /** "A" for the identical crates, "B" for the remainder. */
+  letter: string;
+  count: number;
+  quantity: number;
+  heading: string;
+  spec: {
+    rows: Row[];
+    freight: Row[];
+    layout: { chosen: string; why: string; runnerUp: string | null };
+    checks: PrintableCheck[];
+  };
+  build: {
+    drawings: Drawing[];
+    /** "Dimensions in inches" or "Dimensions in mm". */
+    dimsNote: string;
+    cutList: CutGroup[];
+    totals: Row[];
+    fasteners: Fastener[];
+    fastenerTotal: number;
+    steps: AssemblyStep[];
+  };
+  label: PrintableLabel;
+}
+
+export interface PrintableDesign {
+  units: Units;
+  unitsNote: string;
+  title: string;
+  /** "2026-11-16" (UTC). */
+  date: string;
+  part: Row[];
+  shipment: { split: boolean; text: string | null; rows: Row[]; unmet: string | null };
+  crates: PrintableCrate[];
+  /** Why there is no crate (spec §7.9), or null. */
+  problem: string | null;
+}
+
+export interface PrintableInput {
+  part: DesignPart & { massAssumed?: boolean };
+  plan: ShipmentPlan;
+  standards: ShopStandards;
+  units: Units;
+  /** ISO timestamp; passed in so this stays pure. */
+  generatedAt: string;
+}
+
+const other = (u: Units): Units => (u === "imperial" ? "metric" : "imperial");
+const withUnit = (mm: readonly number[], u: Units) => `${dims(mm, u)} ${lengthUnit(u)}`;
+const massEach = (kg: number, u: Units) => (u === "imperial" ? `${formatMass(kg, u)} lb` : `${+kg.toFixed(2)} kg`);
+/** A spacing or other shop size with its unit: 11 13/16″ or 300 mm. */
+const shopSize = (mm: number, u: Units) => (u === "imperial" ? cut(mm, u) : `${Math.round(mm)} mm`);
+
+const LEVEL_TEXT: Record<Check["level"], PrintableCheck["levelText"]> = { ok: "Pass", caution: "Caution", info: "Info" };
+
+/** The `explainLayout` result as a sentence, as the Layouts tab words it. */
+export function whyText(e: LayoutExplanation): string {
+  switch (e.kind) {
+    case "only":
+      return "This is the only way to pack this batch under the current packing rules.";
+    case "stable":
+      return "The recommended layout is the smallest crate that will not tip easily.";
+    case "smaller":
+      return `The recommended layout is the smallest stable crate. The next option ships ${e.nextMorePct}% more volume.`;
+    case "tie":
+      return "The recommended layout is the lowest of the options that tie on shipping volume.";
+    case "ranked":
+      return e.by === "cost"
+        ? "Ranked by crate cost: the recommended layout is the cheapest stable, fully blocked crate to build."
+        : "Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked crates without an LTL length charge.";
+    case "picked":
+      return `This layout was picked by hand. It ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the recommended layout.`;
+  }
+}
+
+const layoutText = (l: Layout, u: Units) => `${describeLayout(l)}, ${l.orientation.label.toLowerCase()}: ${withUnit(l.external, u)} outside`;
+
+function runnerUp(layouts: Layout[], shown: Layout, u: Units): string | null {
+  const next = layouts.find((l) => l.key !== shown.key);
+  if (!next) return null;
+  const pct = Math.round((next.externalVolumeM3 / shown.externalVolumeM3 - 1) * 100);
+  const vol = pct > 0 ? `${pct}% more volume` : pct < 0 ? `${-pct}% less volume` : "about the same volume";
+  return `${layoutText(next, u)}, ${volume(next.externalVolumeM3, u)}, ${vol}${next.stable ? "" : ", may tip"}.`;
+}
+
+/** Centre of gravity, when the design carries one (#8 adds it). */
+function cogOf(design: CrateDesign): Vec3 | null {
+  const cog = (design as CrateDesign & { centerOfGravityMm?: unknown }).centerOfGravityMm;
+  return Array.isArray(cog) && cog.length === 3 && cog.every((v) => typeof v === "number" && Number.isFinite(v)) ? (cog as Vec3) : null;
+}
+
+/** The design's own LTL freight terms (#17, spec §7.12), so the print and the Overview agree. */
+function freightRows(design: CrateDesign, u: Units): Row[] {
+  const f = design.freight;
+  const imperial = u === "imperial";
+  const dimText = imperial ? `${f.dimWeightLb} lb` : `${Math.ceil(f.dimWeightLb / LB_PER_KG)} kg`;
+  const grossWins = f.grossLb >= f.dimWeightLb;
+  return [
+    { label: "Dimensional weight", value: dimText, note: `L × W × H in inches ÷ ${f.dimDivisorIn3PerLb}` },
+    {
+      label: "Billable weight",
+      value: grossWins ? weight(design.grossKg, u) : dimText,
+      note: grossWins ? "the gross is higher" : "the dimensional weight is higher",
+    },
+    {
+      label: "Density",
+      value: `${f.densityLbFt3.toFixed(1)} lb/ft³`,
+      note: imperial ? "gross ÷ outside volume, whole inches" : `${Math.round(design.grossKg / design.layout.externalVolumeM3)} kg/m³`,
+    },
+    { label: "Freight class", value: String(f.freightClass), note: "estimate from density (NMFC)" },
+  ];
+}
+
+function cutList(design: CrateDesign, u: Units): CutGroup[] {
+  const groups = new Map<string, CutGroup & { amount: number }>();
+  for (const l of design.bom) {
+    const stock = stockText(l, u);
+    const g = groups.get(stock) ?? { stock, material: l.material, lines: [], pieces: 0, total: "", amount: 0 };
+    g.lines.push({ piece: l.label, assembly: ASSEMBLY_NAMES[l.assembly], cut: cutText(l, u), qty: l.qty });
+    g.pieces += l.qty;
+    g.amount += l.material === "plywood" ? (l.cutMm[0] * l.cutMm[1] * l.qty) / 1e6 : (l.cutMm[0] * l.qty) / 1000;
+    groups.set(stock, g);
+  }
+  return [...groups.values()].map(({ amount, ...g }) => ({ ...g, total: g.material === "plywood" ? area(amount, u) : run(amount, u) }));
+}
+
+/** Which assembly step a cut-list line or screw line belongs to. */
+function stepOf(assembly: Assembly, what: string): number {
+  if (assembly === "base") return 0;
+  if (assembly === "sides" || assembly === "ends") return 1;
+  if (assembly === "lid") return 4;
+  return what === "Bearer" || what === "bearers" ? 2 : 3;
+}
+
+/** The part gap in the layout, from the slot spacing; null with one part per row and column. */
+function partGap(layout: Layout): number | null {
+  const [a, b] = layout.cellSize;
+  const next = (axis: 0 | 1, size: number) => {
+    const s0 = layout.slots[0];
+    const s1 = layout.slots.find((s) => s.index[axis] === 1 && s.index[2] === 0);
+    return s0 && s1 ? s1.min[axis] - s0.min[axis] - size : null;
+  };
+  return next(0, a) ?? next(1, b);
+}
+
+function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblyStep[] {
+  const { layout, construction: c, members } = design;
+  const out: AssemblyStep[] = ASSEMBLY_STEPS.map((title, i) => ({ n: i + 1, title, text: "", pieces: [], screws: 0 }));
+  for (const l of design.bom) {
+    out[stepOf(l.assembly, l.label)].pieces.push({ piece: l.label, stock: stockText(l, u), cut: cutText(l, u), qty: l.qty });
+  }
+  for (const s of schedule) out[stepOf(s.assembly, s.id)].screws += s.qty;
+
+  const has = (kind: string) => members.some((m) => m.kind === kind);
+  const [nx, ny, nz] = layout.counts;
+  const gap = partGap(layout);
+  const extW = layout.external[1];
+  const skid = design.bom.find((l) => l.kind === "skid");
+  const floor = design.bom.find((l) => l.kind === "floor");
+  const separator = design.bom.find((l) => l.kind === "separator");
+  out[0].text =
+    `Lay the ${c.skidCount} ${skid ? stockText(skid, u) : ""} skids along the length, evenly spread across the ${shopSize(extW, u)} width, ` +
+    `and screw the ${floor ? stockText(floor, u) : "plywood"} floor on top. Forklift tines go between the skids from the ends.`;
+  out[1].text =
+    "Screw the rails and uprights to the outside of each side and end panel. Stand the side walls on the floor, fit the end walls " +
+    "between them, then screw the walls to the floor and at the four corners.";
+  const grid = nz > 1 ? `${nx} × ${ny} per layer, ${nz} layers` : `${nx} × ${ny}`;
+  out[2].text =
+    (has("bearer") ? "Screw the bearers to the floor under each part position. " : "") +
+    `Set the ${layout.slots.length} parts ${layout.orientation.label.toLowerCase()} in a ${grid} grid` +
+    `${gap !== null ? `, ${shopSize(gap, u)} apart` : ""}, ${shopSize(Math.min(layout.clearance[0], layout.clearance[1]), u)} or more from the walls` +
+    `${nz > 1 ? ", starting with the bottom layer" : ""}.`;
+  out[3].text = !has("blocking")
+    ? "No blocking posts: the gaps are too small to block (see the blocking check)."
+    : nz > 1
+      ? `Screw a blocking post into the gap on each side of every part. Lay a ${separator ? stockText(separator, u) : "plywood"} separator over each ` +
+        "full layer, load the next layer on it, and block it the same way."
+      : "Screw a blocking post into the gap on each side of every part, from the floor to the top of the part.";
+  out[4].text = "Screw the edge and cross cleats to the lid panel, set the lid on the walls and screw it down around the top.";
+  return out;
+}
+
+function label(design: CrateDesign, part: DesignPart, type: CrateType, split: boolean, u: Units): PrintableLabel {
+  const { layout, construction: c, members } = design;
+  const y0 = Math.min(...members.map((m) => m.min[1]));
+  const z0 = Math.min(...members.map((m) => m.min[2]));
+  const cog = cogOf(design);
+  return {
+    partId: part.id,
+    partName: part.name,
+    quantity: `${type.quantity} PCS`,
+    gross: weight(design.grossKg, u).toUpperCase(),
+    grossOther: weight(design.grossKg, other(u)).toUpperCase(),
+    crate: split ? `CRATE ${type.label} · ${type.count} ${type.count === 1 ? "CRATE" : "CRATES"} OF THIS TYPE` : null,
+    outside: withUnit(layout.external, u),
+    forkEntry: "Fork entry from the ends",
+    widthMm: layout.external[1],
+    heightMm: layout.external[2],
+    skidTallMm: c.skid.tall,
+    skids: members.filter((m) => m.kind === "skid").map((m) => ({ y: m.min[1] - y0, w: m.size[1] })),
+    cogMm: cog,
+    cogEnd: cog ? { y: cog[1] - y0, z: cog[2] - z0 } : null,
+  };
+}
+
+function crateSection(input: PrintableInput, type: CrateType, split: boolean): PrintableCrate | null {
+  const { part, standards, units: u } = input;
+  const { design, layouts } = type.result;
+  if (!design) return null;
+  const { layout } = design;
+  const schedule = screwSchedule(design.members, layout.interior, standards);
+  const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed, readAsMm: false }, null);
+  const both = (kg: number): Row => ({ label: "", value: weight(kg, u), note: weight(kg, other(u)) });
+  return {
+    letter: type.label,
+    count: type.count,
+    quantity: type.quantity,
+    heading: split
+      ? `Crate ${type.label}: ${type.quantity} × ${part.name} · build ${type.count}`
+      : `Crate for ${type.quantity} × ${part.name}`,
+    spec: {
+      rows: [
+        { label: "Parts in the crate", value: `${type.quantity} × ${part.id}`, note: split ? `${type.count} of these crates` : undefined },
+        { label: "Outside (L × W × H)", value: withUnit(layout.external, u), note: dimsOther(layout.external, u) },
+        { ...both(design.grossKg), label: "Gross" },
+        { ...both(design.tareKg), label: "Tare (empty crate)" },
+        { ...both(design.payloadKg), label: "Payload" },
+        { label: "Volume", value: volume(layout.externalVolumeM3, u), note: volume(layout.externalVolumeM3, other(u)) },
+      ],
+      freight: freightRows(design, u),
+      layout: {
+        chosen: `${layoutText(layout, u)}, ${volume(layout.externalVolumeM3, u)}`,
+        why: whyText(explainLayout(layouts, layout, standards)),
+        runnerUp: runnerUp(layouts, layout, u),
+      },
+      checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: k.detail })),
+    },
+    build: {
+      drawings: crateDrawings(design, u),
+      dimsNote: u === "imperial" ? "Dimensions in inches, to the nearest 1/16″" : "Dimensions in mm",
+      cutList: cutList(design, u),
+      totals: [
+        { label: "Plywood", value: area(design.plywoodM2, u) },
+        { label: "Lumber", value: run(design.lumberM, u) },
+        { label: "Wood screws", value: `~${design.screws}` },
+      ],
+      fasteners: schedule.map((s) => ({
+        title: s.title,
+        rule: s.everyMm === null ? s.rule : `1 every ${shopSize(s.everyMm, u)} ${s.rule}`,
+        qty: s.qty,
+      })),
+      fastenerTotal: schedule.reduce((n, s) => n + s.qty, 0),
+      steps: steps(design, schedule, u),
+    },
+    label: label(design, part, type, split, u),
+  };
+}
+
+/** The whole hand-off document for a plan, in the selected units. Pure. */
+export function buildPrintable(input: PrintableInput): PrintableDesign {
+  const { part, plan, units: u, generatedAt } = input;
+  const { totals, split } = plan;
+  const crates = plan.crates.map((t) => crateSection(input, t, split)).filter((c): c is PrintableCrate => c !== null);
+  return {
+    units: u,
+    unitsNote: u === "imperial" ? "Inches and pounds; cuts to the nearest 1/16″, lumber by nominal size" : "Millimetres and kilograms",
+    title: split ? `Shipment of ${totals.parts} × ${part.name}` : `Crate for ${totals.parts} × ${part.name}`,
+    date: generatedAt.slice(0, 10),
+    part: [
+      { label: "Part", value: part.id },
+      { label: "Name", value: part.name },
+      { label: "Material", value: part.material ?? "not given" },
+      { label: "Mass each", value: massEach(part.mass_kg, u), note: massEach(part.mass_kg, other(u)) },
+      { label: "Quantity", value: String(totals.parts) },
+    ],
+    shipment: {
+      split,
+      text: split ? `Ships as ${describeShipment(plan)}` : null,
+      rows: split
+        ? [
+            { label: "Crates", value: String(totals.crates) },
+            { label: "Parts", value: String(totals.parts) },
+            { label: "Gross, all crates", value: weight(totals.grossKg, u), note: weight(totals.grossKg, other(u)) },
+            { label: "Volume, all crates", value: volume(totals.volumeM3, u), note: volume(totals.volumeM3, other(u)) },
+          ]
+        : [],
+      unmet: plan.unmet,
+    },
+    crates,
+    problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,
+  };
+}
+
+export type PrintableFromFile = { ok: true; doc: PrintableDesign; notes: string[] } | { ok: false; error: string };
+
+/**
+ * The document for a saved design file (§6.5), rebuilt with `standards` the way reopening the
+ * file does. The part comes from the file itself (its size and mass), so a custom part needs
+ * no model to print. `notes` say what came out differently from the saved summary.
+ */
+export function printableFromDesignFile(text: string, standards: ShopStandards, units: Units, generatedAt: string): PrintableFromFile {
+  const parsed = parseDesignFile(text);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const { file } = parsed;
+  const p = file.part;
+  const part = { id: p.id, name: p.name, material: p.material, mass_kg: p.mass_kg, dimensions_mm: p.dimensions_mm, massAssumed: p.massAssumed };
+  const plan = planShipment(part, file.settings, file.layoutKey, standards);
+  const { notes } = restoreDesign(file, part, standards);
+  return { ok: true, doc: buildPrintable({ part, plan, standards, units, generatedAt }), notes };
+}

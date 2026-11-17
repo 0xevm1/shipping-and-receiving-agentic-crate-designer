@@ -27,3 +27,46 @@ export function describeLayout(l: Layout): string {
 export function layoutName(l: Layout): string {
   return describeLayout(l) + (l.orientation.id === "as-modeled" ? "" : `, ${l.orientation.label.toLowerCase()}`);
 }
+
+/** Whole dollars with thousands separators: "$1,186". */
+export function usd(v: number): string {
+  return `$${Math.round(v).toLocaleString("en-US")}`;
+}
+
+/** A signed dollar difference: "+$12", "−$5", or "same cost" when it rounds to $0. */
+export function usdDelta(v: number): string {
+  const r = Math.round(v);
+  if (r === 0) return "same cost";
+  return `${r > 0 ? "+" : "−"}${usd(Math.abs(r))}`;
+}
+
+/** Build time to the minute: "2 h 43 m", "45 m". */
+export function hoursText(hours: number): string {
+  const total = Math.round(hours * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h ? `${h} h ${m} m` : `${m} m`;
+}
+
+/** Elapsed time to the second: "45 s", "1 m 12 s", "1 h 3 m". */
+export function elapsedText(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} m ${s % 60} s`;
+  return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} m`;
+}
+
+const KG_M3_PER_LB_FT3 = 16.0185;
+
+/** Freight density: "26.7 lb/ft³", or "428 kg/m³" in metric. */
+export function densityText(lbFt3: number, u: Units): string {
+  return u === "imperial" ? `${lbFt3.toFixed(1)} lb/ft³` : `${Math.round(lbFt3 * KG_M3_PER_LB_FT3)} kg/m³`;
+}
+
+/** A signed density difference in the display units, or "" when it rounds to nothing. */
+export function densityDelta(lbFt3: number, u: Units): string {
+  const v = u === "imperial" ? Math.round(lbFt3 * 10) / 10 : Math.round(lbFt3 * KG_M3_PER_LB_FT3);
+  if (v === 0) return "";
+  const text = u === "imperial" ? `${Math.abs(v).toFixed(1)} lb/ft³` : `${Math.abs(v)} kg/m³`;
+  return `${v > 0 ? "+" : "−"}${text}`;
+}

@@ -113,6 +113,40 @@ const GROUPS: Group[] = [
       { path: ["rates", "screwSpacingMm", "cleat"], label: "Screws along cleats every", unit: "mm" },
       { path: ["rates", "screwSpacingMm", "skid"], label: "Screws along skids every", unit: "mm" },
       { path: ["rates", "screwSpacingMm", "panelJoint"], label: "Screws along panel joints every", unit: "mm" },
+      { path: ["rates", "screwCostUsdPer100"], label: "Screw cost", unit: "$/100", hint: "Part of the crate's material cost." },
+    ],
+  },
+  {
+    title: "Labour",
+    fields: [
+      {
+        path: ["labour", "rateUsdPerHour"],
+        label: "Labour rate",
+        unit: "$/h",
+        hint: "Build time × this rate is the labour in the crate cost.",
+      },
+      { path: ["labour", "lumberCutMin"], label: "Per lumber cut", unit: "min" },
+      { path: ["labour", "plywoodCutMin"], label: "Per plywood cut", unit: "min" },
+      { path: ["labour", "setupMin"], label: "Per cut size (set-up)", unit: "min", hint: "Setting a stop or fence for each distinct size." },
+      { path: ["labour", "screwMin"], label: "Per screw", unit: "min" },
+      {
+        path: ["labour", "assemblyStepMin"],
+        label: "Per assembly step",
+        unit: "min",
+        hint: "Base, four walls, lid, and the dunnage for each layer.",
+      },
+      { path: ["labour", "handlingMin"], label: "Handling per crate", unit: "min", hint: "Moving, marking and staging the finished crate." },
+    ],
+  },
+  {
+    title: "Freight",
+    fields: [
+      {
+        path: ["freight", "dimDivisorIn3PerLb"],
+        label: "Dim weight divisor",
+        unit: "in³/lb",
+        hint: "Outside L × W × H in inches ÷ this is the dimensional weight.",
+      },
     ],
   },
 ];
@@ -157,8 +191,8 @@ export function ShopStandards() {
         {customised && <span className={styles.badge}>Customised</span>}
       </summary>
       <p className="lede">
-        The stock, thresholds, limits and rates every crate is designed to. Changes apply at once and are saved in this
-        browser. Sizes are in mm and weights in kg.
+        The stock, thresholds, limits, rates and shop times every crate is designed to and costed with. Changes apply at once and are saved in this
+        browser. Sizes are in mm, weights in kg and times in minutes.
       </p>
 
       {GROUPS.map((g) => (

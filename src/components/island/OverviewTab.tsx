@@ -9,6 +9,7 @@ import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/u
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";
+import { Scorecard } from "./Scorecard";
 import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
@@ -53,6 +54,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           {weight(design.grossKg, units)}
         </Flash>
       </div>
+      <Scorecard design={design} />
 
       <ul className="chain">
         <Step name="Parts" value={weight(design.payloadKg, units)} flash={["payload"]}>

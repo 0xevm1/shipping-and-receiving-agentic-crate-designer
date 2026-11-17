@@ -876,6 +876,29 @@ h1.brand {
   font-size: 12.5px;
   color: var(--muted);
 }
+/* Cost and freight against the recommendation (#17) */
+.opt-delta {
+  display: block;
+  margin-top: 2px;
+  font: 400 12px/1.45 var(--mono);
+  color: var(--soft);
+}
+.opt-delta .worse {
+  color: var(--red);
+}
+.opt-delta .better {
+  color: var(--green);
+}
+/* Rank by: volume / crate cost / freight class (#17) */
+.seg.rank {
+  display: flex;
+  margin: 0 0 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hair);
+}
+.seg.rank button {
+  flex: 1 1 0;
+}
 .volbar {
   display: block;
   height: 3px;

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { catalog, modelUrl } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
-import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult } from "@/domain/design";
+import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult, type Ranking } from "@/domain/design";
 import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
@@ -123,6 +123,12 @@ export interface DesignerState {
   lastChange: LastChange | null;
   /** Narrow screens (#42): the island is a right-side drawer; true while it is open. Separate from `panelsHidden`. */
   drawerOpen: boolean;
+  /** How the recommended layout is chosen (#17): `volume` (the default), `cost` or `density`. Kept across edits. */
+  ranking: Ranking;
+  /** Time to design (#17): `Date.now()` when the current part was loaded, or null before the app mounts. */
+  designStartedAt: number | null;
+  /** Milliseconds from loading the part to its first export (CSV, design JSON or GLB); null until then. */
+  designedInMs: number | null;
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
@@ -166,6 +172,12 @@ export interface DesignerState {
   setLoadMessage: (m: string) => void;
   requestFit: (instant?: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
+  /** Re-ranks the layouts by volume, crate cost or freight (#17); resets the layout pick. */
+  setRanking: (ranking: Ranking) => void;
+  /** Starts the time-to-design clock if it isn't running (called once after mount). */
+  startDesignClock: (now?: number) => void;
+  /** Records the first export or download since the part was loaded. Later exports don't move it. */
+  markExported: (now?: number) => void;
 }
 
 export const DEFAULT_PART_ID = "PART-001";
@@ -202,6 +214,9 @@ function initialPlan(): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
   return { plan, crateIndex: 0, result: plan.crates[0].result };
 }
 
+/** A fresh time-to-design clock, for a newly loaded part or design (#17). */
+const newDesignClock = (): Pick<DesignerState, "designStartedAt" | "designedInMs"> => ({ designStartedAt: Date.now(), designedInMs: null });
+
 export const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -225,7 +240,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
    */
   const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
     const next = { ...get(), ...patch };
-    const plan = planShipment(next.part, next.settings, next.layoutKey, next.standards);
+    const plan = planShipment(next.part, next.settings, next.layoutKey, next.standards, next.ranking);
     // Stay on the crate type on screen while the plan still has it.
     const crateIndex = next.crateIndex < plan.crates.length ? next.crateIndex : 0;
     const result = plan.crates[crateIndex].result;
@@ -276,9 +291,13 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     fit: { nonce: 0, instant: true },
     lastChange: null,
     drawerOpen: false,
+    ranking: "volume",
+    designStartedAt: null,
+    designedInMs: null,
 
     setPart: (part) =>
       recompute({
+        ...newDesignClock(),
         part,
         measured: null,
         pin: null,
@@ -286,7 +305,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
       }),
     loadDesign: (part, settings, layoutKey, crateIndex = 0) =>
-      recompute({ part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
+      recompute({ ...newDesignClock(), part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
     setCrateIndex: (index) => {
       const { plan, crateIndex, fit } = get();
       if (index === crateIndex || !Number.isInteger(index) || index < 0 || index >= plan.crates.length) return;
@@ -312,7 +331,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       // Name and material don't move anything: refresh the result (checks may quote the
       // part) without re-framing the camera or dropping the user's layout pick.
       const { settings, layoutKey, standards, crateIndex } = get();
-      const plan = planShipment(part, settings, layoutKey, standards);
+      const plan = planShipment(part, settings, layoutKey, standards, get().ranking);
       const index = crateIndex < plan.crates.length ? crateIndex : 0;
       const result = plan.crates[index].result;
       const source: ChangeSource = mass_kg !== undefined ? "mass" : "material" in meta ? "material" : "name";
@@ -380,6 +399,16 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     requestFit: (instant = false) => set({ fit: { nonce: get().fit.nonce + 1, instant } }),
     setDrawerOpen: (drawerOpen) => {
       if (get().drawerOpen !== drawerOpen) set({ drawerOpen });
+    },
+    setRanking: (ranking) => {
+      if (ranking !== get().ranking) recompute({ ranking, layoutKey: null }, "layout");
+    },
+    startDesignClock: (now = Date.now()) => {
+      if (get().designStartedAt === null) set({ designStartedAt: now, designedInMs: null });
+    },
+    markExported: (now = Date.now()) => {
+      const { designStartedAt, designedInMs } = get();
+      if (designStartedAt !== null && designedInMs === null) set({ designedInMs: Math.max(0, now - designStartedAt) });
     },
   };
 });
