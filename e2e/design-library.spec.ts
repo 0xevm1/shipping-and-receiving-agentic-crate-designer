@@ -23,7 +23,10 @@ import {
   shot,
 } from "./helpers";
 
-/** The design library and share links: save, list and reuse per part; designs in the URL. */
+/**
+ * The design library and share links: save, list and reuse per part; designs in the URL.
+ * Saved designs is hidden from the Overview (#150), so the tests that drive it are skipped; opening a link still works.
+ */
 
 const section = (page: Page) => panel(page).getByRole("region", { name: "Saved designs" });
 const list = (page: Page) => section(page).getByRole("list", { name: "Saved designs for this part" });
@@ -49,7 +52,7 @@ test.beforeEach(async ({ page }) => {
   await setUnits(page, "metric");
 });
 
-test("a saved design is listed for its part after a reload and reused in one click", async ({ page }) => {
+test.skip("a saved design is listed for its part after a reload and reused in one click", async ({ page }) => {
   test.slow(); // a reload and several recomputes
   await expect(section(page)).toContainText("None saved for this part yet.");
   await setQuantity(page, 8);
@@ -88,7 +91,7 @@ test("a saved design is listed for its part after a reload and reused in one cli
   await expect(section(page)).toContainText("None saved for this part yet.");
 });
 
-test("saved designs can be renamed, and deleted with an undo", async ({ page }) => {
+test.skip("saved designs can be renamed, and deleted with an undo", async ({ page }) => {
   await saveDesign(page, "Draft");
   await section(page).getByRole("button", { name: "Rename Draft" }).click();
   const input = section(page).getByLabel("New name for Draft");
@@ -104,7 +107,7 @@ test("saved designs can be renamed, and deleted with an undo", async ({ page }) 
   await expect(list(page)).toContainText("Bracket standard");
 });
 
-test("Save, Rename and Delete leave focus on a sensible control", async ({ page }) => {
+test.skip("Save, Rename and Delete leave focus on a sensible control", async ({ page }) => {
   await section(page).getByRole("button", { name: "Save design" }).click();
   const form = section(page).getByRole("form", { name: "Save this design" });
   await expect(form.getByLabel("Design name")).toBeFocused();
@@ -130,7 +133,7 @@ test("Save, Rename and Delete leave focus on a sensible control", async ({ page 
   await expect(section(page).getByRole("heading", { name: "Saved designs" })).toBeFocused();
 });
 
-test("the library exports and imports as a JSON file", async ({ page }) => {
+test.skip("the library exports and imports as a JSON file", async ({ page }) => {
   await saveDesign(page, "Exported one");
   const [download] = await Promise.all([page.waitForEvent("download"), section(page).getByRole("button", { name: "Export library" }).click()]);
   expect(download.suggestedFilename()).toBe("crate-design-library.json");
@@ -147,7 +150,7 @@ test("the library exports and imports as a JSON file", async ({ page }) => {
   await expect(list(page)).toContainText("Exported one");
 });
 
-test("a share link opens the same crate on a fresh page", async ({ page }) => {
+test.skip("a share link opens the same crate on a fresh page", async ({ page }) => {
   test.slow();
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
   await expect(header(page)).toContainText("PART-002");
@@ -191,7 +194,7 @@ test("a damaged share link falls back to the default crate with a message", asyn
   await shot(page, "design-library-share-link-invalid");
 });
 
-test("a custom part's share link names the model to load, then opens with it", async ({ page }) => {
+test.skip("a custom part's share link names the model to load, then opens with it", async ({ page }) => {
   test.slow();
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();

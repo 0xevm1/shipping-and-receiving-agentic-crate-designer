@@ -1,10 +1,10 @@
 /*
- * The shared job (#46): saves on the server, below Saved designs on the Overview. Reuses the
- * `.btn`, `.linkbtn` and `.actions` primitives (ui.css); rows match Saved designs.
+ * The shared job (#46): saves on the server, last on the Overview. Its heading is a `.subhead`
+ * (hairline above); it reuses the `.btn`, `.linkbtn` and `.actions` primitives (ui.css).
  */
 
 .root {
-  margin-top: 22px;
+  margin-top: 4px;
 }
 
 .sub {
