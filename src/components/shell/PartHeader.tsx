@@ -34,6 +34,10 @@ export function PartHeader() {
   const measured = useDesigner((s) => s.measured);
   const units = useDesigner((s) => s.units);
   const match = modelMatchesCatalog(part, measured);
+  // The file's units and axis are the user's to set on a file they loaded: always for an unknown one (even when its size
+  // leaves no crate to draw, which is when a wrong guess most needs fixing), and for a catalog-named one that doesn't match.
+  const showFrame = canSetFrame(part) && (!part.catalogDims || match === false);
+  const size = measured ?? (showFrame ? part.dimensions_mm : null);
 
   return (
     <header className={styles.header} data-testid="part-header">
@@ -56,10 +60,9 @@ export function PartHeader() {
           // Remount per loaded file so the fields start from that file's values.
           <PartDetailsFields key={part.modelUrl} />
         )}
-        {measured && (
+        {size && (
           <div>
-            {dims(measured, units)} {lengthUnit(units)} · {/* A catalog part's file is known; a catalog-named file that does not match gets the choice too. */}
-            {canSetFrame(part) && (!part.catalogDims || match === false) && <FrameFields />}
+            {dims(size, units)} {lengthUnit(units)} · {showFrame && <FrameFields />}
             <span className={match === false ? styles.warn : ""}>{modelNote(match, part.unitsGuessed)}</span>
           </div>
         )}

@@ -54,7 +54,7 @@ test("an unknown GLB uses a stand-in mass until details are entered", async ({ p
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
   await expect(massField(page)).toHaveValue("10");
   await expect(header(page)).toContainText("kg each stand-in");
-  await expect(header(page)).toContainText("size measured from the file");
+  await expect(header(page)).toContainText("units guessed from the size");
   // The stand-in mass adds one caution; other checks (fork entry on this narrow crate, say) may add
   // their own, so compare counts rather than fixing the badge number.
   await pollCrate(page, (s) => s.massAssumed).toBe(true);
@@ -101,6 +101,8 @@ test("a part over 20 m is refused with a problem message", async ({ page }) => {
   // The size and the limit follow the units (metres here, feet in imperial).
   await expect(alert).toContainText("Its longest side is 30 m and the limit is 20 m");
   await pollCrate(page, (s) => s.problem).toBe("part-too-large");
+  // A wrong guess is most often what makes a part too large, so the units stay in reach (#105).
+  await expect(header(page).getByLabel("File units")).toHaveValue("mm");
   // Said once: the tabs with nothing to show are disabled, and the way out is on the card.
   for (const name of ["Layouts", "Cut list", "Rules", "Checks"]) await expect(page.getByRole("tab", { name })).toBeDisabled();
   await expect(page.getByRole("tab", { name: "Overview" })).toBeEnabled();

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { BRACKET, crate, fileInput, header, mmText, openApp, pollCrate, sampleFile, setUnits, SHAFT, shot, unitsAxisFile } from "./helpers";
+import { BRACKET, crate, fileInput, header, mmText, openApp, pollCrate, sampleFile, setUnits, SHAFT, shot, unitsAxisFile, waitForScene } from "./helpers";
 
 /**
  * A part file that is not in metres or not Z up (#105): the header says what it was read as and
@@ -90,4 +90,48 @@ test("the catalog parts offer no units or axis, and a file far from the origin l
   far.partFrame.sizeMm.forEach((v, i) => expect(v).toBeCloseTo(metres.partFrame.sizeMm[i], 1));
   expect(far.outside).toEqual(metres.outside);
   await pollCrate(page, (s) => s.partFrame.drawnMm?.[0]).toBeCloseTo(metres.partFrame.sizeMm[0], 1);
+});
+
+test("the choices are saved: a reload reopens the file read the same way", async ({ page }) => {
+  test.slow(); // a reload and a re-measure
+  await load(page, unitsAxisFile("bracket-y-up.glb"));
+  await upSelect(page).selectOption("y");
+  await pollCrate(page, (s) => s.partFrame.up).toBe("y");
+  const before = await crate(page);
+
+  // The debounced save has written the design with the axis, and the model's bytes are kept.
+  const saved = () =>
+    page.evaluate(() => {
+      const text = localStorage.getItem("crate-designer.last-design.v1");
+      return text ? (JSON.parse(text).design.part as { up?: string; units?: string }) : null;
+    });
+  await expect.poll(saved).toMatchObject({ up: "y", units: "m" });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          new Promise<boolean>((resolve) => {
+            const req = indexedDB.open("crate-designer");
+            req.onerror = () => resolve(false);
+            req.onsuccess = () => {
+              if (!req.result.objectStoreNames.contains("glb")) return resolve(false);
+              const get = req.result.transaction("glb").objectStore("glb").get("last");
+              get.onsuccess = () => resolve(Boolean(get.result));
+              get.onerror = () => resolve(false);
+            };
+          }),
+      ),
+    )
+    .toBe(true);
+
+  await page.reload();
+  await waitForScene(page);
+  await pollCrate(page, (s) => s.partId).toBe("bracket-y-up");
+  await pollCrate(page, (s) => s.partFrame.drawnMm).not.toBeNull();
+  const after = await crate(page);
+  expect(after.partFrame).toMatchObject({ units: "m", up: "y" });
+  expect(after.partFrame.sizeMm).toEqual(before.partFrame.sizeMm);
+  expect(after.partFrame.drawnMm).toEqual(before.partFrame.drawnMm);
+  expect(after.outside).toEqual(before.outside);
+  await expect(upSelect(page)).toHaveValue("y");
 });

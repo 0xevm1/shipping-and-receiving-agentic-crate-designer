@@ -2802,7 +2802,7 @@ copies chosen shots there on request.
     names a caution and links to Checks; the tab counts cautions and notes apart.
   - `part-units`: a 60 in shaft is guessed as 60 mm, picking inches gives the catalog shaft's size and crate and the
     viewer measures the same; a Y-up bracket lies on its side until Y up is picked, then the crate and the drawn height match
-    the Z-up bracket (probe `partFrame`); the catalog parts offer no choice; a file far from the origin loads centred.
+    the Z-up bracket (probe `partFrame`); the catalog parts offer no choice; a file far from the origin loads centred; a reload reopens the file read the same way.
   - `load-part`: a catalog GLB fills in its details; an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
     parts are refused with a message; dragging text doesn't raise the drop veil, a file does.
   - `load-messages`: the toast under the header: an error (alert) stays until dismissed, a note (status) goes by itself;
