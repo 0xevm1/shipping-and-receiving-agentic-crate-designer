@@ -67,6 +67,11 @@ export function usd(v: number): string {
   return `$${Math.round(v).toLocaleString("en-US")}`;
 }
 
+/** Dollars and cents with thousands separators, for a cost per part: "$5.47", "$1,186.20". */
+export function usdCents(v: number): string {
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /** A signed dollar difference: "+$12", "−$5", or "same cost" when it rounds to $0. */
 export function usdDelta(v: number): string {
   const r = Math.round(v);

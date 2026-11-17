@@ -2,6 +2,7 @@ import type { BundleInput } from "@/lib/exportBundle";
 import type { PartModelReader } from "./glb";
 import type { EngineStamp } from "./schemas";
 import { stamp } from "./engine";
+import { sweepFor } from "./artifacts";
 
 /**
  * The download package (spec §7.13) built by the engine, in any runtime. The PDF (jsPDF), ZIP
@@ -22,10 +23,14 @@ export async function buildBundleZip(
   at = new Date(input.generatedAt),
 ): Promise<BundleZip> {
   const [{ buildBundle, zipBundle }, { glbMaker }] = await Promise.all([import("@/lib/exportBundle"), import("./glb")]);
-  const bundle = await buildBundle(input, {
-    glb: glbMaker(input.part, read),
-    pdf: async (doc) => (await import("@/lib/exportPdf")).printableToPdf(doc),
-  });
   const { part, settings, standards, ranking, layoutKey } = input;
-  return { ...stamp({ part, settings, standards, ranking, layoutKey }), name: bundle.name, zip: zipBundle(bundle.files, at) };
+  const st = stamp({ part, settings, standards, ranking, layoutKey });
+  const bundle = await buildBundle(
+    { ...input, stamp: st, sweep: input.sweep === undefined ? sweepFor({ part, settings, standards, ranking, layoutKey }) : input.sweep },
+    {
+      glb: glbMaker(input.part, read, { ...st }),
+      pdf: async (doc) => (await import("@/lib/exportPdf")).printableToPdf(doc),
+    },
+  );
+  return { ...st, name: bundle.name, zip: zipBundle(bundle.files, at) };
 }

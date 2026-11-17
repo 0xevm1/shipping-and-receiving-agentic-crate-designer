@@ -211,6 +211,14 @@ tab at a time.
 
     The pill shows "Exporting…" for at least 1.5 s (no hold or spinner with reduced motion),
     then "Downloaded crate-PART-001-x4.zip". The separate downloads above stay. Spec §7.13.
+
+    **Download all** (#46), the outlined pill beside it, downloads one .zip comparing the design
+    on screen with the best quantities per crate: a folder each with the GLB, PDF and cut list, a
+    `manifest.json` (engine version, input hash, every file's size and SHA-256) and a
+    `comparison.pdf` (quantity per crate, crates, outside size, gross, cost per part, and why the
+    recommended quantity won). Every file carries the engine version and input hash; each PDF
+    states the quantity rationale and the constraint that stopped a larger crate. No freight
+    dollars appear (there are no freight rates). Spec §7.17.
 12. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
@@ -373,8 +381,9 @@ src/lib/           edge code, may import domain: display units, cut-list formatt
                    loading, part analysis for shaped blocking, the checks the UI shows, the
                    export document, the Export pill's .zip and PDF (tested)
 src/engine/        the crate engine, may import lib and domain: one API (design, cut list,
-                   Export .zip) that runs the same in the page, a Web Worker and Node, every
-                   output stamped with engineVersion and inputHash (spec §5.1)
+                   Export .zip, per-artifact GLB / PDF / CSV builders and the multi-configuration
+                   bundle) that runs the same in the page, a Web Worker and Node, every output
+                   stamped with engineVersion and inputHash (spec §5.1, §7.17)
 src/state/         may import engine, lib and domain: zustand stores, persistence, loading
                    flows, the engine's Web Worker and its client, per-frame animation values
 src/server/        server-only (Postgres via drizzle, S3 blob storage, #46), may import engine,
