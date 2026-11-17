@@ -213,6 +213,16 @@ describe("designCrate with structural sizing", () => {
     for (const s of skids) expect(s.min[2]).toBe(-248);
   });
 
+  it("keeps the fork openings as tall as the skids: the joists sit on top of them (#8)", () => {
+    const openings = heavy.handling.openings;
+    expect(openings).toHaveLength(2);
+    for (const o of openings) {
+      expect(o.clearMm).toBeCloseTo(140, 6);
+      expect(o.width).toBeGreaterThanOrEqual(DEFAULT_STANDARDS.structure.minForkOpeningMm);
+    }
+    for (const id of ["forklift", "pallet-jack"]) expect(heavy.checks.find((c) => c.id === id)?.level).toBe("ok");
+  });
+
   it("keeps the bounding box equal to the outside size", () => {
     for (let a = 0; a < 3; a++) {
       const lo = Math.min(...heavy.members.map((m) => m.min[a]));
