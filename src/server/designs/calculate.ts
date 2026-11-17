@@ -6,7 +6,7 @@
  * (`readOrgStandards`), the shipped defaults when not given.
  */
 import { createHash } from "node:crypto";
-import { GLB_MESSAGES, glbSizeUnits, idFromFile, nameFromFile } from "@/domain/glb";
+import { idFromFile, nameFromFile } from "@/domain/glb";
 import { readFrame } from "@/domain/partFrame";
 import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
 import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
@@ -34,9 +34,7 @@ export async function calculateDesigns(
     const issue = fields.error.issues[0]!;
     throw new ApiFailure(400, "invalid_request", issue.message, issue.path.join("."));
   }
-  const { bytes, fileName } = await checkedGlb(form.get("file"));
-  const sizeUnits = glbSizeUnits(bytes);
-  if (!sizeUnits) throw new ApiFailure(422, "invalid_glb", GLB_MESSAGES.noGeometry, "file");
+  const { bytes, fileName, sizeUnits } = await checkedGlb(form.get("file"));
   const { mass, material, name, total, freightRates, units, up } = fields.data;
   const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units, up });
   const sha256 = createHash("sha256").update(bytes).digest("hex");

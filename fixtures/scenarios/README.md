@@ -30,7 +30,7 @@ The app opens in inches and pounds. Switch to **MM KG** (bottom right) to read t
 | Crate bigger than a plywood sheet | `parts.json` + `bigger-than-sheet.glb`, then the Cut list | 300 kg | 2,000 × 1,400 × 800 mm |
 | Part over a pallet footprint | `parts.json` + `pallet-overhang.glb` | 200 kg | 1,300 × 1,100 × 1,000 mm |
 | Model size disagrees with parts.json | `parts-size-mismatch.json` + `size-mismatch.glb` | 20 kg | model is 300 mm tall, catalog says 258 |
-| `parts.json` entry with a missing field | `parts-missing-field.json` + `missing-field.glb` | none in the entry | the entry has no `mass_kg` |
+| `parts.json` entry with a missing field | `parts-missing-field.json` + `missing-field.glb` | none in the entry | the entry has no `mass_kg`; the entry is skipped and named, and the .glb loads with the 10 kg stand-in |
 | Draco compression | `draco.glb` | | plain message |
 | Meshopt compression | `meshopt.glb` | | plain message |
 | Text glTF | `text.gltf` | | plain message |
@@ -39,6 +39,33 @@ The app opens in inches and pounds. Switch to **MM KG** (bottom right) to read t
 | Damaged GLB | `damaged.glb` | | plain message |
 | A GLB with nothing in it | `empty-scene.glb` | | plain message |
 | Invalid JSON | `not-json.json` | | plain message |
+
+## The file check (#106)
+
+One file per kind of finding. The toast says it in a line and **Details** opens the report (spec §6.6).
+
+| Load | The check says |
+|---|---|
+| `parts-trailing-comma.json` | error: not JSON, line 4, column 3 |
+| `not-json.json` | error: not JSON, line 1, column 3 |
+| `parts-wrong-shape.json` | error: a list, not `{"parts": [...]}` |
+| `parts-empty.json` | error: the `parts` list is empty |
+| `parts-entry-not-object.json` + `heavy-1500kg.glb` | 2 errors: entries that are a string and `null`; the good one loads |
+| `parts-bad-entries.json` + `heavy-1500kg.glb` | 6 errors (mass as text, negative mass, no id, a model that isn't `.glb`, a repeated id, a repeated model); the good entry loads |
+| `parts-lenient.json` + `tall-part.glb` | clean: only id, name, model and mass; the size comes from the model |
+| `parts-ignored-fields.json` + `tall-part.glb` | newer `schema_version`, unknown `model_units`, 3 unknown fields (notes), 4 optional fields ignored (warnings) |
+| `parts-implausible.json` + `lopsided.glb` | a mass of 99,999,999 kg, a mass of 0.0002 kg, a density and a size that can't be right (warnings); the part loads |
+| `parts-units-mm.json` + `shaft-millimetres.glb` | clean: `model_units: "millimeters"` is used, not guessed |
+| `parts-units-wrong.json` + `shaft-millimetres.glb` | warning: `model_units` says meters, the size only fits millimetres |
+| `parts-other-models.json` + `tall-part.glb` | 2 entries name files that weren't loaded; the .glb has no entry |
+| `parts-size-mismatch.json` + `size-mismatch.glb` | warning: the model is 300 mm tall, the entry says 258 |
+| `heavy-1500kg.glb` + `tiny-light.glb` | note: the first opens, the second was not used (#121) |
+| `draco.glb`, `meshopt.glb` | error: compression the viewer can't read |
+| `damaged.glb`, `not-a-model.glb`, `renamed-gltf.glb`, `renamed-stl.glb`, `old-version.glb` | error: damaged, not a binary glTF (naming a text glTF or an STL), glTF 1.0 |
+| `empty-scene.glb`, `single-point.glb`, `flat.glb` | error: no geometry, no size, zero thickness |
+| `sliver.glb` | warning: almost flat (0.04%) |
+| `far-from-origin.glb` | note: 866 m from the origin, where sizes lose precision |
+| `text.gltf`, `not-a-model.txt` | error: text glTF; not a .glb or .json |
 
 ## Scenarios that are settings (no file)
 

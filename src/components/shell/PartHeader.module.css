@@ -139,6 +139,16 @@
 .error::before {
   content: "↳ ";
 }
+/* An implausible mass (#122): amber like an error, but a sentence long, so it wraps inside the header instead of widening it (and pushing the toast aside). */
+.massWarning {
+  max-width: 44ch;
+  color: var(--gold);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.massWarning::before {
+  content: "↳ ";
+}
 
 /* A compact desktop: the tagline goes (the island narrows to 420px, Island.module.css). */
 @media (max-width: 1180px) and (min-width: 981px) {

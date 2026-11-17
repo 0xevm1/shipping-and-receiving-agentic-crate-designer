@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { GLB_MESSAGES, glbProblem, glbSizeUnits, looksLikeTextGltf } from "./glb";
+import { checkGlbFile, GLB_MESSAGES, glbProblem, glbProblemMessage, glbSizeUnits } from "./glb";
 import { readFrame } from "./partFrame";
 
 const sample = (name: string) => new Uint8Array(readFileSync(`public/parts/${name}`));
@@ -25,7 +25,7 @@ const box = (min: number[], max: number[], node: object = {}) => ({
   scenes: [{ nodes: [0] }],
   nodes: [{ mesh: 0, ...node }],
   meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
-  accessors: [{ min, max }],
+  accessors: [{ componentType: 5126, count: 8, type: "VEC3", min, max }],
 });
 
 describe("glbProblem", () => {
@@ -35,24 +35,28 @@ describe("glbProblem", () => {
     expect(glbProblem(bytes.slice().buffer)).toBeNull();
   });
 
-  it("rejects non-GLB data, damaged headers and chunks, and compression", () => {
-    expect(glbProblem(new TextEncoder().encode('{"asset":{}}'))).toBe(GLB_MESSAGES.notGlb);
-    expect(glbProblem(glb({ asset: {} }, { version: 1 }))).toBe(GLB_MESSAGES.damaged);
-    expect(glbProblem(glb({ asset: {} }, { declaredExtra: 8 }))).toBe(GLB_MESSAGES.damaged);
+  it("rejects non-GLB data, damaged headers and chunks, and compression, in the file check's words", () => {
+    expect(glbProblem(new TextEncoder().encode('{"asset":{}}'))).toBe(glbProblemMessage({ kind: "not-glb", looksLike: "a text glTF" }));
+    expect(glbProblem(glb({ asset: {} }, { version: 1 }))).toBe(glbProblemMessage({ kind: "version", version: 1 }));
     const truncated = glb({ asset: {} });
     new DataView(truncated.buffer).setUint32(12, 4096, true);
-    expect(glbProblem(truncated)).toBe(GLB_MESSAGES.damaged);
-    expect(glbProblem(glb({ asset: {}, extensionsRequired: ["KHR_draco_mesh_compression"] }))).toBe(GLB_MESSAGES.compressed);
-    expect(glbProblem(glb({ asset: {}, extensionsRequired: ["EXT_meshopt_compression"] }))).toBe(GLB_MESSAGES.compressed);
+    expect(glbProblem(truncated)).toBe(glbProblemMessage({ kind: "damaged" }));
+    expect(glbProblem(glb({ asset: {}, extensionsRequired: ["KHR_draco_mesh_compression"] }))).toBe(
+      glbProblemMessage({ kind: "compressed", extension: "Draco" }),
+    );
+    expect(glbProblem(glb({ asset: {}, extensionsRequired: ["EXT_meshopt_compression"] }))).toBe(
+      glbProblemMessage({ kind: "compressed", extension: "Meshopt" }),
+    );
+    expect(glbProblem(glb({ asset: {} }))).toBe(glbProblemMessage({ kind: "no-geometry" }));
   });
 });
 
-describe("looksLikeTextGltf", () => {
-  it("spots JSON, with or without leading whitespace or a BOM, and not a GLB", () => {
-    expect(looksLikeTextGltf(new TextEncoder().encode('  \n{"asset":{}}'))).toBe(true);
-    expect(looksLikeTextGltf(new Uint8Array([0xef, 0xbb, 0xbf, 0x7b]))).toBe(true);
-    expect(looksLikeTextGltf(sample("PART-002-long-steel-shaft.glb"))).toBe(false);
-    expect(looksLikeTextGltf(new Uint8Array())).toBe(false);
+describe("checkGlbFile", () => {
+  it("gives the size, or the message and whether the file isn't a .glb at all (415 at the API)", () => {
+    expect(checkGlbFile(sample("PART-002-long-steel-shaft.glb"), "shaft.glb")).toMatchObject({ ok: true });
+    expect(checkGlbFile(sample("PART-002-long-steel-shaft.glb"), "shaft.gltf")).toEqual({ ok: false, message: GLB_MESSAGES.textGltf, notGlb: true });
+    expect(checkGlbFile(new TextEncoder().encode("nope"), "x.glb")).toMatchObject({ ok: false, notGlb: true });
+    expect(checkGlbFile(glb({ asset: {} }), "empty.glb")).toMatchObject({ ok: false, notGlb: false });
   });
 });
 

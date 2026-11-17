@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { countsText } from "@/lib/fileCheckReport";
 import { useView } from "@/state/viewStore";
 import styles from "./LoadToast.module.css";
 
@@ -17,6 +18,8 @@ const NOTE_DISMISS_MS = 9000;
 export function LoadToast() {
   const message = useView((s) => s.loadMessage);
   const kind = useView((s) => s.loadMessageKind);
+  const report = useView((s) => s.fileReport);
+  const reportOpen = useView((s) => s.reportOpen);
   const dismiss = () => useView.getState().setLoadMessage("");
 
   useEffect(() => {
@@ -33,6 +36,18 @@ export function LoadToast() {
       <span className={styles.msg} role="alert">
         {kind === "error" ? message : ""}
       </span>
+      {message && report && (
+        <button
+          type="button"
+          className={styles.details}
+          aria-haspopup="dialog"
+          aria-expanded={reportOpen}
+          aria-label={`Details of the file check: ${countsText(report.findings)}`}
+          onClick={() => useView.getState().setReportOpen(true)}
+        >
+          Details
+        </button>
+      )}
       {message && (
         <button type="button" className={styles.close} aria-label="Dismiss the message" onClick={dismiss}>
           ×

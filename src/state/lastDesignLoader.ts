@@ -27,6 +27,8 @@ export function lastDesignOf(s: Pick<DesignerState, "part" | "settings" | "plan"
  * person loaded something else while this was reading), and then it resolves false.
  */
 export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | null = browserIdb(), ticket: LoadTicket = beginLoad()): Promise<boolean> {
+  // A reopened crate has no file check of its own, and an earlier one would describe other files.
+  useView.getState().setFileReport(null);
   const file = saved.design;
   const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
   try {

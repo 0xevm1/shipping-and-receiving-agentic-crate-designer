@@ -19,7 +19,16 @@ function applyOutcome(outcome: Outcome) {
     s.loadDesign(outcome.part, settings, layoutKey, crateIndex);
   } else if (outcome.part) s.setPart(outcome.part);
   // Without a part nothing opened: the message says what to do, and stays until dismissed.
-  useView.getState().setLoadMessage(outcome.message, outcome.part ? "note" : "error");
+  const view = useView.getState();
+  view.setFileReport(outcome.report ?? null);
+  view.setLoadMessage(outcome.message, outcome.part ? "note" : "error");
+}
+
+/** A load is starting: its message and the last load's file check are over. */
+function clearLoadFeedback() {
+  const view = useView.getState();
+  view.setLoadMessage("");
+  view.setFileReport(null);
 }
 
 const failed = (err: unknown) =>
@@ -53,7 +62,7 @@ async function applyLatest(ticket: LoadTicket, work: () => Promise<Outcome>): Pr
 export async function openDesignFile(file: DesignFile, glbs: File[] = []): Promise<boolean> {
   const ticket = beginLoad();
   const s = useDesigner.getState();
-  useView.getState().setLoadMessage("");
+  clearLoadFeedback();
   const outcome = await applyLatest(ticket, () => loadDesign(file, glbs, catalog.parts, s.standards, useView.getState().units));
   return Boolean(outcome?.part);
 }
@@ -68,7 +77,7 @@ export async function loadPickedFiles(list: FileList | File[]) {
   const ticket = beginLoad();
   const s = useDesigner.getState();
   const units = useView.getState().units;
-  useView.getState().setLoadMessage("");
+  clearLoadFeedback();
   const files = [...list];
   const pending = useLibrary.getState().pendingShare;
   const completes = pending && !files.some((f) => /\.json$/i.test(f.name)) && files.some((f) => f.name === pending.part.model);

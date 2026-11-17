@@ -3,7 +3,7 @@
 // bucket. `bun run test:integration`.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { GLB_MESSAGES, MAX_GLB_BYTES } from "@/domain/glb";
+import { GLB_MESSAGES, glbProblemMessage, MAX_GLB_BYTES } from "@/domain/glb";
 import { ApiErrorSchema, CreatePartResponseSchema, ModelUrlResponseSchema } from "@/lib/api/parts";
 import { blobConfig } from "@/server/blob/config";
 import { resetBlobStore } from "@/server/blob";
@@ -115,19 +115,34 @@ describe("POST /api/v1/parts", () => {
     await expectError(await POST(upload({ mass: "-1" }, { bytes: sampleBytes, name: SAMPLE })), 400, "Enter a number of kg, like 12.5.", "mass");
   });
 
-  it("refuses Draco and Meshopt, text .gltf, non-GLB data and a missing file", async () => {
+  it("refuses Draco and Meshopt, text .gltf, non-GLB data and a missing file, in the file check's words (§6.6)", async () => {
     const draco = fakeGlb({ asset: { version: "2.0" }, extensionsRequired: ["KHR_draco_mesh_compression"] });
-    await expectError(await POST(upload({ mass: "1" }, { bytes: draco, name: "d.glb" })), 422, GLB_MESSAGES.compressed, "file");
+    await expectError(
+      await POST(upload({ mass: "1" }, { bytes: draco, name: "d.glb" })),
+      422,
+      glbProblemMessage({ kind: "compressed", extension: "Draco" }),
+      "file",
+    );
     const meshopt = fakeGlb({ asset: { version: "2.0" }, extensionsRequired: ["EXT_meshopt_compression"] });
-    await expectError(await POST(upload({ mass: "1" }, { bytes: meshopt, name: "m.glb" })), 422, GLB_MESSAGES.compressed, "file");
+    await expectError(
+      await POST(upload({ mass: "1" }, { bytes: meshopt, name: "m.glb" })),
+      422,
+      glbProblemMessage({ kind: "compressed", extension: "Meshopt" }),
+      "file",
+    );
 
     const gltf = new TextEncoder().encode('{"asset":{"version":"2.0"}}');
     await expectError(await POST(upload({ mass: "1" }, { bytes: gltf, name: "part.gltf" })), 415, GLB_MESSAGES.textGltf, "file");
-    await expectError(await POST(upload({ mass: "1" }, { bytes: gltf, name: "renamed.glb" })), 415, GLB_MESSAGES.textGltf, "file");
+    await expectError(
+      await POST(upload({ mass: "1" }, { bytes: gltf, name: "renamed.glb" })),
+      415,
+      glbProblemMessage({ kind: "not-glb", looksLike: "a text glTF" }),
+      "file",
+    );
 
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, ...new Array(40).fill(0)]);
-    await expectError(await POST(upload({ mass: "1" }, { bytes: png, name: "x.glb" })), 415, GLB_MESSAGES.notGlb, "file");
-    await expectError(await POST(upload({ mass: "1" }, { bytes: fakeGlb({ asset: {} }), name: "empty.glb" })), 422, GLB_MESSAGES.noGeometry);
+    await expectError(await POST(upload({ mass: "1" }, { bytes: png, name: "x.glb" })), 415, glbProblemMessage({ kind: "not-glb" }), "file");
+    await expectError(await POST(upload({ mass: "1" }, { bytes: fakeGlb({ asset: {} }), name: "empty.glb" })), 422, glbProblemMessage({ kind: "no-geometry" }));
     await expectError(await POST(upload({ mass: "1" })), 400, "Add the part's .glb file, in a field named file.", "file");
 
     // Nothing was stored for any of them.

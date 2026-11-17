@@ -5,6 +5,7 @@ import { allChecks, cautionCount } from "@/lib/checks";
 import { useDownloadAll } from "@/state/downloadAll";
 import { exportNote, useExportRun } from "@/state/exportRun";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./ExportPill.module.css";
 
 const EXPORT_TITLE = "Download a .zip with the 3D model, the PDF (spec, build sheet, label), the cut list and the design file";
@@ -31,7 +32,8 @@ const ALL_TITLE =
  */
 export function ExportPill() {
   const canExport = useDesigner((s) => !!s.result.design && !s.plan.problem);
-  const cautions = useDesigner((s) => (s.result.design ? cautionCount(allChecks(s.result.design.checks, s.part, s.measured)) : 0));
+  const findings = useView((s) => s.fileReport?.findings);
+  const cautions = useDesigner((s) => (s.result.design ? cautionCount(allChecks(s.result.design.checks, s.part, s.measured, findings)) : 0));
   const state = useExportRun((s) => s.state);
   const run = useExportRun((s) => s.run);
   const busy = state.kind === "busy";

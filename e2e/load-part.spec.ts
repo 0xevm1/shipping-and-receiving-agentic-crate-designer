@@ -147,7 +147,7 @@ test("dragging text over the page doesn't raise the drop veil or swallow the dro
   });
   expect(prevented).toBe(false);
 
-  // A file drag still shows it, and the drop is read (a .txt is told to choose a .glb).
+  // A file drag still shows it, and the drop is read (a .txt is told what it can be instead).
   const dt = await page.evaluateHandle(() => {
     const d = new DataTransfer();
     d.items.add(new File(["hello"], "note.txt", { type: "text/plain" }));
@@ -157,5 +157,7 @@ test("dragging text over the page doesn't raise the drop veil or swallow the dro
   await expect(veil).toBeVisible();
   await page.dispatchEvent("body", "drop", { dataTransfer: dt });
   await expect(veil).toHaveCount(0);
-  await expect(loadMessage(page)).toHaveText("Choose a .glb file or a design .json.");
+  await expect(loadMessage(page)).toHaveText(
+    "note.txt isn't a .glb or a .json file, so it can't be used. Choose a part as .glb, with a parts.json if you have one, or a saved design .json.",
+  );
 });

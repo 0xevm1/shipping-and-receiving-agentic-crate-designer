@@ -1,0 +1,22 @@
+{
+  "parts": [
+    {
+      "id": "SCN-940",
+      "name": "Shaft with a mass of 99,999,999 kg",
+      "model": "lopsided.glb",
+      "mass_kg": 99999999
+    },
+    {
+      "id": "SCN-941",
+      "name": "Part SCN-941",
+      "model": "not-loaded.glb",
+      "mass_kg": 0.0002,
+      "density_kg_m3": 50000,
+      "dimensions_mm": [
+        0.5,
+        30,
+        40000
+      ]
+    }
+  ]
+}

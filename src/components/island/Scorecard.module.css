@@ -71,3 +71,6 @@
   color: var(--muted);
   white-space: nowrap;
 }
+.absurd {
+  color: var(--gold);
+}

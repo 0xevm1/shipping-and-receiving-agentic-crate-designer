@@ -1,0 +1,181 @@
+/*
+ * The File check report. Desktop: a glass panel in the island's place at the right (the crate is
+ * never under it; it sits above the island, which keeps its own state beneath). Narrow: a sheet at
+ * the foot over a scrim, above the drawer. The findings scroll inside; the header and the Copy row stay.
+ */
+
+.scrim {
+  display: none;
+}
+.dialog {
+  position: fixed;
+  top: 24px;
+  right: var(--pad);
+  width: 440px;
+  max-height: calc(100vh - 24px - 96px);
+  z-index: var(--z-drawer);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px 16px;
+  background: linear-gradient(165deg, rgba(24, 66, 110, 0.97), rgba(0, 22, 44, 0.98));
+}
+@media (max-width: 1180px) and (min-width: 981px) {
+  .dialog {
+    width: 420px;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.head h2 {
+  margin: 0;
+  font: 400 24px/1.1 var(--sans);
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.close {
+  flex: none;
+  width: var(--touch);
+  height: var(--touch);
+  margin: -8px -10px -8px 0;
+  padding: 0;
+}
+.counts {
+  margin: 10px 0 0;
+  font: 500 12.5px/1.3 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--gold);
+}
+.outcome {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--soft);
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  margin: 12px -8px 0 0;
+  padding-right: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.file + .file {
+  margin-top: 16px;
+}
+.file h3 {
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--hair);
+  font: 500 12px/1.3 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.file ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.finding {
+  display: grid;
+  grid-template-columns: 20px auto 1fr;
+  column-gap: 8px;
+  row-gap: 2px;
+  align-items: baseline;
+  padding: 8px 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.finding + .finding {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.mark {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font: 700 11px/1 var(--mono);
+  align-self: start;
+  margin-top: 2px;
+  border: 1.5px solid currentColor;
+}
+.sev {
+  font: 600 11px/1.3 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.error .mark,
+.error .sev {
+  color: var(--red);
+}
+.warning .mark,
+.warning .sev {
+  color: var(--gold);
+}
+.note .mark,
+.note .sev {
+  color: var(--sky);
+}
+/* The place sits after the severity on the first line; the sentence takes the full width below it. */
+.where {
+  justify-self: start;
+  min-width: 0;
+  font: 500 12px/1.3 var(--mono);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.text {
+  grid-column: 2 / -1;
+  overflow-wrap: anywhere;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+.copied {
+  font-size: 12.5px;
+  color: var(--soft);
+}
+
+@media (max-width: 980px), (pointer: coarse) {
+  .foot button {
+    min-height: var(--touch);
+  }
+}
+
+/* Narrow: a sheet over a scrim, above the drawer (which has z-index var(--z-drawer)). */
+@media (max-width: 980px) {
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-drawer) + 1);
+    background: rgba(0, 10, 24, 0.55);
+  }
+  .dialog {
+    top: auto;
+    right: 12px;
+    bottom: calc(12px + var(--sa-b, 0px));
+    left: 12px;
+    width: auto;
+    max-height: min(78dvh, 640px);
+    z-index: calc(var(--z-drawer) + 2);
+    padding: 14px 16px 12px;
+  }
+  .head h2 {
+    font-size: 20px;
+  }
+}

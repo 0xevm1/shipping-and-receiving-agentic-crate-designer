@@ -101,6 +101,14 @@ buildable crate design and cut list in under a minute, without needing CAD.
     app uploads a loaded file with the frame it is read in, and the same file in another frame
     is another part, with its own job. The engine's request only carries the part's size, in mm,
     Z up, so the frame reaches the design and `inputHash` through `dimensions_mm`.
+  - **Declared units (#106).** A `parts.json` can say what its model files are in: `model_units`
+    at the top of the file, or on one entry (the entry's wins). It is read as `m` / `mm` / `in`
+    from `meters`, `millimeters`, `inches` and the obvious spellings (`metres`, `mm`, `inch`, `in`),
+    and is used instead of the size guess when an entry names the file (`unitsGuessed` is then
+    false). An entry that also has `dimensions_mm` checks it: the declared units win when they give
+    that size; if only another reading does, that one is used and the file check warns
+    (`units-disagree`, §6.6) because `model_units` is wrong. An unknown value is a warning and the
+    units fall back to the guess. The up axis is never declared (`coordinate_system` is not read).
   - **Any distance from the origin.** Files are not centred. The viewer and the export both
     re-centre each part on the centre of its bounding box (in model units, before scaling), and
     the outline is taken from the box's own corner, so a mesh tens of metres from the origin
@@ -375,7 +383,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | File | Responsibility |
 |---|---|
 | `src/domain/schema.ts` | zod schemas and types: `Part`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
-| `src/domain/glb.ts` | GLB checks shared by the browser and the upload API (#46): `glbProblem` (magic, version, chunks, Draco / Meshopt), `looksLikeTextGltf`, the user-facing `GLB_MESSAGES`, `MAX_GLB_BYTES` (50 MB, API only), `glbSizeUnits` (bounding box from accessor min / max, no three.js), `idFromFile` / `nameFromFile` |
+| `src/domain/glbInfo.ts` | `readGlb`: a .glb's header, JSON chunk and accessor bounds to its size and centre, or the first reason it can't be used (#106). Pure; sizes match three.js's. The one reader for the browser's file check, the upload API and the CLI (#46) |
+| `src/domain/glb.ts` | The sentences for `readGlb`'s problems (`glbProblemMessage`, the file check's words), `glbProblem`, `glbSizeUnits`, `checkGlbFile` (the API's and CLI's verdict: size, or message and whether it is a 415), `GLB_MESSAGES` (text .gltf, too large), `MAX_GLB_BYTES` (50 MB, API only), `idFromFile` / `nameFromFile` |
 | `src/domain/partFrame.ts` | The file frame's numbers (#105, §4), shared by the browser, the API and the CLI: `MODEL_UNITS`, `UP_AXES`, `MM_PER_UNIT`, `guessUnits`, `guessedFrame`, `framedSizeMm`, `readFrame`, `fitFrame` |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart`. Data only: the `/parts/…` model URL is built in `lib/part.ts` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotationMatrix()` (integer, as three.js's XYZ Euler) and `rotatedSize()` |
@@ -422,10 +431,12 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/lib/message.ts` | `renderMessage`: check messages (typed quantities) rendered for the selected units (#62, §7.7) |
 | `src/lib/part.ts` | `LoadedPart` (a part with its model URL, units, up axis and load facts), `catalogPart()`, `framePart()` and `canSetFrame()` |
 | `src/lib/partFrame.ts` | The file frame (#105, §4): `framedScene` (the three.js turn to Z up), the UI's words (`UNITS_LABEL`, `UP_LABEL`, `frameWords`), and the domain's numbers re-exported |
-| `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
+| `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass, an implausible mass, and one that points to the File check report), sorted; `cautionCount` |
 | `src/lib/lumber.ts` | US shop names (#15): the nominal-lumber names from `domain/lumber.ts` (`sectionText`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
-| `src/lib/loadPart.ts` | Loading a part in the browser: GLB validation (from `domain/glb.ts`), measuring with three.js, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
+| `src/lib/fileCheck.ts` | The file check (#106, §6.6): `checkFiles` reads the picked files (names and contents, no WebGL or DOM) and returns `Finding`s plus the decisions the loader follows (accepted entries, the model that opens, its frame); the plausibility limits; `massWarning`, `sizeMatches`, `parseModelUnits` |
+| `src/lib/fileCheckReport.ts` | The toast's one line (`verdict`), the report's counts, grouping and plain-text copy (`reportText`), `reportFor` |
+| `src/lib/loadPart.ts` | `loadPartFiles` (decides from `checkFiles`: entries, the model that opens, the frame, the message) and `loadDesign` (opening a design file); `designFilePart` |
 | `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached by model URL |
 | `src/lib/currentDesign.ts` | `currentDesignText()` / `currentDesignFile()`: the design on screen as a design file (§6.5) with its part outline and ranking, for the download, the print link, the library and share links |
 | `src/lib/appInfo.ts` | `APP`: the name and version written into design files and the README |
@@ -487,9 +498,10 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values, idle timing constants and `reducedMotion()` |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
-| `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
+| `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer and the File check report (focus in, Tab wraps, focus back to the opener; focus inside another dialog opened over it is left to that dialog); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
 | `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
-| `src/components/shell/LoadToast.tsx` | The load message as a glass toast by the part header (beside it on desktop, under it on narrow screens): a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
+| `src/components/shell/LoadToast.tsx` | The load message as a glass toast by the part header (beside it on desktop, under it on narrow screens): a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a Details button when the file check found anything; a dismiss button |
+| `src/components/shell/FileCheckDialog.tsx` | The File check report (§8.2): a dialog opened by Details or by the File check button by Load a part; findings by file, counts, Copy report |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (`usePopover`), Hide panels |
@@ -549,6 +561,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 
 ### 6.1 Catalog (`parts.json` → `PartsCatalogSchema`)
 
+The **bundled** catalog (`src/data/parts.json`, three parts) is strict and validated at module load:
+
 ```ts
 Part {
   id: string                       // "PART-001"
@@ -562,7 +576,29 @@ Part {
 }
 ```
 
-The catalog-level field `model_units` must be the literal `"meters"`.
+Its catalog-level field `model_units` must be the literal `"meters"`.
+
+**A `parts.json` the user supplies (#106)** is read leniently (`CatalogEntry` in
+`src/domain/schema.ts`, rules in §6.6). It is a JSON object with a `parts` list; the app uses only
+what the crate design needs:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | Text, unique in the file. Becomes the part's id |
+| `name` | yes | Text |
+| `model` | yes | The `.glb` file name the entry is for (matched to the file's name exactly) |
+| `mass_kg` | yes | A number above 0: the supplied mass of one part. Never taken from the mesh |
+| `material` | no | Text. Without it the header says "material not given" |
+| `density_kg_m3` | no | A number above 0. Kept for the record; no rule uses it |
+| `dimensions_mm` | no | `[x, y, z]`, each above 0. The model check compares the mesh to it. Without it the size comes from the mesh and there is no catalog size to check |
+| `suggested_quantities` | no | Whole numbers above 0, shown as quick picks. Without it: 1, 4, 8 |
+| `model_units` | no | What the model's numbers are in: `meters`, `millimeters`, `inches`. On an entry or at the top of the file; the entry's wins (§4) |
+
+Top-level `schema_version` (the newest read is `1.0`), `coordinate_system` and `metadata_note` are
+accepted and not used. Anything else, at the top or in an entry, is ignored and named in the
+report. An entry that is missing a required field, or has one of the wrong kind, is **skipped**
+and the rest of the file still loads; an optional field of the wrong kind is **ignored** with a
+warning and the entry still loads.
 
 The catalog holds no shape data beyond the bounding box. A part's **profile** (its outline from
 each side, #16) is measured from the GLB in the browser after the crate first renders (§7.5b),
@@ -644,7 +680,13 @@ Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
 - `name`: whitespace and control characters collapsed, then 1–80 characters (`PART_NAME_MAX`).
 - `material`: tidied the same way, at most 60 characters (`PART_MATERIAL_MAX`). Blank clears it,
   and the UI shows "material not given". Free text; `MATERIAL_SUGGESTIONS` are only offered.
-- `mass_kg`: a finite number above 0. Any accepted mass, even 10, clears `massAssumed`.
+- `mass_kg`: a finite number above 0. Any accepted mass, even 10, clears `massAssumed`. A mass
+  above `MAX_PLAUSIBLE_MASS_KG` (20,000 kg) or under `MIN_PLAUSIBLE_MASS_KG` (1 g) is **accepted
+  with a warning** (#122), the same limit and wording as a `parts.json` entry gets (§6.6): one
+  line under the header (`massWarning`), a Checks caution "Part mass looks wrong", and above the
+  limit the scorecard shows no freight class (the density it would use is meaningless) and says
+  its weights and cost are not real. It is a warning, not a refusal, because the same value from
+  a `parts.json` must be treated the same way and a supplied mass is the user's to state.
 
 **The file's frame.** The store action `setPartFrame({ units?, up? })` (#105) re-reads the loaded
 file in another frame: `framePart` gives the new size, the measured outline is dropped (it was
@@ -947,9 +989,104 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     (was …)". A single-crate file has no `shipment` and is byte-identical to before.
   - The load message starts "Design loaded: {quantity} × {name}." and adds any of those notes.
   - **Wording of load messages:** short, plain, in the selected units, and never about file
-    history. An error says what happened and what to do ("That isn't a .glb file. Choose a .glb
-    or a design .json."). A message with no part opened is an error (`loadMessageKind`), shown
+    history. An error says what happened and what to do ("draco.glb can't be opened. That .glb uses
+    Draco compression, which the viewer can't read. Export it again without Draco compression."). A message with no part opened is an error (`loadMessageKind`), shown
     with `role="alert"` until dismissed; a note goes by itself (§8.2).
+### 6.6 The file check (`src/lib/fileCheck.ts`, #106, #121, #122)
+
+One pure function, `checkFiles(files, { known })`, reads everything the user picked or dropped (a
+file is a name and its contents: text for JSON, bytes for a .glb; no WebGL, no DOM, so it runs in
+vitest and could run in a command-line script) and returns:
+
+- `findings: Finding[]`, each `{ file, where?, severity, code, message }`. `where` is an entry id
+  or a path like `parts[2].mass_kg`. `severity` is **error** (can't be used), **warning** (used,
+  but look) or **note** (ignored or assumed). `code` is a stable id (the tests pin them) and
+  `message` is one plain sentence saying what is wrong and what to do. A message is a typed
+  `Message` (§7.16), so a length or a mass in it follows the units toggle; a file's own number is
+  quoted as written ("a mass_kg of 99999999"), which is unit-free.
+- the decisions the loader then follows, so the report and the behaviour cannot disagree: the
+  accepted `entries`, the `opened` model (its raw size, the frame it is read in, whether the units
+  are a guess, the entry that names it), the `design` file if one was picked, and whether the part
+  is still `awaitingGlb`. `loadPartFiles` makes no decision of its own.
+
+`src/domain/glbInfo.ts` reads a .glb: the header, the JSON chunk and each mesh's `POSITION` accessor
+bounds carried through its node's matrix (or translation, rotation and scale), scanning the float
+data only when an accessor has no bounds. A test compares every sample and fixture to three.js's
+`Box3`. The upload API (`POST /api/v1/parts`, `POST /api/v1/designs`) and `bun run crate` (#46) read
+the file with the same `readGlb` and answer with the same sentences (`glbProblemMessage`,
+`checkGlbFile` in `domain/glb.ts`), so a file the app refuses the API refuses in the same words: 415
+for a file that isn't a binary glTF (`not-glb`, a text `.gltf`), 422 for the other `glb-*` errors.
+A valid load changes nothing; **errors never change the crate on screen**; warnings and
+notes never block.
+
+**Which model opens (#121).** The app designs one part at a time. With several .glb files, the
+first one that a `parts.json` entry (or an earlier load) names opens, else the first that can be
+read; a file that can't be read is passed over for one that can. Every other readable file gets a
+`glb-extra` note naming the one that opened and saying to load it on its own, and the toast says
+"Opened a.glb. The app designs one part at a time, so b.glb was not used." The entries of the
+`parts.json` are all kept, so each of the other parts loads by dropping its .glb alone. Choosing
+among the files in the app (a picker) was not built: the order is the order the files were picked,
+the message says which opened, and one more drop opens another, which is faster than a dialog on
+a demo. A saved design names its own model, so nothing is called extra there.
+
+**Plausibility (#122)** (warnings, never errors; the numbers are named constants in `fileCheck.ts`):
+
+| Limit | Value | Why |
+|---|---|---|
+| `MAX_PLAUSIBLE_MASS_KG` | 20,000 kg | A full trailer carries about 20 t: one part above it is a typo or the wrong unit |
+| `MIN_PLAUSIBLE_MASS_KG` | 0.001 kg | Under 1 g the mass is probably in grams |
+| `PLAUSIBLE_DENSITY_KG_M3` | 1 to 25,000 | Light foam to osmium |
+| `PLAUSIBLE_SIDE_MM` | 1 to 20,000 (`MAX_PART_MM`) | Above it the app refuses the part anyway (§7.9) |
+| `FAR_FROM_ORIGIN_MM` | 100,000 | float32 holds about 7 digits: at 100 m a size is off by about 0.01 mm, the app's resolution. Nearer than that nothing is said (the viewer re-centres, §4) |
+| `SLIVER_RATIO` | 0.001 | A smallest side under 0.1% of the longest is almost flat |
+| `MODEL_TOLERANCE_MM` | 1 | The same match the Checks tab's model check uses (`sizeMatches`) |
+
+**The rules.** Examples are the messages as written (metric).
+
+| Code | Severity | Where | When, and an example |
+|---|---|---|---|
+| `json-syntax` | error | | Not JSON (a leading byte order mark is fine). "This isn't valid JSON: unexpected "]" at line 4, column 3. Fix that and load it again." The position comes from the app's own reader, because the engines word their errors differently and most give none |
+| `shape` | error | `parts` | Not an object with a `parts` list, or the list is empty. "Expected an object with a "parts" list, like {"parts": [ … ]}, but found a list of parts with no wrapper. Wrap the part entries in a "parts" list." |
+| `schema-newer` | warning | `schema_version` | Newer than 1.0. "schema_version 2.0 is newer than the 1.0 this app reads, so fields added since are ignored. Check the entries below look right." |
+| `units-unknown` | warning | `model_units`, `parts[i].model_units` | Not meters, millimeters or inches (or a spelling of them). "model_units "cubits" isn't meters, millimeters or inches, so the units are guessed from each model's size. Set it to one of those three." |
+| `unknown-field` | note | `owner`, `parts[i].colour` | A field the app doesn't use, named. "SCN-930 has a field "colour" that the app doesn't use, so it was ignored." |
+| `entry-shape` | error | `parts[i]` | An entry that isn't an object. "Entry 2 is "a.glb", not an object with an id, name, model and mass_kg, so it was skipped. Replace it with an object like the others." |
+| `missing-field` | error | `parts[i].id` etc. | `id`, `name`, `model` or `mass_kg` is missing (or `null`). "SCN-900 has no mass_kg, so it was skipped. Add the mass of one part in kilograms, like 12.5." |
+| `wrong-type` | error | `parts[i].mass_kg` etc. | A required field of the wrong kind, an empty `id` or `name`, or a `model` that isn't a .glb. "SCN-910: mass_kg should be a number but is "21.5 kg", so it was skipped. Write just the number of kilograms, without quotes or a unit." |
+| `non-positive` | error | `parts[i].mass_kg` | A mass of 0 or less. "SCN-911: mass_kg is -5, but a part must weigh more than 0 kg, so it was skipped. Enter its real mass in kilograms." |
+| `duplicate-id` | error | `parts[i].id` | The second entry with an id; the first counts. "SCN-901 repeats the id of parts[0], so it was skipped. Give every part its own id." |
+| `duplicate-model` | error | `parts[i].model` | The second entry naming one .glb. "SCN-915 names heavy-1500kg.glb, which parts[0] already uses, so it was skipped. Each part needs its own .glb." |
+| `field-ignored` | warning | `parts[i].dimensions_mm` etc. | An optional field of the wrong kind; the entry still loads. "SCN-930: dimensions_mm should be three numbers above 0, [x, y, z] in mm but is a list, so it was ignored, and the size comes from the model." |
+| `implausible-mass` | warning | `parts[i].mass_kg` | Over `MAX_PLAUSIBLE_MASS_KG` or under `MIN_PLAUSIBLE_MASS_KG`. "SCN-940: a mass_kg of 99999999 is more than 20,000 kg, the most one part is taken to weigh. Check for an extra digit or the wrong unit." |
+| `implausible-density` | warning | `parts[i].density_kg_m3` | Outside `PLAUSIBLE_DENSITY_KG_M3`. "SCN-941: density_kg_m3 is 50000, outside 1 to 25,000. Check it is in kilograms per cubic metre." |
+| `implausible-dimension` | warning | `parts[i].dimensions_mm` | A side outside `PLAUSIBLE_SIDE_MM`. "SCN-941: dimensions_mm has 0.5, outside 1 mm to 20,000 mm. Check it is in millimetres." |
+| `model-missing` | warning | the entry's id | A .glb was supplied, none of them is named by any entry (and no skipped entry names one), so each entry names a file that wasn't loaded. With a catalog beside some of its models this is silent: the other entries are the catalog doing its job. "SCN-960 names bracket.glb, which wasn't loaded. Load that .glb with parts.json, or fix the name." |
+| `glb-unlisted` | note | the .glb | Same situation, on the file that opened. "No entry in parts.json names this file, so it was loaded with stand-in details (10 kg)." Or "Its entry (SCN-900) was skipped, so it was loaded with stand-in details (10 kg)." |
+| `file-type` | error, or note beside a usable file | the file | Not .glb or .json. "notes.txt isn't a .glb or a .json file, so it can't be used. Choose a part as .glb, with a parts.json if you have one, or a saved design .json." |
+| `gltf-text` | error | the file | A text .gltf. "Text .gltf files can't be used. Export the part as a single .glb file." |
+| `glb-not-glb` | error | the file | No "glTF" header. "It has a .glb name but isn't a binary glTF (it looks like an STL file). Export the part again as .glb; renaming a file doesn't convert it." Names a text glTF, an STL, a STEP or an XML file when the first bytes say so |
+| `glb-version` | error | the file | glTF 1.0. "It is glTF version 1, and the app reads version 2. Export the part again as a .glb (glTF 2.0)." |
+| `glb-damaged` | error | the file | A chunk runs past the end of the file, or the JSON can't be read. "That .glb file is damaged: it is cut off or its header can't be read. Try exporting it again." |
+| `glb-compressed` | error | the file | Draco or Meshopt compression is required. "That .glb uses Draco compression, which the viewer can't read. Export it again without Draco compression." |
+| `glb-no-geometry` | error | the file | No mesh with points in the scene. "It has no 3D geometry in its scene (no mesh with points). Export the part itself, not just cameras, lights or an empty scene." |
+| `glb-no-size` | error | the file | All points are one point. "All its geometry sits at one point, so it has no size. Check the export has the part's real mesh." |
+| `glb-flat` | error | the file | One side is zero. "It is flat: zero thickness along Z, so a crate can't be sized around it. Export the part as a solid." |
+| `glb-sliver` | warning | the file | Smallest side under `SLIVER_RATIO` of the largest. "Its thinnest side is 0.04% of its longest, so it is almost flat. If that isn't the part, check the export." |
+| `glb-off-origin` | note | the file | Centre farther than `FAR_FROM_ORIGIN_MM`. "Its geometry sits about 866,227 mm from the file's origin, where sizes lose precision (about 0.01 mm). Move the part to the origin before exporting." |
+| `units-guessed` | note | the file | The units are a guess from the size and the guess is not metres (metres is what glTF itself means, so reading metres assumes nothing). "The model's units aren't given, so it is read as inches from its size. If that is wrong, set the file's units at the top left, or give model_units in parts.json." |
+| `units-disagree` | warning | the entry's id | `model_units` can't give the entry's `dimensions_mm` but another reading does, and was used. "model_units says metres, but the model only matches dimensions_mm read as millimetres, so it was read that way. Correct model_units in parts.json." |
+| `size-mismatch` | warning | the entry's id | The model's size (in the frame it is read in) differs from `dimensions_mm` by more than `MODEL_TOLERANCE_MM` on a side. The crate follows the entry's size, as before, and the Checks tab's "3D model does not match the catalog" says the same. "The model measures 360 mm × 220 mm × 300 mm but SCN-902 says 360 mm × 220 mm × 258 mm. Check dimensions_mm and model_units, or the file's units under the part's size at the top left." |
+| `glb-extra` | note | the file | A readable .glb that was not opened because another was (#121). "Not opened: the app designs one part at a time, and it opened heavy-1500kg.glb. Load this file on its own to design it." |
+
+A parts.json alone (no .glb) is not a finding: the toast says "Part details loaded. Now choose its
+.glb file." and the entries are kept.
+
+**The toast's line** (`verdict`) is plain text and never carries a length or a mass (the report is
+where those follow the units toggle): for a parts.json "parts-missing-field.json: 1 entry skipped
+(SCN-900: mass_kg).", "…7 fields ignored, newer schema_version.", "…implausible mass."; for a file
+that can't open the file's name and the reason; for several models which one opened. A clean
+load has no line.
+
 ## 7. Algorithms
 
 ### 7.1 Orientations
@@ -1366,6 +1503,10 @@ The UI adds two checks that depend on the loaded file (`src/state/checks.ts`):
 - **`model`:** ok when the measured GLB is within ±1 mm of the catalog size; caution when it
   isn't; info ("Size comes from the model file") for parts with no catalog entry.
 - **`mass`:** a caution while a stand-in mass is in use.
+- **`mass-implausible`:** a caution "Part mass looks wrong" for a mass over 20,000 kg or under 1 g
+  (`massWarning`, §6.6).
+- **`file-check`:** a caution "The files had problems" while the last load's File check has an
+  error or a warning, saying how many and pointing to the report (§8.2). Notes alone add nothing.
 
 The Checks tab badge counts cautions.
 
@@ -2339,7 +2480,27 @@ open question for the user (see #20).
   it can't brush the crate's top-left corner, which it did when it hung under the header (#62);
   under 981 px it hangs under the header as wide as it. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
   region and goes after 9 s; an error is `role="alert"`, has a gold edge and stays until
-  dismissed or the next load. Both have a dismiss button.
+  dismissed or the next load. Both have a dismiss button. When the file check (§6.6) found anything,
+  the message is its one-line verdict ("parts-missing-field.json: 1 entry skipped (SCN-900: mass_kg).")
+  and the toast has a **Details** button that opens the report. The toast's width stops short of the island
+  whatever the header's width: the shell measures the header into `--header-w` (a long size line,
+  with the file's units and axis, makes it wider than the 345 / 400 px the first paint assumes).
+- **File check report (`FileCheckDialog`, #106):** findings grouped by file (an `h3` per file), each
+  with a severity mark and word (Error, Warning or Note: a mark, a word and a colour, so it never rests
+  on colour alone), the place (`parts[2].mass_kg`, in mono) and the sentence, in the selected units.
+  At the top: the counts ("1 error, 4 warnings, 1 note") and what the load did ("Opened a.glb." or "Nothing
+  was opened, so the crate on screen is unchanged."). **Copy report** puts the same as plain text on the
+  clipboard (`reportText`) and says so in a live region. It is a `role="dialog"` named "File check":
+  focus moves to its close button, Tab wraps inside it, **Escape** or the close button closes it
+  and focus returns to what opened it (Escape stops there: it doesn't also close the drawer). On
+  a desktop it takes the island's place (its top, right edge and width), over the island and never over the
+  crate; on a phone it is a sheet at the foot over a scrim, above the drawer, with 44 px targets. It
+  has two entry points: **Details** on the toast, and a **File check** button with the number of
+  findings before **Load a part** in the island header (in the drawer on a phone, where the buttons
+  take their own row under the part name). The button stays from a load that had anything to say until
+  the next load; a clean load has no toast line and no button. The findings are in memory only
+  (`fileReport` in `viewStore.ts`): never in a design file, never in the library or a share link,
+  and a reload starts without them. The Checks tab carries one caution that points here (§7.7).
 - **Export Packing Specs:** only the header's Export pill (§7.13) exports; the View popover has no export
   button (#77 added one, removed in #62). The zip's `crate-{part id}-x{quantity}.glb` (#27) is built from the
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
@@ -2564,6 +2725,13 @@ open question for the user (see #20).
 - **Load a part** (file picker) or a drop anywhere loads a new part; a full-page veil shows while
   dragging.
 - Dropping a `parts.json` alongside the GLB merges its valid entries into the lookup first.
+  Every file picked or dropped goes through the **file check** (§6.6) before anything is loaded:
+  an entry needs only `id`, `name`, `model` and `mass_kg`; a bad entry is skipped with a message that
+  names the part and the field, and the valid ones in the same file still load; extra fields and a
+  newer `schema_version` are named in the report and never stop the load; `model_units` sets the
+  file's units instead of the guess. **Several .glb files:** one part is designed at a time, so the
+  first that an entry names (else the first) opens and the message says which others were not used
+  (#121).
 - **A design file** (JSON with `"kind": "crate-design"`, §6.5) restores its part, rules and
   layout instead. A custom part's GLB goes in the same pick or drop; without it, the message
   says which file to add.
@@ -2575,10 +2743,14 @@ open question for the user (see #20).
   part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
   steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
   mass is entered (§6.2a).
-- **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data (bad
-  magic, version or chunk lengths), each with a plain message (`GLB_MESSAGES`, `domain/glb.ts`).
-  The upload API (`POST /api/v1/parts`, #46) gives the same messages and also refuses files over
-  50 MB (`MAX_GLB_BYTES`); see `docs/BLOB_STORAGE.md`.
+- **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, a damaged or renamed
+  file, a glTF 1.0, a scene with nothing in it, a flat or point-sized model, a `parts.json` that isn't
+  JSON (with the line and column) or has the wrong shape, and a file of another type, each with a
+  message that says what is wrong and what to do (§6.6); the crate on screen is not touched. No
+  message is the generic "choose a .glb or a design .json". The upload API
+  (`POST /api/v1/parts`, #46) and `bun run crate` read a .glb with the same code (`readGlb`,
+  `domain/glbInfo.ts`) and give the same messages (`glbProblemMessage`, `domain/glb.ts`), and also refuse
+  files over 50 MB (`MAX_GLB_BYTES`); see `docs/BLOB_STORAGE.md`.
 - Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
 - **A saved design** (Overview → Saved designs → Use, #14) and **a share link** open through
   the same path as a design file (`loadDesign`), so the §6.5 restore notes apply. A reused
@@ -3182,7 +3354,7 @@ they must keep loading (the standards fixture must also write back byte for byte
 
 **`src/state/checks.test.ts`** checks `modelMatchesCatalog` (null without a size or measurement;
 the 1 mm tolerance per axis) and `allChecks` (model ok / caution / info notes, the stand-in mass
-caution, cautions-first sorting, domain checks left untouched).
+caution, the implausible-mass caution at and past its limit, the one File check caution (errors and warnings, not notes), cautions-first sorting, domain checks left untouched).
 
 **`src/state/library.store.test.ts`** checks the library's storage (versioned key; empty when
 nothing is saved and nothing stored when empty; unreadable JSON, another kind or a newer version
@@ -3321,9 +3493,28 @@ the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
 **`src/lib/csv.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
 units line, `cut_in`), nominal stock, fractional cuts and ASCII only; the metric header and
 `cut_mm`; the same rows and quantities in both; and a split shipment in both.
+**`src/lib/fileCheck.test.ts`** (#106) has a table-driven test per rule in §6.6, keyed by the
+finding's code: the JSON position (line and column, whatever the engine says; a byte order mark),
+every top-level shape, `schema_version` on both sides of 1.0, unknown fields named, each required
+field missing, null and of the wrong kind, a mass of 0 and below, repeated ids and models, each
+optional field of the wrong kind (ignored, entry kept), each plausibility limit and the limits
+themselves (accepted), `model_units` spellings, an unknown value, the entry's own value over the
+file's and its use as the part's frame (declared, overruled by the size, no size to check), a model an
+entry names that was not supplied and a .glb no entry names, the known catalog, the size
+mismatch in both units, every .glb problem against the fixtures, units guessed only when not
+metres, a sliver and a far-from-origin model, and #121: the first opens, the one an entry names
+opens whatever the order, a damaged one is passed over, a design names its own.
+**`src/lib/glbInfo.test.ts`** (it sits in lib because it uses three.js; the reader is `domain/glbInfo.ts`) checks the sizes through node transforms (matrix, translation,
+rotation, scale) and that every sample and fixture measures the same as three.js's `Box3`.
+**`src/lib/fileCheckReport.test.ts`** checks the verdict for each kind of load, the counts, the
+grouping, and the plain-text report in both units.
 **`src/lib/loadPart.test.ts`**
-checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
-names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
+checks names from file names, and the three acceptance criteria of #106 through `loadPartFiles`
+with the fixtures: an entry with only id, name, model and mass loads with its GLB; a bad entry
+gets a message naming the part and the field while the valid entries in the file load; a
+schema_version 1.1 with an unknown field loads with a note naming it. Also a load with only errors
+opens nothing, two GLBs (#121), an absurd mass (#122), `model_units` as the frame, a bundled
+catalog name, and a size mismatch. For design files: catalog vs custom source, a catalog
 design restored from the bundled catalog, a custom design without its GLB naming the file,
 other JSON still read as a catalog, and plain messages for a bad design or bad JSON.
 **`src/domain/glb.test.ts`** checks the shared GLB checks (damaged version, declared length and
@@ -3437,7 +3628,7 @@ copies chosen shots there on request.
 **Conventions for specs:**
 
 - Find things by role, label or text. Where that isn't possible, use a `data-testid` (`size-label`, `check` with
-  `data-level`, `cut-piece` / `cut-stock` / `cut-size` / `cut-qty`, `load-toast`, `change-note`, `flash`, `summary`,
+  `data-level`, `cut-piece` / `cut-stock` / `cut-size` / `cut-qty`, `load-toast`, `file-check` (the report), `file-check-button`, `mass-warning`, `change-note`, `flash`, `summary`,
   `view-popover`, and others); never a CSS class, because styles move. The two places a computed style is the behaviour under
   test are the plain "4x4" (`font-feature-settings`) and the stand-in / invalid underline styles in `part-header`.
 - Prove wiring and behaviour; don't pin what a unit test owns. Read the expected numbers from `window.__crate` (the
@@ -3480,6 +3671,12 @@ copies chosen shots there on request.
   - `part-units`: a 60 in shaft is guessed as 60 mm, picking inches gives the catalog shaft's size and crate (each read once its recommendation has settled) and the
     viewer measures the same; a Y-up bracket lies on its side until Y up is picked, then the crate and the drawn height match
     the Z-up bracket (probe `partFrame`); the catalog parts offer no choice; a file far from the origin loads centred; a reload reopens the file read the same way.
+  - `file-check` (#106): at desktop and phone sizes, a parts.json with a good and a bad entry plus a GLB loads the good
+    part, the toast names the skipped part and field, Details opens the report (focus in, Escape back to Details), the File check
+    button by Load a part keeps it reachable with its count, and the Checks tab points to it; two GLBs open the first and the report says
+    which; an absurd mass loads with a warning in the report, under the header and in Checks, and follows the units toggle; a
+    file that can't open leaves the crate alone and the next clean load removes the report; the report is a focus trap and copies
+    as plain text. The toast stays clear of the island when the header is wide, and on a phone the report's buttons are 44 px.
   - `load-part`: a catalog GLB fills in its details; a new part opens at the recommended quantity and layout ("Set to the recommended N per crate", **In use**); an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
     parts are refused with a message; dragging text doesn't raise the drop veil, a file does.
   - `load-messages`: the toast under the header: an error (alert) stays until dismissed, a note (status) goes by itself;
@@ -3535,6 +3732,9 @@ copies chosen shots there on request.
 | Size labels as DOM, not drei `<Html>` | `<Html>` mounts a React root per label, and unmounting those during a render raced in React 19 | Positions are projected manually each frame |
 | Camera framing via `setViewOffset` toward the free area | The crate stays centred beside the island; picking and projection still use one camera | Insets are measured from the DOM |
 | A loaded GLB's units (m, mm, in) and up axis (Z, Y) are guessed from its size, saved in the design file and one choice away in the header (#105) | Interviewers may hand over a file from another CAD system; a wrong guess must be obviously visible and fixable on screen, and a reload must measure the same | The guess can't tell a 60 in part from a 60 mm one; Y up is never guessed, only chosen |
+| One pure file check (`checkFiles`) decides what loads and what the report says, instead of the loader and a separate validator each deriving it (#106) | The report and the behaviour cannot disagree, it needs no browser so the rules are table-tested, and it could run as a command-line script | The .glb size is read from accessor bounds, not from three.js: a test pins them equal on every sample and fixture, but a file whose exporter writes odd bounds would differ |
+| An implausible value (a 99,999,999 kg mass) is a warning, never a refusal, in parts.json and in the header's field (#122) | The same value must be treated the same wherever it comes from, and a supplied mass is the user's to state; the warning shows in three places and the scorecard stops presenting freight figures as real | A typo can still be exported after the warning is seen |
+| Several .glb files: the first (or the one an entry names) opens and the rest get a note, with no chooser (#121) | One part per crate is the brief; saying which opened is what removes the silence, and dropping the other alone opens it. A dialog costs more time than a second drop | A person who wanted the second file drops it again |
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
@@ -3607,6 +3807,9 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #20 | UX redesign: full-bleed scene, glass island, tabbed detail |
 
 Other known gaps:
+
+- The file check reads a .glb's size from its accessor bounds (§6.6). A mesh whose positions have no declared bounds and are not float32 data
+  can't be measured, so its file is refused as having no geometry; sparse accessors count by their base bounds; nothing checks textures or animations.
 
 - Batch splitting (#25, §7.10) offers only N identical crates plus one remainder.
 - Structural sizing (#7, §7.15) checks strength only: no deflection, joint, point-load or racking

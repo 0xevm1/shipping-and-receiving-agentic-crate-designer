@@ -59,6 +59,27 @@
   justify-content: space-between;
   gap: 12px;
 }
+/* "Load a part", with the File check button before it while the last load had findings; they wrap rather than squeeze the name. */
+.loaders {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.fileCheck {
+  gap: 8px;
+  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+}
+.fileCount {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--gold);
+  color: var(--navy-deep);
+  font: 600 11px/18px var(--mono);
+  text-align: center;
+}
 .partbar h2,
 .panel h2 {
   font: 400 24px/1.1 var(--sans);
@@ -227,7 +248,22 @@
     font-size: 20px;
     overflow-wrap: anywhere;
   }
-  .load {
+  /* With the File check button the buttons don't fit beside the name: the name and the close button keep the first row, the buttons take the second. */
+  .partbar[data-checks] {
+    flex-wrap: wrap;
+  }
+  .partbar[data-checks] h2 {
+    flex: 1 1 8ch;
+  }
+  .partbar[data-checks] .close {
+    order: 1;
+  }
+  .partbar[data-checks] .loaders {
+    order: 2;
+    flex: 1 0 100%;
+  }
+  .load,
+  .fileCheck {
     min-height: var(--touch);
   }
   .close {

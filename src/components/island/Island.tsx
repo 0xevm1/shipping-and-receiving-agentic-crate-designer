@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref, type UIEvent } from "react";
 import { allChecks, cautionCount } from "@/lib/checks";
+import { countsText, type FileReport } from "@/lib/fileCheckReport";
 import type { ChangeSource } from "@/state/designEvents";
 import { useDesigner } from "@/state/store";
 import { useView, type Tab } from "@/state/viewStore";
@@ -31,6 +32,31 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout", "recommended"];
+
+/**
+ * Reopens the File check report: by "Load a part", where the files came in, with the number of findings. It is
+ * there from a load that had anything to say until the next load (a clean load shows nothing).
+ */
+function FileCheckButton({ report }: { report: FileReport }) {
+  const open = useView((s) => s.reportOpen);
+  const n = report.findings.length;
+  return (
+    <button
+      type="button"
+      className={`pillbtn small ${styles.fileCheck}`}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-label={`File check: ${countsText(report.findings)}`}
+      data-testid="file-check-button"
+      onClick={() => useView.getState().setReportOpen(!open)}
+    >
+      File check
+      <span className={styles.fileCount} aria-hidden="true">
+        {n}
+      </span>
+    </button>
+  );
+}
 
 /** The island's id, for the hamburger's `aria-controls` on narrow screens. */
 export const ISLAND_ID = "island";
@@ -61,7 +87,9 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   const loadFiles = useLoadFiles();
   const fileInput = useRef<HTMLInputElement>(null);
   // One pass over the checks, shared by the tab badges, the Overview verdict and the Checks tab.
-  const checks = useMemo(() => (design ? allChecks(design.checks, part, measured) : []), [design, part, measured]);
+  const report = useView((s) => s.fileReport);
+  const findings = report?.findings;
+  const checks = useMemo(() => (design ? allChecks(design.checks, part, measured, findings) : []), [design, part, measured, findings]);
   const cautions = cautionCount(checks);
   const notes = checks.filter((c) => c.level === "info").length;
   // No crate: the problem is the whole panel (Overview's slot) and the other tabs have nothing to show.
@@ -105,11 +133,14 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
       {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open, "data-open": drawer.open || undefined })}
     >
       <div className={styles.parthead} ref={headRef} data-empty={!design || undefined}>
-        <div className={styles.partbar}>
+        <div className={styles.partbar} data-checks={report ? "" : undefined}>
           <h2>{part.name}</h2>
-          <button type="button" className={`pillbtn small ${styles.load}`} onClick={() => fileInput.current?.click()}>
-            Load a part
-          </button>
+          <div className={styles.loaders}>
+            {report && <FileCheckButton report={report} />}
+            <button type="button" className={`pillbtn small ${styles.load}`} onClick={() => fileInput.current?.click()}>
+              Load a part
+            </button>
+          </div>
           <input
             ref={fileInput}
             type="file"

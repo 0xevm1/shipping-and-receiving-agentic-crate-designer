@@ -70,3 +70,8 @@ export function triangleGlb(size: [number, number, number]): Buffer {
 export function unitsAxisFile(name: string) {
   return { name, mimeType: "model/gltf-binary", buffer: readFileSync(`fixtures/units-axis/${name}`) };
 }
+
+/** A file from `fixtures/scenarios/` (scripts/fixtures/scenarios.mjs) as an in-memory upload. */
+export function scenarioFile(name: string) {
+  return { name, mimeType: name.endsWith(".json") ? "application/json" : "model/gltf-binary", buffer: readFileSync(`fixtures/scenarios/${name}`) };
+}

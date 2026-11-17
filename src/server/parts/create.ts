@@ -8,7 +8,8 @@
  * object and one `part_model` row; each upload is still its own `part` (mass may differ).
  */
 import { createHash } from "node:crypto";
-import { GLB_MESSAGES, glbProblem, glbSizeUnits, looksLikeTextGltf, MAX_GLB_BYTES, nameFromFile } from "@/domain/glb";
+import { checkGlbFile, GLB_MESSAGES, MAX_GLB_BYTES, nameFromFile } from "@/domain/glb";
+import type { Vec3 } from "@/domain/schema";
 import { readFrame } from "@/domain/partFrame";
 import { CreatePartFieldsSchema, type CreatePartResponse, type PartResponse } from "@/lib/api/parts";
 import { modelKey } from "../blob/keys";
@@ -58,15 +59,13 @@ export async function readForm(request: Request): Promise<FormData> {
 }
 
 /** The file's bytes, once it has passed every check the browser makes. `POST /designs` reuses it. */
-export async function checkedGlb(file: FormDataEntryValue | null): Promise<{ bytes: Uint8Array; fileName: string }> {
+export async function checkedGlb(file: FormDataEntryValue | null): Promise<{ bytes: Uint8Array; fileName: string; sizeUnits: Vec3 }> {
   if (!(file instanceof File)) throw new ApiFailure(400, "invalid_request", "Add the part's .glb file, in a field named file.", "file");
   if (file.size > MAX_GLB_BYTES) throw new ApiFailure(413, "too_large", GLB_MESSAGES.tooLarge, "file");
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (/\.gltf$/i.test(file.name) || looksLikeTextGltf(bytes)) throw new ApiFailure(415, "unsupported_file", GLB_MESSAGES.textGltf, "file");
-  const problem = glbProblem(bytes);
-  if (problem === GLB_MESSAGES.notGlb) throw new ApiFailure(415, "unsupported_file", problem, "file");
-  if (problem) throw new ApiFailure(422, "invalid_glb", problem, "file");
-  return { bytes, fileName: file.name };
+  const verdict = checkGlbFile(bytes, file.name);
+  if (!verdict.ok) throw new ApiFailure(verdict.notGlb ? 415 : 422, verdict.notGlb ? "unsupported_file" : "invalid_glb", verdict.message, "file");
+  return { bytes, fileName: file.name, sizeUnits: verdict.sizeUnits };
 }
 
 export async function createPart(request: Request, { db, blob, org }: PartsDeps): Promise<CreatePartResponse> {
@@ -83,9 +82,7 @@ export async function createPart(request: Request, { db, blob, org }: PartsDeps)
     const issue = fields.error.issues[0]!;
     throw new ApiFailure(400, "invalid_request", issue.message, issue.path.join("."));
   }
-  const { bytes, fileName } = await checkedGlb(form.get("file"));
-  const sizeUnits = glbSizeUnits(bytes);
-  if (!sizeUnits) throw new ApiFailure(422, "invalid_glb", GLB_MESSAGES.noGeometry, "file");
+  const { bytes, fileName, sizeUnits } = await checkedGlb(form.get("file"));
   // Read in the units and up axis sent, as the app read it (spec §4); each guessed when not sent.
   const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units: fields.data.units, up: fields.data.up });
   const readAsMm = frame.units === "mm";

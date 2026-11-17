@@ -10,6 +10,7 @@ import type { PartProfile } from "./profile";
 export const Vec3Schema = z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]);
 export type Vec3 = [number, number, number];
 
+/** A bundled catalog part. Exported for the engine's request schema (`DesignPartSchema`, #46). */
 export const PartSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -24,6 +25,18 @@ export const PartSchema = z.object({
   suggested_quantities: z.array(z.number().int().positive()).min(1),
 });
 export type Part = z.infer<typeof PartSchema>;
+
+/**
+ * An entry of a parts.json the user supplies (spec §4). Only `id`, `name`, `model` and `mass_kg` are
+ * required: a part without a material, density, size or suggested quantities is still a part, and
+ * the size then comes from the model. `model_units` is what the model's numbers are in. A bundled
+ * `Part` is a `CatalogEntry`. The rules that decide whether a file's entry is accepted live in
+ * `src/lib/fileCheck.ts`.
+ */
+export type CatalogEntry = Pick<Part, "id" | "name" | "model" | "mass_kg"> &
+  Partial<Pick<Part, "material" | "density_kg_m3" | "dimensions_mm" | "suggested_quantities">> & {
+    model_units?: "m" | "mm" | "in";
+  };
 
 export const PartsCatalogSchema = z.object({
   schema_version: z.string(),

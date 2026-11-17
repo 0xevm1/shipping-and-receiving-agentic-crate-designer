@@ -10,8 +10,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
-import { GLB_MESSAGES, glbProblem, glbSizeUnits, idFromFile, looksLikeTextGltf, MAX_GLB_BYTES, nameFromFile } from "@/domain/glb";
+import { checkGlbFile, GLB_MESSAGES, idFromFile, MAX_GLB_BYTES, nameFromFile } from "@/domain/glb";
 import { MM_PER_UNIT, readFrame } from "@/domain/partFrame";
+import type { Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { designShipment } from "@/engine/engine";
 import { buildBundleZip } from "@/engine/files";
@@ -30,12 +31,12 @@ export class CliError extends Error {
   }
 }
 
-/** The checks the app and the API make on a GLB, with their messages. */
-function checkGlb(bytes: Uint8Array, fileName: string): void {
+/** The checks the app and the API make on a GLB, with their messages; its size in file units. */
+function checkGlb(bytes: Uint8Array, fileName: string): Vec3 {
   if (bytes.byteLength > MAX_GLB_BYTES) throw new CliError(GLB_MESSAGES.tooLarge);
-  if (/\.gltf$/i.test(fileName) || looksLikeTextGltf(bytes)) throw new CliError(GLB_MESSAGES.textGltf);
-  const problem = glbProblem(bytes);
-  if (problem) throw new CliError(problem);
+  const verdict = checkGlbFile(bytes, fileName);
+  if (!verdict.ok) throw new CliError(verdict.message);
+  return verdict.sizeUnits;
 }
 
 export interface RunResult {
@@ -47,9 +48,7 @@ export interface RunResult {
 /** Runs the engine here: sweep, shortlist, and the recommended design's files. */
 export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new Date()): Promise<RunResult> {
   const fileName = basename(opts.file);
-  checkGlb(bytes, fileName);
-  const sizeUnits = glbSizeUnits(bytes);
-  if (!sizeUnits) throw new CliError(GLB_MESSAGES.noGeometry);
+  const sizeUnits = checkGlb(bytes, fileName);
   const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units: opts.units ?? undefined, up: opts.up ?? undefined });
   const sha256 = sha256Hex(bytes);
   const req: SweepRequest = {

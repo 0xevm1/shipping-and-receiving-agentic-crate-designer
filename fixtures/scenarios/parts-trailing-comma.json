@@ -1,0 +1,5 @@
+{
+  "parts": [
+    { "id": "A", "name": "Part A", "model": "a.glb", "mass_kg": 3 },
+  ]
+}

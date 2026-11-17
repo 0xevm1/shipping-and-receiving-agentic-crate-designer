@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Assembly } from "@/domain/crate";
 import type { DesignResult } from "@/domain/design";
 import { diffDesigns, type DesignChange } from "@/domain/diff";
+import type { FileReport } from "@/lib/fileCheckReport";
 import type { Units } from "@/lib/units";
 import { onDesignEdit, type ChangeSource, type DesignEdit } from "./designEvents";
 import type { KeyValueStore } from "./persist";
@@ -91,6 +92,14 @@ export interface ViewStoreState {
   loadMessage: string;
   /** An error stays until dismissed or the next load; a note goes by itself. */
   loadMessageKind: LoadMessageKind;
+  /**
+   * What the file check found in the last load (spec §8.2), kept until the next load so the report stays
+   * reachable after the toast goes. In memory only: it describes files, not the design, so it is never
+   * saved with a design and a reload starts without it.
+   */
+  fileReport: FileReport | null;
+  /** The File check report is open. */
+  reportOpen: boolean;
   /** Narrow screens: the island is a right-side drawer; true while it is open. Separate from `panelsHidden`. */
   drawerOpen: boolean;
   /** True while the last-opened crate is being reopened after mount; the scene waits for it. */
@@ -117,6 +126,9 @@ export interface ViewStoreState {
   markExported: (now?: number) => void;
   togglePanels: () => void;
   setLoadMessage: (m: string, kind?: LoadMessageKind) => void;
+  /** Keeps (or, with null, forgets) the last load's file check; either way the report is closed. */
+  setFileReport: (report: FileReport | null) => void;
+  setReportOpen: (open: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
   setRestoring: (restoring: boolean) => void;
 }
@@ -143,6 +155,8 @@ export const useView = create<ViewStoreState>()((set, get) => ({
   panelsHidden: false,
   loadMessage: "",
   loadMessageKind: "note",
+  fileReport: null,
+  reportOpen: false,
   drawerOpen: false,
   restoring: false,
 
@@ -183,6 +197,10 @@ export const useView = create<ViewStoreState>()((set, get) => ({
   },
   togglePanels: () => set({ panelsHidden: !get().panelsHidden }),
   setLoadMessage: (loadMessage, loadMessageKind = "note") => set({ loadMessage, loadMessageKind }),
+  setFileReport: (fileReport) => set({ fileReport, reportOpen: false }),
+  setReportOpen: (reportOpen) => {
+    if (get().reportOpen !== reportOpen && (!reportOpen || get().fileReport)) set({ reportOpen });
+  },
   setDrawerOpen: (drawerOpen) => {
     if (get().drawerOpen !== drawerOpen) set({ drawerOpen });
   },

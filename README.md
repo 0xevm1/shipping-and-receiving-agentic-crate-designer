@@ -206,7 +206,23 @@ tab at a time.
    - For an unknown file, enter its name, material and mass in the top-left header. The
      material field suggests common alloys and takes any text; aluminum draws lighter than
      steel. A 10 kg stand-in mass is used, with a warning, until you enter one. Mass is never
-     guessed from the mesh.
+     guessed from the mesh. A mass over 20,000 kg (or under a gram) is accepted but warned about
+     under the header and in Checks.
+   - **Your own `parts.json`:** drop it with the `.glb` it names. Each entry needs only `id`,
+     `name`, `model` (the `.glb` file name) and `mass_kg`; `material`, `density_kg_m3`,
+     `dimensions_mm` (the size is measured from the model without it), `suggested_quantities` and
+     `model_units` (`meters`, `millimeters` or `inches`: what the model's numbers are in) are
+     optional. A bad entry is skipped and named, and the good ones still load. Spec §6.1.
+   - **The file check.** Whatever you drop is checked first. When anything is wrong or assumed,
+     the toast under the app name says it in a line ("parts.json: 1 entry skipped (SCN-900:
+     mass_kg).") and **Details** opens the **File check** report: every finding by file, with its
+     place and what to do, and a **Copy report** button. The report stays one click away from
+     **Load a part** until the next load. It covers a `parts.json` that isn't JSON (with the line
+     and column) or has the wrong shape, entries with missing or wrong fields, repeated ids,
+     implausible numbers, unknown fields, a newer `schema_version`, and a `.glb` that is
+     damaged, compressed, empty or flat, in doubt about its units, or different in size from its
+     entry. The rules are a table in spec §6.6. Pick several `.glb` files and the first (or the one
+     an entry names) opens; the report says which, and that the others were not used.
    - A newly loaded part, and the sample part on a first visit, opens at the **recommended
      quantity per crate** and its crate, without you choosing one ("Set to the recommended 34
      per crate"); a saved design, a design file, a share link or your last crate keeps its own.
@@ -482,7 +498,7 @@ All of these live in one zod-validated object, `ShopStandards` (`src/domain/stan
 ```
 src/domain/        pure TypeScript (mm, kg, Z-up), no React, three.js or DOM; all crate logic, unit-tested
 src/lib/           edge code, may import domain: display units, cut-list formatting, part-file
-                   loading, part analysis for shaped blocking, the checks the UI shows, the
+                   loading and the file check (`fileCheck.ts`, pure), part analysis for shaped blocking, the checks the UI shows, the
                    export document, the Export pill's .zip and PDF (tested)
 src/engine/        the crate engine, may import lib and domain: one API (design, cut list,
                    Export .zip, per-artifact GLB / PDF / CSV builders and the multi-configuration

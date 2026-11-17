@@ -89,19 +89,20 @@ says what the app says. Multipart form fields (schemas in `src/lib/api/parts.ts`
 | `units` | Optional: what the file's numbers are in, `m`, `mm` or `in` (spec §4). Guessed from its size when absent |
 | `up` | Optional: which axis of the file points up, `z` or `y`. `z` when absent |
 
-Checks, with the same messages as the browser (`GLB_MESSAGES` in `src/domain/glb.ts`, which
-`src/lib/loadPart.ts` uses too):
+Checks, by the browser's file check rules and in its words (spec §6.6): `readGlb`
+(`src/domain/glbInfo.ts`) reads the file for both, and `checkGlbFile` / `glbProblemMessage`
+(`src/domain/glb.ts`) give the sentence:
 
 | Refused | Status | Code |
 |---|---|---|
 | Missing or bad `mass`, bad `density`, `units` or `up`, missing `file` | 400 | `invalid_request` (with `field`) |
 | Not multipart | 415 | `invalid_request` |
 | Over 50 MB (by `Content-Length` before reading, then by the file) | 413 | `too_large` |
-| Text `.gltf` (by name or content), non-GLB data | 415 | `unsupported_file` |
-| Damaged header or chunks, Draco / Meshopt (`extensionsRequired`), no geometry | 422 | `invalid_glb` |
+| A `.gltf` name, or bytes that aren't a binary glTF (a renamed text glTF, STL, ...) | 415 | `unsupported_file` |
+| Damaged header or chunks, glTF 1.0, Draco / Meshopt (`extensionsRequired`), no geometry, a point-sized or flat model | 422 | `invalid_glb` |
 
-The server measures the model's bounding box from the JSON chunk (`glbSizeUnits`: each POSITION
-accessor's min / max through the node transforms, the same box three.js gives; a unit test
+The server measures the model's bounding box with the same reader (`readGlb`: each POSITION
+accessor's min / max through the node transforms, scanning the data only when an accessor has none; the same box three.js gives; a unit test
 compares them on every bundled part), and reads it in the `units` and `up` sent, each guessed
 as the browser guesses it when absent (`readFrame` in `src/domain/partFrame.ts`: metres up to 3
 units across, inches up to 20, millimetres beyond; Z up). The part keeps that frame
