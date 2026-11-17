@@ -286,6 +286,6 @@ describe("an opened design keeps its own settings", () => {
 
 /** A sweep request for the part and rules on screen. */
 function sweepRequest(): SweepRequest {
-  const { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s().settings;
-  return { part: s().part, rules: { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness }, standards: s().standards };
+  const { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s().settings;
+  return { part: s().part, rules: { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness }, standards: s().standards };
 }

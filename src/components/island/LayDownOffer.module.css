@@ -1,0 +1,25 @@
+/* The Checks tab's offer to lay the parts down: an outlined note above the list with its one button. */
+
+.offer {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  margin: 4px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+}
+.offer b {
+  font-weight: 500;
+  font-size: 14.5px;
+}
+.offer span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 980px), (pointer: coarse) {
+  .offer :global(.btn) {
+    min-height: var(--touch);
+  }
+}

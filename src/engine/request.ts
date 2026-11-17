@@ -30,10 +30,10 @@ export function sweepRequestFor(input: {
   maxQuantity?: number;
   total?: number | null;
 }): SweepRequest {
-  const { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } = input.rules;
+  const { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness } = input.rules;
   return {
     part: designPartOf(input.part),
-    rules: { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness },
+    rules: { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness },
     standards: input.standards,
     ...(input.freightRates !== undefined ? { freightRates: input.freightRates } : {}),
     ...(input.maxQuantity !== undefined ? { maxQuantity: input.maxQuantity } : {}),

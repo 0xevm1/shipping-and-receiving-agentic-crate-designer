@@ -7,7 +7,8 @@ import { catalogPart } from "@/lib/part";
 import { designShipment } from "./engine";
 import { designPartHash, designRequestFor, sweepRequestFor } from "./request";
 import { DesignRequestSchema } from "./schemas";
-import { SweepRequestSchema, sweepInputHash } from "./sweep";
+import type { RestingFace } from "@/domain/orientations";
+import { SweepRequestSchema, sweepDesignRequest, sweepInputHash } from "./sweep";
 
 const face = { cols: 2, rows: 1, depth: [0, 10] };
 const PROFILE: PartProfile = {
@@ -34,6 +35,42 @@ describe('the one request builder (#46 "same inputs")', () => {
     });
     expect(DesignRequestSchema.parse(design)).toEqual(design);
     expect(design.part).toEqual(req.part);
+  });
+
+  it("carries the resting faces into the sweep, so the server sweeps with the rules the page designs with (#109)", () => {
+    const part = catalogPart(getPart("PART-001"));
+    const rules = { ...DEFAULT_SETTINGS, restingFaces: ["-y", "+x"] } as const;
+    const req = sweepRequestFor({ part, rules, standards: DEFAULT_STANDARDS });
+    expect(req.rules.restingFaces).toEqual(["-y", "+x"]);
+    expect(Object.keys(req.rules).sort()).toEqual(["maxLayers", "panelThickness", "partGapMm", "restingFaces", "wallClearanceMm"]);
+    const as = (restingFaces: readonly RestingFace[]) =>
+      sweepInputHash(sweepRequestFor({ part, rules: { ...DEFAULT_SETTINGS, restingFaces }, standards: DEFAULT_STANDARDS }));
+    expect(as(["-y", "+x"])).not.toBe(as(["-z"]));
+    // The sweep sweeps the same crates the design request would design at each quantity.
+    expect(sweepDesignRequest(req, 4, null).settings).toEqual({ ...req.rules, quantity: 4 });
+  });
+
+  it("reads requests from before resting faces: keepUpright true is as modelled, false is any face (#109)", () => {
+    const part = catalogPart(getPart("PART-001"));
+    const old = (keepUpright: boolean) => {
+      const { restingFaces: _gone, ...rest } = DEFAULT_SETTINGS;
+      void _gone;
+      return { ...rest, keepUpright };
+    };
+    for (const [keepUpright, faces] of [
+      [true, ["-z"]],
+      [false, ["-z", "+z", "-y", "+y", "-x", "+x"]],
+    ] as const) {
+      const design = JSON.parse(
+        JSON.stringify(designRequestFor({ part, settings: DEFAULT_SETTINGS, standards: DEFAULT_STANDARDS, layoutKey: null, ranking: "volume" })),
+      );
+      design.settings = old(keepUpright);
+      expect(DesignRequestSchema.parse(design).settings.restingFaces).toEqual(faces);
+      const sweep = JSON.parse(JSON.stringify(sweepRequestFor({ part, rules: DEFAULT_SETTINGS, standards: DEFAULT_STANDARDS })));
+      delete sweep.rules.restingFaces;
+      sweep.rules.keepUpright = keepUpright;
+      expect(SweepRequestSchema.parse(sweep).rules.restingFaces).toEqual(faces);
+    }
   });
 
   it("gives the same answers from the loaded part and from the part as the server stores it (JSON)", () => {

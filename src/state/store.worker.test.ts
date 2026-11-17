@@ -1,3 +1,4 @@
+import { ANY_FACES } from "@/domain/orientations";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { inputHash } from "@/engine/engine";
@@ -47,8 +48,8 @@ describe("store with the engine in a worker", () => {
 
   it("keeps up with quick edits: each builds on the last, and the newest design wins", () => {
     for (let i = 0; i < 6; i++) s().setSettings({ partGapMm: s().settings.partGapMm + 5 });
-    s().setSettings({ keepUpright: false });
-    expect(s().settings).toMatchObject({ partGapMm: initial.settings.partGapMm + 30, keepUpright: false });
+    s().setSettings({ restingFaces: ANY_FACES });
+    expect(s().settings).toMatchObject({ partGapMm: initial.settings.partGapMm + 30, restingFaces: ANY_FACES });
     flush();
     expect(s().designedFrom.settings).toEqual(s().settings);
     expect(s().result.design?.layout.slots).toHaveLength(initial.settings.quantity);

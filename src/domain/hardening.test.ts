@@ -1,10 +1,11 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import type { CrateDesign } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, MAX_PART_MM, type DesignPart } from "./design";
 import { CrateSettingsSchema, normalizeSettings, settingsAdjustments, type CrateSettings, type Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm } from "./standards";
-import { metricText as metric } from "./testFixtures";
+import { metricText as metric, facesFor } from "./testFixtures";
 import { loadAwareBudget, medianMs } from "./testTiming";
 
 const MIN_INTERIOR_MM = minInteriorMm(DEFAULT_STANDARDS);
@@ -49,7 +50,7 @@ describe("quantity extremes", () => {
     const p = parts.find((q) => q.id === id)!;
     const budget = loadAwareBudget(50, 15);
     for (const quantity of [1, 200]) {
-      const settings = { quantity, keepUpright, maxLayers };
+      const settings = { quantity, restingFaces: facesFor(keepUpright), maxLayers };
       const r = run(p, settings);
       expect(r.problem).toBeNull();
       expect(r.design!.layout.slots).toHaveLength(quantity);
@@ -199,7 +200,7 @@ describe("settings at the boundary", () => {
       quantity: NaN,
       partGapMm: Infinity,
       maxLayers: "3",
-      keepUpright: "no",
+      restingFaces: "no",
       panelThickness: 3,
       wallClearanceMm: undefined,
     } as unknown as Partial<CrateSettings>;
@@ -207,9 +208,9 @@ describe("settings at the boundary", () => {
   });
 
   it("applies valid changes and ignores unknown keys", () => {
-    const patch = { keepUpright: false, panelThickness: 15, quantity: 12, colour: "red" } as Partial<CrateSettings>;
+    const patch = { restingFaces: ANY_FACES, panelThickness: 15, quantity: 12, colour: "red" } as Partial<CrateSettings>;
     const next = normalizeSettings(patch, base);
-    expect(next).toEqual({ ...base, keepUpright: false, panelThickness: 15, quantity: 12 });
+    expect(next).toEqual({ ...base, restingFaces: ANY_FACES, panelThickness: 15, quantity: 12 });
     expect(CrateSettingsSchema.safeParse(next).success).toBe(true);
   });
 
@@ -262,7 +263,7 @@ describe("a layout or a reason", () => {
       for (const quantity of [1, 7, 199, 200]) {
         for (const keepUpright of [true, false]) {
           for (const maxLayers of [1, 6]) {
-            const r = run(part(dims), { quantity, keepUpright, maxLayers, partGapMm: 0, wallClearanceMm: 300 });
+            const r = run(part(dims), { quantity, restingFaces: facesFor(keepUpright), maxLayers, partGapMm: 0, wallClearanceMm: 300 });
             expect(r.design === null).toBe(r.problem !== null);
             // Every valid input has at least one layout (see spec §7.2).
             expect(r.layouts.length).toBeGreaterThan(0);

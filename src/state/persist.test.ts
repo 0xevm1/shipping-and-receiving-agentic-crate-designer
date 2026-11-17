@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DESIGN_SCHEMA_VERSION } from "@/domain/designFile";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { LAST_DESIGN_STORAGE_KEY, loadLastDesign, saveLastDesign } from "./lastDesignStorage";
 import { LIBRARY_STORAGE_KEY, loadLibrary, saveLibrary } from "./libraryStorage";
@@ -173,7 +174,7 @@ describe("last designs saved before and after the part's units and up axis (#105
   it("a format 2 design (no units, no axis) opens as Z up with its units left to find", () => {
     const last = read("last-design.v1.design-v2.json");
     expect(last).toMatchObject({ tab: "layouts", ranking: "volume" });
-    expect(last?.design.schemaVersion).toBe(3);
+    expect(last?.design.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(last?.design.part).toMatchObject({ id: "bracket-inches", up: "z" });
     expect(last?.design.part.units).toBeUndefined();
   });
@@ -183,12 +184,21 @@ describe("last designs saved before and after the part's units and up axis (#105
     expect(last?.design.part).toMatchObject({ id: "bracket-y-up", units: "m", up: "y" });
   });
 
+  it("every older fixture's keepUpright reads as the faces a part may rest on (#109)", () => {
+    for (const name of ["last-design.v1.json", "last-design.v1.design-v2.json", "last-design.v1.design-v3.json"]) {
+      expect(read(name)?.design.settings.restingFaces, name).toEqual(["-z"]);
+    }
+    expect(read("last-design.v1.design-v3-lying.json")?.design.settings.restingFaces).toEqual(["-z", "+z", "-y", "+y", "-x", "+x"]);
+    const library = loadLibrary(memoryStorageWith(LIBRARY_STORAGE_KEY, fixture("design-library.v1.json")));
+    expect(library[0].design.settings.restingFaces).toEqual(["-z"]);
+  });
+
   it("saving what was loaded writes the current format, and it loads again the same", () => {
     const store = memoryStorage();
     for (const name of ["last-design.v1.design-v2.json", "last-design.v1.design-v3.json"]) {
       const last = read(name)!;
       expect(saveLastDesign(last, store)).toBe(true);
-      expect(JSON.parse(store.data.get(LAST_DESIGN_STORAGE_KEY)!).design.schemaVersion).toBe(3);
+      expect(JSON.parse(store.data.get(LAST_DESIGN_STORAGE_KEY)!).design.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
       expect(loadLastDesign(store)).toEqual(last);
     }
   });

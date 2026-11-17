@@ -1,3 +1,4 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { getPart } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, settingsFromStandards, type DesignPart } from "./design";
@@ -251,7 +252,7 @@ describe("computeDesign with custom standards", () => {
 
   it("the stability ratio and volume tolerance steer the ranking", () => {
     const strict = custom({ limits: { stableHeightRatio: 0.5 } });
-    const d = design("PART-002", strict, { quantity: 1, keepUpright: false });
+    const d = design("PART-002", strict, { quantity: 1, restingFaces: ANY_FACES });
     expect(check(d, "stable")!.level).toBe("caution");
 
     const r = computeDesign(getPart("PART-001"), DEFAULT_SETTINGS);

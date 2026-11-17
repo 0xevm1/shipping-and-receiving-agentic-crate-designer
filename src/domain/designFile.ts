@@ -6,7 +6,7 @@ import { kg, mm, msg, type Message } from "./message";
 import { MODEL_UNITS, UP_AXES } from "./partFrame";
 import { usableProfile, type PartProfile } from "./profile";
 import { decodeProfile, EncodedProfileSchema } from "./profileCodec";
-import { CrateSettingsSchema, Vec3Schema, type CrateSettings, type DesignPart, type Vec3 } from "./schema";
+import { CrateSettingsSchema, readSettings, Vec3Schema, type CrateSettings, type DesignPart, type Vec3 } from "./schema";
 import { describeShipment, planShipment, type ShipmentPlan } from "./shipment";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
@@ -24,8 +24,9 @@ export const DESIGN_FILE_KIND = "crate-design";
  * 2: the layout ranking and the part's measured outline joined the file, because the crate
  * planned from a file depends on both.
  * 3: the part's file units and up axis joined the file, because the model is measured with them.
+ * 4: `settings.keepUpright` became `settings.restingFaces`, the faces the part may rest on.
  */
-export const DESIGN_SCHEMA_VERSION = 3;
+export const DESIGN_SCHEMA_VERSION = 4;
 
 const DesignFilePartSchema = z.object({
   /** "catalog": the model ships with the app (/public/parts). "custom": the user supplies the GLB. */
@@ -173,6 +174,8 @@ const FORMAT = {
       const part = typeof doc.part === "object" && doc.part !== null ? (doc.part as Record<string, unknown>) : null;
       return part ? { ...doc, part: { ...part, up: "z", ...(part.source === "catalog" ? { units: "m" } : {}) } } : doc;
     },
+    // 3 to 4: Keep parts upright on is "as modelled" (rest on the model's own base), off is "any face".
+    3: (doc: Record<string, unknown>) => ({ ...doc, settings: readSettings(doc.settings) }),
   },
 };
 
