@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { layoutCards, openApp, openStandards, openTab, panel, setQuantity, setUnits, shot, standards, useRecommendedLayout } from "./helpers";
+import { layoutCards, openApp, openStandards, openTab, panel, setQuantity, setUnits, shot, standards, useTopRankedLayout } from "./helpers";
 
 /**
  * Design scorecard (#17): crate cost (material + labour), build time, freight class and
@@ -110,7 +110,7 @@ test("the Layouts cards show deltas against the recommendation, and the ranking 
 
 test("changing the labour rate in Shop standards changes the crate cost", async ({ page }) => {
   // A standards change re-picks the layout by the ranking; start on that layout, not the sweep's.
-  await useRecommendedLayout(page);
+  await useTopRankedLayout(page);
   await openTab(page, "Overview");
   const before = await crateCost(page);
   const { labour: labourBefore } = await costSplit(page);

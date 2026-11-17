@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { crateCostPerPart } from "@/domain/shipment";
 import { ShopStandardsSchema } from "@/domain/standards";
 import { DesignPartSchema, DesignSummarySchema } from "@/engine/schemas";
 import { savedDateText, usd } from "@/lib/format";
@@ -55,7 +56,7 @@ function pendingRow(c: PendingConfig): Row {
       inputHash: c.body.inputHash,
       engineVersion: c.body.engineVersion,
       quantityPerCrate: s?.crates[0]?.quantity ?? s?.quantity ?? 1,
-      score: s && s.totals.parts > 0 ? s.totals.costUsd / s.totals.parts : null,
+      score: s ? crateCostPerPart(s.totals) : null,
       origin: "user",
       addedAt: c.createdAt,
       summary: s,

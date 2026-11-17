@@ -6,7 +6,17 @@ const ID = "00000000-0000-4000-8000-000000000001";
 describe("event types", () => {
   it("lists the first-cut types from #46 §3", () => {
     expect([...CRATE_EVENT_TYPES].sort()).toEqual(
-      ["artifact.ready", "config.added", "configs.ready", "engine.updated", "job.created", "job.error", "part.created", "recommendation.changed"].sort(),
+      [
+        "artifact.ready",
+        "config.added",
+        "configs.ready",
+        "engine.updated",
+        "job.created",
+        "job.error",
+        "job.part_changed",
+        "part.created",
+        "recommendation.changed",
+      ].sort(),
     );
   });
 

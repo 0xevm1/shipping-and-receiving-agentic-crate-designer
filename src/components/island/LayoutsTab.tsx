@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
 import { explainLayout, scoreLayouts, type LayoutExplanation, type LayoutScore, type Ranking } from "@/domain/design";
 import type { Layout } from "@/domain/packing";
+import type { QuantitySweep } from "@/domain/sweep";
 import { densityDelta, densityText, describeLayout, usd, usdDelta } from "@/lib/format";
+import { isRecommended, RANKING_WORDS } from "@/lib/printable";
 import { dims, lengthUnit, volume, type Units } from "@/lib/units";
+import { useBestQuantity } from "@/state/bestQuantity";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
 import { CrateTypePicker } from "./CrateTypePicker";
 import styles from "./LayoutsTab.module.css";
+import { RecommendationWhy } from "./RecommendationWhy";
 
 const FIRST_SHOWN = 4;
 
@@ -32,6 +36,8 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
   const settings = useDesigner((s) => s.settings);
   // Parts in the crate type on screen: its layouts are for this many.
   const quantity = useDesigner((s) => s.plan.crates[s.crateIndex]?.quantity ?? s.settings.quantity);
+  const plan = useDesigner((s) => s.plan);
+  const { sweep } = useBestQuantity();
   const [showAll, setShowAll] = useState(false);
   const current = design.layout;
   const best = layouts[0];
@@ -51,8 +57,13 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
     <>
       <h2>Ways to pack it</h2>
       <p className="lede">
-        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from above,
-        then from the side.
+        <Why
+          explanation={explainLayout(layouts, current, standards, ranking)}
+          ranking={ranking}
+          sweep={isRecommended(plan, sweep) ? sweep : null}
+          onUseBest={() => setLayoutKey(null)}
+        />{" "}
+        Each drawing shows the crate from above, then from the side.
       </p>
       <div className={`seg ${styles.rank}`} role="group" aria-label="Rank layouts by">
         {RANKING_LABELS.map((r) => (
@@ -141,7 +152,23 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   );
 }
 
-function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; onUseBest: () => void }) {
+/**
+ * Why the layout on screen. `sweep` is set when the crate on screen is the quantity sweep's
+ * recommendation (applied on load, on a first visit, or with **Use**): a layout that isn't this
+ * list's top is then the recommendation's, ranked by cost per part, not a pick by hand.
+ */
+function Why({
+  explanation: e,
+  ranking,
+  sweep,
+  onUseBest,
+}: {
+  explanation: LayoutExplanation;
+  ranking: Ranking;
+  sweep: QuantitySweep | null;
+  onUseBest: () => void;
+}) {
+  if (e.kind === "picked" && sweep) return <Recommended morePct={e.morePct} ranking={ranking} sweep={sweep} onUseBest={onUseBest} />;
   switch (e.kind) {
     case "only":
       return <>This is the only way to pack this batch under the current packing rules.</>;
@@ -170,6 +197,28 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
         </>
       );
   }
+}
+
+/** The recommendation's layout, with "Why this crate?" one click away and the list's own ranking explained. */
+function Recommended({ morePct, ranking, sweep, onUseBest }: { morePct: number; ranking: Ranking; sweep: QuantitySweep; onUseBest: () => void }) {
+  const [open, setOpen] = useState(false);
+  const whyId = useId();
+  return (
+    <>
+      <span data-testid="layout-recommended">
+        <b>Recommended: cheapest per part</b> —{" "}
+        <button type="button" className="linkbtn" aria-expanded={open} aria-controls={open ? whyId : undefined} onClick={() => setOpen(!open)}>
+          why?
+        </button>{" "}
+        This is the quantity sweep&apos;s crate, the lowest crate cost per part. The list below is ranked by {RANKING_WORDS[ranking]}, where it ships{" "}
+        {morePct > 0 ? `${morePct}% more volume than` : "about the same volume as"} the top layout.{" "}
+        <button type="button" className="linkbtn" onClick={onUseBest}>
+          Use the top-ranked layout
+        </button>
+      </span>
+      {open && <RecommendationWhy sweep={sweep} id={whyId} />}
+    </>
+  );
 }
 
 /**

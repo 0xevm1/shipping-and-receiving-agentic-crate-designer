@@ -17,6 +17,7 @@ import { Box2, Spherical, Vector2, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Vec3 } from "@/domain/schema";
 import { lastProfileMs } from "@/lib/partProfile";
+import { isRecommended } from "@/lib/printable";
 import type { Units } from "@/lib/units";
 import { useSweep } from "@/state/bestQuantity";
 import { anim, autoplay, isIdle } from "@/state/motion";
@@ -87,6 +88,12 @@ export interface CrateSnapshot {
   /** The current sweep's recommended quantity per crate; null while it is being swept or none passes. */
   recommended: number | null;
   /**
+   * Why the layout on screen, as the Layouts tab says it: `ranking` when it is the list's top,
+   * `recommendation` when it is the sweep's recommended crate (cheapest per part) and not the
+   * list's top, `hand` when a person picked another one.
+   */
+  layoutPick: "ranking" | "recommendation" | "hand";
+  /**
    * Centre of gravity: the design's, crate-interior mm, and what the 3D view draws (`marker` is
    * the CoG mark's position, null while hidden; `arrows` the fork-entry arrows mounted and
    * `arrowsShown` those the crate isn't hiding).
@@ -139,6 +146,16 @@ function projectCrate(three: RootState | undefined): CrateSnapshot["crateScreen"
 function recommendedNow(): number | null {
   const { inputs, done } = useSweep.getState();
   return done && done.inputs === inputs ? (done.sweep.recommendation?.quantity ?? null) : null;
+}
+
+/** `CrateSnapshot.layoutPick`: the Layouts tab's own rule (`isRecommended`, spec §7.16). */
+function layoutPickNow(s: ReturnType<typeof useDesigner.getState>): CrateSnapshot["layoutPick"] {
+  const shown = s.result.design?.layout.key;
+  if (!shown || shown === s.result.layouts[0]?.key) return "ranking";
+  const { done } = useSweep.getState();
+  // As `useBestQuantity`: the last result for the part on screen.
+  const sweep = done && done.inputs.part === s.part ? done.sweep : null;
+  return isRecommended(s.plan, sweep) ? "recommendation" : "hand";
 }
 
 function snapshot(): CrateSnapshot {
@@ -197,6 +214,7 @@ function snapshot(): CrateSnapshot {
     profileMs: lastProfileMs(),
     autoRecommend: s.autoRecommend ? (s.autoRecommend.applied ? "measuring" : "waiting") : null,
     recommended: recommendedNow(),
+    layoutPick: layoutPickNow(s),
     cog: s.result.design
       ? {
           mm: [...s.result.design.handling.cogMm],

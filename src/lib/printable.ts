@@ -191,8 +191,18 @@ const shopSize = (mm: number, u: Units) => (u === "imperial" ? cut(mm, u) : `${M
 
 const LEVEL_TEXT: Record<Check["level"], PrintableCheck["levelText"]> = { ok: "Pass", caution: "Caution", info: "Info" };
 
-/** The `explainLayout` result as a sentence, as the Layouts tab words it. */
-function whyText(e: LayoutExplanation): string {
+/** What each Layouts ranking ranks by, in a sentence ("ranked by volume"). */
+export const RANKING_WORDS: Record<Ranking, string> = { volume: "volume", cost: "crate cost", density: "freight class" };
+
+/**
+ * The `explainLayout` result as a sentence, as the Layouts tab words it. `recommended` is set when
+ * the crate is the quantity sweep's recommendation: its layout is then the one cheapest per part,
+ * not one picked by hand.
+ */
+function whyText(e: LayoutExplanation, ranking: Ranking, recommended: boolean): string {
+  if (e.kind === "picked" && recommended) {
+    return `Recommended: cheapest per part. This is the quantity sweep's crate, the lowest crate cost per part. The layouts are ranked by ${RANKING_WORDS[ranking]}, where it ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the top layout.`;
+  }
   switch (e.kind) {
     case "only":
       return "This is the only way to pack this batch under the current packing rules.";
@@ -415,7 +425,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       freight: freightRows(design, u),
       layout: {
         chosen: `${layoutText(layout, u)}, ${volume(layout.externalVolumeM3, u)}`,
-        why: whyText(explainLayout(layouts, layout, standards, input.ranking)),
+        why: whyText(explainLayout(layouts, layout, standards, input.ranking), input.ranking, isRecommended(input.plan, input.sweep)),
         runnerUp: runnerUp(layouts, layout, u),
       },
       checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: renderMessage(k.detail, u) })),

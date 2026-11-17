@@ -17,10 +17,12 @@ import { changesFor, effectiveJob, usePendingChanges } from "./pendingChanges";
  * - **the server's**, the shared record (`GET /jobs/:id` `totalPlan`), over the server's sweep
  *   with the job's standards and the default packing rules.
  *
- * With the same inputs they are the same plan, and one is shown (with the server's configuration
- * ids, for its files). They differ when the rules or standards on screen differ from the
- * server's, or the part on screen has a measured outline (shaped blocking, spec §7.5b) that the
- * server's part, known by its overall size, doesn't; then both are shown, each labelled.
+ * Both sweep the same part: the browser sends its part, measured outline included, to the job
+ * (#46 "same inputs", `PUT /jobs/:id/part`), and the server designs from it through the engine's
+ * one request builder. So with the same rules and standards they are the same plan, and one is
+ * shown (with the server's configuration ids, for its files). They differ only when the rules or
+ * standards on screen differ from the server's (or while the server re-plans a part that just
+ * changed); then both are shown, each labelled.
  */
 
 /** One crate type of a plan as shown. */

@@ -8,13 +8,16 @@
  *   transaction. With a total quantity it also plans the total (`planTotal`, spec §7.16): each
  *   crate type of the plan is saved and linked as `precomputed` too, and the stamped plan is
  *   stored on the job (`design_job.total_plan`) if the job's total is still the one planned.
- *   Deduplicated per job and total. Dead-lettered: the job goes to `error` and `job.error` is
+ *   It designs from the job's part as the browser sent it (`jobDesignPart`, with the measured
+ *   outline), through the engine's request builder (`sweepRequestFor`), so its numbers are the
+ *   browser's. Deduplicated per job, part version and total. Dead-lettered: the job goes to `error` and `job.error` is
  *   emitted.
  * - `bundle`: the server-built `bundle.zip` (slice 6). Its handler is `createBundleHandler` in
  *   src/server/artifacts, passed in as `createJobHandlers({ …, bundle })` (it needs blob storage).
  */
 import { z } from "zod";
-import { DEFAULT_SWEEP_RULES, sweepDesignRequest, type SweepRequest } from "@/engine/sweep";
+import { designPartHash, sweepRequestFor } from "@/engine/request";
+import { DEFAULT_SWEEP_RULES, sweepDesignRequest } from "@/engine/sweep";
 import { emitEvent } from "../events/emit";
 import { type OrgContext, orgContext } from "../db/org";
 import type { QueueJob } from "../db/queue";
@@ -24,6 +27,7 @@ import type { EnginePool } from "../workers/pool";
 import { type JobHandler, PermanentJobError } from "./runner";
 import type { TotalPlanResponse } from "@/lib/api/jobs";
 import { totalPlanRecord } from "../jobs/totalPlan";
+import { jobDesignPart } from "../jobs/designPart";
 
 /** What `configs.ready` says of a stored total plan: enough for a log line or a toast. */
 function totalPlanHint(p: TotalPlanResponse) {
@@ -57,16 +61,19 @@ async function requireJob(repo: Repository, ctx: OrgContext, jobId: string) {
 export async function enqueueSweep(ctx: OrgContext, jobId: string, repo: Repository): Promise<QueueJob> {
   const job = await requireJob(repo, ctx, jobId);
   const payload: SweepJobPayload = { jobId };
-  const { job: queued } = await repo.queue.enqueue(ctx, { kind: "sweep", payload, dedupeKey: sweepDedupeKey(jobId, job.totalQuantity) });
+  const dedupeKey = sweepDedupeKey(jobId, job.totalQuantity, job.designPartHash);
+  const { job: queued } = await repo.queue.enqueue(ctx, { kind: "sweep", payload, dedupeKey });
   return queued;
 }
 
 /**
- * One sweep queued or running per job and total: the job id alone without a total, and
- * `<jobId>:total:<n>` with one. A sweep already running for an old total doesn't absorb a new
- * total's (it would plan the old one), so a total changed mid-sweep still gets its plan.
+ * One sweep queued or running per job, part version and total: `<jobId>`, then `:part:<hash>`
+ * (the first 16 hex of `design_part_hash`) once a browser has sent the job's part, then
+ * `:total:<n>` with a total. A sweep already running for an old total or an old part doesn't
+ * absorb a new one's (it would plan the old one), so a change mid-sweep still gets its results.
  */
-export const sweepDedupeKey = (jobId: string, total: number | null): string => (total === null ? jobId : `${jobId}:total:${total}`);
+export const sweepDedupeKey = (jobId: string, total: number | null, partHash: string | null = null): string =>
+  `${jobId}${partHash ? `:part:${partHash.slice(0, 16)}` : ""}${total === null ? "" : `:total:${total}`}`;
 
 /**
  * After a new engine starts: queues the sweep for every job of the org whose total has no plan
@@ -121,18 +128,17 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
     if (!part) throw new PermanentJobError(`No part ${job.partId}.`);
     if (job.status === "open" || job.status === "error") await repo.jobs.update(org, job.id, job.version, { status: "running" });
 
-    const req: SweepRequest = {
-      part: {
-        id: part.id,
-        name: part.name,
-        mass_kg: part.massKg,
-        dimensions_mm: [part.sizeXMm, part.sizeYMm, part.sizeZMm],
-        material: part.material ?? undefined,
-      },
+    // The part as the browser designs it (its measured outline too), through the engine's one
+    // request builder, so this sweep is the browser's sweep (#46 "same inputs").
+    const req = sweepRequestFor({
+      part: jobDesignPart(job, part),
       rules: DEFAULT_SWEEP_RULES,
       standards: (await readOrgStandards(repo, org)).standards,
       total: job.totalQuantity,
-    };
+    });
+    /** The part version this sweep is for: its results are stored as current only while it still is. */
+    const sweptPart = job.designPartHash;
+    const partHash = designPartHash(req.part);
     const report = await pool.run("designs", req);
     // Stored like a configuration saved from the browser (docs/API.md): the whole DesignRequest, so
     // the server can rebuild it (artifacts, "Use"), and the engine's DesignSummary of it.
@@ -160,6 +166,7 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
           resultSummary: designs[i]!.summary,
           score: c.scoreUsdPerPart,
           engineVersion: report.engineVersion,
+          partHash,
         });
         await tx.configurations.link(org, job.id, row.id, "precomputed");
         ids.push(row.id);
@@ -175,6 +182,7 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
           resultSummary: d.summary,
           score: report.curve[t.quantity - 1]?.scoreUsdPerPart ?? null,
           engineVersion: report.engineVersion,
+          partHash,
         });
         await tx.configurations.link(org, job.id, row.id, "precomputed");
         planIds.set(`${t.quantity}:${t.layoutKey}`, row.id);
@@ -187,12 +195,13 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
           return k >= 0 ? (ids[k] ?? null) : (planIds.get(`${t.quantity}:${t.layoutKey}`) ?? null);
         });
         // Only while the job's total is still the one planned: a newer total has its own sweep queued.
-        totalPlanStored = await tx.jobs.setTotalPlan(org, job.id, req.total, totalPlan);
+        totalPlanStored = await tx.jobs.setTotalPlan(org, job.id, req.total, totalPlan, sweptPart);
       }
       const recommendedConfigurationId = ids[0] ?? null;
       const current = await tx.jobs.get(org, job.id);
-      // The job moves on only from open/running, and a selection someone already made is kept.
-      if (current && (current.status === "open" || current.status === "running")) {
+      // The job moves on only from open/running, and a selection someone already made is kept;
+      // not at all when its part changed meanwhile (that part's sweep is queued).
+      if (current && current.designPartHash === sweptPart && (current.status === "open" || current.status === "running")) {
         await tx.jobs.update(org, job.id, current.version, {
           status: report.problem || !recommendedConfigurationId ? "error" : "ready",
           selectedConfigurationId: current.selectedConfigurationId ?? recommendedConfigurationId,

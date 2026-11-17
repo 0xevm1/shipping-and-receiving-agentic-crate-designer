@@ -7,6 +7,7 @@ import type { ShipmentPlan } from "@/domain/shipment";
 import type { QuantitySweep } from "@/domain/sweep";
 import { normalizeSettings, type CatalogEntry, type CrateSettings, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
+import { designRequestFor } from "@/engine/request";
 import type { DesignResponse, EngineStamp } from "@/engine/schemas";
 import { canSetFrame, catalogPart, framePart, type LoadedPart } from "@/lib/part";
 import type { PartFrame } from "@/lib/partFrame";
@@ -150,7 +151,7 @@ function place(plan: ShipmentPlan, crateIndex: number): Planned {
 /** The preloaded part's plan: one crate at the default quantity, designed in this thread. */
 function initialPlan(): Planned & Pick<DesignerState, "designedFrom"> {
   const input: PlanInput = { part: initialPart, settings: DEFAULT_SETTINGS, standards: DEFAULT_STANDARDS, layoutKey: null, ranking: "volume" };
-  const out = engine.designSync(input);
+  const out = engine.designSync(designRequestFor(input));
   return { ...place(out.plan, 0), designedFrom: designed(input, out) };
 }
 
@@ -200,7 +201,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     waiting.push({ ticket, patch, ...(opened ? { opened } : {}) });
     const input = planInput({ ...get(), ...now });
     let inline = true;
-    engine.design(input, (out) => {
+    engine.design(designRequestFor(input), (out) => {
       const landed = waiting.filter((w) => w.ticket <= ticket);
       waiting = waiting.filter((w) => w.ticket > ticket);
       const merged: Partial<DesignerState> = Object.assign({}, ...landed.map((w) => w.patch));

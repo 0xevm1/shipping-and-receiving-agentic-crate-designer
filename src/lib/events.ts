@@ -46,6 +46,8 @@ export const EVENT_PAYLOADS = {
   "recommendation.changed": z.looseObject({ configurationId: id.nullable() }),
   /** A generated file is in blob storage. */
   "artifact.ready": z.looseObject({ artifactId: id, configurationId: id, kind: z.string().min(1) }),
+  /** The job is designed from a new version of its part (`PUT /jobs/:id/part`); its sweep re-runs. */
+  "job.part_changed": z.looseObject({ partHash: z.string().min(1) }),
   /** The job failed; `message` is safe to show. */
   "job.error": z.looseObject({ message: z.string() }),
   /** The server runs a new engine; open tabs should reload. Org-wide (no job). */

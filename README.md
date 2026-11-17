@@ -237,15 +237,19 @@ tab at a time.
      parts ship in all and splits them evenly over the cheapest number of crates: "40 parts →
      2 crates × 20, $20.51 per part", why that many crates (one fewer fails the 1,000 kg limit,
      one more costs more per part), **Use** per crate type and its files from the server. It is
-     planned in the browser at once (offline too) and by the server for the shared job; the
-     Overview's shipment shows the same split.
+     planned in the browser at once (offline too) and by the server for the shared job, from
+     the same part: the browser sends the job its part with the measured outline, so both
+     sweeps give the same numbers ("This browser and the server agree"). The Overview's shipment
+     shows the same split.
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one
    won. Each card also shows what it costs to build and its freight class against the
    recommendation ("+$26 · same class 65"), and **Rank by** re-ranks by **Crate cost** or
    **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
-   cost or freight; Volume is the default.
+   cost or freight; Volume is the default. The recommended crate (step 2) is ranked by cost per
+   part instead, so its layout can be another card: Layouts then says **"Recommended: cheapest
+   per part — why?"** (opening **Why this crate?**) rather than calling it a pick by hand.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
    labels. The real part models sit in each slot. With the size labels come gold
    **fork-entry arrows** at both ends, one per opening between the skids, and, only when the centre of gravity is off-centre or high,

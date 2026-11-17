@@ -6,8 +6,11 @@ import { ENGINE_VERSION } from "@/engine/version";
 import type { ConfigurationResponse, JobResponse, JobSnapshot, TotalPlanResponse } from "@/lib/api/jobs";
 import { catalogPart, framePart } from "@/lib/part";
 import { LIVENESS_MAX_DELAY_MS, LIVENESS_MIN_DELAY_MS } from "@/lib/liveness";
+import { FACE_IDS, type PartProfile } from "@/domain/profile";
+import { designPartHash } from "@/engine/request";
 import {
   configurationBody,
+  designPartBody,
   keepMyChange,
   partIdentity,
   saveConfiguration,
@@ -212,7 +215,12 @@ describe("startJobSync", () => {
     let snapshots = 0;
     const fetch = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/v1/jobs" && init?.method === "POST") {
-        expect(JSON.parse(String(init.body))).toEqual({ catalogId: useDesigner.getState().part.id, reuse: true });
+        // The part as this browser designs it goes with the job (#46 "same inputs").
+        expect(JSON.parse(String(init.body))).toEqual({
+          catalogId: useDesigner.getState().part.id,
+          reuse: true,
+          designPart: designPartBody(useDesigner.getState().part),
+        });
         return json(200, { job, created: false });
       }
       if (url === `/api/v1/jobs/${JOB}`) return json(200, snapshot(snapshots++ ? [saved] : []));
@@ -238,6 +246,55 @@ describe("startJobSync", () => {
     expect(useJobSync.getState().reloadNeeded).toBe(true);
     stop();
     expect(es.readyState).toBe(2);
+  });
+
+  it('sends the part to its job once its outline is measured, once per version (#46 "same inputs")', async () => {
+    const puts: Record<string, unknown>[] = [];
+    let partHash: string | null = null;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/v1/jobs" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        partHash = designPartHash(body.designPart);
+        return json(201, { job: { ...job, partHash }, created: true });
+      }
+      if (url === `/api/v1/jobs/${JOB}/part` && init?.method === "PUT") {
+        const body = JSON.parse(String(init.body));
+        puts.push(body.part);
+        partHash = designPartHash(body.part);
+        return json(200, { job: { ...job, partHash }, changed: true });
+      }
+      if (url === `/api/v1/jobs/${JOB}`) return json(200, { ...snapshot([]), job: { ...job, partHash } });
+      return json(404, { error: { code: "not_found", message: "?" } });
+    });
+    const stop = startJobSync({
+      api: { fetch: fetch as unknown as typeof globalThis.fetch },
+      EventSourceImpl: FakeEventSource as unknown as typeof EventSource,
+      refreshDelayMs: 0,
+      partSyncDelayMs: 0,
+    });
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    // The job already has this part (no outline yet): nothing more is sent.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(puts).toEqual([]);
+
+    const { part } = useDesigner.getState();
+    const face = { cols: 1, rows: 1, depth: [0] };
+    const profile: PartProfile = {
+      version: 1,
+      sizeMm: part.dimensions_mm,
+      cellMm: 2,
+      faces: Object.fromEntries(FACE_IDS.map((f) => [f, face])) as PartProfile["faces"],
+    };
+    useDesigner.getState().setPartProfile(part.modelUrl, profile);
+    await vi.waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0]).toEqual(designPartBody(useDesigner.getState().part));
+    expect(puts[0]!.profile).toEqual(profile);
+    await vi.waitFor(() => expect(useJobSync.getState().job?.partHash).toBe(designPartHash(puts[0] as never)));
+    // Another change to the store that leaves the part as it is sends nothing.
+    useDesigner.getState().setSettings({ quantity: 3 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(puts).toHaveLength(1);
+    stop();
   });
 
   it("on engine.updated, ignores its own engine version and asks for a reload on another before saving again", async () => {

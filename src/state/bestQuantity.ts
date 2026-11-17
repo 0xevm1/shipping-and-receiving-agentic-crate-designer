@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { CrateSettings } from "@/domain/schema";
 import type { QuantitySweep } from "@/domain/sweep";
+import { sweepRequestFor } from "@/engine/request";
 import { engine as appEngine, type EngineClient } from "./engineClient";
 import { useDesigner, type DesignerState } from "./store";
 
@@ -55,7 +56,7 @@ export function startSweeps(engine: EngineClient = appEngine, delayMs = SWEEP_DE
     useSweep.setState({ inputs });
     clearTimeout(timer);
     const run = () =>
-      engine.sweep({ part: inputs.part, rules: inputs.rules, standards: inputs.standards }, (out) => {
+      engine.sweep(sweepRequestFor(inputs), (out) => {
         if (!live) return;
         useSweep.setState({ done: { inputs, sweep: out.sweep } });
         // Only a result for what is on screen opens a part at its recommendation.

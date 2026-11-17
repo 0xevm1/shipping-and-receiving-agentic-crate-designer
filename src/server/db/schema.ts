@@ -139,6 +139,16 @@ export const designJob = pgTable(
      * changes. Served only when its total and engine version are current.
      */
     totalPlan: jsonb("total_plan").$type<unknown>(),
+    /**
+     * The part as the browser designs it (#46 "same inputs", docs/API.md "The job's part"): the
+     * engine's `DesignPart` (id, name, mass, size, material and the measured outline, spec §7.5b),
+     * validated with `DesignPartSchema`. Every server-side engine call for the job designs from it,
+     * so the server's sweep and total plan match the browser's. Null until a browser sends one:
+     * the part row's facts are used. Derived data, like `total_plan`: written without a version bump.
+     */
+    designPart: jsonb("design_part").$type<unknown>(),
+    /** `designPartHash(design_part)`: which version of the part the job's server-side results are for. */
+    designPartHash: text("design_part_hash"),
     version: integer("version").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -184,6 +194,11 @@ export const configuration = pgTable(
     /** Crate cost per part in USD (lower is better); null when there is no crate. */
     score: doublePrecision("score"),
     engineVersion: text("engine_version").notNull(),
+    /**
+     * `designPartHash` of the request's part (#46 "same inputs"): a sweep's `precomputed`
+     * configurations are served only while it is the job's part. Null on rows saved before it existed.
+     */
+    partHash: text("part_hash"),
     createdAt: createdAt(),
   },
   (t) => [

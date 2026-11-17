@@ -25,7 +25,8 @@ import { create } from "zustand";
 import { catalog } from "@/domain/catalog";
 import { RANKINGS, type Ranking } from "@/domain/design";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "@/domain/schema";
-import { summarize } from "@/engine/engine";
+import { designPartOf, summarize } from "@/engine/engine";
+import { designPartHash, designRequestFor } from "@/engine/request";
 import { type ShopStandards, ShopStandardsSchema } from "@/domain/standards";
 import { DesignPartSchema, type DesignSummary, DesignSummarySchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
@@ -34,7 +35,7 @@ import type { JobEventMessage } from "@/lib/events";
 import { subscribeJobEvents } from "@/lib/jobEvents";
 import { createLiveness, type Liveness } from "@/lib/liveness";
 import type { LoadedPart } from "@/lib/part";
-import { type ApiOptions, createJob, fetchJob, postConfiguration, probeHealth, uploadPart } from "./jobApi";
+import { type ApiOptions, createJob, fetchJob, postConfiguration, probeHealth, putJobPart, uploadPart } from "./jobApi";
 import { cachedJob, cacheJob, updateCachedJob } from "./jobCache";
 import {
   assignJob,
@@ -140,13 +141,21 @@ function mergeConfig(config: SavedConfig): void {
  * together, so they describe the same design even while a newer edit is in the worker.
  */
 export function configurationBody(s: Pick<DesignerState, "designedFrom" | "plan">): SaveConfigurationRequest {
-  const { part, settings, standards, layoutKey, ranking, engineVersion, inputHash } = s.designedFrom;
-  const designPart = { id: part.id, name: part.name, mass_kg: part.mass_kg, dimensions_mm: part.dimensions_mm, material: part.material, profile: part.profile };
+  const { engineVersion, inputHash } = s.designedFrom;
   // Through JSON, as the server will see it (drops undefined fields, e.g. a missing profile).
-  return JSON.parse(
-    JSON.stringify({ request: { part: designPart, settings, standards, layoutKey, ranking }, engineVersion, inputHash, summary: summarize(s.plan) }),
-  );
+  return JSON.parse(JSON.stringify({ request: designRequestFor(s.designedFrom), engineVersion, inputHash, summary: summarize(s.plan) }));
 }
+
+/**
+ * The part as this browser's engine designs it, as the server will store it (#46 "same inputs"):
+ * the engine's design fields (with the measured outline once there is one), through JSON.
+ */
+export function designPartBody(part: DesignPart): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(designPartOf(part)));
+}
+
+/** How long the part waits after a change (an outline measured, a mass typed) before it is sent to the job. */
+export const PART_SYNC_DELAY_MS = 400;
 
 export type SaveOutcome =
   { kind: "saved"; config: SavedConfig; created: boolean } | { kind: "offline" } | { kind: "reload" } | { kind: "rejected"; message: string };
@@ -306,6 +315,8 @@ export type JobSyncDeps = {
   liveness?: Liveness;
   /** Wait before sending again when another tab held the sync lock. */
   flushRetryMs?: number;
+  /** Wait after a change to the part before it is sent (`PART_SYNC_DELAY_MS`). */
+  partSyncDelayMs?: number;
 };
 
 /** Wait before trying the queue again while another tab is sending it. */
@@ -317,7 +328,7 @@ export const FLUSH_RETRY_MS = 2000;
  * after a restored crate is on screen); returns a function that stops.
  */
 export function startJobSync(deps: JobSyncDeps = {}): () => void {
-  const { api, EventSourceImpl, refreshDelayMs = REFRESH_DELAY_MS, flushRetryMs = FLUSH_RETRY_MS } = deps;
+  const { api, EventSourceImpl, refreshDelayMs = REFRESH_DELAY_MS, flushRetryMs = FLUSH_RETRY_MS, partSyncDelayMs = PART_SYNC_DELAY_MS } = deps;
   const liveness = deps.liveness ?? createLiveness({ probe: () => probeHealth(api) });
   /** Server part ids of uploaded models, by object URL and frame (`partIdentity`), so a part is uploaded once per page. */
   const uploaded = new Map<string, string>();
@@ -332,6 +343,9 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
   let connecting = false;
   let flushing = false;
   let flushAgain = false;
+  let partTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The part hash last sent per job, so a part the server keeps as it was isn't sent again and again. */
+  const sentPart = new Map<string, string>();
 
   reloadPending();
   const current = (gen: number) => !stopped && gen === generation;
@@ -340,6 +354,7 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
     unsubscribe?.();
     unsubscribe = null;
     clearTimeout(refresh);
+    clearTimeout(partTimer);
     connected = false;
     connecting = false;
   }
@@ -434,6 +449,32 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
     } else if (r.kind === "offline") offline();
   }
 
+  /**
+   * Sends the part on screen to its job when the job is designed from another version of it (an
+   * outline measured after the job opened, a mass entered): the server then sweeps what this
+   * browser sweeps (#46 "same inputs"). Debounced; once per part version and job.
+   */
+  function schedulePartSync() {
+    clearTimeout(partTimer);
+    partTimer = setTimeout(() => void syncPart(generation), partSyncDelayMs);
+  }
+
+  async function syncPart(gen: number) {
+    const { job } = useJobSync.getState();
+    if (!current(gen) || !connected || !job || useJobSync.getState().fromCache) return;
+    const part = designPartBody(useDesigner.getState().part) as DesignPart;
+    const hash = designPartHash(part);
+    if (hash === job.partHash || sentPart.get(job.id) === hash) return;
+    sentPart.set(job.id, hash);
+    const r = await putJobPart(job.id, { part }, api);
+    if (!current(gen)) return;
+    if (r.ok) setJob(r.data.job);
+    else if (r.kind === "offline") {
+      sentPart.delete(job.id);
+      offline();
+    }
+  }
+
   function onEvent(jobId: string, gen: number, e: JobEventMessage) {
     if (!current(gen)) return;
     if (e.type === "engine.updated") {
@@ -484,7 +525,8 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
       }
       request = { partId: p.id };
     }
-    const created = await createJob({ ...request, reuse: true }, api);
+    // The part as this browser designs it, so the server's sweep is this sweep (#46 "same inputs").
+    const created = await createJob({ ...request, reuse: true, designPart: designPartBody(useDesigner.getState().part) }, api);
     if (!current(gen)) return;
     if (!created.ok) {
       if (created.kind === "rejected") return useJobSync.setState({ status: "unavailable", note: created.message });
@@ -500,6 +542,7 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
     connected = true;
     liveness.reportReachable();
     flush();
+    schedulePartSync();
     unsubscribe = subscribeJobEvents(jobId, (e) => onEvent(jobId, gen, e), {
       lastEventId: snap.data.lastEventId,
       EventSourceImpl,
@@ -533,6 +576,7 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
       useJobSync.setState({ status: "live", note: "" });
       const { job } = useJobSync.getState();
       if (job) void reload(job.id, generation);
+      schedulePartSync();
     }
     flush();
   });
@@ -545,7 +589,10 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
 
   follow(useDesigner.getState().part);
   const stopFollowing = useDesigner.subscribe((s, prev) => {
-    if (s.part !== prev.part) follow(s.part);
+    if (s.part === prev.part) return;
+    follow(s.part);
+    // The same part with new design facts (its outline measured, its mass entered): tell its job.
+    if (connected) schedulePartSync();
   });
 
   return () => {
@@ -555,6 +602,7 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
     stopLiveness();
     if (!deps.liveness) liveness.stop();
     clearTimeout(flushTimer);
+    clearTimeout(partTimer);
     if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
     teardown();
     useJobSync.setState({ ...INITIAL, reloadNeeded: useJobSync.getState().reloadNeeded });
