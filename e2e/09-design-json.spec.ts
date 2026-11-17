@@ -53,6 +53,8 @@ test("the Cut list tab downloads the design as JSON with a summary", async ({ pa
 });
 
 test("a catalog design reopens with its rules, layout and cut list", async ({ page }) => {
+  // Two part loads and two downloads: a long flow, so it gets the 3× budget.
+  test.slow();
   // A non-default design: the shaft, 8 of them, and a layout that isn't the recommended one.
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
   await expect(page.getByRole("banner")).toContainText("PART-002");
@@ -93,6 +95,7 @@ test("a design whose layout no longer exists falls back to the recommended one",
 });
 
 test("a custom design needs its model: named when missing, restored when added", async ({ page }) => {
+  test.slow(); // three part loads and a download
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
   await page.getByLabel("Part name").fill("Test widget");
