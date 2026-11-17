@@ -36,7 +36,10 @@ export default function CrateViewer() {
   const view = useDesigner((s) => s.view);
   const problem = useDesigner((s) => s.result.problem);
   const down = useRef<[number, number] | null>(null);
+  // The last-opened crate is being reopened (#71): show nothing rather than flash the default one.
+  const restoring = useDesigner((s) => s.restoring);
 
+  if (restoring) return null;
   if (!design) return <div className="stage-msg">{problem?.title ?? "No crate to show."}</div>;
 
   const origin = sceneOrigin(design);

@@ -1,0 +1,114 @@
+"use client";
+
+import { catalog } from "@/domain/catalog";
+import { planShipment } from "@/domain/shipment";
+import { designFilePart, loadDesign } from "@/lib/loadPart";
+import { browserIdb, loadLastGlb, saveLastGlb } from "@/state/glbCache";
+import { createDebouncedSaver, lastDesignOf, saveLastDesign, type LastDesign } from "@/state/lastDesignStorage";
+import { useLibrary } from "@/state/libraryStore";
+import { browserStorage, type KeyValueStore } from "@/state/standardsStorage";
+import { useDesigner, type DesignerState, type LoadedPart } from "@/state/store";
+
+/**
+ * Reopens the last-opened crate (#71, spec §9) through the design-file path (`loadDesign`), with
+ * its tab and ranking, after the saved standards and units are applied. A custom part's GLB comes
+ * from IndexedDB; when it isn't there (never kept, over the cap, or another file) the default
+ * part stays, the load row names the file, and loading it reopens the design (like a shared
+ * custom-part link). Anything else that fails falls back to the default part with a warning.
+ * True when the crate was reopened.
+ */
+export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | null = browserIdb()): Promise<boolean> {
+  const file = saved.design;
+  const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
+  try {
+    let glbs: File[] = [];
+    if (!inCatalog) {
+      const kept = await loadLastGlb(idb);
+      if (!kept || kept.name !== file.part.model) {
+        useLibrary.getState().setPendingShare(file);
+        useDesigner
+          .getState()
+          .setLoadMessage(
+            `Your last crate (${file.settings.quantity} × ${file.part.name}) wasn't reopened: this browser didn't keep ${file.part.model} (models over 50 MB aren't kept). Load ${file.part.model} to reopen it.`,
+          );
+        return false;
+      }
+      glbs = [new File([kept.bytes], kept.name, { type: "model/gltf-binary" })];
+    }
+    const s = useDesigner.getState();
+    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards);
+    if (!outcome.part || !outcome.design) {
+      console.warn(`Last-opened crate not reopened, opening the default part. ${outcome.message}`);
+      return false;
+    }
+    const { settings, layoutKey, crateIndex } = outcome.design;
+    const plan = planShipment(outcome.part, settings, layoutKey, s.standards, saved.ranking);
+    if (!plan.crates[crateIndex]?.result.design) {
+      console.warn("Last-opened crate no longer makes a crate, opening the default part.");
+      return false;
+    }
+    useDesigner.getState().restoreDesign(outcome.part, settings, layoutKey, crateIndex, { tab: saved.tab, ranking: saved.ranking });
+    // Only what came out differently is worth a line; the crate itself shows it reopened.
+    const lead = `Design loaded: ${file.settings.quantity} × ${outcome.part.name}.`;
+    const notes = outcome.message.startsWith(lead) ? outcome.message.slice(lead.length).trim() : "";
+    if (notes) useDesigner.getState().setLoadMessage(`Your last crate reopened. ${notes}`);
+    return true;
+  } catch (e) {
+    console.warn("Last-opened crate not reopened, opening the default part.", e);
+    return false;
+  }
+}
+
+type Watched = Pick<DesignerState, "part" | "settings" | "plan" | "result" | "tab" | "ranking">;
+const changed = (a: Watched, b: Watched) =>
+  a.part !== b.part || a.settings !== b.settings || a.result !== b.result || a.plan !== b.plan || a.tab !== b.tab || a.ranking !== b.ranking;
+
+/**
+ * Saves the crate on screen on every change (debounced), and a newly loaded custom part's GLB
+ * bytes to IndexedDB. A pending save is written when the page is hidden, so a quick reload keeps
+ * the last edit. A state with no crate isn't saved: the last one that had a crate is kept.
+ * With `saveNow`, the crate on screen is saved straight away (a share link just opened it).
+ * Returns a cleanup function.
+ */
+export function watchLastDesign({
+  saveNow = false,
+  storage = browserStorage(),
+  idb = browserIdb(),
+}: { saveNow?: boolean; storage?: KeyValueStore | null; idb?: IDBFactory | null } = {}) {
+  const saver = createDebouncedSaver<LastDesign>((d) => saveLastDesign(d, storage));
+  const schedule = (s: Watched) => {
+    const d = lastDesignOf(s);
+    if (d) saver.schedule(d);
+  };
+  const unsubscribe = useDesigner.subscribe((s, prev) => {
+    if (changed(s, prev)) schedule(s);
+    if (s.part !== prev.part && s.part.modelUrl.startsWith("blob:") && designFilePart(s.part).source === "custom") void keepGlb(s.part, idb);
+  });
+  if (saveNow) schedule(useDesigner.getState());
+  const onHide = () => saver.flush();
+  window.addEventListener("pagehide", onHide);
+  const onVisibility = () => document.visibilityState === "hidden" && saver.flush();
+  document.addEventListener("visibilitychange", onVisibility);
+  return () => {
+    saver.flush();
+    unsubscribe();
+    window.removeEventListener("pagehide", onHide);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
+}
+
+/** Last GLB kept, so the same part re-loaded (e.g. its name edited) isn't written again. */
+let keptUrl: string | null = null;
+
+/** Reads a loaded part's GLB back from its object URL and keeps it in IndexedDB. */
+async function keepGlb(part: LoadedPart, idb: IDBFactory | null) {
+  if (part.modelUrl === keptUrl || !part.model) return;
+  keptUrl = part.modelUrl;
+  try {
+    const bytes = await (await fetch(part.modelUrl)).arrayBuffer();
+    const r = await saveLastGlb(part.model, bytes, idb);
+    if (r === "too-big") console.warn(`${part.model} is over 50 MB, so it isn't kept for the next visit.`);
+  } catch (e) {
+    console.warn("Couldn't keep the part's model for the next visit.", e);
+  }
+}
