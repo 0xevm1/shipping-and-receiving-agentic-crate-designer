@@ -103,5 +103,8 @@ export function memberBounds(members: readonly Pick<Member, "min" | "size">[]): 
   return { min: [x.lo, y.lo, z.lo], max: [x.hi, y.hi, z.hi] };
 }
 
+/** How many boards of this kind there are (blocking posts, bearers, cradles, ...). */
+export const countKind = (members: readonly Pick<Member, "kind">[], kind: MemberKind): number => members.filter((m) => m.kind === kind).length;
+
 /** The values from largest to smallest, as a new array. */
 export const sortDesc = (v: readonly number[]): number[] => [...v].sort((p, q) => q - p);

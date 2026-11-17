@@ -30,7 +30,8 @@ import { allChecks } from "@/state/checks";
 import { crateDrawings, type Drawing } from "./drawings";
 import { cutText, describeLayout, documentDate, stockText } from "./format";
 import { memberBounds } from "./memberBounds";
-import { area, cut, dims, dimsOther, LB_PER_KG, lengthUnit, run, volume, weight, type Units } from "./units";
+import { LB_PER_KG } from "@/domain/units";
+import { area, cut, dims, dimsOther, lengthUnit, run, volume, weight, type Units } from "./units";
 
 /** A labelled value, with an optional second line (the other units, or how it was worked out). */
 export interface Row {

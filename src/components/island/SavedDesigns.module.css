@@ -1,5 +1,5 @@
 /*
- * The design library (#14): "Saved designs" at the bottom of the Overview. A CSS module; the
+ * The design library: "Saved designs" at the bottom of the Overview. A CSS module; the
  * shared classes it reuses from globals.css (`.btn`, `.linkbtn`, `.actions`) are `:global`.
  */
 

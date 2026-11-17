@@ -2,7 +2,8 @@
  * Text ↔ value helpers for the part header's inline fields. The store and the domain
  * stay in kg; the mass field shows and accepts lb when imperial units are selected.
  */
-import { LB_PER_KG, type Units } from "./units";
+import { LB_PER_KG } from "@/domain/units";
+import type { Units } from "./units";
 
 export const massUnit = (u: Units) => (u === "imperial" ? "lb" : "kg");
 

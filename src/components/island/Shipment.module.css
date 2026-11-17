@@ -1,5 +1,5 @@
 /*
- * Shipment planning (#25): the "Ships as …" block at the top of the Overview, the crate type
+ * Shipment planning: the "Ships as …" block at the top of the Overview, the crate type
  * picker shared by the Overview, Layouts, Cut list and Checks, and the cut list scope toggle.
  * A CSS module; the picker also carries the global `.seg` pill style from globals.css.
  */

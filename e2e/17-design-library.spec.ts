@@ -94,7 +94,7 @@ test("saved designs can be renamed, and deleted with an undo", async ({ page }) 
   await section(page).getByRole("button", { name: "Delete Bracket standard" }).click();
   await expect(section(page).getByRole("status")).toContainText("Deleted “Bracket standard”.");
   await expect(list(page)).toBeHidden();
-  await section(page).getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await section(page).getByRole("button", { name: "Undo" }).click(); // outside the live region
   await expect(list(page).getByRole("listitem")).toHaveCount(1);
   await expect(list(page)).toContainText("Bracket standard");
 });
@@ -125,10 +125,18 @@ test("a share link opens the same crate on a fresh page", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
   await expect(page.getByRole("banner")).toContainText("PART-002");
   await setQuantity(page, 8);
+  const defaultOutside = (await crate(page)).outside;
   await openTab(page, "Layouts");
-  await panel(page).getByRole("button", { pressed: false }).first().click();
+  // A layout card other than the one on screen (the Rank-by buttons are not in this group).
+  const card = panel(page).getByRole("group", { name: "Layouts", exact: true }).getByRole("button", { pressed: false }).first();
+  const cardText = await card.innerText();
+  const cardSize = /\d+ × \d+ × \d+/.exec(cardText)![0];
+  await card.click();
   await openTab(page, "Overview");
   const outside = (await crate(page)).outside;
+  // The pick really changed the crate, to the size the card showed.
+  expect(outside).not.toEqual(defaultOutside);
+  expect(outside!.map(Math.round).join(" × ")).toBe(cardSize);
   const link = await copyShareLink(page);
   expect(link).toMatch(/\/#design=[A-Za-z0-9_-]+$/);
 

@@ -2,9 +2,10 @@
 
 import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import type { DesignField } from "@/domain/diff";
-import { ASSEMBLY_NAMES } from "@/domain/export";
-import { layoutName } from "@/lib/format";
-import { plywoodText, sectionText } from "@/lib/lumber";
+import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { countKind } from "@/domain/members";
+import { layoutName, usd } from "@/lib/format";
+import { plywoodLabel, sectionLabel } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
@@ -20,17 +21,15 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
   const auto = useDesigner((s) => s.settings.panelThickness === "auto");
   const setHover = useDesigner((s) => s.setHover);
   const { layout, construction: c } = design;
-  // Parts in the crate on screen: the whole batch, or one crate type's share of a split (#25).
+  // Parts in the crate on screen: the whole batch, or one crate type's share of a split.
   const quantity = layout.slots.length;
-  const imperial = units === "imperial";
-  const count = (kind: string) => design.members.filter((m) => m.kind === kind).length;
-  const posts = count("blocking");
-  const bearers = count("bearer");
-  const separators = count("separator");
-  const cradles = count("cradle");
-  // Imperial uses shop names (#15): "1/2″" plywood, "1x4" cleats, "4x4" skids.
-  const ply = (v: number) => (imperial ? plywoodText(v) : `${v} mm`);
-  const section = (a: number, b: number) => (imperial ? sectionText(a, b) : `${a} × ${b}`);
+  const posts = countKind(design.members, "blocking");
+  const bearers = countKind(design.members, "bearer");
+  const separators = countKind(design.members, "separator");
+  const cradles = countKind(design.members, "cradle");
+  // Imperial uses shop names: "1/2″" plywood, "1x4" cleats, "4x4" skids.
+  const ply = (v: number) => plywoodLabel(v, units);
+  const section = (a: number, b: number) => sectionLabel(a, b, units);
   const maxAssembly = Math.max(...Object.values(design.tareKgByAssembly));
 
   return (
@@ -40,7 +39,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
         {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name.toLowerCase()}
         {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
-      {/* Values an edit changed flash gold for 1.2 s (#39). */}
+      {/* Values an edit changed flash gold for 1.2 s. */}
       <div className="big">
         <Flash on={["outside"]}>{dims(layout.external, units)}</Flash>
         <small>{lengthUnit(units)}</small>
@@ -80,7 +79,8 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
               joists and a{" "}
             </>
           )}
-          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
+          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of
+          parts
         </Step>
         {cradles > 0 ? (
           <Step name="Cradles" value={`${cradles} cradles`}>
@@ -93,8 +93,8 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           </Step>
         )}
         <Step name="Gross weight" value={weight(design.grossKg, units)} flash={["gross"]} end>
-          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about $
-          {Math.round(design.materialCostUsd)} of wood
+          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about {usd(design.materialCostUsd)} of
+          wood
         </Step>
       </ul>
 
@@ -126,7 +126,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
         })}
       </div>
 
-      {/* The design library (#14): save, list and reuse this part's designs; share links. */}
+      {/* The design library: save, list and reuse this part's designs; share links. */}
       <SavedDesigns />
     </>
   );

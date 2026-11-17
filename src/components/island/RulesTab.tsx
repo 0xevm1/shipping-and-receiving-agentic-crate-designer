@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
 import { settingsAdjustments, type CrateSettings } from "@/domain/schema";
 import { clampNote } from "@/lib/clampNote";
-import { plywoodText } from "@/lib/lumber";
+import { plywoodLabel } from "@/lib/lumber";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { ShopStandards } from "./ShopStandards";
@@ -27,8 +27,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const { setSettings, resetRules } = useDesigner.getState();
   const setQty = (q: number) => setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
   const mm = (v: number) => `${length(v, units)} ${lengthUnit(units)}`;
-  // Plywood by the thickness it is sold as: "1/2″" in imperial (#15), "12 mm" in metric.
-  const ply = (v: number) => (units === "imperial" ? plywoodText(v) : `${v} mm`);
+  const ply = (v: number) => plywoodLabel(v, units);
   // A typed quantity goes to the store as typed; if it was clamped or rejected, say so by the field.
   const [note, setNote] = useState<{ id: number; text: string } | null>(null);
   useEffect(() => {
@@ -64,7 +63,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
             </button>
           ))}
         </div>
-        <div className="changenote" role="status" style={{ gridColumn: "1 / -1" }}>
+        <div className="changenote" role="status">
           {note && <span key={note.id}>{note.text}</span>}
         </div>
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
@@ -129,7 +128,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <div className="seg" role="group" aria-label="Wall and lid plywood">
           {PANELS.map((p) => (
             <button key={p} type="button" aria-pressed={settings.panelThickness === p} onClick={() => setSettings({ panelThickness: p })}>
-              {p === "auto" ? "Auto" : units === "imperial" ? plywoodText(p) : p}
+              {p === "auto" ? "Auto" : units === "imperial" ? plywoodLabel(p, units) : p}
             </button>
           ))}
         </div>
@@ -140,7 +139,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         </small>
       </div>
 
-      <div className="actions" style={{ marginTop: 16 }}>
+      <div className="actions spaced">
         <button type="button" className="btn" onClick={resetRules}>
           Reset rules
         </button>

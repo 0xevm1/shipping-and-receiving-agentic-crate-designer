@@ -1,5 +1,5 @@
 /*
- * Shop standards (#19): a collapsible section at the bottom of the Rules tab. A CSS module (#54);
+ * Shop standards: a collapsible section at the bottom of the Rules tab. A CSS module;
  * the shared classes it reuses from globals.css (`.panel`, `.rule`, `.lede`, `.btn`) are `:global`.
  */
 
@@ -111,7 +111,7 @@
   cursor: default;
 }
 
-/* Touch (#62): the number fields and the summary are at least 44 px tall. */
+/* Touch: the number fields and the summary are at least 44 px tall. */
 @media (max-width: 980px), (pointer: coarse) {
   .field input {
     min-height: 44px;
