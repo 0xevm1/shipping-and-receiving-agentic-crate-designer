@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Geist_Mono, Inter_Tight, Mrs_Saint_Delafield } from "next/font/google";
 import "./globals.css";
-import "./ui.css";
 
 /*
  * Type roles follow hadrian.co, which uses Klim's Söhne family. Söhne is

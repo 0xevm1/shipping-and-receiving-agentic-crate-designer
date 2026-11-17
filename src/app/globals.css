@@ -21,7 +21,6 @@
  */
 
 :root {
-  color-scheme: dark;
   --navy: #002548;
   --navy-deep: #001a33;
   --navy-light: #13497d;
@@ -61,19 +60,10 @@
   --z-drawer: 30;
 }
 
-html,
-body {
-  height: 100%;
-}
 body {
   margin: 0;
   font: 14px/1.45 var(--sans);
-  color: var(--text);
-  background:
-    radial-gradient(ellipse at 42% 52%, rgba(19, 73, 125, 0.55) 0%, transparent 60%),
-    radial-gradient(ellipse at 50% 48%, transparent 45%, rgba(0, 12, 26, 0.55) 100%), var(--navy);
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
 }
 @layer base {
   button,
@@ -100,18 +90,12 @@ body {
   }
 }
 
-/* Narrow (the drawer layout, `max-width: 980px`): the page is exactly the viewport and never scrolls. */
+/* Narrow (the drawer layout, `max-width: 980px`): safe-area insets, for the notch. */
 @media (max-width: 980px) {
   :root {
     --sa-t: env(safe-area-inset-top, 0px);
     --sa-r: env(safe-area-inset-right, 0px);
     --sa-b: env(safe-area-inset-bottom, 0px);
     --sa-l: env(safe-area-inset-left, 0px);
-  }
-  html,
-  body {
-    height: 100dvh;
-    overflow: hidden;
-    overscroll-behavior: none;
   }
 }

@@ -1,7 +1,8 @@
 /*
  * The export document: Letter pages, black on white, vector SVG drawings.
- * Imported only by the print route. Next keeps a route's global CSS loaded after navigation,
- * so every rule is scoped to the print document (`.print-doc`, or `:has()` it).
+ * Imported only by the print route, which sits outside the `(designer)` route group: it loads the
+ * design tokens and base rules (globals.css) and this file, none of the designer's CSS. Rules are
+ * still scoped to the document (`.print-doc`) so they stay out of the way of anything else.
  */
 
 @page {
@@ -9,11 +10,11 @@
   margin: 0.5in;
 }
 
-html:has(.print-doc, .print-loading),
-html:has(.print-doc, .print-loading) body {
-  height: auto;
-  overflow: visible;
+html {
   color-scheme: light;
+}
+html,
+body {
   background: #d9d9d9;
   color: #000;
 }
@@ -95,6 +96,10 @@ html:has(.print-doc, .print-loading) body {
 }
 .print-doc p {
   margin: 0 0 6px;
+}
+/* Nominal lumber names ("4x4") keep a plain x: Inter's contextual alternates would draw ×. */
+.print-doc .nominal {
+  font-feature-settings: "calt" 0;
 }
 .print-doc .soft {
   color: var(--soft-ink);
