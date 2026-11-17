@@ -69,8 +69,9 @@ test("a saved design is listed for its part after a reload and reused in one cli
   await shot(page, "14-saved-designs-list");
   await island(page).screenshot({ path: "e2e/screenshots/14-saved-designs-island.png" });
 
-  // Reuse: through the design-file path, with its load message.
-  await pollCrate(page, (s) => s.quantity).toBe(4);
+  // Reuse: through the design-file path, with its load message. The reload reopened the last
+  // crate on screen (#71), the single bracket.
+  await pollCrate(page, (s) => s.quantity).toBe(1);
   await section(page).getByRole("button", { name: "Use Bracket × 8, two layers" }).click();
   await expect(loadMessage(page, "Design loaded: 8 × Machined steel bracket.")).toBeVisible();
   await pollCrate(page, (s) => s.quantity).toBe(8);
