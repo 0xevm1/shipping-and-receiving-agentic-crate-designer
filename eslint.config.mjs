@@ -6,9 +6,18 @@ import nextTs from "eslint-config-next/typescript";
  * Layer boundaries (docs/SPECIFICATION.md §5, #89). Arrows point down only:
  *
  *   components/, app/   render; may import everything below
- *   state/              zustand stores and persistence; may import lib and domain
+ *   state/              zustand stores and persistence, the engine's Web Worker and its client;
+ *                       may import engine, lib and domain
+ *   engine/             the crate engine (#46, spec §5.1): domain plus the file builders behind
+ *                       one API that runs unchanged in a browser tab, a Web Worker and Node. May
+ *                       import lib and domain; no DOM globals, no Node built-ins (tests excepted)
+ *                       and none of lib's browser-only modules. A server or CLI imports it too
  *   lib/                edge code (format, load, export); may import domain
  *   domain/             pure TypeScript in mm/kg, Z-up; imports nothing above it
+ *
+ * The engine sits above lib, not below it, because the builders it serves (CSV, PDF, bundle)
+ * are made of lib's unit formatting and print model; moving all of that under the engine would
+ * gain nothing the lint rules below don't already guarantee.
  *
  * Type-only imports get no exemption: a type that crosses a boundary is in the wrong layer.
  * Test files follow the same rules as the code they sit beside.
@@ -22,6 +31,7 @@ const ban = (name, ...paths) => ({
 const layer = (dir) => [`@/${dir}`, `**/${dir}`];
 
 const upLib = ban("src/lib", ...layer("lib"));
+const upEngine = ban("src/engine", ...layer("engine"));
 const upState = ban("src/state", ...layer("state"));
 const upComponents = ban("src/components", ...layer("components"));
 const upApp = ban("src/app", ...layer("app"));
@@ -38,24 +48,40 @@ const DOMAIN_PACKAGE_PATTERNS = [
     message: "The domain is pure TypeScript: no rendering, framework or store packages.",
   },
 ];
-const BROWSER_GLOBALS = [
-  "window",
-  "document",
-  "navigator",
-  "localStorage",
-  "sessionStorage",
-  "indexedDB",
-  "location",
-  "history",
-  "HTMLElement",
-  "Element",
-  "Blob",
-  "File",
-  "FileReader",
-  "Worker",
-  "requestAnimationFrame",
-  "matchMedia",
-].map((name) => ({ name, message: "The domain has no DOM or browser APIs: do that in src/lib or src/state." }));
+const browserGlobals = (layer, where) =>
+  [
+    "window",
+    "document",
+    "navigator",
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+    "location",
+    "history",
+    "HTMLElement",
+    "Element",
+    "Blob",
+    "File",
+    "FileReader",
+    "Worker",
+    "requestAnimationFrame",
+    "matchMedia",
+  ].map((name) => ({ name, message: `${layer} has no DOM or browser APIs: do that in ${where}.` }));
+const BROWSER_GLOBALS = browserGlobals("The domain", "src/lib or src/state");
+
+// The engine runs in Node too: no Node built-ins outside its tests.
+const NODE_BUILTINS = {
+  group: [
+    "node:*",
+    ...["fs", "fs/promises", "path", "os", "crypto", "child_process", "worker_threads", "stream", "buffer", "url", "util", "http", "https", "net"],
+  ],
+  message: "The engine runs in the browser too: no Node built-ins. Put Node-only code behind an adapter outside src/engine.",
+};
+// lib modules that need a page (downloads, idle-time mesh analysis): the engine can't import them.
+const BROWSER_ONLY_LIB = {
+  group: ["download", "partProfile"].flatMap((m) => [`@/lib/${m}`, `**/lib/${m}`]),
+  message: "This lib module needs a browser page; the engine runs in Workers and Node too.",
+};
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -77,7 +103,7 @@ const eslintConfig = defineConfig([
     name: "layers/domain",
     files: ["src/domain/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { paths: DOMAIN_PACKAGES, patterns: [upLib, upState, upComponents, upApp, ...DOMAIN_PACKAGE_PATTERNS] }],
+      "no-restricted-imports": ["error", { paths: DOMAIN_PACKAGES, patterns: [upLib, upEngine, upState, upComponents, upApp, ...DOMAIN_PACKAGE_PATTERNS] }],
       "no-restricted-globals": ["error", ...BROWSER_GLOBALS],
     },
   },
@@ -93,6 +119,7 @@ const eslintConfig = defineConfig([
           paths: DOMAIN_PACKAGES.filter((p) => p.name !== "three"),
           patterns: [
             upLib,
+            upEngine,
             upState,
             upComponents,
             upApp,
@@ -106,7 +133,24 @@ const eslintConfig = defineConfig([
     name: "layers/lib",
     files: ["src/lib/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upState, upComponents, upApp] }],
+      "no-restricted-imports": ["error", { patterns: [upEngine, upState, upComponents, upApp] }],
+    },
+  },
+  {
+    name: "layers/engine",
+    files: ["src/engine/**/*.{ts,tsx}"],
+    ignores: ["src/engine/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [upState, upComponents, upApp, BROWSER_ONLY_LIB, NODE_BUILTINS] }],
+      "no-restricted-globals": ["error", ...browserGlobals("The engine", "src/state (the worker client) or an adapter")],
+    },
+  },
+  {
+    // Engine tests run in Node (and jsdom): they may read fixtures from disk.
+    name: "layers/engine-tests",
+    files: ["src/engine/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [upState, upComponents, upApp, BROWSER_ONLY_LIB] }],
     },
   },
   {
