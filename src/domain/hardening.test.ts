@@ -48,6 +48,7 @@ describe("quantity extremes", () => {
 
   it.each(cases)("%s at quantity 1 and 200 (upright %s, %i layers) packs every part, fast", (id, keepUpright, maxLayers) => {
     const p = parts.find((q) => q.id === id)!;
+    const budget = loadAwareBudget(50, 15);
     for (const quantity of [1, 200]) {
       const settings = { quantity, keepUpright, maxLayers };
       const r = run(p, settings);
@@ -55,11 +56,30 @@ describe("quantity extremes", () => {
       expect(r.design!.layout.slots).toHaveLength(quantity);
       expectSound(r.design!);
       // Measured at 1–3 ms. A real regression is a 10× event, so the budget is generous, and
-      // the median of several runs ignores one run stalled by a busy machine.
-      expect(medianMs(() => run(p, settings))).toBeLessThan(50);
+      // the median of several runs ignores one run stalled by a busy machine, and the budget grows with the
+      // machine's load (see loadAwareBudget).
+      expect(medianMs(() => run(p, settings))).toBeLessThan(budget);
     }
   });
 });
+
+/**
+ * A wall-clock budget that follows machine load. A fixed CPU loop takes about 3.5 ms on an idle
+ * laptop; when the machine is busy it takes proportionally longer, and so does the code under
+ * test. The budget is `ms` or `ratio` loop-times, whichever is larger, so it is never tighter than
+ * `ms` and a 10x regression still fails when the machine is idle.
+ */
+function loadAwareBudget(ms: number, ratio: number): number {
+  const times: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    const t0 = performance.now();
+    let x = 0;
+    for (let n = 0; n < 3e6; n++) x += Math.sqrt(n);
+    if (x < 0) throw new Error("unreachable: keeps the loop from being optimised away");
+    times.push(performance.now() - t0);
+  }
+  return Math.max(ms, ratio * times.sort((a, b) => a - b)[2]);
+}
 
 /** Median wall time of `TIMING_RUNS` calls, robust to a few runs slowed by GC or CPU load. */
 const TIMING_RUNS = 5;
