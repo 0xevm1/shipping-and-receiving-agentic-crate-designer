@@ -72,6 +72,11 @@ interface Tooltip {
  */
 export interface ViewStoreState {
   tab: Tab;
+  /**
+   * A request to focus the Overview's Parts to ship field (from the Rules tab's over-200 note), with
+   * the total to prefill if the field is empty. The field takes it when it mounts and clears it.
+   */
+  partsToShipRequest: { nonce: number; prefill: number | null } | null;
   /** The 3D view's toggles and camera preset. */
   view: ViewState;
   insets: Insets;
@@ -110,6 +115,9 @@ export interface ViewStoreState {
   /** Applies the units saved in this browser, if any. Called once after the app mounts. */
   loadSavedUnits: (storage?: KeyValueStore | null) => void;
   setTab: (t: Tab) => void;
+  /** Goes to the Overview and asks for Parts to ship to take focus, prefilled with `prefill` when empty. */
+  goToPartsToShip: (prefill: number | null) => void;
+  clearPartsToShipRequest: () => void;
   setMode: (m: Mode) => void;
   setView: (patch: Partial<ViewState>) => void;
   setInsets: (i: Insets) => void;
@@ -142,6 +150,7 @@ export function currentMode(v: Pick<ViewState, "lid" | "front" | "explode">): Mo
 
 export const useView = create<ViewStoreState>()((set, get) => ({
   tab: "overview",
+  partsToShipRequest: null,
   view: { lid: true, front: true, explode: 0, blocking: true, parts: true, dims: true, camera: "iso" },
   insets: { left: 0, top: 0, right: 0, bottom: 0 },
   fit: { nonce: 0, instant: true },
@@ -169,6 +178,10 @@ export const useView = create<ViewStoreState>()((set, get) => ({
     if (units && units !== get().units) set({ units });
   },
   setTab: (tab) => set({ tab }),
+  goToPartsToShip: (prefill) => set({ tab: "overview", partsToShipRequest: { nonce: (get().partsToShipRequest?.nonce ?? 0) + 1, prefill } }),
+  clearPartsToShipRequest: () => {
+    if (get().partsToShipRequest) set({ partsToShipRequest: null });
+  },
   setMode: (mode) => {
     const view = { ...get().view, lid: mode !== "open", front: mode !== "open", explode: mode === "exploded" ? 1 : 0 };
     set({ view, fit: { nonce: get().fit.nonce + 1, instant: false } });

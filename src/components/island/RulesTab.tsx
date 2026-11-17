@@ -6,7 +6,9 @@ import { settingsAdjustments, type CrateSettings } from "@/domain/schema";
 import { panelOptions } from "@/domain/standards";
 import { clampNote } from "@/lib/clampNote";
 import { plywoodLabel } from "@/lib/lumber";
+import { quantityCapNote } from "@/lib/quantityCap";
 import { length, lengthUnit, weight } from "@/lib/units";
+import { useJobSync } from "@/state/jobSync";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
 import { ChangeNote } from "../shell/ChangeFeedback";
@@ -33,7 +35,13 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const panels: CrateSettings["panelThickness"][] = ["auto", ...panelOptions(standards)];
   if (!panels.includes(settings.panelThickness)) panels.push(settings.panelThickness);
   const { setSettings, resetRules } = useDesigner.getState();
-  const setQty = (q: number) => setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
+  // Parts to ship (Overview) belongs to the shared job: it is there only with a job, and not while a reload is due.
+  const canPoint = useJobSync((s) => Boolean(s.job) && !s.reloadNeeded);
+  const goToPartsToShip = useView((s) => s.goToPartsToShip);
+  const setQty = (q: number) => {
+    setCapped(null);
+    setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
+  };
   const mm = (v: number) => `${length(v, units)} ${lengthUnit(units)}`;
   const ply = (v: number) => plywoodLabel(v, units);
   // A typed quantity goes to the store as typed; if it was clamped or rejected, say so by the field.
@@ -43,11 +51,16 @@ export function RulesTab({ design }: { design: CrateDesign }) {
     const t = setTimeout(() => setNote(null), CLAMP_NOTE_MS);
     return () => clearTimeout(t);
   }, [note]);
+  // A quantity over what one crate holds is not a passing note: it stays, with the way forward, until the next edit.
+  const [capped, setCapped] = useState<number | null>(null);
   const typeQty = (q: number) => {
     const [adj] = settingsAdjustments({ quantity: q }, useDesigner.getState().settings);
-    setNote(adj ? { id: Date.now(), text: clampNote(adj, "Quantity") } : null);
+    const over = adj?.kind === "clamped" && q > adj.max;
+    setCapped(over ? q : null);
+    setNote(adj && !over ? { id: Date.now(), text: clampNote(adj, "Quantity") } : null);
     setSettings({ quantity: q });
   };
+  const cap = capped === null ? null : quantityCapNote(capped, MAX_QTY, canPoint);
 
   return (
     <>
@@ -77,6 +90,14 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           ))}
         </div>
         <ChangeNote note={note} className={rule.fullRow} />
+        <div className={`${styles.cap} ${rule.fullRow}`} role="status" data-testid="quantity-cap-note">
+          {cap?.text}
+        </div>
+        {cap?.action && (
+          <button type="button" className={`linkbtn ${styles.capAction} ${rule.fullRow}`} onClick={() => goToPartsToShip(cap.prefill)}>
+            {cap.action}
+          </button>
+        )}
         <BestQuantity design={design} />
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>

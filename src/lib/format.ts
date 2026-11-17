@@ -62,6 +62,15 @@ export function savedDateText(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/**
+ * Puts thousands separators in the whole numbers of a sentence: "10000 parts ship as 333 crates" becomes
+ * "10,000 parts ...". For text built where the number can't be formatted at the source (the engine's
+ * plan messages). Leaves decimals and numbers already grouped alone; dollars get them too ("$1234.50").
+ */
+export function groupThousands(text: string): string {
+  return text.replace(/(?<![\d.,])\d{4,}(?![\d,])/g, (n) => Number(n).toLocaleString("en-US"));
+}
+
 /** Whole dollars with thousands separators: "$1,186". */
 export function usd(v: number): string {
   return `$${Math.round(v).toLocaleString("en-US")}`;
