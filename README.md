@@ -117,7 +117,10 @@ tab at a time.
      tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
      cardboard box may be enough)
 6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
-7. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
+7. **Download the crate as a 3D model** (View → "Download 3D model (.glb)"): the assembled crate
+   in metres, Z up, every board a named mesh grouped by assembly, with the parts in their slots
+   unless "Include parts" is off.
+8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
    stack and base-rating limits, and densities, material costs and screw spacing. A change

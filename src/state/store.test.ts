@@ -68,3 +68,48 @@ describe("setPartDetails", () => {
     expect(s().part).toBe(part);
   });
 });
+
+describe("lastChange", () => {
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    s().setPart({ ...unknownPart, dimensions_mm: [1, 1, 1] });
+  });
+
+  it("is cleared by loading a part", () => {
+    expect(s().lastChange).toBeNull();
+  });
+
+  it("records a mass edit's diff and source", () => {
+    s().setPartDetails({ mass_kg: 14.71 });
+    const c = s().lastChange!;
+    expect(c.source).toBe("mass");
+    expect(c.changes.map((x) => x.field)).toEqual(["gross", "payload"]);
+    const gross = c.changes[0];
+    expect([Math.round(gross.from as number), Math.round(gross.to as number)]).toEqual([16, 20]);
+  });
+
+  it("records a name or material edit as a change with nothing moved", () => {
+    s().setPartDetails({ material: "4140 steel" });
+    expect(s().lastChange).toMatchObject({ source: "material", changes: [] });
+    const id = s().lastChange!.id;
+    s().setPartDetails({ name: "Cover" });
+    expect(s().lastChange).toMatchObject({ source: "name", changes: [], id: id + 1 });
+  });
+
+  it("records rules and layout edits, but not units", () => {
+    s().setSettings({ quantity: 4 });
+    expect(s().lastChange?.source).toBe("rules");
+    expect(s().lastChange?.changes.map((x) => x.field)).toContain("grid");
+    const before = s().lastChange;
+    s().setUnits("imperial");
+    expect(s().lastChange).toBe(before);
+    s().setLayoutKey(s().result.layouts[s().result.layouts.length - 1].key);
+    expect(s().lastChange?.source).toBe("layout");
+  });
+
+  it("leaves nothing to compare when the design becomes a problem", () => {
+    s().setPart({ ...unknownPart, dimensions_mm: [30_000, 1, 1] });
+    s().setPartDetails({ mass_kg: 5 });
+    expect(s().lastChange).toBeNull();
+  });
+});

@@ -68,6 +68,9 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Rendering:** three.js is Y up and in metres. Exactly **one** transform does the conversion:
   the root `<group rotation={[-π/2,0,0]} scale={0.001}>` in `CrateViewer.tsx`. Everything inside
   it uses domain coordinates. Domain front (−Y) faces world +Z; domain +X stays world +X.
+- **Exported GLB** (`src/lib/exportGlb.ts`) follows the input GLB convention, not three.js's:
+  metres, **Z up**. The only conversion from the domain is × 0.001 (mm → m); there is no Y-up
+  rotation in the file.
 - **Loaded GLBs** are read as metres, Z up, like the samples. A file more than **20 units**
   across is read as millimetres instead (`MM_FILE_THRESHOLD` in `src/lib/loadPart.ts`), and the
   UI says so ("file read as millimetres", plus an info check).
@@ -130,20 +133,25 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
+| `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
+| `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
+| `src/lib/changes.ts` | A design diff as screen text: "Gross 16 → 20 kg" or "No change to the crate" |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging |
-| `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()` |
+| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
+| `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
-| `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata; name, material and mass fields for unknown parts |
-| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover, Hide panels |
+| `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
+| `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
+| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
 | `src/components/shell/StandardsLoader.tsx` | Applies the saved shop standards once the app has mounted |
 | `src/components/island/*.tsx` | The island and its five tabs |
@@ -240,7 +248,8 @@ Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
 
 Invalid input changes nothing and returns a message. Catalog parts are read-only. A mass change
 recomputes the design and resets the layout pick, like any other input. A name or material
-change refreshes the result but keeps the layout pick and the camera.
+change refreshes the result but keeps the layout pick and the camera. Every accepted change
+records what it moved in `lastChange` (§8.5a), even when nothing did.
 
 **Material → look.** `partFinish(material)` returns `"aluminum"` when the text contains "alum"
 (case-insensitive, so "aluminium" counts) and `"steel"` for everything else, including no
@@ -651,7 +660,7 @@ The canvas fills the window. Four regions float above it:
 
 | Region | Contents |
 |---|---|
-| Top left (no glass) | "Crate Designer", the tagline, then two mono lines: id · material · mass each; measured size · model check. Unknown parts get an editable mass field and a stand-in warning |
+| Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a). Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
 | Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
 | Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads). Above it, any load message (shown only when there is one) |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb), View popover, Hide panels |
@@ -686,10 +695,33 @@ open question for the user (see #20).
   - The mode icon steps closed → open → exploded. The View popover has camera presets (3D, Top,
     Front, End), switches for lid, front wall, blocking, parts and size labels, and a
     continuous Pull apart slider. A mix that matches no mode shows the "custom" icon.
+- **GLB download (#27):** below the slider, an "Include parts" switch (on by default) and
+  "Download 3D model (.glb)" save `crate-{part id}-x{quantity}.glb`. The file is built from the
+  design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
+  it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
+  - **Units and frame:** metres, Z up, like the input GLBs (§4).
+  - **Node tree:** `Crate` → `Base`, `Side walls`, `End walls`, `Lid`, `Inside the crate`
+    (empty assemblies are left out), each holding one box mesh per board named
+    `{label} {n}`, numbered per label across the crate (e.g. `Side rail 3`); then, with parts,
+    `Parts` → `Part 1` … `Part N`, placed with the same transform as `PartInstances`
+    (re-centre, `mmPerUnit` scale, slot centre, `orientation.euler`).
+  - **Materials:** one per board kind, named `Wood {kind}` and coloured as `WOOD` in
+    `scene.ts`; parts get `Part steel` or `Part aluminum`.
+  - The part model is loaded with `GLTFLoader` and cached per URL. Exported with three's
+    `GLTFExporter` (`binary: true`).
 - **Framing per mode:** each mode has its own camera distance, as a fraction of the distance
   that just fits the whole scene (`MODE_ZOOM` in `Director.tsx`): closed 0.68, open 0.8,
   exploded 1.0. Hide panels moves in a further ×0.82. Mode changes re-frame, so idle auto-play
   glides in and out with the modes.
+- **Room for the size labels:** with size labels on, the fit also projects the crate's three
+  label anchors (moved out with the walls) at the goal angle and backs the camera off just
+  enough that each label, taken as about 88 × 28 px, sits inside the free area. This only ever
+  zooms out, so it changes nothing when the labels already fit (the default crate); it keeps
+  a long crate's end labels from landing under the island (#43).
+- **First framing:** OrbitControls registers as the default controls one render after
+  `Director` first frames the crate. `Director` keeps the orbit target it placed and hands it to
+  the controls when they arrive, so the camera orbits the crate's middle from the first frame
+  (#43).
 - **Continuous transitions:** `Director` eases `anim.explode`, `anim.lidAlpha` and
   `anim.frontAlpha` toward the store's targets: rate 10 /s for user changes, 1.5 /s during idle
   auto-play. `CrateModel` writes position and opacity each frame.
@@ -744,11 +776,61 @@ open question for the user (see #20).
 - **An unknown GLB** gets a name from its file name, no material, and a 10 kg stand-in mass. The
   part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
   steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
-  mass is entered (§6.2a). Each field applies as soon as its text is valid; invalid text is
-  outlined in gold and reverts on blur.
+  mass is entered (§6.2a).
 - **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data, each
   with a plain message.
 - Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
+
+**The part header (#40).** It reads as a sentence, not a form:
+
+```
+gearbox-cover · Gearbox cover
+6061-T6 aluminum · 14.71 kg each · crate gross 20 kg
+435 × 445 × 254 mm · size measured from the file
+```
+
+- **Fields are text with an underline:** no border, background or radius; they inherit the line's
+  mono font. A 1 px `--hair` underline, brighter on hover; on focus a 1.5 px sky underline and
+  white text (no outline box). Each field is sized to its value (`field-sizing: content`, with a
+  `ch` width from `fieldWidthCh` where that isn't supported) between a minimum and maximum.
+- **States, not by colour alone:** solid underline = a value; **dashed** = empty (muted italic
+  placeholder: "add material", "enter mass") or a stand-in. While the mass is the stand-in, its
+  underline is dashed gold with a dashed gold "stand-in" tag after the unit (this replaces the
+  old warning sentence; the field's `aria-describedby` reads the full hint). Invalid text gets a
+  solid gold underline, `aria-invalid`, and a one-line reason under the sentence, linked by
+  `aria-describedby`.
+- **Keyboard:** Tab order name → material → mass. Typing only drafts; **Enter** commits, **Escape**
+  reverts, blur commits valid text and reverts invalid text to the last valid value. On the mass,
+  **↑ / ↓** step 0.1 of the shown unit (Shift: 1) and commit at once.
+- **Mass units:** the field shows kg, or lb (to 2 decimals) with imperial units, and accepts an
+  optional trailing unit and a comma decimal mark. Lb converts to kg on commit; the store keeps kg.
+  ↑ / ↓ step in the shown unit so the field never jumps by a conversion remainder.
+- **Material** keeps its datalist suggestions, without the dropdown arrow.
+- **Catalog parts** show the same sentence as plain text, without fields or underlines.
+- **Crate gross** follows the mass on every part, in the selected units (#39).
+- Narrow screens: the lines wrap; fields stay underlined.
+
+### 8.5a Showing the effect of an edit (#39)
+
+An edit can recalculate the crate without anything visible moving (a 1 mm part at 10 → 14.71 kg
+keeps the minimum crate), so every edit gets feedback from **one diff**:
+
+- **`diffDesigns(prev, next)`** (`src/domain/diff.ts`, pure) returns the changed fields with old and
+  new values in domain units: gross, tare and payload (kg, compared to the gram), outside size,
+  wall plywood, floor, skid section and count, and the layout grid. It returns `[]` when either side
+  has no design.
+- **`lastChange`** in the store: `{ id, at, source, changes }`, set when an input changes the design:
+  `setPartDetails` (source `name`, `material` or `mass`), `setSettings` / `resetRules` (`rules`)
+  and `setLayoutKey` (`layout`). Loading a part, a units change, or a design that became a problem
+  doesn't set one. It clears after `CHANGE_NOTE_MS` (5 s).
+- **The note** (`ChangeNote`, `role="status"`): "Gross 16 → 20 kg", up to two changes then
+  "+N more", or "No change to the crate". Changes that format the same in the selected units are
+  dropped (`visibleChanges`), so it never says "16 → 16 kg". It sits under the header for part
+  edits and over the foot of the island's part view for rules and layout edits. It fades over its
+  last 1.5 s.
+- **Highlights** (`Flash`): changed values in the header gross and the Overview (outside size,
+  gross, payload, layout grid, wall plywood, skids, floor, empty crate) flash gold for 1.2 s.
+- **`prefers-reduced-motion`:** no flash and no fade; the note still shows, then goes.
 
 ## 9. Persistence
 
@@ -854,11 +936,34 @@ everything else to steel, and the CSV header carries the entered name, material 
 
 **`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
 changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
-flag, invalid input changes nothing, and catalog parts are read-only.
+flag, invalid input changes nothing, and catalog parts are read-only. It also checks
+`lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
+payload with source `mass`; name and material edits record an empty diff; rules and layout edits
+record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
+
+**`src/domain/diff.test.ts`** checks `diffDesigns`: equal designs and a missing design give `[]`;
+a heavier 1 mm part changes only gross and payload; a heavy load steps up the plywood, skids,
+tare and outside size; a quantity change moves the grid and outside size; changes come in
+`DESIGN_FIELDS` order; and floating-point noise in weights is not a change.
+
+**`src/lib/partFields.test.ts`** checks the header's field helpers: kg and lb display, parsing
+(optional unit, comma decimal, one-line reasons for blank, non-numeric and non-positive text),
+lb → kg → lb round trips, ↑ / ↓ steps in either unit with a floor, the fallback width, and the
+change note text ("Gross 16 → 20 kg", lb and inch fractions, "+N more", and "No change to the
+crate" when the changes round away).
 
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions. **`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
 names, and filtering a `parts.json`.
+
+**`src/lib/exportGlb.test.ts`** round-trips the GLB export (#27) for each sample part: export
+with `GLTFExporter`, re-load with `GLTFLoader`, and check that the boards' bounds (parts
+excluded) equal `layout.external` within 1 mm in metres with X, Y, Z = L, W, H (Z up, no
+rotation); the node tree is `Crate` → the non-empty assemblies in build order → `Parts`; there is
+one uniquely named mesh per member (`Floor 1`, `Side rail 4`, …) with `Wood …` materials; and
+`Part 1…N` match the slot count and sit inside the crate. It also checks that each part's centre
+is its slot centre, that parts can be left out, and the file name. Node has no `FileReader`,
+which the exporter's binary path uses, so the test installs a minimal one.
 
 When you change packing or construction rules, keep these passing. If a rule change
 deliberately changes an expected value, update the test and this spec in the same PR.
@@ -895,20 +1000,33 @@ HTML report as `playwright-report`.
     "Showing N × piece", Escape clears it.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
     View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
-    Hide panels keeps the credit; idle auto-play starts after 6 s without input.
+    Hide panels keeps the credit; idle auto-play starts after 6 s without input; from the
+    exploded view, "Download 3D model (.glb)" saves `crate-PART-001-x4.glb` with the `glTF`
+    header, a matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1`
+    … `Part 4`), and with "Include parts" off the file has no `Parts` node; the first framing
+    aims at the crate's middle; for PART-001 × 4, PART-002 × 1 and × 4 and PART-003 × 8 no
+    size label overlaps the island or leaves the window, in every mode.
   - `07-load-parts` (through the hidden file input, in-memory files): a catalog GLB fills in
-    mass and material (PART-002: 1692 × 334 × 411); an unknown GLB gets the stand-in caution
-    and Checks badge until name, material and mass are entered; a text `.gltf` is rejected; a
-    30 m part (a generated GLB read as millimetres) shows the over-20 m problem.
+    mass and material (PART-002: 1692 × 334 × 411) and has no fields; an unknown GLB gets the
+    stand-in tag, caution and Checks badge until name, material and mass are entered (Enter
+    commits); a text `.gltf` is rejected; a 30 m part (a generated GLB read as millimetres)
+    shows the over-20 m problem.
   - `08-layout`: at 1440 × 900 the document doesn't scroll and the island panel does; at
     900 px the layout stacks with no horizontal scroll on any tab.
-  - `09-shop-standards`: the section is collapsed by default and shows all five groups when
+  - `09-part-header` (#40, #39): a catalog part reads as the same sentence with no fields; each
+    field edited by keyboard in Tab order, with the stand-in (dashed) showing and clearing, no
+    box, the sky focus underline and ↑ / Shift+↓ steps; an invalid mass shows its reason (gold,
+    `aria-describedby`), Enter doesn't save it and Escape reverts, and blur restores a blanked
+    name; a 1 mm part (generated GLB) at 10 → 14.71 kg updates the header to "crate gross
+    20 kg", notes "Gross 16 → 20 kg, parts 10 → 15 kg" and highlights the Overview (motion on);
+    +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
+    shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
+    `09-header-*`.
+  - `10-shop-standards`: the section is collapsed by default and shows all five groups when
     opened; changing the plywood cost to 2200 shows "Customised" and raises the Overview's
     "$ of wood", which survives a reload; Reset to defaults restores the cost (also after a
     reload); a light-panel threshold of 50 kg switches the Overview to 15 mm ply; a negative
     density is flagged and reverts on blur.
-- **Known bug, marked `test.fixme`:** the first framing runs before OrbitControls registers,
-  so the orbit target stays at the floor until the first re-frame.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 

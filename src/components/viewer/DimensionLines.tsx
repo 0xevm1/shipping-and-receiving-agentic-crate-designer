@@ -88,6 +88,18 @@ export function DimensionLines({ design, units, showParts }: { design: CrateDesi
   );
 }
 
+/**
+ * Anchors of the crate's size labels (length, width, height) in crate-interior mm, moved out
+ * with the walls by explode amount `e`, as `DimensionLines` draws them. `Director` frames these.
+ * The part's labels sit inside the crate, so they don't need their own room.
+ */
+export function crateLabelAnchors(design: CrateDesign, e: number): Vec3[] {
+  const out = EXPLODE_WALL_MM * e;
+  return buildLines(design, false).anchors.map(({ at, where }) =>
+    where === "front" ? [at[0], at[1] - out, at[2]] : where === "right" ? [at[0] + out, at[1], at[2]] : at,
+  );
+}
+
 function buildLines(design: CrateDesign, withPart: boolean) {
   const { layout, construction } = design;
   const ext = layout.external;

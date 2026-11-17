@@ -35,7 +35,7 @@ test("Shop standards is collapsed by default and lists every group", async ({ pa
   await expect(standards(page).getByLabel("Plywood cost")).toHaveValue("1100");
   await expect(standards(page).getByText("Customised")).toHaveCount(0);
   await standards(page).getByRole("heading", { name: "Stock on hand" }).scrollIntoViewIfNeeded();
-  await shot(page, "09-standards-open");
+  await shot(page, "10-standards-open");
 });
 
 test("a plywood rate change shows in the Overview cost, survives a reload and resets", async ({ page }) => {
@@ -43,7 +43,7 @@ test("a plywood rate change shows in the Overview cost, survives a reload and re
   await openTab(page, "Overview");
   const before = await woodCost(page);
   await showCost(page);
-  await shot(page, "09-standards-cost-before");
+  await shot(page, "10-standards-cost-before");
 
   await openStandards(page);
   const rate = standards(page).getByLabel("Plywood cost");
@@ -51,13 +51,13 @@ test("a plywood rate change shows in the Overview cost, survives a reload and re
   await expect(standards(page).getByText("Customised")).toBeVisible();
   await expect(standards(page)).toContainText("Default 1100 $/m³.");
   await rate.evaluate((el) => el.scrollIntoView({ block: "center" }));
-  await shot(page, "09-standards-rate-changed");
+  await shot(page, "10-standards-rate-changed");
 
   await openTab(page, "Overview");
   await expect.poll(() => woodCost(page)).toBeGreaterThan(before);
   const after = await woodCost(page);
   await showCost(page);
-  await shot(page, "09-standards-cost-after");
+  await shot(page, "10-standards-cost-after");
 
   // Saved in this browser: a reload keeps the house rules.
   await page.reload();
