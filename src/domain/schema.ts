@@ -86,3 +86,38 @@ export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateS
   if (shape.panelThickness.safeParse(patch.panelThickness).success) next.panelThickness = patch.panelThickness!;
   return CrateSettingsSchema.parse(next);
 }
+
+export type NumericSetting = (typeof NUMERIC_SETTINGS)[number];
+
+/** A typed number that `normalizeSettings` did not take as given, so the UI can say why. */
+export interface SettingsAdjustment {
+  key: NumericSetting;
+  /** clamped into range, rounded to a whole number, or rejected (the old value stays). */
+  kind: "clamped" | "rounded" | "rejected";
+  /** The value the settings now hold. */
+  value: number;
+  min: number;
+  max: number;
+}
+
+/**
+ * What `normalizeSettings(patch, current)` changes or refuses among the numeric fields
+ * present in the patch. Empty when every value was taken as given.
+ */
+export function settingsAdjustments(patch: Partial<CrateSettings>, current: CrateSettings): SettingsAdjustment[] {
+  const next = normalizeSettings(patch, current);
+  const shape = CrateSettingsSchema.shape;
+  const out: SettingsAdjustment[] = [];
+  for (const key of NUMERIC_SETTINGS) {
+    if (!(key in patch)) continue;
+    const v: unknown = patch[key];
+    const field = shape[key];
+    const range = { min: field.minValue ?? -Infinity, max: field.maxValue ?? Infinity };
+    if (typeof v !== "number" || !Number.isFinite(v)) out.push({ key, kind: "rejected", value: next[key], ...range });
+    else if (next[key] !== v) {
+      const kind = v < range.min || v > range.max ? "clamped" : "rounded";
+      out.push({ key, kind, value: next[key], ...range });
+    }
+  }
+  return out;
+}

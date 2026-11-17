@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import { MIN_INTERIOR_MM, type CrateDesign } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, MAX_PART_MM, type DesignPart } from "./design";
-import { CrateSettingsSchema, normalizeSettings, type CrateSettings, type Vec3 } from "./schema";
+import { CrateSettingsSchema, normalizeSettings, settingsAdjustments, type CrateSettings, type Vec3 } from "./schema";
 
 /** Edge cases and bad input (#10): extremes must give a crate or a clear reason, never a crash. */
 
@@ -144,6 +144,37 @@ describe("zero gaps and clearances", () => {
   });
 });
 
+describe("blocking check uses the gaps in the drawn crate (#36)", () => {
+  const blocking = (d: CrateDesign) => d.checks.find((c) => c.id === "blocking")!;
+
+  it("passes for a padded tiny part even with a 0 mm clearance setting", () => {
+    const d = run(part([10, 10, 10]), { quantity: 1, wallClearanceMm: 0 }).design!;
+    // Padded up to the minimum interior, so the real wall gaps are far over 19 mm.
+    expect(Math.min(d.layout.clearance[0], d.layout.clearance[1])).toBeGreaterThan(19);
+    expect(d.members.some((m) => m.kind === "blocking")).toBe(true);
+    expect(blocking(d).level).toBe("ok");
+  });
+
+  it("names a 10 mm gap between parts as the problem", () => {
+    const d = run(parts[0], { quantity: 4, partGapMm: 10 }).design!;
+    expect(blocking(d).level).toBe("caution");
+    expect(blocking(d).detail).toMatch(/10 mm gap between parts/);
+  });
+
+  it("names a thin wall clearance as the problem", () => {
+    const d = run(parts[0], { quantity: 4, wallClearanceMm: 5 }).design!;
+    expect(blocking(d).level).toBe("caution");
+    expect(blocking(d).detail).toMatch(/5 mm clearance to the/);
+  });
+
+  it("ignores the part gap when there is one part per layer", () => {
+    const d = run(parts[0], { quantity: 1, partGapMm: 0, wallClearanceMm: 50 }).design!;
+    expect(d.layout.counts.slice(0, 2)).toEqual([1, 1]);
+    expect(blocking(d).level).toBe("ok");
+    expect(blocking(d).detail).toMatch(/smallest gap is 50 mm/);
+  });
+});
+
 describe("settings at the boundary", () => {
   const base = DEFAULT_SETTINGS;
 
@@ -175,6 +206,15 @@ describe("settings at the boundary", () => {
     const next = normalizeSettings(patch, base);
     expect(next).toEqual({ ...base, keepUpright: false, panelThickness: 15, quantity: 12 });
     expect(CrateSettingsSchema.safeParse(next).success).toBe(true);
+  });
+
+  it("reports what it clamped, rounded or rejected", () => {
+    expect(settingsAdjustments({ quantity: 500 }, base)).toEqual([{ key: "quantity", kind: "clamped", value: 200, min: 1, max: 200 }]);
+    expect(settingsAdjustments({ partGapMm: -20 }, base)).toEqual([{ key: "partGapMm", kind: "clamped", value: 0, min: 0, max: 300 }]);
+    expect(settingsAdjustments({ quantity: 3.6 }, base)).toEqual([{ key: "quantity", kind: "rounded", value: 4, min: 1, max: 200 }]);
+    expect(settingsAdjustments({ quantity: NaN }, { ...base, quantity: 7 })).toEqual([{ key: "quantity", kind: "rejected", value: 7, min: 1, max: 200 }]);
+    expect(settingsAdjustments({ quantity: 12, partGapMm: 25 }, base)).toEqual([]);
+    expect(settingsAdjustments({}, base)).toEqual([]);
   });
 
   it("always produces settings the schema accepts", () => {
