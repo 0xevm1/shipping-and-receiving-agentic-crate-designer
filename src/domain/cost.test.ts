@@ -1,18 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { getPart } from "./catalog";
 import { crateCost, estimateLabour, FIXED_ASSEMBLY_STEPS, freightClassFor, freightTerms, NMFC_DENSITY_SCALE } from "./cost";
-import { computeDesign, DEFAULT_SETTINGS, explainLayout, rankByObjective, rankLayouts, RANKINGS, scoreLayouts } from "./design";
+import { computeDesign, explainLayout, rankByObjective, rankLayouts, RANKINGS, scoreLayouts } from "./design";
 import type { CrateSettings } from "./schema";
 import { planShipment } from "./shipment";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, standardsFromJson, type DeepPartial, type ShopStandards } from "./standards";
+import { DEFAULT_STANDARDS, standardsFromJson } from "./standards";
+import { custom, settings } from "./testFixtures";
 
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
 
-const settings = (patch: Partial<CrateSettings> = {}): CrateSettings => ({ ...DEFAULT_SETTINGS, ...patch });
 const design = (id = "PART-001", patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
   computeDesign(getPart(id), settings(patch), null, standards).design!;
 

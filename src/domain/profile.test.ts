@@ -83,8 +83,12 @@ describe("shaped blocking (#16)", () => {
     const profile = profileOf(size, { "-x": (_y, z) => (z > 100 ? 60 : 0) });
     const d = designCrate(custom(size, profile), one, computeDesign(custom(size), one).design!.layout);
     const [slot] = d.layout.slots;
-    const shaped = blocking(d.members).filter((m) => m.label === SHAPED_BLOCK);
+    const shaped = blocking(d.members).filter((m) => m.variant === "shaped-block");
     expect(shaped).toHaveLength(1);
+    // The cut list still names it, and only shaped blocks are marked.
+    expect(shaped[0].label).toBe(SHAPED_BLOCK);
+    expect(blocking(d.members).filter((m) => m.label === SHAPED_BLOCK)).toHaveLength(1);
+    expect(d.shapedBlocking?.blocks).toBe(1);
     expect(shaped[0].min[0]).toBe(slot.min[0]);
     expect(shaped[0].size[0]).toBe(60);
     // It starts half a cell (2.5 mm) above the step: the step lies somewhere between two samples.
@@ -118,7 +122,7 @@ describe("shaped blocking (#16)", () => {
   it("leaves recesses deeper than the limit alone", () => {
     const profile = profileOf(size, { "-x": (_y, z) => (z > 100 ? MAX_SHAPED_BLOCK_DEPTH_MM + 20 : 0) });
     const d = designCrate(custom(size, profile), one, computeDesign(custom(size), one).design!.layout);
-    expect(blocking(d.members).filter((m) => m.label === SHAPED_BLOCK)).toHaveLength(0);
+    expect(blocking(d.members).filter((m) => m.variant === "shaped-block")).toHaveLength(0);
   });
 
   it("keeps shaped blocks on neighbouring sides apart", () => {
@@ -126,7 +130,7 @@ describe("shaped blocking (#16)", () => {
     const deep = () => 50;
     const profile = profileOf([200, 200, 200], { "-x": deep, "+x": deep, "-y": deep, "+y": deep });
     const d = computeDesign(custom([200, 200, 200], profile), { ...DEFAULT_SETTINGS, quantity: 4 }).design!;
-    const shaped = blocking(d.members).filter((m) => m.label === SHAPED_BLOCK);
+    const shaped = blocking(d.members).filter((m) => m.variant === "shaped-block");
     expect(shaped.length).toBeGreaterThan(0);
     for (const a of shaped) {
       for (const b of shaped) {

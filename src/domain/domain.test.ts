@@ -7,6 +7,7 @@ import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from 
 import { ORIENTATIONS, rotatedSize } from "./orientations";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
+import { custom as customStandards } from "./testFixtures";
 
 const { trailerMm: DRY_VAN_53FT_MM, ltlExcessiveLengthMm: LTL_EXCESSIVE_LENGTH_MM, cardboard: CARDBOARD_LIMITS } = DEFAULT_STANDARDS.limits;
 
@@ -321,6 +322,14 @@ describe("cardboard check", () => {
     expect(cardboard(custom(partKg + 0.1, [300, 200, 100]))).toBeUndefined();
     expect(cardboard(custom(payloadKg / 2, [300, 200, 100], 2))?.level).toBe("info");
     expect(cardboard(custom(payloadKg / 2 + 0.1, [300, 200, 100], 2))).toBeUndefined();
+  });
+
+  it("states the shop's own carton limits, not fixed ones", () => {
+    const limits = { partKg: 20, payloadKg: 40, boxDimSumMm: 2100 };
+    const loose = computeDesign(getPart("PART-003"), { ...DEFAULT_SETTINGS, quantity: 1 }, null, customStandards({ limits: { cardboard: limits } }));
+    const text = metric(cardboard(loose)!.detail);
+    expect(text).toContain("parts up to 20 kg, payload up to 40 kg, 2,100 mm L + W + H");
+    expect(text).not.toMatch(/ECT|29\.5/);
   });
 
   it("stays quiet when the box would be too big", () => {

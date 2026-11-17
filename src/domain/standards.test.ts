@@ -15,13 +15,8 @@ import {
   type DeepPartial,
   type ShopStandards,
 } from "./standards";
+import { custom } from "./testFixtures";
 
-/** Defaults with a patch applied; throws if the result is invalid. */
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
 
 const design = (partId: string, standards: ShopStandards, patch: Partial<CrateSettings> = {}) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;

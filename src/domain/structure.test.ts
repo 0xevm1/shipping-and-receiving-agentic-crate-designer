@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { screwSchedule } from "./crate";
-import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
+import { DEFAULT_SETTINGS } from "./design";
+import { memberKg } from "./materials";
+import type { Member } from "./members";
 import type { CrateSettings } from "./schema";
 import { crateGrossLimitKg, planShipment } from "./shipment";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
+import { DEFAULT_STANDARDS } from "./standards";
 import {
   floorCheck,
   frameCount,
@@ -20,14 +22,9 @@ import {
   skidShare,
   type BaseInput,
 } from "./structure";
+import { custom, designOf } from "./testFixtures";
 
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
-const design = (part: DesignPart, patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
-  computeDesign(part, { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
+const design = designOf;
 
 const STD = { wide: 89, tall: 89 };
 const HEAVY = { wide: 89, tall: 140 };
@@ -314,5 +311,24 @@ describe("shipment planning on the computed rating (#25 with #7)", () => {
       [6, 30],
       [1, 20],
     ]);
+  });
+});
+
+describe("dead-load estimate", () => {
+  // The base is sized from an estimate made before the crate is drawn (`estimateDeadLoad`), so the
+  // estimate must never be lighter than the boards that end up above the skids.
+  const kgOf = (members: Member[]) => members.reduce((n, m) => n + memberKg(m, DEFAULT_STANDARDS), 0);
+  const cases = parts.flatMap((p) => [...p.suggested_quantities, 1, 7, 40].map((quantity) => [p.id, quantity] as const));
+
+  it.each(cases)("covers the weight above the skids for %s x %i", (id, quantity) => {
+    const d = design(getPart(id), { quantity });
+    // Everything above the skids counts, floor joists included.
+    const actual = kgOf(d.members.filter((m) => m.kind !== "skid"));
+    expect(d.structure.dead.allKg).toBeGreaterThanOrEqual(actual - 1e-9);
+  });
+
+  it.each(cases)("covers the dunnage that loads the floor for %s x %i", (id, quantity) => {
+    const d = design(getPart(id), { quantity });
+    expect(d.structure.dead.contentsKg).toBeGreaterThanOrEqual(kgOf(d.members.filter((m) => m.assembly === "inside")) - 1e-9);
   });
 });

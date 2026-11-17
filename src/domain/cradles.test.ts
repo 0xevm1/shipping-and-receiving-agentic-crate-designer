@@ -6,13 +6,9 @@ import { screwSchedule, type Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
+import { custom } from "./testFixtures";
 
 const S = DEFAULT_STANDARDS;
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(S, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
 const design = (partId: string, patch: Partial<CrateSettings> = {}, standards = S) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
 const shaft = (patch: Partial<CrateSettings> = {}) => design("PART-002", patch);
@@ -167,6 +163,9 @@ describe("cradles in the shaft crate", () => {
     const stacking = ofLabel(d.members, STACKING_CRADLE_LABEL);
     expect(bottom).toHaveLength(4);
     expect(stacking).toHaveLength(4);
+    // Only the stacking cradles are marked, which is what the screw schedule keys on.
+    expect(stacking.every((m) => m.variant === "stacking-cradle")).toBe(true);
+    expect(bottom.some((m) => m.variant)).toBe(false);
     const c = d.layout.cellSize[2];
     const z0 = d.layout.slots.find((s) => s.index[2] === 0)!.min[2];
     const z1 = d.layout.slots.find((s) => s.index[2] === 1)!.min[2];

@@ -15,13 +15,9 @@ import {
   type Handling,
 } from "./handling";
 import type { CrateSettings, Vec3 } from "./schema";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
+import { custom } from "./testFixtures";
 
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
 const design = (partId: string, patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
 const check = (checks: Check[], id: string) => checks.find((c) => c.id === id)!;
