@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { layoutCards, openApp, openStandards, openTab, panel, setQuantity, setUnits, shot, standards } from "./helpers";
+import { layoutCards, openApp, openStandards, openTab, panel, setQuantity, setUnits, shot, standards, useTopRankedLayout } from "./helpers";
 
 /**
  * Design scorecard (#17): crate cost (material + labour), build time, freight class and
@@ -80,7 +80,7 @@ test("the Layouts cards show deltas against the recommendation, and the ranking 
   await openTab(page, "Layouts");
   const cards = layoutCards(page);
   expect(await cards.count()).toBeGreaterThan(1);
-  await expect(cards.first()).toContainText("recommended");
+  await expect(cards.first()).toContainText("top by volume");
   await expect(cards.first()).toContainText(/\$\d+ to build · class \d+/);
   // Every other card says how it compares in dollars and freight class.
   const count = await cards.count();
@@ -109,6 +109,8 @@ test("the Layouts cards show deltas against the recommendation, and the ranking 
 });
 
 test("changing the labour rate in Shop standards changes the crate cost", async ({ page }) => {
+  // A standards change re-picks the layout by the ranking; start on that layout, not the sweep's.
+  await useTopRankedLayout(page);
   await openTab(page, "Overview");
   const before = await crateCost(page);
   const { labour: labourBefore } = await costSplit(page);

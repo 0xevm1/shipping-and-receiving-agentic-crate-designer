@@ -6,7 +6,7 @@ import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
 import { canSetFrame } from "@/lib/part";
 import { UNITS_LABEL, UP_LABEL, type ModelUnits, type UpAxis } from "@/lib/partFrame";
-import { MODEL_UNITS, UP_AXES } from "@/domain/designFile";
+import { MODEL_UNITS, UP_AXES } from "@/domain/partFrame";
 import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
 import { massWarning } from "@/lib/fileCheck";

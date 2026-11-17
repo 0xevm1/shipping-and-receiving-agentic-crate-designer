@@ -10,6 +10,7 @@ import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
 import { ChangeNote } from "../shell/ChangeFeedback";
+import { BestQuantity } from "./BestQuantity";
 import rule from "./rule.module.css";
 import styles from "./RulesTab.module.css";
 import { ShopStandards } from "./ShopStandards";
@@ -76,6 +77,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           ))}
         </div>
         <ChangeNote note={note} className={rule.fullRow} />
+        <BestQuantity design={design} />
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 

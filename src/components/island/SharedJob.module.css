@@ -1,0 +1,212 @@
+/*
+ * The shared job (#46): saves on the server, below Saved designs on the Overview. Reuses the
+ * `.btn`, `.linkbtn` and `.actions` primitives (ui.css); rows match Saved designs.
+ */
+
+.root {
+  margin-top: 22px;
+}
+
+.sub {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Connection light: green when live, gold while connecting, red-ish when the server is away. */
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  transform: translateY(-1px);
+}
+.root[data-sync="live"] .dot {
+  background: var(--green);
+}
+.root[data-sync="connecting"] .dot {
+  background: var(--gold);
+}
+.root[data-sync="offline"] .dot,
+.root[data-sync="unavailable"] .dot {
+  background: var(--red);
+}
+
+.reload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.reload span {
+  flex: 1 1 180px;
+}
+
+/* Local first (#46 slice 7a): changes kept on this device until the server confirms them. */
+.cached {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.unsynced {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px dashed var(--gold);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.unsynced b {
+  font-weight: 500;
+  color: var(--gold);
+}
+
+.problems {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.problem {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.problem b {
+  font-weight: 500;
+}
+.theirs {
+  color: var(--muted);
+}
+
+.unsyncedBadge {
+  padding: 0 7px;
+  border: 1px dashed var(--gold);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.notes {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+/* Matches the Saved designs form fields. */
+.notes textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px 9px;
+  color: var(--text);
+  font: 400 13px/1.4 var(--sans);
+  resize: vertical;
+}
+.notes textarea:focus-visible {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 1px var(--sky);
+}
+
+.list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.item:first-child {
+  border-top: 1px solid var(--hair);
+}
+.item[data-unsynced] {
+  border-left: 2px dashed var(--gold);
+  padding-left: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.name {
+  font-weight: 500;
+  font-size: 14px;
+}
+.item[data-current] .name::after {
+  content: " · on screen";
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(123, 216, 143, 0.16);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 500;
+}
+.date {
+  margin-left: auto;
+  flex: none;
+  font: 400 11.5px/1.2 var(--mono);
+  color: var(--muted);
+}
+.meta {
+  margin-top: 3px;
+  font: 400 12px/1.4 var(--mono);
+  color: var(--gold);
+}
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+.rowActions :global(.btn) {
+  padding: 5px 14px;
+}
+
+.actions {
+  margin-top: 4px;
+}
+
+.status {
+  min-height: 1.4em;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* The drawer: touch targets of at least 44 px. */
+@media (max-width: 980px) {
+  .rowActions :global(.btn),
+  .rowActions :global(.linkbtn),
+  .reload :global(.btn),
+  .problem :global(.btn),
+  .problem :global(.linkbtn) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

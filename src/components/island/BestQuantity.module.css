@@ -1,0 +1,44 @@
+/* The best-quantity hint under "How many parts" on the Rules tab (spec §7.16). */
+
+.hint {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--soft);
+}
+.hint[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.head b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.hint small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* "Why this crate?": a link-button on its own line, with a touch-sized target on coarse pointers. */
+.whyBtn {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+@media (max-width: 980px), (pointer: coarse) {
+  .whyBtn {
+    min-height: var(--touch);
+  }
+}

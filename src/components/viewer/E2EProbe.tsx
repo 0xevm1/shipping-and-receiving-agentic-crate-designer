@@ -17,7 +17,9 @@ import { Box2, Spherical, Vector2, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Vec3 } from "@/domain/schema";
 import { lastProfileMs } from "@/lib/partProfile";
+import { isRecommended } from "@/lib/printable";
 import type { Units } from "@/lib/units";
+import { useSweep } from "@/state/bestQuantity";
 import { anim, autoplay, isIdle } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { currentMode, useView, type Tab, type ViewState } from "@/state/viewStore";
@@ -49,6 +51,7 @@ export interface CrateSnapshot {
   panelsHidden: boolean;
   /** Narrow screens: the island drawer is open. */
   drawerOpen: boolean;
+  /** The batch the design on screen was made for (`designedFrom`, like `partId` and `massAssumed`). */
   quantity: number;
   /** The shipment plan's crate types: one for a single crate. */
   crateTypes: { label: string; count: number; quantity: number }[];
@@ -58,8 +61,8 @@ export interface CrateSnapshot {
   crateParts: number | null;
   partId: string;
   /**
-   * How the part is read: the file's units and up axis, the size the plan uses (`sizeMm`, from the
-   * file's own measurements) and the size the viewer measured on the model it draws, turned to Z up
+   * How the part the design on screen was made from is read (`designedFrom`): the file's units and
+   * up axis, the size the plan uses (`sizeMm`, from the file's own measurements) and the size the viewer measured on the model it draws, turned to Z up
    * (`drawnMm`; null before the model has rendered). Z is the part's height in the crate.
    */
   partFrame: { units: string; up: string; sizeMm: Vec3; drawnMm: Vec3 | null };
@@ -76,6 +79,20 @@ export interface CrateSnapshot {
   shapedBlocking: boolean;
   /** Milliseconds the last part analysis took in this page; null before any. */
   profileMs: number | null;
+  /**
+   * A newly loaded part opening at the sweep's recommendation (spec §7.16): `waiting` for the
+   * first result, `measuring` once it is applied (until the measured outline's result), null when
+   * settled or stopped by an edit. Wait for null before reading numbers after loading a part.
+   */
+  autoRecommend: "waiting" | "measuring" | null;
+  /** The current sweep's recommended quantity per crate; null while it is being swept or none passes. */
+  recommended: number | null;
+  /**
+   * Why the layout on screen, as the Layouts tab says it: `ranking` when it is the list's top,
+   * `recommendation` when it is the sweep's recommended crate (cheapest per part) and not the
+   * list's top, `hand` when a person picked another one.
+   */
+  layoutPick: "ranking" | "recommendation" | "hand";
   /**
    * GPU resources the renderers hold (`renderer.info.memory`): the 3D view's, and the island thumbnail's
    * (null before it is created). Counts that keep growing as parts are loaded are a leak.
@@ -130,6 +147,22 @@ function projectCrate(three: RootState | undefined): CrateSnapshot["crateScreen"
   return { left: box.min.x, top: box.min.y, right: box.max.x, bottom: box.max.y };
 }
 
+/** The sweep's recommendation for the inputs on screen, or null while they wait to be swept. */
+function recommendedNow(): number | null {
+  const { inputs, done } = useSweep.getState();
+  return done && done.inputs === inputs ? (done.sweep.recommendation?.quantity ?? null) : null;
+}
+
+/** `CrateSnapshot.layoutPick`: the Layouts tab's own rule (`isRecommended`, spec §7.16). */
+function layoutPickNow(s: ReturnType<typeof useDesigner.getState>): CrateSnapshot["layoutPick"] {
+  const shown = s.result.design?.layout.key;
+  if (!shown || shown === s.result.layouts[0]?.key) return "ranking";
+  const { done } = useSweep.getState();
+  // As `useBestQuantity`: the last result for the part on screen.
+  const sweep = done && done.inputs.part === s.part ? done.sweep : null;
+  return isRecommended(s.plan, sweep) ? "recommendation" : "hand";
+}
+
 function snapshot(): CrateSnapshot {
   const s = useDesigner.getState();
   const v = useView.getState();
@@ -144,6 +177,9 @@ function snapshot(): CrateSnapshot {
     cameraAngles = { theta: sph.theta, phi: sph.phi };
   }
   const external = s.result.design?.layout.external;
+  // The inputs the design on screen was made from: an edit's design lands a few ms after the
+  // edit (the engine runs in a Web Worker), so waiting on these waits for the design too.
+  const designed = s.designedFrom;
   const { handling } = probeStats;
   return {
     mode: currentMode(v.view),
@@ -163,19 +199,27 @@ function snapshot(): CrateSnapshot {
     units: v.units,
     panelsHidden: v.panelsHidden,
     drawerOpen: v.drawerOpen,
-    quantity: s.settings.quantity,
+    quantity: designed.settings.quantity,
     crateTypes: s.plan.crates.map(({ label, count, quantity }) => ({ label, count, quantity })),
     crateIndex: s.crateIndex,
     crateParts: s.result.design?.layout.slots.length ?? null,
-    partId: s.part.id,
-    partFrame: { units: s.part.modelUnits, up: s.part.upAxis, sizeMm: [...s.part.dimensions_mm], drawnMm: s.measured ? [...s.measured] : null },
-    massAssumed: s.part.massAssumed,
+    partId: designed.part.id,
+    partFrame: {
+      units: designed.part.modelUnits,
+      up: designed.part.upAxis,
+      sizeMm: [...designed.part.dimensions_mm],
+      drawnMm: s.measured ? [...s.measured] : null,
+    },
+    massAssumed: designed.part.massAssumed,
     crateScreen: projectCrate(three),
     frames,
     pulses: probeStats.pulsesFired,
     photonsActive: probeStats.photonsActive,
     shapedBlocking: !!s.result.design?.shapedBlocking,
     profileMs: lastProfileMs(),
+    autoRecommend: s.autoRecommend ? (s.autoRecommend.applied ? "measuring" : "waiting") : null,
+    recommended: recommendedNow(),
+    layoutPick: layoutPickNow(s),
     gpu: three
       ? {
           geometries: three.gl.info.memory.geometries,

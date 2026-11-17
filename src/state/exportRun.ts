@@ -1,13 +1,13 @@
 import { create } from "zustand";
-import { downloadBytes } from "@/lib/exportGlb";
+import { downloadBytes } from "@/lib/download";
 import { models } from "@/lib/modelRegistry";
 import { useDesigner } from "./store";
 import { useView } from "./viewStore";
 
 /** The busy state shows at least this long, so a fast export still registers (not with reduced motion). */
-const MIN_BUSY_MS = 1500;
+export const MIN_BUSY_MS = 1500;
 /** How long "Downloaded …" stays up. */
-const DONE_NOTE_MS = 8000;
+export const DONE_NOTE_MS = 8000;
 /** A failure stays up longer, since it asks the person to do something. */
 export const ERROR_NOTE_MS = 15000;
 
@@ -19,7 +19,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * The one export run behind the Export pill: one click downloads `crate-<part>-x<qty>.zip`
- * (`src/lib/exportBundle.ts`, loaded on first use). A second click while busy does nothing.
+ * (the engine's `buildBundleZip`, loaded with its PDF, ZIP and GLB code on first use). A second click while busy does nothing.
  * The outcome note clears itself, a failure after a longer time than a success.
  */
 export const useExportRun = create<{ state: ExportState; run: () => Promise<void> }>((set, get) => {
@@ -45,7 +45,7 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
       const hold = models.acquire(s.part.modelUrl);
       try {
         const work = (async () => {
-          const { browserMakers, buildBundle, zipBundle } = await import("@/lib/exportBundle");
+          const [{ buildBundleZip }, { urlModelReader }] = await Promise.all([import("@/engine/files"), import("@/engine/glb")]);
           const input = {
             part: s.part,
             settings: s.settings,
@@ -54,10 +54,10 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
             standards: s.standards,
             units,
             ranking: s.ranking,
+            layoutKey: s.layoutKey,
             generatedAt: at.toISOString(),
           };
-          const bundle = await buildBundle(input, await browserMakers(s.part));
-          return { name: bundle.name, zip: zipBundle(bundle.files, at) };
+          return buildBundleZip(input, urlModelReader, at);
         })();
         const [{ name, zip }] = await Promise.all([work, reduce ? null : wait(MIN_BUSY_MS)]);
         downloadBytes(name, zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, "application/zip");

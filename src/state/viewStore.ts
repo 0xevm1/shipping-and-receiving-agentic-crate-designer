@@ -51,6 +51,8 @@ interface LastChange {
   source: ChangeSource;
   /** From `diffDesigns(previous, next)`; empty when nothing moved. */
   changes: DesignChange[];
+  /** What the screen says instead of the diff's summary ("Set to the recommended 34 per crate"); the diff stays the detail. */
+  note?: string;
 }
 
 /** How long the change note stays (it fades over the end). Longer than the Overview flash (1.2 s) so it can be read. */
@@ -219,7 +221,7 @@ function dropStaleLines(s: Pick<ViewStoreState, "pin" | "hover">, result: Design
 let changeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** The `lastChange` for an edit from `source` that moves the design from `prev` to `next`. */
-function changeNote(source: ChangeSource, prev: DesignResult, next: DesignResult): Pick<ViewStoreState, "lastChange"> {
+function changeNote(source: ChangeSource, prev: DesignResult, next: DesignResult, note?: string): Pick<ViewStoreState, "lastChange"> {
   clearTimeout(changeTimer);
   // A problem on either side (no design) has its own message; there is nothing to compare.
   if (!prev.design || !next.design) return { lastChange: null };
@@ -227,7 +229,7 @@ function changeNote(source: ChangeSource, prev: DesignResult, next: DesignResult
   changeTimer = setTimeout(() => {
     if (useView.getState().lastChange?.id === id) useView.setState({ lastChange: null });
   }, CHANGE_NOTE_MS);
-  return { lastChange: { id, at: Date.now(), source, changes: diffDesigns(prev.design, next.design) } };
+  return { lastChange: { id, at: Date.now(), source, changes: diffDesigns(prev.design, next.design), ...(note ? { note } : {}) } };
 }
 
 /**
@@ -254,7 +256,7 @@ function onEdit(edit: DesignEdit) {
       const sizeChanged = edit.partReplaced || edit.next.design?.layout.key !== edit.prev.design?.layout.key;
       useView.setState({
         // With a source, records what moved; without one (a standards change) clears the note.
-        ...(edit.source ? changeNote(edit.source, edit.prev, edit.next) : { lastChange: null }),
+        ...(edit.source ? changeNote(edit.source, edit.prev, edit.next, edit.note) : { lastChange: null }),
         // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
         ...(s.designedInMs !== null ? { designedInMs: null } : {}),
         hover: null,

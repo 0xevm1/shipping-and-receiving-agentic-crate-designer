@@ -3,6 +3,7 @@ import type { CrateDesign } from "./crate";
 import { RANKINGS, type Ranking } from "./design";
 import { hasKind, readEnvelope, writeEnvelope } from "./envelope";
 import { kg, mm, msg, type Message } from "./message";
+import { MODEL_UNITS, UP_AXES } from "./partFrame";
 import { usableProfile, type PartProfile } from "./profile";
 import { decodeProfile, EncodedProfileSchema } from "./profileCodec";
 import { CrateSettingsSchema, Vec3Schema, type CrateSettings, type DesignPart, type Vec3 } from "./schema";
@@ -25,13 +26,6 @@ export const DESIGN_FILE_KIND = "crate-design";
  * 3: the part's file units and up axis joined the file, because the model is measured with them.
  */
 export const DESIGN_SCHEMA_VERSION = 3;
-
-/** What a loaded model's numbers are in (spec §4): metres, millimetres or inches. The measuring is in `src/lib/partFrame.ts`. */
-export const MODEL_UNITS = ["m", "mm", "in"] as const;
-export type ModelUnits = (typeof MODEL_UNITS)[number];
-/** Which model axis points up: Z (the crate's own frame, and the sample files') or Y (glTF's own convention). */
-export const UP_AXES = ["z", "y"] as const;
-export type UpAxis = (typeof UP_AXES)[number];
 
 const DesignFilePartSchema = z.object({
   /** "catalog": the model ships with the app (/public/parts). "custom": the user supplies the GLB. */
@@ -69,6 +63,11 @@ const DesignFileSchema = z.object({
   schemaVersion: z.literal(DESIGN_SCHEMA_VERSION),
   app: z.object({ name: z.string(), version: z.string() }),
   savedAt: z.string(),
+  /**
+   * The engine that made the file and the hash of its input (spec §5.1): written by the engine's
+   * file builders (the Export package), absent from a file saved with Download design (.json).
+   */
+  engine: z.object({ version: z.string(), inputHash: z.string() }).optional(),
   part: DesignFilePartSchema,
   settings: CrateSettingsSchema,
   /** How the recommended layout was chosen (spec §7.2); the layout lists and the "why" follow it. */
@@ -113,15 +112,18 @@ export interface SerializeInput {
   app: { name: string; version: string };
   /** ISO timestamp; passed in so this stays pure. */
   savedAt: string;
+  /** The engine's stamp, when the engine built the file. */
+  engine?: { version: string; inputHash: string };
 }
 
 /** The design as pretty-printed JSON, ending in a newline. */
-export function serializeDesign({ part, settings, layoutKey, ranking = "volume", design, plan, app, savedAt }: SerializeInput): string {
+export function serializeDesign({ part, settings, layoutKey, ranking = "volume", design, plan, app, savedAt, engine }: SerializeInput): string {
   const file: DesignFile = {
     kind: DESIGN_FILE_KIND,
     schemaVersion: DESIGN_SCHEMA_VERSION,
     app: { name: app.name, version: app.version },
     savedAt,
+    ...(engine ? { engine: { version: engine.version, inputHash: engine.inputHash } } : {}),
     part: DesignFilePartSchema.parse(part),
     settings: CrateSettingsSchema.parse(settings),
     ranking,

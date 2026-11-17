@@ -11,9 +11,14 @@ docs/screenshots
 playwright-report
 test-results
 e2e/screenshots
+# Test baselines vitest writes byte for byte (the engine parity baseline).
+src/**/__snapshots__
 
 # Prose keeps its hand-set tables and wrapping.
 *.md
 
+# drizzle-kit output; `bun run db:generate` writes it and CI diffs it.
+db/migrations
+.engine-worker
 # Generated test fixtures, some deliberately malformed (scripts/fixtures/scenarios.mjs).
 fixtures

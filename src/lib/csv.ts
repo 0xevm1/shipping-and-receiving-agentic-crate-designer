@@ -64,6 +64,17 @@ export function shipmentToCsv(part: DesignPart, plan: ShipmentPlan, u: Units): s
   return [...header, ...rows, `Wood screws (approx),fastener,,,${all.screws}`].join("\n") + "\n";
 }
 
+/**
+ * The cut list with the engine's stamp (spec §5.1) as one more `#` line, after the description and
+ * before the column names: "# Engine 0.1.0+engine.5, input 3f2a…".
+ */
+export function stampCsv(csv: string, stamp: { engineVersion: string; inputHash: string }): string {
+  const lines = csv.split("\n");
+  const at = lines.findIndex((l) => !l.startsWith("#"));
+  lines.splice(at < 0 ? 0 : at, 0, `# Engine ${stamp.engineVersion}, input ${stamp.inputHash}`);
+  return lines.join("\n");
+}
+
 function csvCell(v: string | number): string {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

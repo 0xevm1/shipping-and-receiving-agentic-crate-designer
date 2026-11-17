@@ -20,6 +20,7 @@ import {
   shot,
   tab,
   triangleGlb,
+  waitForRecommended,
   waitForScene,
 } from "./helpers";
 
@@ -66,7 +67,10 @@ test("a reload reopens the same crate: rules, layout, ranking, tab and units", a
   const ranking = panel(page).getByRole("group", { name: "Rank layouts by" });
   await ranking.getByRole("button", { name: "Crate cost" }).click();
   // A layout card that isn't the recommended one.
+  const recommended = (await crate(page)).outside;
   await otherLayout(page).first().click();
+  // The pick's design lands from the engine's worker a few ms after the click.
+  await pollCrate(page, (s) => s.outside).not.toEqual(recommended);
   const before = await crate(page);
   await expect.poll(() => savedQuantity(page)).toBe(8);
   await shot(page, "last-design-before-reload");
@@ -161,15 +165,20 @@ test("a GLB over the 50 MB cap isn't kept: the reload opens the default part and
 
 test("corrupt saved data opens the default part without an error", async ({ page }) => {
   await openApp(page);
+  // Opening at the recommendation schedules a save; let it land first, or the reload's flush
+  // would write it over the corrupt entry.
+  const opened = await waitForRecommended(page);
+  await expect.poll(() => savedQuantity(page)).toBe(opened.quantity);
   await page.evaluate((key) => localStorage.setItem(key, '{"kind":"crate-designer.last-design","version":1,"design":{oops'), KEY);
   const errors: Error[] = [];
   const warnings: string[] = [];
   page.on("pageerror", (e) => errors.push(e));
   page.on("console", (m) => m.type() === "warning" && warnings.push(m.text()));
   await reloadApp(page);
-  const s = await crate(page);
+  // Nothing to restore: the default part, opened at its recommendation (spec §7.16).
+  const s = await waitForRecommended(page);
   expect(s.partId).toBe("PART-001");
-  expect(s.quantity).toBe(4);
+  expect(s.quantity).toBe(s.recommended);
   expect(s.tab).toBe("overview");
   await expect(loadMessage(page)).toHaveCount(0);
   expect(errors).toEqual([]);

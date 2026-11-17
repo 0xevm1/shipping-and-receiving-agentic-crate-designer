@@ -2,6 +2,10 @@
 # Actions → "E2E" → Run workflow (pick a branch), or `gh workflow run e2e.yml --ref <branch>`.
 # It is deliberately not part of pull-request CI or the pre-commit hook: the suite takes many
 # minutes. Optional input: a spec path or Playwright filter to run part of it.
+#
+# Like the `integration` job in ci.yml, it starts Postgres and the blob emulator from the repo's
+# docker-compose.yml (not a `services:` block), migrates the e2e database, then runs Playwright
+# against `next start` on the runner: Next.js outside Docker, as locally (#46).
 
 name: E2E
 
@@ -25,6 +29,10 @@ jobs:
     name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The database playwright.config.ts points `next start` at (its default, set here for the
+      # migrate step too).
+      E2E_DB_NAME: crate_designer_e2e
     steps:
       - uses: actions/checkout@v7
 
@@ -69,16 +77,32 @@ jobs:
         if: steps.browsers.outputs.cache-hit == 'true'
         run: bunx playwright install-deps chromium
 
-      # Production build with the read-only test hook (window.__crate) compiled in.
+      # Postgres and the blob emulator healthy, buckets and CORS set up.
+      - name: Start infrastructure
+        run: bun run infra:up
+
+      - name: Migrate the e2e database
+        run: bun run db:migrate
+        env:
+          DB_NAME: ${{ env.E2E_DB_NAME }}
+
+      # Production build with the read-only test hook (window.__crate) compiled in. `build` also
+      # bundles the server's engine worker thread.
       - name: Build (e2e)
         run: bun run build
         env:
           NEXT_PUBLIC_E2E: "1"
 
+      # Playwright serves the build with `next start` on the runner (playwright.config.ts webServer).
       - name: E2E tests
         run: bun run e2e ${{ inputs.filter }}
         env:
           E2E_SKIP_BUILD: "1"
+          E2E_SKIP_INFRA: "1"
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color
 
       - name: Upload screenshots
         if: ${{ !cancelled() }}
@@ -97,3 +121,7 @@ jobs:
           path: playwright-report/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Stop infrastructure
+        if: always()
+        run: docker compose down -v

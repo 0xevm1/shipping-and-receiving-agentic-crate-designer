@@ -2,7 +2,7 @@ import { isDesignFileJson, parseDesignFile } from "@/domain/designFile";
 import { MAX_PART_MM } from "@/domain/design";
 import { dimsMessage, kg, mm, msg, parts, type Message } from "@/domain/message";
 import type { CatalogEntry, Vec3 } from "@/domain/schema";
-import { readGlb, type GlbProblem } from "./glbInfo";
+import { GLB_MESSAGES, glbProblemMessage, readGlb } from "@/domain/glb";
 import { fitFrame, framedSizeMm, guessUnits, UNITS_LABEL, type ModelUnits, type PartFrame } from "./partFrame";
 
 /**
@@ -439,26 +439,6 @@ function checkCatalog(file: string, json: unknown, out: Finding[]): Catalog {
   return { summary, entries };
 }
 
-/** The sentence for a .glb that can't be used. Errors carry no sizes, so none of these needs the units toggle. */
-function glbProblemMessage(p: GlbProblem): string {
-  switch (p.kind) {
-    case "not-glb":
-      return `It has a .glb name but isn't a binary glTF${p.looksLike ? ` (it looks like ${p.looksLike})` : ""}. Export the part again as .glb; renaming a file doesn't convert it.`;
-    case "version":
-      return `It is glTF version ${p.version}, and the app reads version 2. Export the part again as a .glb (glTF 2.0).`;
-    case "damaged":
-      return "That .glb file is damaged: it is cut off or its header can't be read. Try exporting it again.";
-    case "compressed":
-      return `That .glb uses ${p.extension} compression, which the viewer can't read. Export it again without ${p.extension === "Draco" ? "Draco" : "Meshopt"} compression.`;
-    case "no-geometry":
-      return "It has no 3D geometry in its scene (no mesh with points). Export the part itself, not just cameras, lights or an empty scene.";
-    case "no-size":
-      return "All its geometry sits at one point, so it has no size. Check the export has the part's real mesh.";
-    case "flat":
-      return `It is flat: zero thickness along ${"XYZ"[p.axis]}, so a crate can't be sized around it. Export the part as a solid.`;
-  }
-}
-
 /** Reads the picked files. Pure: see the module comment. */
 export function checkFiles(files: readonly FileInput[], { known = [] }: CheckOptions = {}): FileCheck {
   const findings: Finding[] = [];
@@ -501,7 +481,7 @@ export function checkFiles(files: readonly FileInput[], { known = [] }: CheckOpt
         glbs.push({ name: f.name, ok: false });
       } else glbs.push({ name: f.name, ok: true, raw: r.info.size, center: r.info.center });
     } else if (kind === "gltf") {
-      add("error", "gltf-text", t("Text .gltf files can't be used. Export the part as a single .glb file."));
+      add("error", "gltf-text", t(GLB_MESSAGES.textGltf));
     } else unusable.push(f.name);
   }
 

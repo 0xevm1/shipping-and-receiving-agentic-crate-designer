@@ -340,4 +340,11 @@ describe("format 3: the part's file units and up axis (#105)", () => {
     expect(r.file.summary).toEqual(doc.summary);
     expect(r.file.part).toMatchObject({ id: "widget_v2", dimensions_mm: widget.dimensions_mm, model: "widget_v2.glb" });
   });
+
+  it("keeps the engine's stamp (#46) of a format 2 file the engine wrote", () => {
+    const engine = { version: "0.1.0+engine.3", inputHash: "f".repeat(64) };
+    const r = parseDesignFile(JSON.stringify({ ...asFormat2(widget), engine }));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.file).toMatchObject({ schemaVersion: 3, engine });
+  });
 });

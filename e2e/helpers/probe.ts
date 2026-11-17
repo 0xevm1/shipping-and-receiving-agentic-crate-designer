@@ -31,16 +31,39 @@ export async function waitForFrames(page: Page, n = 2) {
   await pollCrate(page, (s) => s.frames, { timeout: 30_000 }).toBeGreaterThanOrEqual(start + n);
 }
 
+/**
+ * After loading a new part (a GLB, catalog or not), or opening the app on the preloaded part: waits until it has opened at the quantity
+ * sweep's recommended quantity and layout and settled (spec §7.16: applied, then once more for the
+ * measured outline), so the numbers read next stay put. An edit settles it too. Not for pages that
+ * stop the outline analysis (`disableShapeAnalysis`), which never measure. Returns the snapshot.
+ */
+export async function waitForRecommended(page: Page): Promise<CrateSnapshot> {
+  await pollCrate(page, (s) => s.autoRecommend, { timeout: 30_000 }).toBeNull();
+  // The settled recommendation's design has landed (the probe reads the design's own inputs).
+  await pollCrate(page, (s) => s.recommended === null || s.quantity === s.recommended).toBe(true);
+  return crate(page);
+}
+
 /** The scene is drawing and the preloaded part's model has loaded (the header shows the model check). */
 async function waitForReady(page: Page) {
   await waitForScene(page);
   await expect(page.getByRole("banner")).toContainText("model matches catalog", { timeout: 30_000 });
 }
 
-/** Opens the app and waits until it is ready (`waitForReady`). */
-export async function openApp(page: Page) {
+/**
+ * Opens the app and waits until it is ready (`waitForReady`) and the preloaded part has opened at
+ * its recommended quantity and crate (spec §7.16: with nothing to restore, the default part is
+ * treated as a load). Read the quantity from the probe, never pin it. A page that stops the outline
+ * analysis (`disableShapeAnalysis`) passes `{ measured: false }`: it waits for the first result only.
+ */
+export async function openApp(page: Page, { measured = true }: { measured?: boolean } = {}) {
   await page.goto("/");
   await waitForReady(page);
+  if (measured) await waitForRecommended(page);
+  else {
+    await pollCrate(page, (s) => s.autoRecommend, { timeout: 30_000 }).not.toBe("waiting");
+    await pollCrate(page, (s) => s.recommended === null || s.quantity === s.recommended).toBe(true);
+  }
 }
 
 /**

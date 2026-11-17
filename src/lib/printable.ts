@@ -22,13 +22,16 @@ import { explainLayout, type LayoutExplanation, type Ranking } from "@/domain/de
 import { fileProfile, parseDesignFile, restoreDesign } from "@/domain/designFile";
 import type { Message } from "@/domain/message";
 import type { Layout } from "@/domain/packing";
-import type { DesignPart } from "@/domain/schema";
+import type { CrateSettings, DesignPart } from "@/domain/schema";
 import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
-import type { ShopStandards } from "@/domain/standards";
+import { CONSTRAINT_TEXT, explainRecommendation } from "@/domain/explainRecommendation";
+import { costsArePlaceholder, PLACEHOLDER_COST_NOTE, type ShopStandards } from "@/domain/standards";
+import type { QuantitySweep } from "@/domain/sweep";
+import { explanationText, type ExplanationText } from "./explanation";
 import { renderMessage } from "./message";
 import { allChecks } from "@/lib/checks";
 import { crateDrawings, type Drawing } from "./drawings";
-import { cutText, describeLayout, documentDate, stockText } from "./format";
+import { cutText, describeLayout, documentDate, stockText, usdCents } from "./format";
 import { memberBounds } from "./memberBounds";
 import { LB_PER_KG } from "@/domain/units";
 import { area, cut, dims, dimsOther, groupDigits, lengthUnit, run, volume, weight, type Units } from "./units";
@@ -122,6 +125,27 @@ export interface PrintableCrate {
   label: PrintableLabel;
 }
 
+/** The quantity per crate and why (spec §7.16), when the document was made with the sweep. */
+export interface PrintableQuantity {
+  /** The crate on the page is the sweep's recommendation (its quantity and layout). */
+  recommended: boolean;
+  /** "Recommended: 34 per crate", or "20 per crate; the sweep recommends 34". */
+  heading: string;
+  /** The sweep's rationale: the score and what stopped a larger crate. */
+  rationale: string;
+  rows: Row[];
+  /** "Costs use the shipped placeholder rates …", or null when the shop entered its own. */
+  costNote: string | null;
+  /** Why the sweep recommends its quantity, as the Rules tab says it (spec §7.16), when the rules were given. */
+  why: ExplanationText | null;
+}
+
+/** The engine's stamp (spec §5.1), printed in the footer and the PDF's keywords. */
+export interface PrintableStamp {
+  engineVersion: string;
+  inputHash: string;
+}
+
 export interface PrintableDesign {
   units: Units;
   unitsNote: string;
@@ -133,6 +157,12 @@ export interface PrintableDesign {
   crates: PrintableCrate[];
   /** Why there is no crate (spec §7.9), or null. */
   problem: string | null;
+  /** The quantity rationale, when a sweep was given (the engine's PDF; not the /print route). */
+  quantity?: PrintableQuantity | null;
+  /** Set when the engine built the document. */
+  stamp?: PrintableStamp;
+  /** The ISO time the document was made: the PDF's creation date, so equal inputs give equal bytes. */
+  createdAt?: string;
 }
 
 export interface PrintableInput {
@@ -146,6 +176,12 @@ export interface PrintableInput {
   generatedAt: string;
   /** IANA zone the document date is read in; this device's own zone when absent. */
   timeZone?: string;
+  /** The part's quantity sweep (spec §7.16): adds the quantity rationale. */
+  sweep?: QuantitySweep | null;
+  /** The settings the plan was made with: the sweep's packing rules, for explaining it. */
+  settings?: CrateSettings;
+  /** The engine's stamp, when the engine builds the document. */
+  stamp?: PrintableStamp;
 }
 
 const other = (u: Units): Units => (u === "imperial" ? "metric" : "imperial");
@@ -155,8 +191,18 @@ const shopSize = (mm: number, u: Units) => (u === "imperial" ? cut(mm, u) : `${M
 
 const LEVEL_TEXT: Record<Check["level"], PrintableCheck["levelText"]> = { ok: "Pass", caution: "Caution", info: "Info" };
 
-/** The `explainLayout` result as a sentence, as the Layouts tab words it. */
-function whyText(e: LayoutExplanation): string {
+/** What each Layouts ranking ranks by, in a sentence ("ranked by volume"). */
+export const RANKING_WORDS: Record<Ranking, string> = { volume: "volume", cost: "crate cost", density: "freight class" };
+
+/**
+ * The `explainLayout` result as a sentence, as the Layouts tab words it. `recommended` is set when
+ * the crate is the quantity sweep's recommendation: its layout is then the one cheapest per part,
+ * not one picked by hand.
+ */
+function whyText(e: LayoutExplanation, ranking: Ranking, recommended: boolean): string {
+  if (e.kind === "picked" && recommended) {
+    return `Recommended: cheapest per part. This is the quantity sweep's crate, the lowest crate cost per part. The layouts are ranked by ${RANKING_WORDS[ranking]}, where it ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the top layout.`;
+  }
   switch (e.kind) {
     case "only":
       return "This is the only way to pack this batch under the current packing rules.";
@@ -379,7 +425,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       freight: freightRows(design, u),
       layout: {
         chosen: `${layoutText(layout, u)}, ${volume(layout.externalVolumeM3, u)}`,
-        why: whyText(explainLayout(layouts, layout, standards, input.ranking)),
+        why: whyText(explainLayout(layouts, layout, standards, input.ranking), input.ranking, isRecommended(input.plan, input.sweep)),
         runnerUp: runnerUp(layouts, layout, u),
       },
       checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: renderMessage(k.detail, u) })),
@@ -403,6 +449,58 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
     },
     label: label(design, part, type, split, u),
   };
+}
+
+/** True when the plan's crate is the sweep's recommendation: its quantity and its layout, in one crate type. */
+export function isRecommended(plan: ShipmentPlan, sweep: QuantitySweep | null | undefined): boolean {
+  const rec = sweep?.recommendation;
+  const design = plan.crates[0]?.result.design;
+  return !!rec && !!design && !plan.split && plan.totals.parts === rec.quantity && design.layout.key === rec.crate.layoutKey;
+}
+
+/** The quantity section: the recommendation, its rationale and the constraint that stopped a larger crate. */
+function quantitySection(input: PrintableInput, sweep: QuantitySweep): PrintableQuantity | null {
+  const { plan, standards, units: u, settings, part } = input;
+  const rec = sweep.recommendation;
+  if (!rec || plan.problem) return null;
+  const recommended = isRecommended(plan, sweep);
+  const here = plan.split ? plan.crates.map((c) => c.quantity).join(" and ") : String(plan.totals.parts);
+  const { stoppedBy } = rec;
+  const rows: Row[] = [
+    { label: "Recommended", value: `${rec.quantity} per crate`, note: `${usdCents(rec.crate.scoreUsdPerPart)} a part in crate cost` },
+    stoppedBy
+      ? {
+          label: "Stopped a larger crate",
+          value: `${stoppedBy.quantity} per crate fails the ${CONSTRAINT_TEXT[stoppedBy.binding]}`,
+          note: renderMessage(stoppedBy.reason, u),
+        }
+      : { label: "Stopped a larger crate", value: `Nothing up to ${sweep.maxQuantity} per crate` },
+    {
+      label: "Freight",
+      value: sweep.basis === "crate-only" ? "Not priced" : "Priced from the given rates",
+      note: sweep.basis === "crate-only" ? "No freight rates were given, so the score is crate cost per part." : undefined,
+    },
+  ];
+  return {
+    recommended,
+    heading: recommended ? `Recommended: ${rec.quantity} per crate` : `${here} per crate; the sweep recommends ${rec.quantity}`,
+    rationale: renderMessage(rec.rationale, u),
+    rows,
+    costNote: costsArePlaceholder(standards) ? PLACEHOLDER_COST_NOTE : null,
+    why: recommendationWhy(sweep, standards, settings, !!part.profile, u),
+  };
+}
+
+/** The explanation of the sweep's recommendation in `u`, or null without the rules it was swept under. */
+export function recommendationWhy(
+  sweep: QuantitySweep | null,
+  standards: ShopStandards,
+  settings: CrateSettings | undefined,
+  measured: boolean,
+  u: Units,
+): ExplanationText | null {
+  const e = sweep && settings ? explainRecommendation(sweep, standards, settings, { measured }) : null;
+  return e && explanationText(e, u);
 }
 
 /** The whole hand-off document for a plan, in the selected units. Pure. */
@@ -437,6 +535,8 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
     },
     crates,
     problem: plan.problem ? `${plan.problem.title}. ${renderMessage(plan.problem.detail, u)}` : null,
+    ...(input.sweep ? { quantity: quantitySection(input, input.sweep) } : {}),
+    ...(input.stamp ? { stamp: { engineVersion: input.stamp.engineVersion, inputHash: input.stamp.inputHash }, createdAt: generatedAt } : {}),
   };
 }
 

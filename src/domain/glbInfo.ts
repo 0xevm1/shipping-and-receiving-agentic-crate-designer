@@ -3,8 +3,8 @@ import type { Vec3 } from "@/domain/schema";
 /**
  * What a .glb says about itself, read from its header, its JSON chunk and (when an accessor has no
  * bounds) its binary chunk. No WebGL, no DOM and no three.js, so it runs in the unit tests and in a
- * command-line script as well as in the browser. The rules that turn a problem into a sentence are
- * in `fileCheck.ts`.
+ * command-line script as well as in the browser. The sentence for each problem is
+ * `glbProblemMessage` in `glb.ts`.
  */
 
 const GLB_MAGIC = 0x46546c67; // "glTF"
@@ -173,20 +173,23 @@ function sceneBounds(json: Gltf, bin: Uint8Array | null): { min: Vec3; max: Vec3
   return found ? { min, max } : null;
 }
 
-/** Reads a .glb: its size and centre, or the first reason it can't be used. */
-export function readGlb(buffer: ArrayBuffer): GlbRead {
-  const bytes = new Uint8Array(buffer);
-  const view = new DataView(buffer);
-  if (buffer.byteLength < 12 || view.getUint32(0, true) !== GLB_MAGIC) return { problem: { kind: "not-glb", looksLike: sniff(bytes) } };
+/**
+ * Reads a .glb: its size and centre, or the first reason it can't be used. The one reader for the
+ * browser's file check, the upload API and the CLI (#46), so they accept the same files.
+ */
+export function readGlb(buffer: ArrayBuffer | Uint8Array): GlbRead {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.byteLength < 12 || view.getUint32(0, true) !== GLB_MAGIC) return { problem: { kind: "not-glb", looksLike: sniff(bytes) } };
   const version = view.getUint32(4, true);
   if (version !== 2) return { problem: { kind: "version", version } };
 
   let json: Gltf | null = null;
   let bin: Uint8Array | null = null;
-  for (let at = 12; at + 8 <= buffer.byteLength;) {
+  for (let at = 12; at + 8 <= bytes.byteLength;) {
     const length = view.getUint32(at, true);
     const type = view.getUint32(at + 4, true);
-    if (at + 8 + length > buffer.byteLength) return { problem: { kind: "damaged" } };
+    if (at + 8 + length > bytes.byteLength) return { problem: { kind: "damaged" } };
     const body = bytes.subarray(at + 8, at + 8 + length);
     if (type === CHUNK_JSON && !json) {
       try {

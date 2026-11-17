@@ -36,18 +36,34 @@ invariants) is in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 
 ## Quick start
 
+Requirements: [Bun](https://bun.sh) 1.3+, Node 24 and **Docker** (Docker Desktop, or Engine
+with the compose plugin), running.
+
 ```bash
 git clone git@github.com:0xevm1/shipping-ui.git
 cd shipping-ui
 bun install
-bun run dev          # → http://localhost:3000
+bun run dev          # Docker must be running → http://localhost:3000
+bun run worker       # optional, in a second terminal: background sweeps and large bundles
 ```
+
+`bun run dev` starts Postgres and an S3-compatible blob emulator in Docker
+(`docker-compose.yml`), migrates the database, prints the emulator's console URL and then starts
+Next.js on the host. [`docs/POSTGRES.md`](docs/POSTGRES.md) covers the data store, the scripts,
+`.env.local` and the overrides for running several worktrees at once.
 
 | Command | What it does |
 |---|---|
-| `bun run dev` | Dev server with hot reload |
-| `bun run build && bun run start` | Production build and serve |
-| `bun run test` | Domain unit tests (vitest) |
+| `bun run dev` | `infra:up`, `db:migrate`, then the dev server with hot reload (`bun run dev:app` skips the Docker steps) |
+| `bun run infra:up` / `infra:down` | Start (and wait for) / stop Postgres and the blob emulator; `db:up` / `db:down` are aliases |
+| `bun run db:migrate` / `db:reset` / `db:psql` | Apply `db/migrations/` / drop and re-migrate the database / open `psql` on it |
+| `bun run db:generate` | Write the next migration after changing `src/server/db/schema.ts` |
+| `bun run test:integration` | Integration tests against the Docker Postgres (`*.integration.test.ts`; run `infra:up` first) |
+| `bun run build && bun run start` | Production build and serve (`build` also bundles the server's engine worker thread, `engine:build`) |
+| `bun run worker` | The background job worker: claims queued sweeps from Postgres and runs them on worker threads ([docs/QUEUE.md](docs/QUEUE.md)) |
+| `bun run crate -- part.glb --mass 21.5` | The command line: best quantity, ranked crates and files for a part ([Command line](#command-line)) |
+| `bun run apikey:create -- --name x` | Create an API key for scripts (`apikey:list`, `apikey:revoke -- --id …`) |
+| `bun run test` | Unit tests (vitest); no database needed |
 | `bun run e2e` | End-to-end UI tests (Playwright): builds the app with the test hook, serves it on port 3320 (`E2E_PORT` changes it), runs every flow and saves screenshots to the git-ignored `e2e/screenshots/`. First run `bunx playwright install chromium` once. Locally it uses 1 to 3 workers (`E2E_WORKERS`). `bun run e2e:ui` opens Playwright's UI mode; `bun run e2e:docs-shots` copies chosen shots into `docs/screenshots/` |
 | `bun run format` / `bun run format:check` | Prettier (`.prettierrc`: 160 columns); CI runs the check |
 | `bun run knip` | Unused files, exports and dependencies (a report; it has known findings) |
@@ -69,16 +85,90 @@ bun run dev          # → http://localhost:3000
   commit runs ESLint on the staged files, `bun run typecheck` and `bun run test` (4-6 s), and
   the output names the step that failed. It works in `git worktree`s too. In an emergency, skip it
   with `git commit --no-verify`; CI still runs every check.
-- Nothing else is needed: no environment variables, backend or database. The sample GLBs are
-  bundled in `public/parts/`.
+- **Docker** (Docker Desktop, or Engine with the compose plugin) runs Postgres and the blob
+  emulator for `bun run dev` and the integration tests. `bun run build`, `bun run test` and the
+  pre-commit hook don't need it. No environment variables are needed: the defaults match
+  `docker-compose.yml`, and `.env.example` lists what `.env.local` can override. The sample GLBs
+  are bundled in `public/parts/`.
+
+### Environment
+
+No variables are needed for local work: the defaults match `docker-compose.yml`. Copy
+`.env.example` to `.env.local` to change any of them (full list:
+[docs/POSTGRES.md](docs/POSTGRES.md#environment), [docs/QUEUE.md](docs/QUEUE.md)).
+
+| Variable | Default | |
+|---|---|---|
+| `DATABASE_URL` | built from `DB_PORT`, `DB_NAME` | Postgres; set it for a hosted database |
+| `DB_PORT`, `DB_NAME` | `5432`, `crate_designer` | The Docker Postgres's host port and database |
+| `BLOB_ENDPOINT`, `BLOB_REGION`, `BLOB_BUCKET` | `http://localhost:9000`, `us-east-1`, `crate-designer-dev` | Blob storage (S3 API) |
+| `BLOB_ACCESS_KEY_ID`, `BLOB_SECRET_ACCESS_KEY` | the emulator's | Server-only; never `NEXT_PUBLIC_` |
+| `BLOB_FORCE_PATH_STYLE`, `BLOB_PUBLIC_ENDPOINT` | `true`, `BLOB_ENDPOINT` | Path-style URLs; the host written into presigned URLs |
+| `ENGINE_POOL_SIZE`, `QUEUE_CONCURRENCY` | CPUs − 1 (1–4), `2` | Engine worker threads; queue jobs at once per worker |
+| `CRATE_API_URL`, `CRATE_API_KEY` | `http://localhost:3000`, none | The command line's server and key |
+
+**Real S3 or GCS.** Pointing the `BLOB_*` variables at a real bucket works without code changes:
+the app speaks only the S3 API. For AWS S3 leave `BLOB_ENDPOINT` empty and set
+`BLOB_FORCE_PATH_STYLE=false`; for Cloudflare R2 use the account endpoint and region `auto`; for
+Google Cloud Storage use `BLOB_ENDPOINT=https://storage.googleapis.com` with HMAC keys. In each case
+set `BLOB_REGION`, `BLOB_BUCKET` and the key pair, and give the bucket a CORS rule allowing `GET`
+from the app's origin (`infra/blob-cors.json`). Details:
+[docs/BLOB_STORAGE.md](docs/BLOB_STORAGE.md#one-api-s3).
+
+**Several worktrees at once.** Each needs its own Docker project and ports (and a Playwright port,
+`E2E_PORT`). Put them in the worktree's `.env.local`:
+
+```bash
+COMPOSE_PROJECT_NAME=crate-wt2
+DB_PORT=55432
+BLOB_PORT=59000
+BLOB_CONSOLE_PORT=59001
+BLOB_ENDPOINT=http://localhost:59000
+E2E_PORT=3321
+```
+
+`bun run e2e` uses its own database, `crate_designer_e2e` (`E2E_DB_NAME`), and the
+`crate-designer-test` bucket, so it never touches the dev data; without Docker the specs that need
+the server skip.
+
+## Command line
+
+`bun run crate` designs the crate for a part without the browser: the best quantity per crate,
+the ranked shortlist and, with `--total`, how N parts ship. It calls the app's API
+(`POST /api/v1/designs`), or with `--offline` runs the same engine in its own process.
+
+```bash
+bun run apikey:create -- --name my-laptop          # once; prints the key
+export CRATE_API_KEY=cdk_…
+bun run crate -- public/parts/PART-001-machined-steel-bracket.glb --mass 21.5 --total 40 --out ./out
+bun run crate -- part.glb --mass 21.5 --total 40 --out ./out --offline   # no server, no database
+```
+
+| Option | |
+|---|---|
+| `--mass <kg>` | Mass of one part (required; never read from the mesh) |
+| `--total <n>` | Total parts to ship: adds the even split over crates |
+| `--material`, `--density`, `--name` | Part facts, as for an upload |
+| `--units <m\|mm\|in>`, `--up <z\|y>` | How the file is read, as the part header's choices (default: units guessed from its size, Z up) |
+| `--freight-rates <json or @file>` | LTL rates, `{"usdPerCwtByClass": {"70": 41.5}, "minimumUsd": 95}`; without them no freight dollars appear |
+| `--out <dir>` | Output directory (default `./crate-out`) |
+| `--offline` | Run the engine here; also writes the crate GLB, PDF, cut list, `design.json` and README |
+| `--api <url>`, `--key <key>` | API base URL and key (default `$CRATE_API_URL` or `http://localhost:3000`, `$CRATE_API_KEY`) |
+
+Both modes write `designs.json` (ranked configurations, recommendation and rationale, the 1–200
+curve, the total plan) and `ranking.csv`. The API needs a key from scripts; the app's own pages
+don't. Details, the job queue and the worker threads: [docs/QUEUE.md](docs/QUEUE.md).
 
 ## Pull requests
 
 Every pull request to `main`, and every push to `main`, runs
-[CI](.github/workflows/ci.yml): one job, **`checks`**, which does
-`bun install --frozen-lockfile`, Prettier check, lint, typecheck, unit tests and build.
+[CI](.github/workflows/ci.yml): **`checks`**, which does `bun install --frozen-lockfile`,
+Prettier check, `docker compose config`, lint, typecheck, unit tests and build; and
+**`integration`**, which checks that `db/migrations/` matches the schema, starts Postgres and the
+blob emulator from `docker-compose.yml`, migrates an empty database and runs
+`bun run test:integration`.
 
-**A green `checks` run is required before merging.** GitHub can't enforce this on a private
+**Green `checks` and `integration` runs are required before merging.** GitHub can't enforce this on a private
 repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api` command
 that adds a ruleset requiring the job on `main` once the repo is upgraded or made public.
 
@@ -133,15 +223,33 @@ tab at a time.
      damaged, compressed, empty or flat, in doubt about its units, or different in size from its
      entry. The rules are a table in spec §6.6. Pick several `.glb` files and the first (or the one
      an entry names) opens; the report says which, and that the others were not used.
+   - A newly loaded part, and the sample part on a first visit, opens at the **recommended
+     quantity per crate** and its crate, without you choosing one ("Set to the recommended 34
+     per crate"); a saved design, a design file, a share link or your last crate keeps its own.
 2. **Set the quantity and packing rules** in the **Rules** tab: quantity, keep upright, most
-   layers, gap between parts, clearance to walls, and plywood thickness (or Auto).
+   layers, gap between parts, clearance to walls, and plywood thickness (or Auto). Under the
+   quantity, **Best: N per crate** says why that quantity wins, with **Use** to go back to it.
+   **Why this crate?** explains it in plain words: what was compared, how it is scored (crate
+   cost per part, broken into wood, screws and labour; freight not priced without rates), why
+   this quantity beat the next best (with a cost-per-part curve), what stopped a larger crate,
+   and what it assumes. The spec and comparison PDFs print the same explanation.
+   - **Ship a total.** Under **Shared job** on the Overview, **Parts to ship** takes how many
+     parts ship in all and splits them evenly over the cheapest number of crates: "40 parts →
+     2 crates × 20, $20.51 per part", why that many crates (one fewer fails the 1,000 kg limit,
+     one more costs more per part), **Use** per crate type and its files from the server. It is
+     planned in the browser at once (offline too) and by the server for the shared job, from
+     the same part: the browser sends the job its part with the measured outline, so both
+     sweeps give the same numbers ("This browser and the server agree"). The Overview's shipment
+     shows the same split.
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one
    won. Each card also shows what it costs to build and its freight class against the
    recommendation ("+$26 · same class 65"), and **Rank by** re-ranks by **Crate cost** or
    **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
-   cost or freight; Volume is the default.
+   cost or freight; Volume is the default. The recommended crate (step 2) is ranked by cost per
+   part instead, so its layout can be another card: Layouts then says **"Recommended: cheapest
+   per part — why?"** (opening **Why this crate?**) rather than calling it a pick by hand.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
    labels. The real part models sit in each slot. With the size labels come gold
    **fork-entry arrows** at both ends, one per opening between the skids, and, only when the centre of gravity is off-centre or high,
@@ -214,7 +322,8 @@ tab at a time.
     - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
       split batch: `…-crate-A.glb`, `…-crate-B.glb`);
     - `crate-PART-001-x4.pdf`, a real PDF file with the crate spec, build sheet and shipping
-      label of step 10, for every crate type (drawn with jsPDF, loaded only when you export);
+      label of step 10, for every crate type (drawn with jsPDF; the PDF, ZIP and GLB code
+      loads only when you export);
     - `cut-list.csv` in the selected units (a split batch: one per crate type plus
       `shipment-cut-list.csv`);
     - `design.json`, which reopens with **Load a part**;
@@ -222,6 +331,14 @@ tab at a time.
 
     The pill shows "Exporting…" for at least 1.5 s (no hold or spinner with reduced motion),
     then "Downloaded crate-PART-001-x4.zip". The separate downloads above stay. Spec §7.13.
+
+    **Download all** (#46), the outlined pill beside it, downloads one .zip comparing the design
+    on screen with the best quantities per crate: a folder each with the GLB, PDF and cut list, a
+    `manifest.json` (engine version, input hash, every file's size and SHA-256) and a
+    `comparison.pdf` (quantity per crate, crates, outside size, gross, cost per part, and why the
+    recommended quantity won). Every file carries the engine version and input hash; each PDF
+    states the quantity rationale and the constraint that stopped a larger crate. No freight
+    dollars appear (there are no freight rates). Spec §7.17.
 12. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
@@ -290,12 +407,16 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **A database and accounts.** The shop standards, the display units, the design library and
+- **Accounts.** The shop standards, the display units, the design library and
   the last-opened crate are saved in the browser's `localStorage` (and the last loaded `.glb` in
   IndexedDB), per browser, under versioned keys; bad data is
   skipped with a warning). Designs also move as JSON files (one design, or the whole library)
-  and share links. The plan for a real store, SQLite WASM on OPFS, is in
-  [`docs/DATA_STORE.md`](docs/DATA_STORE.md); spec §9 has the details.
+  and share links. The shared store is Postgres (#46), being built in slices: a part's
+  configurations can be saved to a shared job on the server that every open tab sees
+  ([`docs/API.md`](docs/API.md), [`docs/POSTGRES.md`](docs/POSTGRES.md)); spec §9 has the details.
+  Saves are local first: with the server or its database down they are kept in this browser,
+  marked "Not synced yet", and sent by themselves within a few seconds of the server coming back
+  (`docs/API.md` "Offline"). Until then nobody else sees them.
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
 
@@ -305,7 +426,7 @@ tab at a time.
 |---|---|
 | **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The app shows inches and pounds by default, with a metric toggle; units are converted only at the UI and export edges (`src/lib/units.ts`, `src/lib/lumber.ts`) |
 | **Axes** | Right-handed, **Z up**: the same frame as the source GLBs. X is the crate's long axis (the skids run along X) |
-| **GLB files** | Metres and Z up by default, not centred on their origin (any distance from it). The viewer re-centres each part on its bounding box. A loaded file's units (metres, millimetres or inches) are guessed from its size and its up axis (Z or Y) starts as Z; both are choices in the part header, saved in the design file, and the header says what the file was read as |
+| **GLB files** | Metres and Z up by default, not centred on their origin (any distance from it). The viewer re-centres each part on its bounding box. A loaded file's units (metres, millimetres or inches) are guessed from its size and its up axis (Z or Y) starts as Z; both are choices in the part header, saved in the design file, and the header says what the file was read as. The API and the command line read a file the same way, with optional `units` and `up` fields (`--units`, `--up`) |
 | **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m; the few world-space users (camera framing, floor) convert with the helpers in `viewer/scene.ts` |
 | **Crate origin** | The interior min corner, on the top face of the floor |
 
@@ -383,10 +504,19 @@ src/domain/        pure TypeScript (mm, kg, Z-up), no React, three.js or DOM; al
 src/lib/           edge code, may import domain: display units, cut-list formatting, part-file
                    loading and the file check (`fileCheck.ts`, pure), part analysis for shaped blocking, the checks the UI shows, the
                    export document, the Export pill's .zip and PDF (tested)
-src/state/         may import lib and domain: zustand stores, persistence, loading flows,
-                   per-frame animation values
-src/components/    may import everything below: shell/ (overlays), island/ (tabs), viewer/
-                   (three.js via react-three-fiber); src/app/ is the same layer
+src/engine/        the crate engine, may import lib and domain: one API (design, cut list,
+                   Export .zip, per-artifact GLB / PDF / CSV builders and the multi-configuration
+                   bundle) that runs the same in the page, a Web Worker and Node, every output
+                   stamped with engineVersion and inputHash (spec §5.1, §7.17)
+src/state/         may import engine, lib and domain: zustand stores, persistence, loading
+                   flows, the engine's Web Worker and its client, per-frame animation values
+src/server/        server-only (Postgres via drizzle, S3 blob storage, the job queue, the engine's
+                   worker_threads pool, API keys, #46), may import engine, lib and domain; only
+                   src/app/ may import it (Route Handlers in src/app/api/v1/)
+src/cli/           bun run crate (#46): may import engine, lib and domain; talks to the API, or
+                   runs the engine in-process with --offline
+src/components/    may import everything below except src/server/: shell/ (overlays), island/
+                   (tabs), viewer/ (three.js via react-three-fiber); src/app/ is the same layer
 ```
 
 Styles: each component has its own CSS module (`Name.module.css` next to it). The only global CSS is
@@ -394,24 +524,39 @@ Styles: each component has its own CSS module (`Name.module.css` next to it). Th
 cascade layer that component styles always beat) and the designer's page in `src/app/(designer)/`;
 the `/print` route loads only the tokens and its own `print.css` (spec §13).
 
-Imports point down only (components and app, then state, then lib, then domain). ESLint enforces
-it (`eslint.config.mjs`, `bun run lint`), including for type-only imports and tests.
+Imports point down only (components and app, then state, then engine, then lib, then domain;
+src/server/ beside state, used only by src/app/). ESLint enforces it (`eslint.config.mjs`,
+`bun run lint`), including for type-only imports and tests. The page designs in a Web Worker,
+so typing and dragging never wait for the crate.
 
 ```
 src/data/          parts.json catalog
 public/parts/      GLB models
 public/            also site.webmanifest and its 192/512 icons (tab icons: src/app/icon.svg etc.)
 e2e/               Playwright end-to-end UI tests (bun run e2e)
-docs/              SPECIFICATION.md, DATA_STORE.md, schema.sql, design-handoff/
+db/migrations/     SQL migrations written by drizzle-kit (bun run db:generate)
+infra/             blob emulator bucket setup (CORS) for docker-compose.yml
+scripts/           infra, worker (job queue), apikey, blob-gc, pre-commit
+docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, QUEUE.md, design-handoff/
 ```
 
 ## Docs
 
 - [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md): the full spec covering the data model,
   algorithms, construction rules, invariants, decisions and roadmap.
-- [`docs/DATA_STORE.md`](docs/DATA_STORE.md): the client-side persistence plan (SQLite WASM on
-  OPFS).
-- [`docs/schema.sql`](docs/schema.sql): the proposed tables.
+- [`docs/API.md`](docs/API.md): the `/api/v1` HTTP API: parts, design jobs, server-verified
+  configuration saves, error codes, idempotency and the events each write emits.
+- [`docs/POSTGRES.md`](docs/POSTGRES.md): the Postgres data store: tables, org scoping,
+  scripts, environment and ports.
+- [`docs/BLOB_STORAGE.md`](docs/BLOB_STORAGE.md): GLBs and generated files in S3-compatible
+  storage: object keys, the part upload API, presigned downloads, orphan cleanup. Pointing the
+  `BLOB_*` variables at real AWS S3, Cloudflare R2 or GCS (S3 XML API with HMAC keys) works
+  without code changes.
+- [`docs/QUEUE.md`](docs/QUEUE.md): the Postgres job queue (SKIP LOCKED, NOTIFY, leases,
+  retries, dead letter), the engine's worker threads, `POST /api/v1/designs`, API keys and the
+  `bun run crate` command line.
+- [`docs/LOAD_TEST.md`](docs/LOAD_TEST.md): the saves-and-live-events load test (`bun run load`),
+  its measured limits, and when to move off LISTEN/NOTIFY.
 - [`docs/demo-cheat-sheet.md`](docs/demo-cheat-sheet.md): one page for the live demo: what the app does
   with each unusual input or requirement, which rule decides it, and what is out of scope. Its test
   files are built by `bun run fixtures` (see [`fixtures/scenarios/README.md`](fixtures/scenarios/README.md)).

@@ -2,7 +2,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { Box3, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
-import { readGlb } from "./glbInfo";
+// The reader is in the domain (pure); this test sits in lib because it checks it against three.js.
+import { readGlb } from "@/domain/glbInfo";
 
 const bytes = (path: string): ArrayBuffer => {
   const b = readFileSync(path);

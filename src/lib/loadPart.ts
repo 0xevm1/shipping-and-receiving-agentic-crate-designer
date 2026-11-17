@@ -1,4 +1,5 @@
 import { catalog } from "@/domain/catalog";
+import { idFromFile, nameFromFile } from "@/domain/glb";
 import { fileProfile, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
 import type { Ranking } from "@/domain/design";
 import type { Message } from "@/domain/message";
@@ -9,7 +10,7 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
 import { checkFiles, type FileInput } from "./fileCheck";
 import { reportFor, verdict, type FileReport } from "./fileCheckReport";
 import { catalogPart, framePart, type LoadedPart } from "./part";
-import { fitFrame, framedSizeMm, guessUnits, type PartFrame } from "./partFrame";
+import { fitFrame, framedSizeMm, guessedFrame, type PartFrame } from "./partFrame";
 import { renderMessage } from "./message";
 import { models, type ModelHold } from "./modelRegistry";
 import type { Units } from "./units";
@@ -18,21 +19,8 @@ import type { Units } from "./units";
 const STAND_IN_MASS_KG = 10;
 const DEFAULT_QUANTITIES = [1, 4, 8];
 
-/** The part id a file name gives: the name without ".glb"; "part" for a file that is only ".glb". */
-export function idFromFile(fileName: string): string {
-  return fileName.replace(/\.glb$/i, "").trim() || "part";
-}
-
-/** "PART-004-cast-iron-cover.glb" → "Cast iron cover"; a file called only ".glb" is "Part". */
-export function nameFromFile(fileName: string): string {
-  const stem = idFromFile(fileName);
-  const words =
-    stem
-      .replace(/^PART-\d+-/i, "")
-      .replace(/[-_]+/g, " ")
-      .trim() || stem;
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
+// The file-name rules live in the domain so the upload API (#46) names a part the same way.
+export { idFromFile, nameFromFile };
 
 interface ReadGlb {
   url: string;
@@ -41,9 +29,6 @@ interface ReadGlb {
   /** The model's size as the file has it (file units, file axes). */
   raw: Vec3;
 }
-
-/** The frame a file is first read in when nothing says otherwise: Z up, units guessed from its size (spec §4). */
-const guessedFrame = (raw: Vec3): PartFrame => ({ units: guessUnits(Math.max(...raw)), up: "z" });
 
 /** Checks and measures one GLB (the file check's rules), then makes an object URL for it. A string is a problem message. */
 async function readGlb(glb: File): Promise<ReadGlb | string> {

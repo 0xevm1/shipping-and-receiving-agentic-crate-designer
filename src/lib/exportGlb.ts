@@ -52,9 +52,14 @@ function woodMaterials(): Record<MemberKind, MeshStandardMaterial> {
 /** The exported file's origin, in the design's crate-interior mm: the loaded crate's centre of gravity. */
 export const cratePivotMm = (design: CrateDesign): Vec3 => design.handling.cogMm;
 
-/** The export scene: assembled crate in metres, Z up, its centre of gravity on the origin, optionally with the parts in their slots. */
-export function buildCrateScene(design: CrateDesign, part?: PartModel | null): Scene {
+/**
+ * The export scene: assembled crate in metres, Z up, its centre of gravity on the origin,
+ * optionally with the parts in their slots. `extras` (plain JSON, such as the engine's stamp) is
+ * written as the glTF scene's `extras` and reads back as the loaded scene's `userData`.
+ */
+export function buildCrateScene(design: CrateDesign, part?: PartModel | null, extras?: Record<string, string>): Scene {
   const scene = new Scene();
+  if (extras) scene.userData = { ...extras };
   const crate = new Group();
   crate.name = CRATE_NODE;
   // The pivot is taken off every mesh and part; `Crate` and the assembly groups stay at the origin.
@@ -113,8 +118,8 @@ function partsGroup(design: CrateDesign, part: PartModel, [px, py, pz]: Vec3): G
 }
 
 /** The scene as binary glTF. */
-export async function exportCrateGlb(design: CrateDesign, part?: PartModel | null): Promise<ArrayBuffer> {
-  const scene = buildCrateScene(design, part);
+export async function exportCrateGlb(design: CrateDesign, part?: PartModel | null, extras?: Record<string, string>): Promise<ArrayBuffer> {
+  const scene = buildCrateScene(design, part, extras);
   const result = await new GLTFExporter().parseAsync(scene, { binary: true });
   if (!(result instanceof ArrayBuffer)) throw new Error("GLTFExporter did not return binary data.");
   return result;

@@ -24,7 +24,7 @@ function sectionName(a: number, b: number): Message {
  * per-axis wall clearance (larger than the setting when a tiny crate was padded), and
  * the part gap only on an axis with more than one part.
  */
-function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where: string } {
+export function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where: string } {
   const [nx, ny] = layout.counts;
   const [clearX, clearY] = layout.clearance;
   const gaps = [

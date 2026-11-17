@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { crate, cutRows, island, layoutCards, mmText, openApp, openTab, panel, pickedLayout, setUnits, shot, tab } from "./helpers";
+import { crate, cutRows, island, layoutCards, mmText, openApp, openTab, otherLayout, panel, pickedLayout, setUnits, shot, tab } from "./helpers";
 
 /** The island's tabs: what each shows, and how the tab strip works from the keyboard. */
 
@@ -22,14 +22,33 @@ test("Overview shows the build chain and weight by assembly", async ({ page }) =
   await shot(page, "island-overview");
 });
 
-test("Layouts shows cards with the recommended one picked", async ({ page }) => {
+test("Layouts says the crate on screen is the recommendation, and a layout picked by hand says so", async ({ page }) => {
   await openTab(page, "Layouts");
   await expect(panel(page).getByRole("heading", { name: "Ways to pack it" })).toBeVisible();
   // Layout cards only: the Rank by toggle has pressed buttons too.
   await expect(pickedLayout(page)).toHaveCount(1);
-  await expect(pickedLayout(page)).toContainText("recommended");
   await expect(pickedLayout(page)).toContainText(mmText((await crate(page)).outside!));
   expect(await layoutCards(page).count()).toBeGreaterThan(1);
+
+  // The app opens at the sweep's crate, cheapest per part, which for the sample part isn't the top of
+  // the volume ranking (src/lib/shapedRoundTrip.test.ts): the tab says it is the recommendation.
+  await expect.poll(async () => (await crate(page)).layoutPick).toBe("recommendation");
+  const note = panel(page).getByTestId("layout-recommended");
+  await expect(note).toContainText("Recommended: cheapest per part");
+  await expect(note).toContainText("ranked by volume");
+  await expect(panel(page)).not.toContainText("Your pick");
+  await note.getByRole("button", { name: "why?" }).click();
+  await expect(panel(page).getByTestId("recommendation-why")).toBeVisible();
+  await shot(panel(page), "island-layouts-recommended");
+
+  // A layout picked by hand (neither the list's top nor the recommendation's) says so.
+  await otherLayout(page)
+    .filter({ hasNotText: /top by|recommended/ })
+    .first()
+    .click();
+  await expect.poll(async () => (await crate(page)).layoutPick).toBe("hand");
+  await expect(panel(page)).toContainText("Your pick ships");
+  await expect(panel(page).getByTestId("layout-recommended")).toHaveCount(0);
   await shot(page, "island-layouts");
 });
 
@@ -45,7 +64,7 @@ test("Cut list groups boards by assembly", async ({ page }) => {
 
 test("Rules shows the packing controls", async ({ page }) => {
   await openTab(page, "Rules");
-  await expect(panel(page).getByLabel("Quantity")).toHaveValue("4");
+  await expect(panel(page).getByLabel("Quantity")).toHaveValue(String((await crate(page)).quantity));
   await expect(panel(page).getByLabel("Keep parts upright")).toBeVisible();
   await expect(panel(page).getByRole("group", { name: "Most layers allowed" })).toBeVisible();
   await expect(panel(page).getByLabel("Gap between parts")).toBeVisible();

@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
-  crate,
   fileInput,
   header,
   island,
@@ -20,6 +19,7 @@ import {
   stage,
   tab,
   triangleGlb,
+  waitForRecommended,
 } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
@@ -37,15 +37,30 @@ test("a catalog GLB fills in its mass and material", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
 
   await expect(header(page)).toContainText("PART-002 · Long steel shaft");
-  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross \d+(\.\d)? kg/);
+  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross [\d,]+(\.\d)? kg/);
   // Catalog parts are read-only: the same sentence, with no fields.
   await expect(header(page).locator("input")).toHaveCount(0);
   await expect(header(page)).toContainText("model matches catalog");
   await expect(island(page).getByRole("heading", { name: "Long steel shaft", exact: true })).toBeVisible();
   await pollCrate(page, (s) => s.partId).toBe("PART-002");
-  await expect(panel(page)).toContainText(mmText((await crate(page)).outside!));
+  await expect(panel(page)).toContainText(mmText((await waitForRecommended(page)).outside!));
   await expect(massField(page)).toHaveCount(0);
   await shot(page, "load-part-catalog");
+});
+
+test("a new part opens at the recommended quantity and layout, and says so", async ({ page }) => {
+  await fileInput(page).setInputFiles(sampleFile(SHAFT));
+  // The preloaded part has already opened at its own recommendation (and said so): wait for the new part's.
+  await pollCrate(page, (s) => s.partId).toBe("PART-002");
+  await expect(island(page).getByTestId("change-note")).toContainText(/^Set to the recommended \d+ per crate\. Details: /);
+  const s = await waitForRecommended(page);
+  expect(s.recommended).not.toBeNull();
+  expect(s.quantity).toBe(s.recommended);
+  await openTab(page, "Rules");
+  await expect(panel(page).getByTestId("best-quantity")).toContainText(`Best: ${s.recommended} per crate`);
+  await expect(panel(page).getByTestId("best-quantity").getByRole("button", { name: "In use" })).toBeDisabled();
+  await expect(panel(page).getByLabel("Quantity")).toHaveValue(String(s.recommended));
+  await shot(page, "load-part-recommended");
 });
 
 test("an unknown GLB uses a stand-in mass until details are entered", async ({ page }) => {
@@ -58,6 +73,8 @@ test("an unknown GLB uses a stand-in mass until details are entered", async ({ p
   // The stand-in mass adds one caution; other checks (fork entry on this narrow crate, say) may add
   // their own, so compare counts rather than fixing the badge number.
   await pollCrate(page, (s) => s.massAssumed).toBe(true);
+  // It opens at its recommended quantity: count the cautions once that has settled.
+  await waitForRecommended(page);
   await expect.poll(() => cautions(page)).toBeGreaterThan(0);
   const before = await cautions(page);
   await openTab(page, /Checks/);

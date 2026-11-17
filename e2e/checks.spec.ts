@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { checks, openApp, openTab, panel, setUnits, shot, tab } from "./helpers";
+import { checks, openApp, openTab, panel, setQuantity, setUnits, shot, tab } from "./helpers";
 
 /**
  * The Checks tab and what points at it: the verdict on the Overview and the tab's counts. The wording
@@ -11,9 +11,9 @@ test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
 
-/** Makes one part-gap caution: with no gap the parts are not restrained. */
+/** Makes one part-gap caution: with no gap the parts of the bracket × 4 crate are not restrained. */
 async function causeCaution(page: Page) {
-  await openTab(page, "Rules");
+  await setQuantity(page, 4);
   await panel(page).getByLabel("Gap between parts", { exact: true }).fill("0");
 }
 

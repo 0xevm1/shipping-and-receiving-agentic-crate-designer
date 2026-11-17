@@ -31,7 +31,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "checks", label: "Checks" },
 ];
 
-const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout"];
+const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout", "recommended"];
 
 /**
  * Reopens the File check report: by "Load a part", where the files came in, with the number of findings. It is

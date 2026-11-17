@@ -3,6 +3,7 @@ import { getPart } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, settingsFromStandards, type DesignPart } from "./design";
 import type { CrateSettings } from "./schema";
 import {
+  costsArePlaceholder,
   DEFAULT_STANDARDS,
   mergeStandards,
   minInteriorMm,
@@ -311,6 +312,19 @@ describe("standards JSON", () => {
     const r = standardsFromJson(text);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(message);
+  });
+});
+
+describe("costsArePlaceholder", () => {
+  const own = (patch: Parameters<typeof mergeStandards>[1]) => parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
+  it("is true with the shipped rates and times", () => expect(costsArePlaceholder(DEFAULT_STANDARDS)).toBe(true));
+  it("stays true while any cost input is still shipped", () => {
+    const r = own({ rates: { costUsdPerM3: { plywood: 1200, lumber: 700 }, screwCostUsdPer100: 9 } });
+    expect(r.ok && costsArePlaceholder(r.standards)).toBe(true);
+  });
+  it("is false once wood, screws and labour are all the shop's own", () => {
+    const r = own({ rates: { costUsdPerM3: { plywood: 1200, lumber: 700 }, screwCostUsdPer100: 9 }, labour: { rateUsdPerHour: 42 } });
+    expect(r.ok && costsArePlaceholder(r.standards)).toBe(false);
   });
 });
 

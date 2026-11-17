@@ -10,7 +10,8 @@ import type { PartProfile } from "./profile";
 export const Vec3Schema = z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]);
 export type Vec3 = [number, number, number];
 
-const PartSchema = z.object({
+/** A bundled catalog part. Exported for the engine's request schema (`DesignPartSchema`, #46). */
+export const PartSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   /** GLB filename, served from /public/parts. */

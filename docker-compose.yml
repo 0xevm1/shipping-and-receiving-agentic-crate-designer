@@ -1,0 +1,77 @@
+# Local infrastructure for the crate designer (#46): Postgres and an S3-compatible blob store.
+# Next.js runs on the host (`bun run dev`), not in here. CI starts the same file.
+#
+#   bun run infra:up     start both, wait until healthy and the buckets exist
+#   bun run infra:down   stop (data kept in the named volumes; `down -v` wipes them)
+#
+# Overrides, for parallel worktrees and e2e (docs/POSTGRES.md), from the shell or .env.local:
+#   COMPOSE_PROJECT_NAME  container / volume prefix          (default crate-designer)
+#   DB_PORT               Postgres host port                 (default 5432)
+#   DB_NAME               database created on first start    (default crate_designer)
+#   BLOB_PORT             S3 API host port                   (default 9000)
+#   BLOB_CONSOLE_PORT     emulator admin console host port   (default 9001)
+# Host ports bind to 127.0.0.1 only. Images are pinned to exact tags (#23).
+
+name: crate-designer
+
+services:
+  db:
+    image: postgres:18.6-alpine3.24
+    environment:
+      POSTGRES_USER: crate
+      POSTGRES_PASSWORD: crate
+      POSTGRES_DB: ${DB_NAME:-crate_designer}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker, so mount the parent.
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crate -d postgres -h 127.0.0.1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  # S3-compatible emulator. MinIO was the first choice, but its images are no longer published
+  # on Docker Hub (the community edition is source-only), so this is SeaweedFS in its all-in-one
+  # `mini` mode: S3 API on 8333, admin console on 12535. See docs/POSTGRES.md "Blob emulator".
+  blob:
+    image: chrislusf/seaweedfs:4.51
+    command: ["mini", "-dir=/data", "-ip.bind=0.0.0.0", "-admin.allowInsecureBind"]
+    environment:
+      # The S3 gateway's only identity; anonymous requests get 403.
+      AWS_ACCESS_KEY_ID: ${BLOB_ACCESS_KEY_ID:-crate-dev}
+      AWS_SECRET_ACCESS_KEY: ${BLOB_SECRET_ACCESS_KEY:-crate-dev-secret}
+    ports:
+      - "127.0.0.1:${BLOB_PORT:-9000}:8333"
+      - "127.0.0.1:${BLOB_CONSOLE_PORT:-9001}:12535"
+    volumes:
+      - blob-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  # One-shot: creates the dev and test buckets and applies CORS, then exits 0.
+  blob-init:
+    image: amazon/aws-cli:2.39.2
+    depends_on:
+      blob:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/infra/blob-init.sh"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${BLOB_ACCESS_KEY_ID:-crate-dev}
+      AWS_SECRET_ACCESS_KEY: ${BLOB_SECRET_ACCESS_KEY:-crate-dev-secret}
+      AWS_DEFAULT_REGION: ${BLOB_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: http://blob:8333
+      BLOB_BUCKETS: crate-designer-dev crate-designer-test
+    volumes:
+      - ./infra:/infra:ro
+    restart: "no"
+
+volumes:
+  db-data:
+  blob-data:

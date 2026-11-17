@@ -1,10 +1,28 @@
 import { expect, test, type Page } from "@playwright/test";
-import { BRACKET, crate, fileInput, header, mmText, openApp, pollCrate, sampleFile, setUnits, SHAFT, shot, unitsAxisFile, waitForScene } from "./helpers";
+import {
+  BRACKET,
+  crate,
+  fileInput,
+  header,
+  mmText,
+  openApp,
+  pollCrate,
+  sampleFile,
+  setUnits,
+  SHAFT,
+  shot,
+  unitsAxisFile,
+  waitForRecommended,
+  waitForScene,
+} from "./helpers";
 
 /**
  * A part file that is not in metres or not Z up (#105): the header says what it was read as and
  * lets the user correct it, and the size, the crate and the 3D view follow at once. The fixtures
  * are in `fixtures/units-axis/`; the same part under a plain name is the reference crate.
+ * A newly loaded part opens at the quantity sweep's recommendation (spec §7.16), and a change of
+ * units or axis waits for the recommendation for the new size, so each crate is read once that
+ * has settled: the corrected file's crate is then the reference's, quantity included.
  */
 
 const unitsSelect = (page: Page) => header(page).getByLabel("File units");
@@ -15,6 +33,14 @@ async function load(page: Page, file: ReturnType<typeof sampleFile>) {
   await fileInput(page).setInputFiles(file);
   await pollCrate(page, (s) => s.partId).toBe(file.name.replace(/\.glb$/, ""));
   await pollCrate(page, (s) => s.partFrame.drawnMm).not.toBeNull();
+  await waitForRecommended(page);
+}
+
+/** Picks a file unit or up axis and waits until the part is read that way and its recommendation has settled. */
+async function pick(page: Page, which: "units" | "up", value: string) {
+  await (which === "units" ? unitsSelect(page) : upSelect(page)).selectOption(value);
+  await pollCrate(page, (s) => s.partFrame[which]).toBe(value);
+  await waitForRecommended(page);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -37,8 +63,7 @@ test("a 60 in shaft is read as 60 mm until inches are picked, then it is the cat
   await expect(header(page)).toContainText("units guessed from the size");
   await shot(page, "part-units-inches-before");
 
-  await unitsSelect(page).selectOption("in");
-  await pollCrate(page, (s) => s.partFrame.units).toBe("in");
+  await pick(page, "units", "in");
   const fixed = await crate(page);
   fixed.partFrame.sizeMm.forEach((v, i) => expect(v).toBeCloseTo(want.partFrame.sizeMm[i], 1));
   expect(fixed.outside).toEqual(want.outside);
@@ -63,8 +88,7 @@ test("a Y-up bracket lies on its side until Y up is picked, then it sits upright
   await expect(upSelect(page)).toHaveValue("z");
   await shot(page, "part-units-yup-before");
 
-  await upSelect(page).selectOption("y");
-  await pollCrate(page, (s) => s.partFrame.up).toBe("y");
+  await pick(page, "up", "y");
   const upright = await crate(page);
   upright.partFrame.sizeMm.forEach((v, i) => expect(v).toBeCloseTo(want.partFrame.sizeMm[i], 1));
   expect(upright.outside).toEqual(want.outside);
@@ -95,8 +119,7 @@ test("the catalog parts offer no units or axis, and a file far from the origin l
 test("the choices are saved: a reload reopens the file read the same way", async ({ page }) => {
   test.slow(); // a reload and a re-measure
   await load(page, unitsAxisFile("bracket-y-up.glb"));
-  await upSelect(page).selectOption("y");
-  await pollCrate(page, (s) => s.partFrame.up).toBe("y");
+  await pick(page, "up", "y");
   const before = await crate(page);
 
   // The debounced save has written the design with the axis, and the model's bytes are kept.
