@@ -19,9 +19,10 @@
 import { create } from "zustand";
 import { catalog } from "@/domain/catalog";
 import { RANKINGS, type Ranking } from "@/domain/design";
-import { CrateSettingsSchema, type CrateSettings } from "@/domain/schema";
+import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "@/domain/schema";
 import { summarize } from "@/engine/engine";
-import { type DesignSummary, DesignSummarySchema } from "@/engine/schemas";
+import { type ShopStandards, ShopStandardsSchema } from "@/domain/standards";
+import { DesignPartSchema, type DesignSummary, DesignSummarySchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
 import type { ConfigurationResponse, JobResponse, JobSnapshot, SaveConfigurationRequest } from "@/lib/api/jobs";
 import type { JobEventMessage } from "@/lib/events";
@@ -49,8 +50,8 @@ export interface SavedConfig {
   origin: ConfigurationResponse["origin"];
   addedAt: string;
   summary: DesignSummary | null;
-  /** What to put back on screen; null settings when they no longer parse. */
-  design: { settings: CrateSettings | null; layoutKey: string | null; ranking: Ranking };
+  /** What to put back on screen; null settings when they no longer parse. `part` and `standards` complete the request (null when absent or invalid). */
+  design: { settings: CrateSettings | null; layoutKey: string | null; ranking: Ranking; part: DesignPart | null; standards: ShopStandards | null };
 }
 
 export interface JobSyncState {
@@ -67,6 +68,13 @@ const INITIAL: JobSyncState = { status: "off", note: "", job: null, configs: [],
 
 export const useJobSync = create<JobSyncState>()(() => INITIAL);
 
+/** The stored request's part and standards, parsed; null where missing or no longer valid. */
+function savedRequestParts(c: ConfigurationResponse): { part: DesignPart | null; standards: ShopStandards | null } {
+  const part = DesignPartSchema.safeParse(c.design.part);
+  const standards = ShopStandardsSchema.safeParse(c.design.standards);
+  return { part: part.success ? part.data : null, standards: standards.success ? standards.data : null };
+}
+
 export function toSavedConfig(c: ConfigurationResponse): SavedConfig {
   const summary = DesignSummarySchema.safeParse(c.summary);
   const settings = CrateSettingsSchema.safeParse(c.design.settings);
@@ -80,7 +88,7 @@ export function toSavedConfig(c: ConfigurationResponse): SavedConfig {
     origin: c.origin,
     addedAt: c.addedAt,
     summary: summary.success ? summary.data : null,
-    design: { settings: settings.success ? settings.data : null, layoutKey: c.design.layoutKey, ranking },
+    design: { settings: settings.success ? settings.data : null, layoutKey: c.design.layoutKey, ranking, ...savedRequestParts(c) },
   };
 }
 

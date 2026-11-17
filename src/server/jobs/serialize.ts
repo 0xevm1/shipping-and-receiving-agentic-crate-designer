@@ -16,7 +16,13 @@ export function jobResponse(job: DesignJob): JobResponse {
   };
 }
 
-type StoredRequest = { settings?: Record<string, unknown>; layoutKey?: string | null; ranking?: string };
+type StoredRequest = {
+  part?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
+  standards?: Record<string, unknown>;
+  layoutKey?: string | null;
+  ranking?: string;
+};
 
 export function configurationResponse(c: JobConfiguration): ConfigurationResponse {
   // `settings` holds the whole DesignRequest; it was validated when it was saved.
@@ -30,7 +36,13 @@ export function configurationResponse(c: JobConfiguration): ConfigurationRespons
     score: c.score,
     origin: c.origin,
     summary: (c.resultSummary as Record<string, unknown> | null) ?? null,
-    design: { settings: request.settings ?? {}, layoutKey: request.layoutKey ?? null, ranking: request.ranking ?? "volume" },
+    design: {
+      settings: request.settings ?? {},
+      layoutKey: request.layoutKey ?? null,
+      ranking: request.ranking ?? "volume",
+      ...(request.part ? { part: request.part } : {}),
+      ...(request.standards ? { standards: request.standards } : {}),
+    },
     createdAt: c.createdAt.toISOString(),
     addedAt: c.addedAt.toISOString(),
   };

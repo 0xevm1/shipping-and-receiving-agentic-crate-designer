@@ -10,7 +10,7 @@ import styles from "./ExportPill.module.css";
 const EXPORT_TITLE = "Download a .zip with the 3D model, the PDF (spec, build sheet, label), the cut list and the design file";
 const CAUTION_NOTE_ID = "export-caution";
 const ALL_TITLE =
-  "Download one .zip comparing the design on screen with the best quantities per crate: a folder each (3D model, PDF, cut list), a manifest and a comparison PDF";
+  "Download one .zip comparing the design on screen with the shared job's saved configurations (or, with none saved, the best quantities per crate): a folder each (3D model, PDF, cut list), a manifest and a comparison PDF";
 
 /**
  * The Export pill, under the part header: one click downloads `crate-<part>-x<qty>.zip` with the
