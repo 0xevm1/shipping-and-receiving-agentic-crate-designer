@@ -2,7 +2,8 @@ import { unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { DEFAULT_SETTINGS } from "@/domain/design";
-import { APP_VERSION, parseDesignFile } from "@/domain/designFile";
+import { parseDesignFile } from "@/domain/designFile";
+import { APP } from "./appInfo";
 import { planShipment } from "@/domain/shipment";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { useDesigner, type LoadedPart } from "@/state/store";
@@ -22,7 +23,7 @@ const catalogPart = (): LoadedPart => useDesigner.getState().part;
 function input(part: LoadedPart, quantity: number, units: Units = "imperial", crateIndex = 0): BundleInput {
   const settings = { ...DEFAULT_SETTINGS, quantity };
   const plan = planShipment(part, settings, null, DEFAULT_STANDARDS);
-  return { part, settings, plan, crateIndex, standards: DEFAULT_STANDARDS, units, generatedAt: NOW };
+  return { part, settings, plan, crateIndex, standards: DEFAULT_STANDARDS, units, ranking: "volume", generatedAt: NOW };
 }
 
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -72,13 +73,23 @@ describe("Export bundle (#51)", () => {
     const b = await buildBundle(input(catalogPart(), 4, "metric"), makers);
     const readme = file(b.files, "README.txt");
     for (const f of b.files) expect(readme).toContain(f.name);
-    expect(readme).toContain(`crate-designer ${APP_VERSION}`);
+    expect(readme).toContain(`crate-designer ${APP.version}`);
     expect(readme).toContain("2026-11-16");
     expect(readme).toContain("PART-001 Machined steel bracket");
     expect(readme).toMatch(/Units: +millimetres and kilograms/);
     expect(readme).toContain("nothing was uploaded");
     const imperial = file((await buildBundle(input(catalogPart(), 4), makers)).files, "README.txt");
     expect(imperial).toMatch(/Units: +inches and pounds/);
+  });
+
+  it("dates the README in the zone it is made in, and records the ranking in design.json", async () => {
+    const late = { ...input(catalogPart(), 4), generatedAt: "2026-11-17T07:16:00.000Z", ranking: "cost" as const };
+    const la = await buildBundle({ ...late, timeZone: "America/Los_Angeles" }, makers);
+    expect(file(la.files, "README.txt")).toMatch(/Made: +2026-11-16 \(2026-11-17T07:16:00.000Z\)/);
+    const utc = await buildBundle({ ...late, timeZone: "UTC" }, makers);
+    expect(file(utc.files, "README.txt")).toMatch(/Made: +2026-11-17 /);
+    const parsed = parseDesignFile(file(la.files, "design.json"));
+    expect(parsed.ok && parsed.file.ranking).toBe("cost");
   });
 
   it("packs every crate type of a split batch, and the whole shipment's cut list", async () => {

@@ -41,8 +41,9 @@ test("the Cut list tab downloads the design as JSON with a summary", async ({ pa
   expect(name).toBe("crate-design-PART-001-x4.json");
   expect(json).toMatchObject({
     kind: "crate-design",
-    schemaVersion: 1,
+    schemaVersion: 2,
     app: { name: "crate-designer" },
+    ranking: "volume",
     part: { source: "catalog", id: "PART-001", model: "PART-001-machined-steel-bracket.glb", material: "4140 steel", mass_kg: 21.5 },
     settings: { quantity: 4, keepUpright: true, maxLayers: 2, partGapMm: 50, wallClearanceMm: 50, panelThickness: "auto" },
     summary: { quantity: 4, outsideMm: [932, 652, 497] },
@@ -139,7 +140,7 @@ test("a custom design needs its model: named when missing, restored when added",
 
 test("a design from a newer app is refused with a message", async ({ page }) => {
   const saved = await downloadDesign(page);
-  await fileInput(page).setInputFiles(designFile(JSON.stringify({ ...saved.json, schemaVersion: 2 })));
+  await fileInput(page).setInputFiles(designFile(JSON.stringify({ ...saved.json, schemaVersion: 3 })));
   await expect(loadMessage(page, "saved by a newer version of the app")).toBeVisible();
   await expect(page.getByRole("banner")).toContainText("PART-001");
 });

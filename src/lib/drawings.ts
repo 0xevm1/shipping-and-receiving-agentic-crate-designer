@@ -1,7 +1,7 @@
 /**
- * Orthographic drawings of a crate for the build sheet (#26): outside views (top, front, end)
+ * Orthographic drawings of a crate for the build sheet: outside views (top, front, end)
  * and two sections through the load, projected from the design's members. Pure data in mm, so
- * the print page draws it as SVG and a later PDF export (#51) can draw the same thing.
+ * the print page draws it as SVG and the PDF export draws the same thing.
  *
  * View coordinates: `x` to the right and `y` up, in mm. Every view is drawn with the crate as
  * seen from outside: top from above (front, −Y, at the bottom), front from −Y (+X to the
@@ -12,7 +12,7 @@ import type { CrateDesign, Member } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
 import { cut, type Units } from "./units";
 
-export type RectKind = "plywood" | "lumber" | "dunnage" | "part";
+type RectKind = "plywood" | "lumber" | "dunnage" | "part";
 
 export interface DrawingRect {
   x: number;
@@ -31,7 +31,7 @@ export interface DimLine {
   text: string;
 }
 
-export type DrawingId = "top" | "front" | "end" | "section-plan" | "section-side";
+type DrawingId = "top" | "front" | "end" | "section-plan" | "section-side";
 
 export interface Drawing {
   id: DrawingId;
@@ -113,7 +113,7 @@ export function crateDrawings(design: CrateDesign, units: Units): Drawing[] {
   // Section A–A: a plan cut halfway up the bottom layer of parts.
   const bottom = layout.slots.filter((s) => s.index[2] === 0);
   const cutZ = (bottom[0]?.min[2] ?? 0) + c / 2;
-  // Cradles (#6) sit under the parts, below the cut: drawn as seen beneath it.
+  // Cradles sit under the parts, below the cut: drawn as seen beneath it.
   const cradled = members.some((m) => m.kind === "cradle");
   const below = (m: Member) => m.kind === "cradle" && m.min[2] + m.size[2] <= cutZ;
   const plan = [
@@ -158,9 +158,7 @@ export function crateDrawings(design: CrateDesign, units: Units): Drawing[] {
         : "Section B–B: side through the front row, showing bearers, blocking and separators",
       true,
       side,
-      () => [
-      inside("below", L),
-      inside("right", H),
-    ]),
+      () => [inside("below", L), inside("right", H)],
+    ),
   ];
 }

@@ -18,7 +18,7 @@ const tidy = (s: string) => s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s
  * A partial update. `material: ""` (or blank) clears the material, so the UI
  * shows "material not given". A key that is absent leaves that field alone.
  */
-export const PartDetailsSchema = z.object({
+const PartDetailsSchema = z.object({
   name: z
     .string()
     .transform(tidy)
@@ -33,14 +33,14 @@ export const PartDetailsSchema = z.object({
 });
 export type PartDetailsInput = z.input<typeof PartDetailsSchema>;
 
-export interface PartDetails {
+interface PartDetails {
   name?: string;
   /** `undefined` here (with the key present) means the material was cleared. */
   material?: string | undefined;
   mass_kg?: number;
 }
 
-export type PartDetailsResult = { ok: true; details: PartDetails } | { ok: false; error: string };
+type PartDetailsResult = { ok: true; details: PartDetails } | { ok: false; error: string };
 
 /** Validates and tidies a partial update to an unknown part's name, material and mass. */
 export function cleanPartDetails(input: PartDetailsInput): PartDetailsResult {
@@ -57,7 +57,7 @@ export function cleanPartDetails(input: PartDetailsInput): PartDetailsResult {
  * How a part is drawn. Any material text containing "alum" gets the lighter
  * aluminum look; everything else (steels, iron, unknown, not given) looks like steel.
  */
-export type PartFinish = "aluminum" | "steel";
+type PartFinish = "aluminum" | "steel";
 export function partFinish(material: string | undefined): PartFinish {
   return /alum/i.test(material ?? "") ? "aluminum" : "steel";
 }

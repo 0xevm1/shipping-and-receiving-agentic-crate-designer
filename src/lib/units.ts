@@ -50,7 +50,7 @@ export function cut(mm: number, u: Units): string {
 }
 
 /**
- * The one rule for a mass shown to people (#62): in the displayed unit, one decimal under 100
+ * The one rule for a mass shown to people: in the displayed unit, one decimal under 100
  * ("47.4 lb"; a trailing .0 is dropped) and whole numbers from 100 up ("297 lb"). `group` adds
  * thousands separators ("1,240 kg"), as check messages always had. CSV and JSON keep their own
  * precision.
@@ -62,7 +62,7 @@ export function weight(kg: number, u: Units, group = false): string {
   return `${n} ${u === "imperial" ? "lb" : "kg"}`;
 }
 
-/** Whole units only ("16 kg"): for change notes, where the point is the size of the move (#62). */
+/** Whole units only ("16 kg"): for change notes, where the point is the size of the move. */
 export function weightWhole(kg: number, u: Units): string {
   return u === "imperial" ? `${Math.round(kg * LB_PER_KG)} lb` : `${Math.round(kg)} kg`;
 }

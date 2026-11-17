@@ -2,7 +2,7 @@ import { useId } from "react";
 import type { DimLine, Drawing, DrawingRect } from "@/lib/drawings";
 
 /**
- * One orthographic view or section as vector SVG, black on white (#26). Drawn in mm with the
+ * One orthographic view or section as vector SVG, black on white. Drawn in mm with the
  * y axis flipped; text and offsets are sized from the box the drawing is printed in, so every
  * view reads at the same type size whatever its scale.
  */

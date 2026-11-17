@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { getPart } from "@/domain/catalog";
+import { APP } from "./appInfo";
+import { getPart, parts as catalogParts } from "@/domain/catalog";
 import { screwSchedule } from "@/domain/crate";
 import { DEFAULT_SETTINGS } from "@/domain/design";
 import { parseDesignFile, serializeDesign } from "@/domain/designFile";
 import { planShipment } from "@/domain/shipment";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
-import { buildPrintable, printableFromDesignFile, ASSEMBLY_STEPS, type PrintableDesign } from "./printable";
+import { buildPrintable, printableFromDesignFile, stepOfMember, ASSEMBLY_STEPS, type PrintableDesign } from "./printable";
 import { printHash, readPrintHash } from "./printLink";
 
 const bracket = getPart("PART-001");
@@ -14,7 +15,7 @@ const NOW = "2026-11-16T12:00:00.000Z";
 function printable(quantity: number, units: "imperial" | "metric" = "imperial", extra: Partial<typeof DEFAULT_SETTINGS> = {}): PrintableDesign {
   const settings = { ...DEFAULT_SETTINGS, quantity, ...extra };
   const plan = planShipment(bracket, settings, null, DEFAULT_STANDARDS);
-  return buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units, generatedAt: NOW });
+  return buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units, ranking: "volume", generatedAt: NOW });
 }
 
 describe("PrintableDesign (#26)", () => {
@@ -60,18 +61,15 @@ describe("PrintableDesign (#26)", () => {
     const settings = { ...DEFAULT_SETTINGS, quantity: 4 };
     const plan = planShipment(bracket, settings);
     const d = plan.crates[0].result.design!;
-    // The design's own CoG (#8), on the end view from the outside bottom-left corner.
-    expect(crate.label.cogMm).toEqual(d.centerOfGravityMm);
+    // The design's own CoG, on the end view from the outside bottom-left corner.
     const { panelMm, cleat, floorMm, skid } = d.construction;
-    expect(crate.label.cogEnd!.y).toBeCloseTo(d.centerOfGravityMm[1] + panelMm + cleat.thick, 6);
-    expect(crate.label.cogEnd!.z).toBeCloseTo(d.centerOfGravityMm[2] + floorMm + skid.tall, 6);
-    expect(crate.label.cogEnd!.y).toBeCloseTo(d.layout.external[1] / 2, 6);
+    expect(crate.label.cogEnd.y).toBeCloseTo(d.centerOfGravityMm[1] + panelMm + cleat.thick, 6);
+    expect(crate.label.cogEnd.z).toBeCloseTo(d.centerOfGravityMm[2] + floorMm + skid.tall, 6);
+    expect(crate.label.cogEnd.y).toBeCloseTo(d.layout.external[1] / 2, 6);
     Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, centerOfGravityMm: [400, 300, 150] });
-    const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", generatedAt: NOW });
+    const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: NOW });
     expect(withExtras.crates[0].spec.freight.find((r) => r.label === "Freight class")?.value).toBe("85");
-    expect(withExtras.crates[0].label.cogMm).toEqual([400, 300, 150]);
-    Object.assign(d, { centerOfGravityMm: [NaN, 0, 0] });
-    expect(buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", generatedAt: NOW }).crates[0].label.cogEnd).toBeNull();
+    expect(withExtras.crates[0].label.cogEnd.y).toBeCloseTo(300 - Math.min(...d.members.map((m) => m.min[1])), 6);
   });
 
   it("explains the chosen layout and names the runner-up", () => {
@@ -183,6 +181,7 @@ describe("the print link", () => {
   const plan = planShipment(bracket, settings);
   const design = plan.crates[0].result.design!;
   const text = serializeDesign({
+    app: APP,
     part: { source: "catalog", ...bracket, model: bracket.model },
     settings,
     layoutKey: design.layout.key,
@@ -191,10 +190,14 @@ describe("the print link", () => {
     savedAt: NOW,
   });
 
+  // The link carries the file without its pretty-printing: same JSON, fewer characters.
+  const compact = JSON.stringify(JSON.parse(text));
+
   it("round-trips the design file and the units through the hash, URL-safe", () => {
     const hash = printHash(text, "metric", true);
     expect(hash).toMatch(/^#design=[A-Za-z0-9_-]+&u=metric&print=1$/);
-    expect(readPrintHash(hash)).toEqual({ ok: true, text, units: "metric", print: true });
+    expect(readPrintHash(hash)).toEqual({ ok: true, text: compact, units: "metric", print: true });
+    expect(compact.length).toBeLessThan(text.length);
     expect(readPrintHash(printHash(text, "imperial"))).toMatchObject({ units: "imperial", print: false });
   });
 
@@ -207,9 +210,12 @@ describe("the print link", () => {
   it("uses the share link's `design` parameter, and still opens old `d` links (#62)", () => {
     const data = printHash(text, "imperial").slice("#design=".length).split("&")[0];
     expect(printHash(text, "imperial").startsWith("#design=")).toBe(true);
-    expect(readPrintHash(`#design=${data}&u=imperial`)).toEqual({ ok: true, text, units: "imperial", print: false });
-    expect(readPrintHash(`#d=${data}&u=metric&print=1`)).toEqual({ ok: true, text, units: "metric", print: true });
+    expect(readPrintHash(`#design=${data}&u=imperial`)).toEqual({ ok: true, text: compact, units: "imperial", print: false });
+    expect(readPrintHash(`#d=${data}&u=metric&print=1`)).toEqual({ ok: true, text: compact, units: "metric", print: true });
     expect(readPrintHash("#d=%%%")).toMatchObject({ ok: false });
+    // A padded or truncated value is refused like a damaged share link, not half-read.
+    expect(readPrintHash("#design=abc=")).toMatchObject({ ok: false });
+    expect(readPrintHash("#design=a")).toMatchObject({ ok: false });
   });
 
   it("rebuilds the same document from the design file", () => {
@@ -228,7 +234,7 @@ describe("cradles (#6) in the build sheet", () => {
   const shaft = getPart("PART-002");
   const build = (quantity: number) => {
     const plan = planShipment(shaft, { ...DEFAULT_SETTINGS, quantity }, null, DEFAULT_STANDARDS);
-    return { doc: buildPrintable({ part: shaft, plan, standards: DEFAULT_STANDARDS, units: "metric", generatedAt: NOW }), design: plan.crates[0].result.design! };
+    return { doc: buildPrintable({ part: shaft, plan, standards: DEFAULT_STANDARDS, units: "metric", ranking: "volume", generatedAt: NOW }), design: plan.crates[0].result.design! };
   };
 
   it("places floor cradles before the parts and stacking cradles and end stops after", () => {
@@ -264,5 +270,47 @@ describe("cradles (#6) in the build sheet", () => {
   it("keeps the general blocking titles for other parts", () => {
     const plan = printable(4).crates[0].build.drawings.find((d) => d.id === "section-plan")!;
     expect(plan.title).toBe("Section A–A: plan through the bottom layer, showing the blocking");
+  });
+});
+
+describe("assembly steps", () => {
+  it("puts every member of every catalog design in a step, and every step has its pieces", () => {
+    for (const part of catalogParts) {
+      for (const quantity of [1, part.suggested_quantities[1] ?? 4, 12]) {
+        for (const maxLayers of [1, 2]) {
+          const plan = planShipment(part, { ...DEFAULT_SETTINGS, quantity, maxLayers }, null, DEFAULT_STANDARDS);
+          const design = plan.crates[0].result.design!;
+          for (const m of design.members) {
+            expect(stepOfMember(m), `${part.id} x${quantity}: ${m.label}`).toBeGreaterThanOrEqual(0);
+            expect(stepOfMember(m)).toBeLessThan(ASSEMBLY_STEPS.length);
+          }
+          const doc = buildPrintable({ part, plan, standards: DEFAULT_STANDARDS, units: "metric", ranking: "volume", generatedAt: NOW });
+          const placed = doc.crates[0].build.steps.reduce((n, s) => n + s.pieces.reduce((k, p) => k + p.qty, 0), 0);
+          expect(placed, `${part.id} x${quantity}`).toBe(design.members.length);
+          expect(doc.crates[0].build.steps.reduce((n, s) => n + s.screws, 0)).toBe(design.screws);
+        }
+      }
+    }
+  });
+
+  it("orders bearers and floor cradles before the parts, blocking and stacking cradles after", () => {
+    const at = (kind: "bearer" | "blocking" | "cradle" | "separator", variant?: "shaped-block" | "stacking-cradle") =>
+      stepOfMember({ assembly: "inside", kind, variant });
+    expect(at("bearer")).toBe(2);
+    expect(at("cradle")).toBe(2);
+    expect(at("cradle", "stacking-cradle")).toBe(3);
+    expect(at("blocking")).toBe(3);
+    expect(at("blocking", "shaped-block")).toBe(3);
+    expect(at("separator")).toBe(3);
+  });
+});
+
+describe("the document date", () => {
+  it("is the date on the clock where it was made, in the print and the header", () => {
+    const late = "2026-11-17T07:16:00.000Z";
+    const plan = planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }, null, DEFAULT_STANDARDS);
+    const make = (timeZone: string) => buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: late, timeZone });
+    expect(make("America/Los_Angeles").date).toBe("2026-11-16");
+    expect(make("UTC").date).toBe("2026-11-17");
   });
 });

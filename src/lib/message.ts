@@ -2,7 +2,7 @@ import type { Message, Quantity } from "@/domain/message";
 import { fraction, length, weight, type Units } from "./units";
 
 /**
- * Renders a check message for the selected units (#62). The domain keeps lengths and masses
+ * Renders a check message for the selected units. The domain keeps lengths and masses
  * as typed quantities in mm and kg; this is the one place they become text.
  *
  * Metric reads as it always did ("2,489 mm", "1,240 kg"). Imperial: overall sizes in inches
@@ -19,5 +19,5 @@ export function renderMessage(m: Message, u: Units): string {
   return m.map((p) => (typeof p === "string" ? p : renderQuantity(p, u))).join("");
 }
 
-/** The metric text of a message: what the checks read as before #62, and what tests pin. */
+/** The metric text of a message: what the checks read as before units were selectable, and what tests pin. */
 export const metricText = (m: Message): string => renderMessage(m, "metric");

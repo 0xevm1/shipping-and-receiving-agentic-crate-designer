@@ -129,7 +129,7 @@ function snapshot(): CrateSnapshot {
     pulses: pulse.fired,
     photonsActive: pulse.active,
     shapedBlocking: !!s.result.design?.shapedBlocking,
-    profileMs: lastProfileMs,
+    profileMs: lastProfileMs(),
     cog: s.result.design
       ? {
           mm: [...s.result.design.centerOfGravityMm],

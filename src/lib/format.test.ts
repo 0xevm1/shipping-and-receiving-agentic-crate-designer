@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { densityDelta, densityText, elapsedText, hoursText, usd, usdDelta } from "./format";
+import { densityDelta, densityText, documentDate, elapsedText, hoursText, usd, usdDelta } from "./format";
 
 describe("scorecard formatting (#17)", () => {
   it("dollars", () => {
@@ -25,5 +25,26 @@ describe("scorecard formatting (#17)", () => {
     expect(densityDelta(-2.14, "imperial")).toBe("−2.1 lb/ft³");
     expect(densityDelta(0.6, "metric")).toBe("+10 kg/m³");
     expect(densityDelta(0.01, "imperial")).toBe("");
+  });
+});
+
+describe("documentDate", () => {
+  // 23:16 on the 16th in Los Angeles is already the 17th in UTC: the case that printed the wrong day.
+  const iso = "2026-11-17T07:16:00.000Z";
+
+  it("reads the date in the given zone, not in UTC", () => {
+    expect(documentDate(iso, "America/Los_Angeles")).toBe("2026-11-16");
+    expect(documentDate(iso, "UTC")).toBe("2026-11-17");
+    expect(documentDate(iso, "Pacific/Auckland")).toBe("2026-11-17");
+  });
+
+  it("uses this device's own zone when none is given", () => {
+    const local = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    expect(documentDate(iso)).toBe(`${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`);
+  });
+
+  it("falls back to the text's own date for a timestamp it cannot read", () => {
+    expect(documentDate("2026-11-16 garbage")).toBe("2026-11-16");
   });
 });

@@ -17,7 +17,7 @@ describe("currentDesignFile (#14)", () => {
     expect(back).toEqual({ ok: true, file });
     if (!back?.ok) return;
     const restored = restoreDesign(back.file, s.part, s.standards);
-    expect(restored).toEqual({ settings: s.settings, layoutKey: file.layoutKey, notes: [], crateIndex: 0 });
+    expect(restored).toEqual({ settings: s.settings, layoutKey: file.layoutKey, ranking: "volume", notes: [], crateIndex: 0 });
   });
 
   it("is null when there is no crate", () => {

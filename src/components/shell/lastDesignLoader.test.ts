@@ -12,6 +12,7 @@ const s = () => useDesigner.getState();
 /** The default crate at quantity 8, two layers, on the Rules tab, ranked by cost. */
 function savedCatalogCrate() {
   s().setSettings({ quantity: 8, maxLayers: 2 });
+  s().setRanking("cost");
   const design = currentDesignFile(s(), "2026-11-16T12:00:00.000Z")!;
   useDesigner.setState(initial, true);
   return { design, tab: "rules" as const, ranking: "cost" as const };

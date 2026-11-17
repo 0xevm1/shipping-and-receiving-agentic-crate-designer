@@ -1,20 +1,22 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Scene, Vector3, type Object3D } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { cradleGeometry } from "@/components/viewer/cradleGeometry";
-import { cloneWithMaterial, partMaterial, WOOD } from "@/components/viewer/scene";
+import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
 import { ASSEMBLIES, type CrateDesign, type MemberKind } from "@/domain/crate";
-import { ASSEMBLY_NAMES } from "@/domain/export";
 import { partFinish } from "@/domain/partDetails";
+import type { Vec3 } from "@/domain/schema";
+import { cradleGeometry } from "./cradleGeometry";
+import { memberBounds } from "./memberBounds";
+import { cloneWithMaterial, partMaterial, WOOD } from "./sceneMaterials";
 
 /**
- * The assembled crate as a GLB (#27), for customers' and engineering's own 3D tools.
+ * The assembled crate as a GLB, for customers' and engineering's own 3D tools.
  *
  * Built fresh from the design data, never from the live viewer scene, so exploded offsets,
  * fades, ghosting and highlights can't leak into the file. The file follows the input GLB
  * convention (spec §4): metres, Z up. The only conversion is mm → m (× 0.001), baked into
  * positions and board sizes; there is no Y-up rotation. The root `Crate` node is offset so the
- * assembled crate's bounding-box centre is the file's origin (#81): 3D viewers orbit about the
+ * assembled crate's bounding-box centre is the file's origin: 3D viewers orbit about the
  * origin, so the crate turns about its own middle instead of a corner of the floor.
  *
  * Node tree:
@@ -46,17 +48,7 @@ function woodMaterials(): Record<MemberKind, MeshStandardMaterial> {
 }
 
 /** The centre of the assembled crate's boards, in the design's crate-interior mm. */
-export function crateCentreMm(design: CrateDesign): [number, number, number] {
-  const lo = [Infinity, Infinity, Infinity];
-  const hi = [-Infinity, -Infinity, -Infinity];
-  for (const m of design.members) {
-    for (let i = 0; i < 3; i++) {
-      lo[i] = Math.min(lo[i], m.min[i]);
-      hi[i] = Math.max(hi[i], m.min[i] + m.size[i]);
-    }
-  }
-  return [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2) as [number, number, number];
-}
+export const crateCentreMm = (design: CrateDesign): Vec3 => memberBounds(design.members).centre;
 
 /** The export scene: assembled crate in metres, Z up, centred on the origin, optionally with the parts in their slots. */
 export function buildCrateScene(design: CrateDesign, part?: PartModel | null): Scene {
@@ -79,7 +71,7 @@ export function buildCrateScene(design: CrateDesign, part?: PartModel | null): S
       const n = (counts.get(m.label) ?? 0) + 1;
       counts.set(m.label, n);
       const [sx, sy, sz] = m.size;
-      // Cradles keep their notches (#6): the viewer's solid, scaled to metres.
+      // Cradles keep their notches: the viewer's solid, scaled to metres.
       const geometry = m.cradle ? cradleGeometry(m).scale(M_PER_MM, M_PER_MM, M_PER_MM) : new BoxGeometry(sx * M_PER_MM, sy * M_PER_MM, sz * M_PER_MM);
       const mesh = new Mesh(geometry, materials[m.kind]);
       mesh.name = `${m.label} ${n}`;
@@ -126,6 +118,8 @@ export async function exportCrateGlb(design: CrateDesign, part?: PartModel | nul
   return result;
 }
 
+/** Part models kept for the next export; a custom part has a new object URL on every load, so only the last few are kept. */
+const MAX_CACHED_SCENES = 4;
 const partScenes = new Map<string, Promise<Object3D>>();
 
 /** The part's model, loaded once per URL (the viewer has usually fetched it already, so this hits the cache). */
@@ -135,23 +129,10 @@ export function loadPartScene(url: string): Promise<Object3D> {
     p = new GLTFLoader().loadAsync(url).then((g) => g.scene);
     p.catch(() => partScenes.delete(url));
     partScenes.set(url, p);
+    while (partScenes.size > MAX_CACHED_SCENES) partScenes.delete(partScenes.keys().next().value as string);
   }
   return p;
 }
 
-/** "crate-PART-001-x4.glb", matching the cut-list CSV name. */
-export function glbFileName(partId: string, quantity: number): string {
-  return `crate-${partId}-x${quantity}.glb`;
-}
-
-export function downloadBytes(filename: string, data: ArrayBuffer, type = "model/gltf-binary") {
-  const url = URL.createObjectURL(new Blob([data], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke after the click has been handled, so the download has the data.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+// Kept for importers outside `src/lib`; the download helpers live in `./download`.
+export { downloadBytes } from "./download";

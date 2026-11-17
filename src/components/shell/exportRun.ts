@@ -34,7 +34,7 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
     try {
       const work = (async () => {
         const { browserMakers, buildBundle, zipBundle } = await import("@/lib/exportBundle");
-        const input = { part: s.part, settings: s.settings, plan: s.plan, crateIndex: s.crateIndex, standards: s.standards, units: s.units, generatedAt: at.toISOString() };
+        const input = { part: s.part, settings: s.settings, plan: s.plan, crateIndex: s.crateIndex, standards: s.standards, units: s.units, ranking: s.ranking, generatedAt: at.toISOString() };
         const bundle = await buildBundle(input, await browserMakers(s.part));
         return { name: bundle.name, zip: zipBundle(bundle.files, at) };
       })();
