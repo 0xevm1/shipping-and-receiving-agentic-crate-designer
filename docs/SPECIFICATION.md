@@ -153,6 +153,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (an export edge, formatted with `src/lib`), `downloadText()`, `ASSEMBLY_NAMES` |
 | `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign`, `parseDesignFile` (version check and migrations), `restoreDesign` |
+| `src/domain/designLibrary.ts` | The design library (#14, §9): `partKey`, entries (`createEntry`, rename, remove / restore, `mergeEntries`, `entriesForPart`), the versioned envelope (`libraryToJson`, `parseLibrary`) |
+| `src/domain/shareLink.ts` | Share links (#14, §9): base64url, `shareHash` / `shareUrl`, `readShareHash` (validated by `parseDesignFile`) |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
@@ -162,21 +164,26 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/lumber.ts` | US shop names (#15): `NOMINAL_LUMBER` (`nominalLumber`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
+| `src/lib/currentDesign.ts` | `currentDesignFile()`: the design on screen as a design file (§6.5), for the library and share links |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
 | `src/lib/changes.ts` | A design diff as screen text: "Gross 16 → 20 kg" or "No change to the crate" |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
 | `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and the saved units in `localStorage` (§9) |
+| `src/state/libraryStorage.ts` | Loads and saves the design library in `localStorage` (§9) |
+| `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger, focus trap and summary chip (#42); idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
-| `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design |
-| `src/components/shell/SavedStateLoader.tsx` | Applies the saved units and shop standards once the app has mounted |
+| `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design; `openDesignFile()` for the library and share links |
+| `src/components/shell/SavedStateLoader.tsx` | Applies the saved units, shop standards and design library once the app has mounted, then opens a share link (`shareLinkLoader.ts`) |
+| `src/components/shell/shareLinkLoader.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
 | `src/components/island/*.tsx` | The island and its five tabs |
+| `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
 | `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
@@ -397,8 +404,8 @@ standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUti
 A saved design is a JSON file, downloaded from the Cut list tab with **Download design
 (.json)** as `crate-design-{part id}-x{quantity}.json`, and opened again through **Load a part**
 or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and reads it
-(`parseDesignFile`); both are pure and unit-tested. It is the base for a design library (#14)
-and share links.
+(`parseDesignFile`); both are pure and unit-tested. The design library and share links (#14,
+§9) store and carry this same format.
 
 ```jsonc
 {
@@ -885,7 +892,7 @@ The canvas fills the window. Four regions float above it:
 
 | Tab | Contents |
 |---|---|
-| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D |
+| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty. Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV). For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
 | **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
@@ -991,6 +998,9 @@ open question for the user (see #20).
 - **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data, each
   with a plain message.
 - Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
+- **A saved design** (Overview → Saved designs → Use, #14) and **a share link** open through
+  the same path as a design file (`loadDesign`), so the §6.5 restore notes apply. A reused
+  custom design takes the GLB already loaded (its key matches, §9).
 
 **The part header (#40).** It reads as a sentence, not a form:
 
@@ -1062,10 +1072,70 @@ default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
 hydration mismatch. Nothing saved, an unknown value (with a `console.warn`) or storage that
 throws keeps the default.
 
-A design can be saved to and reopened from a JSON file (§6.5), but isn't stored in the app.
-Everything else lives in memory. The plan for designs is SQLite WASM with the `opfs-sahpool`
-VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema.sql`; shop
-standards could move there (one row per shop) when accounts exist.
+**The design library** (#14) is saved under `crate-designer.design-library.v1`
+(`src/state/libraryStorage.ts`, logic in `src/domain/designLibrary.ts`), so a repeat part gets
+the same proven crate in one click:
+
+```jsonc
+{
+  "kind": "crate-design-library",
+  "version": 1,                       // LIBRARY_VERSION, also in the storage key
+  "entries": [{
+    "id": "4f0c…",                    // crypto.randomUUID()
+    "name": "Bracket × 8, two layers", // required, up to 80 characters
+    "notes": "Proven on the March order", // optional, up to 1,000
+    "savedAt": "2026-11-16T12:00:00.000Z",
+    "partKey": "catalog:PART-001:PART-001-machined-steel-bracket.glb",
+    "design": { "kind": "crate-design", "schemaVersion": 1, … } // the §6.5 design file, as is
+  }]
+}
+```
+
+- **Part identity** (`partKey`): a catalog part is its id and model; a custom part is its model
+  file name and its size rounded to 1 mm (`custom:widget_v2.glb:412x288x141`). A custom part's
+  name, material and mass are editable, so they are not part of the key. The key is recomputed
+  from `design.part` on every read, so an edited key can't misfile an entry.
+- **Listing:** the Overview lists the entries whose key matches the part on screen, newest first.
+- **Reuse** goes through `loadDesign` (§6.5), the same path as a picked design file. For a
+  custom part the GLB already loaded is passed along (read back from its object URL).
+- **Safe load:** the envelope must be right (kind, a version from 1 up to `LIBRARY_VERSION`, an
+  entries list); otherwise the library starts empty with a `console.warn`. Then each entry is
+  checked on its own, its design through `parseDesignFile` (so design-file versions and
+  migrations apply), and a bad entry or a repeated id is skipped with a warning while the rest
+  load. Storage that is missing or throws counts as empty; a refused save (quota) keeps the
+  change for the session and says so. An empty library is stored as no entry.
+- **Library file:** **Export library** downloads the same envelope as
+  `crate-design-library.json`; **Import library** merges one, skipping ids already saved and
+  bad entries, and says how many were added and skipped. This is how designs move between
+  machines until there are accounts.
+- Like the standards, the library is read in `SavedStateLoader` after mount (`useLibrary`, its
+  own small store, separate from the designer's).
+
+**Share links** (#14, `src/domain/shareLink.ts`): **Copy share link** puts the design on screen
+in the URL as `#design=<base64url>`: the design file (§6.5) as compact JSON, UTF-8, base64url
+without padding (about 1 KB of URL). It is in the hash, so it is never sent to a server or
+written to a server log.
+
+- **Opening** (`openShareLink`, after the saved standards are applied so the design is rebuilt
+  with them, and again on `hashchange`): the hash is read through `readShareHash`, which decodes
+  it and validates it with `parseDesignFile`. A catalog part restores fully through
+  `loadDesign`, with the §6.5 notes.
+- **A custom part** can't travel in a URL, because its GLB is a local file. The message names
+  it ("This link shares a 1 × Widget design for a custom part. Load widget_v2.glb with Load a
+  part …"), the design waits, and loading a GLB with that file name opens it. The copy status
+  warns the sender too.
+- **A damaged or tampered link** (bad base64, cut short, not JSON, wrong kind, a newer version,
+  out-of-range settings) changes nothing: on first load the default crate stays, and the load
+  row says "Share link not opened, so the default crate is shown." with the reason.
+- **Tidy URL:** the hash is removed with `history.replaceState` as soon as it is read, so the
+  address bar is clean and a reload doesn't re-open the link over later edits.
+
+**Next: SQLite.** Everything else lives in memory. When designs outgrow `localStorage` (about
+5 MB, one browser, no queries), the plan is SQLite WASM with the `opfs-sahpool` VFS, in a Web
+Worker, behind a typed repository: see `DATA_STORE.md` and `schema.sql`. The library's entries
+map to a designs table (part key, name, notes, saved at, the design JSON), and the library file
+stays the import / export format. Shop standards could move there (one row per shop) when
+accounts exist.
 
 ## 10. Invariants and tests
 
@@ -1189,6 +1259,29 @@ range ignored), the type is kept across edits while it exists, a lower max gross
   same plan and crate type with no notes, and with other standards notes the changed plan.
 - A layout key that no longer exists falls back to the recommended layout with a note; a
   heavier catalog part or a changed summary gives a note with the new and saved values.
+
+**`src/domain/designLibrary.test.ts`** checks the design library (#14): part keys (catalog by id
+and model; custom by file name and rounded size, unaffected by name and mass), trimmed names and
+a required name, rename / remove / restore in place, per-part listing newest first, the
+versioned envelope round trip, refusal of bad JSON, another kind, a newer version or no entries,
+skipping bad entries (a bad design names its field) and repeated ids, a recomputed part key, and
+merging an import without duplicates.
+
+**`src/domain/shareLink.test.ts`** checks share links: base64url round trips (empty, padding
+lengths, non-ASCII) and rejects bad input; a design round-trips through `#design=…` (with or
+without `#`), a custom part with non-ASCII text too; `shareUrl` keeps the query and puts the
+design in the hash; a hash without a design is ignored; damaged, truncated and tampered links
+(out-of-range quantity, wrong kind, newer version, not an object) are refused.
+
+**`src/state/library.store.test.ts`** checks the library's storage (versioned key; empty when
+nothing is saved and nothing stored when empty; unreadable JSON, another kind or a newer version
+fall back to empty with one warning; good entries survive bad ones; throwing storage) and
+`useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
+each time, export and import with duplicates and bad entries counted).
+
+**`src/lib/currentDesign.test.ts`** checks that the design on screen (PART-001 × 4) is written as
+a design file that survives a share-link round trip and restores with no notes, and gives null
+without a crate.
 
 **`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
 changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
@@ -1316,6 +1409,18 @@ HTML report as `playwright-report`.
     and saving it again gives the same file; a stale layout key falls back with a message; a
     custom design without its GLB names `widget_v2.glb` and changes nothing, and with it
     restores the entered name, material and mass; a newer `schemaVersion` is refused.
+  - `17-design-library` (#14): two designs saved from the Overview (one with notes) are listed
+    after a reload, newest first, with "8 parts · 938 × 658 × 823 mm"; **Use** restores
+    quantity 8 and that size with "Design loaded: 8 × Machined steel bracket."; another part
+    has an empty list; rename by keyboard, delete and Undo; Export library gives
+    `crate-design-library.json`, which imports back. A share link for PART-002 × 8 with a
+    picked layout opens on a fresh page load (library cleared) at the same outside size and
+    leaves no hash; a tampered link (quantity 5000) and a non-base64 one show "Share link not
+    opened, so the default crate is shown." and keep PART-001 × 4; a custom part's link names
+    `widget_v2.glb` and opens once that file is loaded. `17-design-library.mobile` (both phone
+    projects): save and reuse inside the drawer with 44 px targets and no page scroll.
+    Screenshots `14-saved-designs-list`, `14-saved-designs-island`, `14-share-link-restored`,
+    `14-share-link-invalid`, `14-<project>-drawer-saved-designs`.
   - `09-part-header` (#40, #39): a catalog part reads as the same sentence with no fields; each
     field edited by keyboard in Tab order, with the stand-in (dashed) showing and clearing, no
     box, the sky focus underline and ↑ / Shift+↓ steps; an invalid mass shows its reason (gold,
@@ -1363,6 +1468,7 @@ HTML report as `playwright-report`.
 | Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
 | House rules are one zod-validated `ShopStandards` object passed into `computeDesign`, defaulting to `DEFAULT_STANDARDS` (#19) | Makes the PM's tribal knowledge explicit and editable; the domain stays pure (no store or storage access), and every existing call and test works unchanged with the defaults | Every domain function takes one more argument; a few exports remain as views of the defaults for tests |
 | Shop standards persist in `localStorage` under a versioned key, loaded after mount | No backend yet; a PM's house rules should survive reloads. Loading after mount avoids a hydration mismatch, and invalid data falls back to the defaults with a warning | Per browser, not per shop: share them with Download / Load standards until there are accounts (§9) |
+| Saved designs live in `localStorage` as the #28 design file plus name and notes, keyed by part identity; share links put the same file base64url in the URL hash (#14) | One format for files, the library and links, with one validator and its migrations; no backend needed yet; the hash never reaches a server log | Per browser, about 5 MB; a custom part's GLB can't travel in a link, so the receiver loads it; SQLite (`DATA_STORE.md`) when it outgrows this |
 | Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists; the stock fields are actual sizes, which map to nominal names for display | An imperial user converts by hand |
 | Imperial by default, with nominal lumber names and a CSV in the selected units (#15) | The shop floor is domestic US: crews think in inches, pounds, 2x4s and 3/4″ ply, and the cut list is what they saw to | Two CSV formats; a custom stock size not in `NOMINAL_LUMBER` shows as fractional inches |
 | A split is N identical crates plus at most one remainder, chosen fewest crates → least volume (3% tie) → most even (#25) | Identical crates are faster to build from one cut list; a PM thinks in crate counts first, then truck space; an even split balances the crates when volume doesn't care | A mixed plan (e.g. 4 + 3 + 3) is never offered; bisection assumes fit falls as the part count grows |
@@ -1388,7 +1494,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #11 | Explain why a layout was chosen (closed; `explainLayout` landed with #20) |
 | #12 | Flag when a wooden crate is overkill (for example, light aluminum that a carton would do) |
 | #13 | Shipping-mode constraints (LTL, container, air) |
-| #14 | Shareable design via URL |
+| #14 | Design library and share links (§9): saved per part in `localStorage`, a library file to move them, designs in the URL hash; SQLite later |
 | #15 | Imperial units by default with a metric toggle, nominal lumber names, CSV in the selected units |
 | #16 | Geometry-aware blocking for irregular parts |
 | #19 | Shop standards configuration (§6.4). Stock, defaults, thresholds, limits and material rates landed; labour rates need a labour-time model first |
