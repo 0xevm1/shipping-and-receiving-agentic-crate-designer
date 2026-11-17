@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { APP } from "@/lib/appInfo";
 import { parts } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
 import { parseDesignFile, serializeDesign, type DesignFile, type DesignFilePart } from "./designFile";
@@ -18,6 +17,7 @@ import {
   type SavedDesign,
 } from "./designLibrary";
 import type { CrateSettings } from "./schema";
+import { TEST_APP } from "./testFixtures";
 
 function catalogFilePart(id: string): DesignFilePart {
   const p = parts.find((x) => x.id === id)!;
@@ -35,7 +35,7 @@ const widget: DesignFilePart = {
 
 function designFile(part: DesignFilePart, settings: CrateSettings = DEFAULT_SETTINGS, savedAt = "2026-11-16T12:00:00.000Z"): DesignFile {
   const design = computeDesign(part, settings).design!;
-  const r = parseDesignFile(serializeDesign({ app: APP, part, settings, layoutKey: design.layout.key, design, savedAt }));
+  const r = parseDesignFile(serializeDesign({ app: TEST_APP, part, settings, layoutKey: design.layout.key, design, savedAt }));
   if (!r.ok) throw new Error(r.error);
   return r.file;
 }

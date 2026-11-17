@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
 import type { Check, Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
@@ -16,7 +15,7 @@ import {
 } from "./handling";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
-import { custom } from "./testFixtures";
+import { custom, metricText as metric } from "./testFixtures";
 
 const design = (partId: string, patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;

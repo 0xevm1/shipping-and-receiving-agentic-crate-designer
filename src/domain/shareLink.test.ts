@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { APP } from "@/lib/appInfo";
 import { parts } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
 import { parseDesignFile, serializeDesign, type DesignFile, type DesignFilePart } from "./designFile";
 import { base64UrlDecode, base64UrlEncode, readShareHash, SHARE_PARAM, shareHash, shareUrl } from "./shareLink";
+import { TEST_APP } from "./testFixtures";
 
 const p = parts.find((x) => x.id === "PART-002")!;
 const shaft: DesignFilePart = { source: "catalog", id: p.id, name: p.name, material: p.material, mass_kg: p.mass_kg, dimensions_mm: p.dimensions_mm, model: p.model };
@@ -11,7 +11,7 @@ const shaft: DesignFilePart = { source: "catalog", id: p.id, name: p.name, mater
 function file(part: DesignFilePart = shaft): DesignFile {
   const settings = { ...DEFAULT_SETTINGS, quantity: 8, maxLayers: 3 };
   const design = computeDesign(part, settings).design!;
-  const r = parseDesignFile(serializeDesign({ app: APP, part, settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T12:00:00.000Z" }));
+  const r = parseDesignFile(serializeDesign({ app: TEST_APP, part, settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T12:00:00.000Z" }));
   if (!r.ok) throw new Error(r.error);
   return r.file;
 }

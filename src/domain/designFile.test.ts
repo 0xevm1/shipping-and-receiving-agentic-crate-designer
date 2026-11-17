@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { APP } from "@/lib/appInfo";
 import { parts } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
-import { bomToCsv } from "@/lib/csv";
-import { metricText } from "@/lib/message";
 import {
   DESIGN_FILE_KIND,
   DESIGN_SCHEMA_VERSION,
@@ -17,6 +14,7 @@ import {
 import type { CrateSettings } from "./schema";
 import { planShipment } from "./shipment";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
+import { metricText, TEST_APP } from "./testFixtures";
 
 const SAVED_AT = "2026-11-16T12:00:00.000Z";
 
@@ -45,7 +43,7 @@ const widget: DesignFilePart = {
 
 function save(part: DesignFilePart, settings: CrateSettings, layoutKey?: string | null) {
   const result = computeDesign(part, settings, layoutKey);
-  const text = serializeDesign({ app: APP, part, settings, layoutKey: result.design!.layout.key, design: result.design!, savedAt: SAVED_AT });
+  const text = serializeDesign({ app: TEST_APP, part, settings, layoutKey: result.design!.layout.key, design: result.design!, savedAt: SAVED_AT });
   return { text, result };
 }
 
@@ -56,7 +54,7 @@ describe("serializeDesign", () => {
     const json = JSON.parse(text);
     expect(json.kind).toBe(DESIGN_FILE_KIND);
     expect(json.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
-    expect(json.app).toEqual({ name: "crate-designer", version: APP.version });
+    expect(json.app).toEqual({ name: "crate-designer", version: TEST_APP.version });
     expect(json.savedAt).toBe(SAVED_AT);
     expect(json.part).toEqual(part);
     expect(json.settings).toEqual(DEFAULT_SETTINGS);
@@ -172,7 +170,7 @@ describe("restoreDesign", () => {
           const picked = computeDesign(p, settings, pick.key).design!;
           for (const design of [original, picked]) {
             const filePart = catalogFilePart(p.id);
-            const text = serializeDesign({ app: APP, part: filePart, settings, layoutKey: design.layout.key, design, savedAt: SAVED_AT });
+            const text = serializeDesign({ app: TEST_APP, part: filePart, settings, layoutKey: design.layout.key, design, savedAt: SAVED_AT });
             const r = parseDesignFile(text);
             if (!r.ok) throw new Error(r.error);
             const restored = restoreDesign(r.file, p);
@@ -181,7 +179,7 @@ describe("restoreDesign", () => {
             const again = computeDesign(p, restored.settings, restored.layoutKey).design!;
             expect(again.layout.external).toEqual(design.layout.external);
             expect(again.grossKg).toBeCloseTo(design.grossKg, 6);
-            for (const u of ["metric", "imperial"] as const) expect(bomToCsv(p, again, u)).toBe(bomToCsv(p, design, u));
+            expect(again.bom).toEqual(design.bom);
           }
         }
       }
@@ -228,7 +226,7 @@ describe("design file: a split batch (#25)", () => {
   function saveType(index: number, standards = DEFAULT_STANDARDS) {
     const plan = planShipment(p, settings, null, standards);
     const design = plan.crates[index].result.design!;
-    return serializeDesign({ app: APP, part: catalogFilePart(p.id), settings, layoutKey: design.layout.key, design, plan, savedAt: SAVED_AT });
+    return serializeDesign({ app: TEST_APP, part: catalogFilePart(p.id), settings, layoutKey: design.layout.key, design, plan, savedAt: SAVED_AT });
   }
 
   it("writes the crate types only for a split, so single-crate files are unchanged", () => {
@@ -237,7 +235,7 @@ describe("design file: a split batch (#25)", () => {
     expect(json.summary.shipment).toEqual(plan.crates.map((c) => ({ count: c.count, quantity: c.quantity })));
     expect(json.summary.quantity).toBe(plan.crates[1].quantity);
     const one = planShipment(p, DEFAULT_SETTINGS);
-    const text = serializeDesign({ app: APP,
+    const text = serializeDesign({ app: TEST_APP,
       part: catalogFilePart(p.id),
       settings: DEFAULT_SETTINGS,
       layoutKey: one.crates[0].result.design!.layout.key,

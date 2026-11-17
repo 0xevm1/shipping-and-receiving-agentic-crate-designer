@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { parts } from "./catalog";
 import type { CrateDesign } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, MAX_PART_MM, type DesignPart } from "./design";
 import { CrateSettingsSchema, normalizeSettings, settingsAdjustments, type CrateSettings, type Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm } from "./standards";
+import { metricText as metric } from "./testFixtures";
 
 const MIN_INTERIOR_MM = minInteriorMm(DEFAULT_STANDARDS);
 

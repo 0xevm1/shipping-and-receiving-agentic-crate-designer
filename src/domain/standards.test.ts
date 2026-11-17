@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, settingsFromStandards, type DesignPart } from "./design";
 import type { CrateSettings } from "./schema";
@@ -15,7 +14,7 @@ import {
   type DeepPartial,
   type ShopStandards,
 } from "./standards";
-import { custom } from "./testFixtures";
+import { custom, metricText as metric } from "./testFixtures";
 
 
 const design = (partId: string, standards: ShopStandards, patch: Partial<CrateSettings> = {}) =>

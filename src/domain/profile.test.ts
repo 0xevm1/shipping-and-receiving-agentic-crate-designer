@@ -1,5 +1,4 @@
 import { Euler, Matrix4 } from "three";
-import { metricText as metric } from "@/lib/message";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import { isSlender, usesCradles } from "./cradles";
@@ -17,6 +16,7 @@ import {
 } from "./profile";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
+import { metricText as metric } from "./testFixtures";
 
 /**
  * A synthetic profile on a `cell`-mm grid. Every face is flat (depth 0) unless `shape` gives a

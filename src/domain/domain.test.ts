@@ -1,13 +1,12 @@
 import { Box3, Euler, Matrix4, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { ASSEMBLIES } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from "./design";
 import { ORIENTATIONS, rotatedSize } from "./orientations";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
-import { custom as customStandards } from "./testFixtures";
+import { custom as customStandards, metricText as metric } from "./testFixtures";
 
 const { trailerMm: DRY_VAN_53FT_MM, ltlExcessiveLengthMm: LTL_EXCESSIVE_LENGTH_MM, cardboard: CARDBOARD_LIMITS } = DEFAULT_STANDARDS.limits;
 
