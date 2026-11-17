@@ -269,18 +269,18 @@ test.describe("idle auto-play", () => {
   // Turn motion back on for this test only: auto-play never runs with reduced motion.
   test.use({ reducedMotion: "no-preference" });
 
-  test("starts turning the crate after 6 s without input", async ({ page }) => {
+  test("starts turning the crate after 5 s without input", async ({ page }) => {
     await openApp(page);
-    // Input stops auto-play at once. Point at the header so nothing in 3D is hovered (a hover holds it).
-    await page.getByRole("banner").getByRole("heading", { name: "Crate Designer" }).hover();
+    // A click stops auto-play at once (hovering doesn't, #64). The header title does nothing else.
+    await page.getByRole("banner").getByRole("heading", { name: "Crate Designer" }).click();
     await pollCrate(page, (s) => s.autoplay).toBe(false);
     const stopped = Date.now();
     const theta = (await crate(page)).cameraAngles!.theta;
 
     await pollCrate(page, (s) => s.autoplay, { timeout: 30_000 }).toBe(true);
-    // IDLE_MS is 6 s. The lower bound allows for the poll's timing; the upper one for slow CI frames.
+    // IDLE_MS is 5 s. The lower bound allows for the poll's timing; the upper one for slow CI frames.
     const waited = Date.now() - stopped;
-    expect(waited).toBeGreaterThan(5_000);
+    expect(waited).toBeGreaterThan(4_000);
     expect(waited).toBeLessThan(20_000);
     await pollCrate(page, (s) => Math.abs(s.cameraAngles!.theta - theta)).toBeGreaterThan(0.02);
   });

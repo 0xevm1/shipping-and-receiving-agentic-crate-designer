@@ -1161,11 +1161,22 @@ open question for the user (see #20).
 - **Opacity:** `setOpacity` (`scene.ts`) moves a material between the opaque and transparent
   passes and recompiles it, because three bakes an `OPAQUE` define into opaque shaders.
 - **Idle auto-play:**
-  - After **6 s** with no pointer, wheel, key or touch input anywhere, the camera turns at
+  - After **5 s** (6 s until #64, shortened at the user's request) with no deliberate input
+    anywhere, the camera turns at
     **0.18 rad/s** (slowed from the handoff's 0.3 at the user's request) and steps closed → exploded → open → exploded → …, half a turn per mode. The
     next mode starts 0.12 turn early so it lands as the half-turn completes.
-  - Any input stops it at once. It holds while a row is pinned, anything is hovered or the
-    narrow-screen drawer is open (#42), and resumes from the mode on screen. It runs on first load.
+  - **Deliberate input** (#64) stops it at once and restarts the idle timer: `pointerdown` (a
+    click or tap), a drag (`pointermove` with a button held, so orbiting the crate or grabbing
+    the part view), `wheel`, `keydown` and `touchstart`, listened for on `window` in
+    `DesignerShell` and classified by `isDeliberateInput` (`src/state/motion.ts`).
+  - **Hovering is not input:** a `pointermove` with no button held, over empty canvas, a board
+    or the island (cut-list rows, weight bars), neither stops nor delays it. It still holds
+    while a row is pinned (pinning is a click), during an orbit drag, or while the narrow-screen
+    drawer is open (#42), and resumes from the mode on screen. It runs on first load.
+  - **Hover while turning:** r3f only picks on pointer events, so while auto-play turns the
+    crate under a still pointer `Director` re-picks about 10 times a second
+    (`events.update()`, only while the pointer is over the canvas). The board tooltip and
+    highlight follow the board under the pointer.
   - With `prefers-reduced-motion` it never runs, and mode changes and camera moves are instant.
 - **Size lines:**
   - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
@@ -1190,7 +1201,7 @@ open question for the user (see #20).
   the handoff's 0.45 and reversed, at the user's request). The turn is driven from frame time in
   `useFrame`, not OrbitControls' `autoRotate`, which steps per frame and runs double speed at
   120 Hz. Dragging stops
-  it; it resumes from the same angle after the shared 6 s idle. Double-click resets tilt and
+  it (hovering doesn't, #64); it resumes from the same angle after the shared 5 s idle. Double-click resets tilt and
   zoom.
 - **Floor:** a line grid of 500 mm squares (1 ft in imperial) reaching at least 5 m (or 3× the
   crate's longest side) from the crate, fading with distance from the crate rather than the
@@ -1599,14 +1610,15 @@ headless Chromium with SwiftShader WebGL, so the canvas really renders. Four pro
 (the drawer layout with a mouse) runs only `*.narrow.spec.ts`; mobile-390 (390 × 844) and
 mobile-360 (360 × 800), both with touch, `isMobile` and 2× pixels, run only `*.mobile.spec.ts`
 (#42). Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
-transitions are instant (§8.4); one test turns motion back on. Each flow saves named full-page
+transitions are instant (§8.4); the idle tests (`06-view`, `12-mobile`, `21-idle-hover`)
+turn motion back on. Each flow saves named full-page
 screenshots to `e2e/screenshots/` (git-ignored); CI uploads them as `e2e-screenshots` with the
 HTML report as `playwright-report`.
 
 - **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`)
   exposes a read-only `window.__crate` with `getState()` (mode from the view targets, view
   switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play,
-  the outside size, problem id, tab, units, quantity, frame count) and `canvasCoverage()` (share
+  `idle` (no deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, frame count) and `canvasCoverage()` (share
   of canvas pixels drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`.
   `next.config.ts` always inlines the flag (`"0"` when unset), so normal builds drop the branch
   and don't bundle the module. Everything else is found by role, label or text; the only test
@@ -1634,7 +1646,7 @@ HTML report as `playwright-report`.
     "Showing N × piece", Escape clears it.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
     View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
-    Hide panels keeps the credit; idle auto-play starts after 6 s without input; from the
+    Hide panels keeps the credit; idle auto-play starts after 5 s without input; from the
     exploded view, "Download 3D model (.glb)" saves `crate-PART-001-x4.glb` with the `glTF`
     header, a matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1`
     … `Part 4`), and with "Include parts" off the file has no `Parts` node; the first framing
@@ -1712,6 +1724,13 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
+  - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
+    the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
+    and `idle` on and the camera turning, while it hovers at least one board and one bar; one
+    click on empty canvas turns both off at once, and auto-play resumes 4–15 s later with the
+    pointer still hovering. A wheel, a key and a drag each stop it. A pointer held still on
+    the turning crate keeps a tooltip, and its hover key changes as boards pass under it; the
+    PR screenshot `docs/screenshots/64-idle-hover/hover-while-turning.png` is saved there.
   - `15-app-icons` (#58, HTTP only): `/favicon.ico`, `/icon.svg`, `/icon1.png` and
     `/apple-icon.png` return 200 with their image types; `/icon.svg` is the crate mark;
     `/site.webmanifest` has name "Crate Designer", start URL `/`, theme `#002548` and two icon

@@ -13,6 +13,7 @@ import {
   IDLE_SEQUENCE,
   IDLE_TURN_RATE,
   isIdle,
+  pointer,
 } from "@/state/motion";
 import { currentMode, reducedMotion, useDesigner, type CameraPreset, type DesignerState } from "@/state/store";
 import type { CrateDesign } from "@/domain/crate";
@@ -56,9 +57,10 @@ const sph = new Spherical();
  * - centres the crate in the area the panels leave free (camera view offset),
  * - re-frames the camera on request (`fit` in the store), easing to the goal,
  * - eases the explode distance and lid / front-wall opacity toward the view targets,
- * - idle auto-play: after 6 s without input the crate turns and steps through
+ * - idle auto-play: after 5 s without deliberate input the crate turns and steps through
  *   closed → exploded → open → exploded, half a turn per mode. It holds while a row is pinned,
- *   anything is hovered, or the narrow-screen drawer is open (#42).
+ *   during a drag, or while the narrow-screen drawer is open (#42). Hovering doesn't hold it
+ *   (#64): while it turns under a still pointer the scene re-picks, so the hover follows the boards.
  */
 export function Director() {
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
@@ -71,6 +73,8 @@ export function Director() {
   /** The orbit target last placed, kept for when the controls aren't registered yet. */
   const aim = useRef(new Vector3());
   const dragging = useRef(false);
+  /** Seconds since the last re-pick under a still pointer. */
+  const sincePick = useRef(0);
 
   // Shift the projection so the crate sits in the middle of the free area, not the window.
   useEffect(() => {
@@ -151,7 +155,7 @@ export function Director() {
     const s = useDesigner.getState();
     const reduce = reducedMotion();
 
-    if (s.result.design && !reduce && !dragging.current && !s.pin && !s.hover && !s.drawerOpen && (autoplay.on || isIdle())) {
+    if (s.result.design && !reduce && !dragging.current && !s.pin && !s.drawerOpen && (autoplay.on || isIdle())) {
       if (!autoplay.on || autoplay.step < 0) {
         autoplay.on = true;
         autoplay.turned = 0;
@@ -172,6 +176,13 @@ export function Director() {
         autoplay.turned = 0;
         autoplay.fired = false;
         autoplay.step = (autoplay.step + 1) % IDLE_SEQUENCE.length;
+      }
+      // The pointer is still but the boards move under it: re-pick ~10×/s so the tooltip and
+      // highlight follow (r3f only raycasts on pointer events). Throttled: parts are detailed meshes.
+      sincePick.current += dt;
+      if (pointer.inCanvas && sincePick.current >= 0.1) {
+        sincePick.current = 0;
+        getThree().events.update?.();
       }
     }
 
