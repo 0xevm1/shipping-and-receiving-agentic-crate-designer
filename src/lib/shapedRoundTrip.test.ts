@@ -171,7 +171,12 @@ describe("the same design file gives the same crate everywhere", () => {
     const heavier = { ...catalogPart(entry), mass_kg: entry.mass_kg * 2 };
     const notes = restoreDesign(file, heavier).notes;
     expect(notes.map(metricText).join(" ")).toMatch(/Gross is now \d+ kg \(was 138 kg\)/);
-    const r = printableFromDesignFile(JSON.stringify({ ...JSON.parse(text), part: { ...JSON.parse(text).part, mass_kg: entry.mass_kg * 2 } }), DEFAULT_STANDARDS, "imperial", NOW);
+    const r = printableFromDesignFile(
+      JSON.stringify({ ...JSON.parse(text), part: { ...JSON.parse(text).part, mass_kg: entry.mass_kg * 2 } }),
+      DEFAULT_STANDARDS,
+      "imperial",
+      NOW,
+    );
     if (!r.ok) throw new Error(r.error);
     expect(r.notes.join(" ")).toMatch(/ lb/);
     expect(r.notes.join(" ")).not.toMatch(/ kg/);

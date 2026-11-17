@@ -60,12 +60,7 @@ export function readJson<T>(
  * default is saved as nothing). Returns false, never throws, when there is no store or it
  * refuses the write (blocked, quota); a refusal also warns with `failedMessage`.
  */
-export function writeJson(
-  store: KeyValueStore | null,
-  key: string,
-  text: string | null,
-  failedMessage = "Couldn't save.",
-): boolean {
+export function writeJson(store: KeyValueStore | null, key: string, text: string | null, failedMessage = "Couldn't save."): boolean {
   if (!store) return false;
   try {
     if (text === null) store.removeItem(key);

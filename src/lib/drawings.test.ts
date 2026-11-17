@@ -73,7 +73,9 @@ describe("crateDrawings with cradles", () => {
     const below = cradles.filter((m) => m.min[2] + m.size[2] <= cutZ);
     expect(below.length).toBeGreaterThan(0);
     for (const m of below) {
-      expect(views["section-plan"].rects.some((r) => r.kind === "dunnage" && r.x === m.min[0] && r.y === m.min[1] && r.w === m.size[0] && r.h === m.size[1])).toBe(true);
+      expect(
+        views["section-plan"].rects.some((r) => r.kind === "dunnage" && r.x === m.min[0] && r.y === m.min[1] && r.w === m.size[0] && r.h === m.size[1]),
+      ).toBe(true);
     }
   });
 

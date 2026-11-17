@@ -124,8 +124,7 @@ const EntrySchema = z.object({
 });
 
 export type LibraryParse =
-  | { ok: true; entries: SavedDesign[]; /** One sentence per entry that was left out. */ skipped: string[] }
-  | { ok: false; error: string };
+  { ok: true; entries: SavedDesign[]; /** One sentence per entry that was left out. */ skipped: string[] } | { ok: false; error: string };
 
 /**
  * Reads a library (stored or imported). Never throws. The envelope must be right; then each

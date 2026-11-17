@@ -45,7 +45,10 @@ export function buildPartProfile(scene: Object3D, mmPerUnit: number, budgetMs = 
     const count = index ? index.count : pos.count;
     for (let i = 0; i + 2 < count; i += 3) {
       for (let k = 0; k < 3; k++) {
-        v.fromBufferAttribute(pos, index ? index.getX(i + k) : i + k).applyMatrix4(mesh.matrixWorld).multiplyScalar(mmPerUnit).sub(min);
+        v.fromBufferAttribute(pos, index ? index.getX(i + k) : i + k)
+          .applyMatrix4(mesh.matrixWorld)
+          .multiplyScalar(mmPerUnit)
+          .sub(min);
         tris.push(v.x, v.y, v.z);
       }
     }
@@ -66,9 +69,15 @@ export function buildPartProfile(scene: Object3D, mmPerUnit: number, budgetMs = 
     for (let t = 0; t < tris.length; t += 9) {
       if ((t & 0xfff) === 0 && now() - started > budgetMs) throw new Error("Part analysis took too long.");
       const [u0, v0, n0, u1, v1, n1, u2, v2, n2] = [
-        tris[t + ua], tris[t + va], tris[t + axis],
-        tris[t + 3 + ua], tris[t + 3 + va], tris[t + 3 + axis],
-        tris[t + 6 + ua], tris[t + 6 + va], tris[t + 6 + axis],
+        tris[t + ua],
+        tris[t + va],
+        tris[t + axis],
+        tris[t + 3 + ua],
+        tris[t + 3 + va],
+        tris[t + 3 + axis],
+        tris[t + 6 + ua],
+        tris[t + 6 + va],
+        tris[t + 6 + axis],
       ];
       const area = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
       if (Math.abs(area) < 1e-9) continue; // edge-on to this axis
@@ -119,12 +128,7 @@ export const lastProfileMs = (): number | null => lastMs;
  * rendered) and hands the profile to `onDone`, or null if analysis failed or ran out of time.
  * Cached per model URL. Returns a cancel function.
  */
-export function scheduleProfile(
-  url: string,
-  scene: Object3D,
-  mmPerUnit: number,
-  onDone: (url: string, profile: PartProfile | null) => void,
-): () => void {
+export function scheduleProfile(url: string, scene: Object3D, mmPerUnit: number, onDone: (url: string, profile: PartProfile | null) => void): () => void {
   if (profiles.has(url)) {
     onDone(url, profiles.get(url)!);
     return () => {};
@@ -143,7 +147,10 @@ export function scheduleProfile(
     profiles.set(url, profile);
     onDone(url, profile);
   };
-  const w = globalThis as typeof globalThis & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+  const w = globalThis as typeof globalThis & {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+    cancelIdleCallback?: (id: number) => void;
+  };
   if (w.requestIdleCallback && w.cancelIdleCallback) {
     const id = w.requestIdleCallback(run, { timeout: 1500 });
     return () => {

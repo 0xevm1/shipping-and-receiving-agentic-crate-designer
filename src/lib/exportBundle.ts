@@ -134,7 +134,16 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
     notes.push(["cut-list.csv", "The cut list, for the shop floor or a spreadsheet."]);
   }
 
-  const designText = serializeDesign({ part: designFilePart(part), settings, layoutKey: shown.layout.key, ranking, design: shown, plan, app: APP, savedAt: generatedAt });
+  const designText = serializeDesign({
+    part: designFilePart(part),
+    settings,
+    layoutKey: shown.layout.key,
+    ranking,
+    design: shown,
+    plan,
+    app: APP,
+    savedAt: generatedAt,
+  });
   files.push({ name: "design.json", data: encode(designText) });
   notes.push([
     "design.json",

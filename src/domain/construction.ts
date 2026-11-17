@@ -32,11 +32,7 @@ interface ConstructionMaterials {
 }
 
 /** Choose board sizes from payload mass, using the shop's stock and thresholds. */
-export function resolveConstruction(
-  settings: CrateSettings,
-  payloadKg: number,
-  standards: ShopStandards = DEFAULT_STANDARDS,
-): ConstructionMaterials {
+export function resolveConstruction(settings: CrateSettings, payloadKg: number, standards: ShopStandards = DEFAULT_STANDARDS): ConstructionMaterials {
   const { stock, construction: rule } = standards;
   const ply = stock.panelPlywoodMm;
   const panelMm =
@@ -55,9 +51,7 @@ export function resolveConstruction(
 export function structureMaterials(c: ConstructionMaterials, standards: ShopStandards = DEFAULT_STANDARDS): StructureMaterials {
   const modulus = (k: LaidSection) => k.wide * k.tall * k.tall;
   const { standard, heavy } = standards.stock.skidMm;
-  const skids = [standard, heavy]
-    .filter((k) => modulus(k) >= modulus(c.minSkid))
-    .sort((a, b) => modulus(a) - modulus(b) || a.wide * a.tall - b.wide * b.tall);
+  const skids = [standard, heavy].filter((k) => modulus(k) >= modulus(c.minSkid)).sort((a, b) => modulus(a) - modulus(b) || a.wide * a.tall - b.wide * b.tall);
   return { panelMm: c.panelMm, floorMm: c.floorMm, cleat: c.cleat, skids: skids.map((k) => ({ wide: k.wide, tall: k.tall })) };
 }
 

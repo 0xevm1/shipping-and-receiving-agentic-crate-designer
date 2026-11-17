@@ -221,8 +221,7 @@ function dropStaleLines(s: Pick<DesignerState, "pin" | "hover">, result: DesignR
   };
 }
 
-export const reducedMotion = () =>
-  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+export const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export const useDesigner = create<DesignerState>()((set, get) => {
   let changeTimer: ReturnType<typeof setTimeout> | undefined;

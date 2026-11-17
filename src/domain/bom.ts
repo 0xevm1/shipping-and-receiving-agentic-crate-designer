@@ -48,7 +48,21 @@ export function buildBom(members: Member[]): BomLine[] {
     if (line) line.qty++;
     else {
       const { assembly, label, kind, material, variant } = m;
-      lines.set(key, { key, assembly, label, name: label, ...(variant && { variant }), kind, material, stock, cut, stockMm, cutMm, qty: 1, ...(notches && { notches }) });
+      lines.set(key, {
+        key,
+        assembly,
+        label,
+        name: label,
+        ...(variant && { variant }),
+        kind,
+        material,
+        stock,
+        cut,
+        stockMm,
+        cutMm,
+        qty: 1,
+        ...(notches && { notches }),
+      });
     }
   }
   return tellApart([...lines.values()]);
@@ -127,8 +141,7 @@ const CORNERS = 4;
 export function screwSchedule(members: Member[], interior: Vec3, standards: ShopStandards = DEFAULT_STANDARDS): ScrewLine[] {
   const [L, W, H] = interior;
   const every = standards.rates.screwSpacingMm;
-  const along = (match: (m: Member) => boolean, spacing: number) =>
-    members.filter(match).reduce((n, m) => n + Math.ceil(Math.max(...m.size) / spacing) + 1, 0);
+  const along = (match: (m: Member) => boolean, spacing: number) => members.filter(match).reduce((n, m) => n + Math.ceil(Math.max(...m.size) / spacing) + 1, 0);
   const count = (kind: MemberKind) => members.filter((m) => m.kind === kind).length;
   const cradles = (stacking: boolean) => members.filter((m) => m.kind === "cradle" && (m.variant === "stacking-cradle") === stacking).length;
   const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
@@ -143,8 +156,22 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
   const lines: ScrewLine[] = [
     joists > 0
       ? line("skids", "base", "Floor joists to skids", null, crossingRule, joistCrossings)
-      : line("skids", "base", "Floor to skids", every.skid, "along each skid, plus 1", along((m) => m.kind === "skid", every.skid)),
-    line("joists", "base", "Floor to joists", every.skid, "along each joist, plus 1", along((m) => m.kind === "joist", every.skid)),
+      : line(
+          "skids",
+          "base",
+          "Floor to skids",
+          every.skid,
+          "along each skid, plus 1",
+          along((m) => m.kind === "skid", every.skid),
+        ),
+    line(
+      "joists",
+      "base",
+      "Floor to joists",
+      every.skid,
+      "along each joist, plus 1",
+      along((m) => m.kind === "joist", every.skid),
+    ),
     line("side-cleats", "sides", "Side wall cleats to panels", every.cleat, alongPlusOne, along(cleatOf("sides"), every.cleat)),
     line("end-cleats", "ends", "End wall cleats to panels", every.cleat, alongPlusOne, along(cleatOf("ends"), every.cleat)),
     line("walls-to-floor", "sides", "Walls to floor", every.panelJoint, "around the base", joint),

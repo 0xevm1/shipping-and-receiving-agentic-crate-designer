@@ -72,7 +72,13 @@ export async function loadPickedFiles(list: FileList | File[]) {
   const completes = pending && !files.some((f) => /\.json$/i.test(f.name)) && files.some((f) => f.name === pending.part.model);
   const outcome = await applyLatest(ticket, () =>
     completes
-      ? loadDesign(pending, files.filter((f) => /\.glb$/i.test(f.name)), catalog.parts, s.standards, s.units)
+      ? loadDesign(
+          pending,
+          files.filter((f) => /\.glb$/i.test(f.name)),
+          catalog.parts,
+          s.standards,
+          s.units,
+        )
       : loadPartFiles(files, [...catalog.parts, ...s.extraParts], catalog.parts, s.standards, s.units),
   );
   if (completes && outcome?.part) useLibrary.getState().setPendingShare(null);

@@ -68,9 +68,7 @@ function values(c: DesignChange, u: Units): { from: string; to: string; unit: st
 
 /** The changes that look different in `units`, as text. */
 export function visibleChanges(changes: readonly DesignChange[], u: Units): ChangeText[] {
-  return changes
-    .map((c) => ({ field: c.field, label: LABELS[c.field], ...values(c, u) }))
-    .filter((t) => t.from !== t.to);
+  return changes.map((c) => ({ field: c.field, label: LABELS[c.field], ...values(c, u) })).filter((t) => t.from !== t.to);
 }
 
 /** "Gross 16 → 20 kg", up to `max` changes, then "+N more"; or "No change to the crate". */

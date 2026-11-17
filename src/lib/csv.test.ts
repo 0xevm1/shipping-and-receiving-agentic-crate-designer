@@ -53,7 +53,10 @@ describe("cut list CSV in the selected units (#15)", () => {
   });
 
   it("has the same rows and quantities in both units", () => {
-    const qty = (csv: string) => rows(csv).slice(1).map((r) => [r.split(",")[0], r.split(",").at(-1)]);
+    const qty = (csv: string) =>
+      rows(csv)
+        .slice(1)
+        .map((r) => [r.split(",")[0], r.split(",").at(-1)]);
     expect(qty(bomToCsv(part, design, "imperial"))).toEqual(qty(bomToCsv(part, design, "metric")));
   });
 
@@ -89,12 +92,7 @@ describe("entered details on the cut list", () => {
 
 describe("shipment CSV header and footer", () => {
   it("names the crate types and ends with the screw total", () => {
-    const plan = planShipment(
-      getPart("PART-003"),
-      { ...DEFAULT_SETTINGS, quantity: 10 },
-      null,
-      mergeStandardsOk({ limits: { perCrate: { maxParts: 4 } } }),
-    );
+    const plan = planShipment(getPart("PART-003"), { ...DEFAULT_SETTINGS, quantity: 10 }, null, mergeStandardsOk({ limits: { perCrate: { maxParts: 4 } } }));
     const screws = plan.crates.reduce((n, c) => n + c.count * c.result.design!.screws, 0);
     const csv = shipmentToCsv(getPart("PART-003"), plan, "metric");
     expect(csv).toMatch(/^# Shipment of 10 x PART-003 .*: 2 x crate A \(4 each\) \+ 1 x crate B \(2\)\n/);

@@ -59,11 +59,7 @@ async function withStore<T>(idb: IDBFactory, mode: IDBTransactionMode, run: (sto
  * Keeps `bytes` as the last custom GLB. A file over the cap isn't kept, and the older record
  * is dropped so it can't be mistaken for this one.
  */
-export async function saveLastGlb(
-  name: string,
-  bytes: ArrayBuffer,
-  idb: IDBFactory | null = browserIdb(),
-): Promise<"saved" | "too-big" | "unavailable"> {
+export async function saveLastGlb(name: string, bytes: ArrayBuffer, idb: IDBFactory | null = browserIdb()): Promise<"saved" | "too-big" | "unavailable"> {
   if (!idb) return "unavailable";
   try {
     if (bytes.byteLength > MAX_CACHED_GLB_BYTES) {

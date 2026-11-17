@@ -42,9 +42,7 @@ function expectSound(d: CrateDesign) {
 }
 
 describe("quantity extremes", () => {
-  const cases = parts.flatMap((p) =>
-    [true, false].flatMap((keepUpright) => [1, 2, 3, 4].map((maxLayers) => [p.id, keepUpright, maxLayers] as const)),
-  );
+  const cases = parts.flatMap((p) => [true, false].flatMap((keepUpright) => [1, 2, 3, 4].map((maxLayers) => [p.id, keepUpright, maxLayers] as const)));
 
   it.each(cases)("%s at quantity 1 and 200 (upright %s, %i layers) packs every part, fast", (id, keepUpright, maxLayers) => {
     const p = parts.find((q) => q.id === id)!;
@@ -282,7 +280,13 @@ describe("settings at the boundary", () => {
 
 describe("a layout or a reason", () => {
   it("always returns one or the other", () => {
-    const sizes: Vec3[] = [[1, 1, 1], [5, 3000, 2], [1530, 172, 172], [0.01, 9000, 0.01], [20000, 20000, 20000]];
+    const sizes: Vec3[] = [
+      [1, 1, 1],
+      [5, 3000, 2],
+      [1530, 172, 172],
+      [0.01, 9000, 0.01],
+      [20000, 20000, 20000],
+    ];
     for (const dims of sizes) {
       for (const quantity of [1, 7, 199, 200]) {
         for (const keepUpright of [true, false]) {

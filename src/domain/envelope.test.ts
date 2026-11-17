@@ -32,7 +32,9 @@ describe("readEnvelope", () => {
     expect(err(text({ kind: "thing" }))).toBe("This thing file has no valid version.");
     expect(err(text({ kind: "thing", version: 1.5 }))).toBe("This thing file has no valid version.");
     expect(err(text({ kind: "thing", version: 0 }))).toBe("This thing file has no valid version.");
-    expect(err(text({ kind: "thing", version: 4 }))).toBe("This thing file was saved by a newer version of the app (format 4; this app reads up to 3). Update the app to open it.");
+    expect(err(text({ kind: "thing", version: 4 }))).toBe(
+      "This thing file was saved by a newer version of the app (format 4; this app reads up to 3). Update the app to open it.",
+    );
     expect(err(text({ kind: "thing", version: 1 }), { ...format, migrations: {} })).toBe("This thing file format 1 can no longer be read.");
   });
 

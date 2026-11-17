@@ -4,15 +4,7 @@ import { isSlender, usesCradles } from "./cradles";
 import { designCrate, SHAPED_BLOCK, type Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
 import { ORIENTATIONS } from "./orientations";
-import {
-  FACE_AXES,
-  FACE_IDS,
-  MAX_SHAPED_BLOCK_DEPTH_MM,
-  sideGrid,
-  usableProfile,
-  type FaceId,
-  type PartProfile,
-} from "./profile";
+import { FACE_AXES, FACE_IDS, MAX_SHAPED_BLOCK_DEPTH_MM, sideGrid, usableProfile, type FaceId, type PartProfile } from "./profile";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
 import { metricText as metric } from "./testFixtures";
@@ -141,7 +133,6 @@ describe("shaped blocking", () => {
     expect(d.members).toEqual(plain.members);
     expect(d.shapedBlocking).toBeUndefined();
     expect(d.checks).toEqual(plain.checks);
-
   });
 
   it("leaves a cradled slender part to cradles, but shapes its blocking stood on end", () => {

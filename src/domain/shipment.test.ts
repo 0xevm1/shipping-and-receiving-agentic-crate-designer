@@ -6,7 +6,6 @@ import type { DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 import { custom, settings, metricText as metric } from "./testFixtures";
 
-
 /**
  * A wall-clock budget that follows machine load. A fixed CPU loop takes about 3.5 ms on an idle
  * laptop; when the machine is busy it takes proportionally longer, and so does the code under
@@ -93,7 +92,10 @@ describe("planShipment: splitting a batch", () => {
       expect(plan.crates[1].quantity).toBeLessThan(plan.crates[0].quantity);
     }
     expect(plan.totals.parts).toBe(200);
-    expect(plan.totals.grossKg).toBeCloseTo(plan.crates.reduce((g, c) => g + c.count * c.result.design!.grossKg, 0), 6);
+    expect(plan.totals.grossKg).toBeCloseTo(
+      plan.crates.reduce((g, c) => g + c.count * c.result.design!.grossKg, 0),
+      6,
+    );
     expect(plan.totals.payloadKg).toBeCloseTo(200 * 21.5, 6);
     expect(plan.unmet).toBeNull();
   });

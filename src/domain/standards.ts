@@ -53,7 +53,11 @@ export const ShopStandardsSchema = z
       /** Floor plywood, always this thickness. */
       floorPlywoodMm: mm(6, 50),
       /** Wall, lid and separator plywood that Auto picks from, by payload. */
-      panelPlywoodMm: z.object({ light: mm(PLYWOOD_MM.min, PLYWOOD_MM.max), medium: mm(PLYWOOD_MM.min, PLYWOOD_MM.max), heavy: mm(PLYWOOD_MM.min, PLYWOOD_MM.max) }),
+      panelPlywoodMm: z.object({
+        light: mm(PLYWOOD_MM.min, PLYWOOD_MM.max),
+        medium: mm(PLYWOOD_MM.min, PLYWOOD_MM.max),
+        heavy: mm(PLYWOOD_MM.min, PLYWOOD_MM.max),
+      }),
       /** Width of blocking posts and bearers. */
       blockWidthMm: mm(19, 300),
       /**

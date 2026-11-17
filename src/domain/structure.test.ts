@@ -153,7 +153,10 @@ describe("floor joists", () => {
     for (const c of p.checks) expect(c.payloadKg).toBeGreaterThanOrEqual(1500);
     // One joist fewer would fail.
     const fewer = pitch(1200, 38, p.joistCount - 1);
-    const looser = [floorCheck(19, fewer, 1100 * 600, 0), ...joistChecks({ wide: 38, tall: 89 }, fewer, pitch(700, p.skid.wide, p.skidCount), p.skid.wide, 1100 * 600, 0)];
+    const looser = [
+      floorCheck(19, fewer, 1100 * 600, 0),
+      ...joistChecks({ wide: 38, tall: 89 }, fewer, pitch(700, p.skid.wide, p.skidCount), p.skid.wide, 1100 * 600, 0),
+    ];
     expect(capacity(looser)).toBeLessThan(1500);
   });
 });

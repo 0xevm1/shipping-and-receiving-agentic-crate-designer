@@ -220,8 +220,7 @@ function makePlan(profile: PartProfile, layout: Pick<Layout, "orientation" | "ce
     const w = Math.min(blockWidth, C[h]);
     const { low, high } = grids[axis];
     // A post at the low wall touches the part's − face (on its high side), and so on.
-    const plan = (lowFace: SideGrid | null, highFace: SideGrid | null): PostPlan =>
-      choosePost(lowFace, highFace, C, axis, w, taken);
+    const plan = (lowFace: SideGrid | null, highFace: SideGrid | null): PostPlan => choosePost(lowFace, highFace, C, axis, w, taken);
     const plans: AxisPlans = { wallLow: plan(null, low), wallHigh: plan(high, null), between: plan(high, low) };
     // X plans go first; Y plans must keep clear of their shaped blocks near the corners.
     for (const p of [plans.wallLow, plans.wallHigh, plans.between]) taken.push(...boxes(p, C, axis, w));

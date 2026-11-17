@@ -69,7 +69,10 @@ export const DesignFileSchema = z.object({
      * Only for a batch split across crates: each crate type's count and parts per
      * crate. The rest of the summary then describes the crate type that was on screen.
      */
-    shipment: z.array(z.object({ count: z.number().int().positive(), quantity: z.number().int().positive() })).min(1).optional(),
+    shipment: z
+      .array(z.object({ count: z.number().int().positive(), quantity: z.number().int().positive() }))
+      .min(1)
+      .optional(),
     /**
      * Set by the 1 to 2 migration: the file was written before part outlines were kept, so
      * the summary may include shaped blocking that the file cannot reproduce on its own.
@@ -191,7 +194,10 @@ export function restoreDesign(file: DesignFile, part: DesignPart, standards: Sho
   const shaped: DesignPart = part.profile || !saved ? part : { ...part, profile: saved };
   const plan = planShipment(shaped, settings, file.layoutKey, standards, file.ranking);
   // The summary describes the crate type that was on screen: find it by its part count.
-  const crateIndex = Math.max(0, plan.crates.findIndex((c) => c.quantity === file.summary.quantity));
+  const crateIndex = Math.max(
+    0,
+    plan.crates.findIndex((c) => c.quantity === file.summary.quantity),
+  );
   const result = plan.crates[crateIndex].result;
   const found = result.layouts.some((l) => l.key === file.layoutKey);
   if (!found) notes.push([`The saved layout (${file.summary.layout}) no longer fits, so the recommended one is shown.`]);
