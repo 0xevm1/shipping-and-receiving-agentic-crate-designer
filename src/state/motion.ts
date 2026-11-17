@@ -13,7 +13,7 @@ export const IDLE_MS = 5000;
 
 /** Idle mode cycle. Every mode holds for half a turn. */
 export const IDLE_SEQUENCE = ["closed", "exploded", "open", "exploded"] as const;
-/** Crate turn speed while idle, rad/s (slow enough to read the crate as it turns). */
+/** Crate turn speed while idle, rad/s. */
 export const IDLE_TURN_RATE = 0.18;
 /** The next mode starts this much of a turn before the half-turn completes, so it lands on time. */
 export const IDLE_LEAD = Math.PI * 2 * 0.12;
