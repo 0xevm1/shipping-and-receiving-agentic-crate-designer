@@ -162,6 +162,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
             try {
               downloadText(csvName, csv());
               setStatus("Cut list downloaded.");
+              useDesigner.getState().markExported();
             } catch {
               setStatus("Download is blocked here. Use Copy cut list.");
             }
@@ -176,6 +177,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
             try {
               await navigator.clipboard.writeText(csv());
               setStatus("Cut list copied.");
+              useDesigner.getState().markExported();
             } catch {
               setStatus("Copy is blocked here.");
             }
@@ -191,6 +193,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
             try {
               downloadText(`crate-design-${part.id}-x${quantity}.json`, designText(), "application/json");
               setStatus("Design downloaded.");
+              useDesigner.getState().markExported();
             } catch {
               setStatus("Download is blocked here.");
             }

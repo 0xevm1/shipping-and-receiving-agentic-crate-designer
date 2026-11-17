@@ -140,14 +140,6 @@ export interface PrintableInput {
   generatedAt: string;
 }
 
-/**
- * Domestic dimensional weight divisor: cubic inches per pound (common US carrier value).
- * Freight class (#17) uses density instead; both are shown so logistics can quote either way.
- */
-export const DIM_DIVISOR_IN3_PER_LB = 139;
-const MM3_PER_IN3 = 25.4 ** 3;
-const M3_PER_FT3 = 0.0283168;
-
 const other = (u: Units): Units => (u === "imperial" ? "metric" : "imperial");
 const withUnit = (mm: readonly number[], u: Units) => `${dims(mm, u)} ${lengthUnit(u)}`;
 const massEach = (kg: number, u: Units) => (u === "imperial" ? `${formatMass(kg, u)} lb` : `${+kg.toFixed(2)} kg`);
@@ -167,6 +159,10 @@ export function whyText(e: LayoutExplanation): string {
       return `The recommended layout is the smallest stable crate. The next option ships ${e.nextMorePct}% more volume.`;
     case "tie":
       return "The recommended layout is the lowest of the options that tie on shipping volume.";
+    case "ranked":
+      return e.by === "cost"
+        ? "Ranked by crate cost: the recommended layout is the cheapest stable, fully blocked crate to build."
+        : "Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked crates without an LTL length charge.";
     case "picked":
       return `This layout was picked by hand. It ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the recommended layout.`;
   }
@@ -182,42 +178,32 @@ function runnerUp(layouts: Layout[], shown: Layout, u: Units): string | null {
   return `${layoutText(next, u)}, ${volume(next.externalVolumeM3, u)}, ${vol}${next.stable ? "" : ", may tip"}.`;
 }
 
-/** Freight class, when the design carries one (#17 adds it). */
-function freightClassOf(design: CrateDesign): string | null {
-  const fc = (design as CrateDesign & { freightClass?: unknown }).freightClass;
-  return typeof fc === "number" || (typeof fc === "string" && fc.trim()) ? String(fc) : null;
-}
-
 /** Centre of gravity, when the design carries one (#8 adds it). */
 function cogOf(design: CrateDesign): Vec3 | null {
   const cog = (design as CrateDesign & { centerOfGravityMm?: unknown }).centerOfGravityMm;
   return Array.isArray(cog) && cog.length === 3 && cog.every((v) => typeof v === "number" && Number.isFinite(v)) ? (cog as Vec3) : null;
 }
 
+/** The design's own LTL freight terms (#17, spec §7.12), so the print and the Overview agree. */
 function freightRows(design: CrateDesign, u: Units): Row[] {
-  const [L, W, H] = design.layout.external;
-  const dimLb = Math.ceil((L * W * H) / MM3_PER_IN3 / DIM_DIVISOR_IN3_PER_LB);
-  const grossLb = design.grossKg * LB_PER_KG;
-  const ft3 = design.layout.externalVolumeM3 / M3_PER_FT3;
+  const f = design.freight;
   const imperial = u === "imperial";
-  const dimText = imperial ? `${dimLb} lb` : `${Math.ceil(dimLb / LB_PER_KG)} kg`;
-  const billKg = Math.max(design.grossKg, dimLb / LB_PER_KG);
-  const rows: Row[] = [
-    { label: "Dimensional weight", value: dimText, note: `L × W × H in inches ÷ ${DIM_DIVISOR_IN3_PER_LB}` },
+  const dimText = imperial ? `${f.dimWeightLb} lb` : `${Math.ceil(f.dimWeightLb / LB_PER_KG)} kg`;
+  const grossWins = f.grossLb >= f.dimWeightLb;
+  return [
+    { label: "Dimensional weight", value: dimText, note: `L × W × H in inches ÷ ${f.dimDivisorIn3PerLb}` },
     {
       label: "Billable weight",
-      value: design.grossKg * LB_PER_KG >= dimLb ? weight(design.grossKg, u) : dimText,
-      note: billKg === design.grossKg ? "the gross is higher" : "the dimensional weight is higher",
+      value: grossWins ? weight(design.grossKg, u) : dimText,
+      note: grossWins ? "the gross is higher" : "the dimensional weight is higher",
     },
     {
       label: "Density",
-      value: `${(grossLb / ft3).toFixed(1)} lb/ft³`,
-      note: imperial ? "gross ÷ outside volume" : `${Math.round(design.grossKg / design.layout.externalVolumeM3)} kg/m³`,
+      value: `${f.densityLbFt3.toFixed(1)} lb/ft³`,
+      note: imperial ? "gross ÷ outside volume, whole inches" : `${Math.round(design.grossKg / design.layout.externalVolumeM3)} kg/m³`,
     },
+    { label: "Freight class", value: String(f.freightClass), note: "estimate from density (NMFC)" },
   ];
-  const fc = freightClassOf(design);
-  if (fc) rows.push({ label: "Freight class", value: fc, note: "estimate from density" });
-  return rows;
 }
 
 function cutList(design: CrateDesign, u: Units): CutGroup[] {

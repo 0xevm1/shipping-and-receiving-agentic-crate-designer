@@ -105,12 +105,19 @@ tab at a time.
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one
-   won.
+   won. Each card also shows what it costs to build and its freight class against the
+   recommendation ("+$26 · same class 65"), and **Rank by** re-ranks by **Crate cost** or
+   **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
+   cost or freight; Volume is the default.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
    labels. The real part models sit in each slot. Left alone for 6 s, the crate slowly turns and
    cycles through the modes.
 5. **Read off the build data:**
-   - **Overview:** outside size, gross weight, how it's built, and crate weight by assembly
+   - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost
+     (material and labour), build time, the estimated LTL freight class with its density in
+     lb/ft³, and the dimensional weight; for a split batch, the whole shipment's cost. Then how
+     it's built, and crate weight by assembly. After the first export (cut list, design file
+     or 3D model) a note says how long the design took: "Designed in 1 m 12 s"
    - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
@@ -126,7 +133,9 @@ tab at a time.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
-   stack and base-rating limits, and densities, material costs and screw spacing. A change
+   stack and base-rating limits, densities, material costs, screw spacing and screw price,
+   the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
+   crate), and the dimensional-weight divisor. A change
    re-designs the crate at once (for example, a higher plywood cost raises the Overview's
    "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
@@ -218,6 +227,20 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
   $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
   quoting.
+- **Labour is a placeholder model** (spec §7.12): $35/h, 0.75 min per lumber cut, 3 min per
+  plywood piece, 2 min per distinct cut size, 0.15 min (9 s) per screw, 6 min per assembly step
+  (base, four walls, lid, dunnage per layer) and 15 min handling per crate. Screws are $8 per
+  100. For PART-001 × 4 that is 2 h 43 m and $95 of labour on $91 of material: a $186 crate.
+  Time a few real crates and enter the shop's own numbers.
+- **Freight is in booking terms, not dollars:** gross lb, outside ft³ (inches rounded up),
+  dimensional weight at **139 in³/lb**, density in lb/ft³ and an **estimated** NMFC class from
+  the 13-sub density scale in force since July 2025. A carrier can class some commodities
+  differently or re-class on inspection.
+- **Time to design, manual baseline (an assumption to correct):** designing one crate by hand
+  (measure the part, sketch the crate, work out the cut list and screws, price it) is taken to
+  take the PM **about 45 minutes** per new part or quantity. The app's "Designed in …" note,
+  from loading the part to the first export, is the number to compare with. Tell us the real
+  figure and we'll update this line.
 - **Part masses** come from the catalog as given, or from the user for unknown files (as do
   their name and material). They are
   never derived from mesh volume.

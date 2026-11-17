@@ -63,7 +63,8 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
   await panel(page).getByLabel("Quantity").fill("8");
   await pollCrate(page, (s) => s.quantity).toBe(8);
   await openTab(page, "Layouts");
-  await panel(page).getByRole("button", { pressed: false }).first().click();
+  // A layout card, not the Rank by toggle (#17).
+  await panel(page).locator(`button.opt[aria-pressed="false"]`).first().click();
   const picked = (await crate(page)).outside;
   await openTab(page, "Cut list");
   const cutList = await panel(page).locator("table.cut").innerText();

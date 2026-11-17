@@ -19,11 +19,12 @@ test("Overview shows the build chain and weight by assembly", async ({ page }) =
 test("Layouts shows cards with the recommended one", async ({ page }) => {
   await openTab(page, "Layouts");
   await expect(panel(page).getByRole("heading", { name: "Ways to pack it" })).toBeVisible();
-  const picked = panel(page).getByRole("button", { pressed: true });
+  // Layout cards only: the Rank by toggle (#17) has pressed buttons too.
+  const picked = panel(page).locator(`button.opt[aria-pressed="true"]`);
   await expect(picked).toHaveCount(1);
   await expect(picked).toContainText("recommended");
   await expect(picked).toContainText("932 × 652 × 497");
-  await expect(panel(page).getByRole("button", { pressed: false }).first()).toBeVisible();
+  await expect(panel(page).locator(`button.opt[aria-pressed="false"]`).first()).toBeVisible();
   await shot(page, "02-layouts");
 });
 

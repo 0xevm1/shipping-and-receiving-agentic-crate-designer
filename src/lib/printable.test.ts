@@ -38,10 +38,10 @@ describe("PrintableDesign (#26)", () => {
   it("lists the part, freight terms and units in imperial", () => {
     expect(doc.part.find((r) => r.label === "Mass each")?.value).toBe("47.4 lb");
     const freight = Object.fromEntries(crate.spec.freight.map((r) => [r.label, r.value]));
-    // 36.7 × 25.7 × 19.6 in = 18 465 in³ ÷ 139 → 133 lb, rounded up.
-    expect(freight["Dimensional weight"]).toMatch(/^\d+ lb$/);
-    expect(freight["Density"]).toMatch(/^\d+\.\d lb\/ft³$/);
-    expect(freight["Freight class"]).toBeUndefined();
+    // The design's own freight terms (#17): 37 × 26 × 20 in ÷ 139 → 139 lb, class 65.
+    expect(freight["Dimensional weight"]).toBe("139 lb");
+    expect(freight["Density"]).toBe("26.7 lb/ft³");
+    expect(freight["Freight class"]).toBe("65");
     expect(crate.label.gross).toMatch(/^\d+ LB$/);
   });
 
@@ -56,11 +56,11 @@ describe("PrintableDesign (#26)", () => {
     expect(m.crates[0].build.cutList.some((g) => g.stock === "19 × 89 lumber")).toBe(true);
   });
 
-  it("shows a freight class when the design has one (#17), and a centre of gravity when it has one (#8)", () => {
+  it("shows the design's freight class (#17), and a centre of gravity when it has one (#8)", () => {
     const settings = { ...DEFAULT_SETTINGS, quantity: 4 };
     const plan = planShipment(bracket, settings);
     const d = plan.crates[0].result.design!;
-    Object.assign(d, { freightClass: 85, centerOfGravityMm: [400, 300, 150] });
+    Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, centerOfGravityMm: [400, 300, 150] });
     const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", generatedAt: NOW });
     expect(withExtras.crates[0].spec.freight.find((r) => r.label === "Freight class")?.value).toBe("85");
     expect(withExtras.crates[0].label.cogMm).toEqual([400, 300, 150]);

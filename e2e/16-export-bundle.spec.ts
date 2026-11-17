@@ -65,7 +65,7 @@ test("Print / save PDF gives the crate spec, build sheet and label for the defau
   await expect(spec).toContainText("932 × 652 × 497 mm");
   await expect(spec).toContainText("Dimensional weight");
   await expect(spec).toContainText(/\d+\.\d lb\/ft³/);
-  await expect(spec).not.toContainText("Freight class");
+  await expect(spec).toContainText("Freight class");
   await expect(spec).toContainText("The recommended layout");
   await expect(spec).toContainText("Runner-up:");
   await expect(spec).toContainText("Fits a 53' dry van");
