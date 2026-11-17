@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
-import { allChecks } from "@/lib/checks";
+import { allChecks, cautionCount } from "@/lib/checks";
 import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import { useLoadFiles } from "../shell/useLoadFiles";
@@ -57,7 +57,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   const fileInput = useRef<HTMLInputElement>(null);
   // One pass over the checks, shared by the tab badges, the Overview verdict and the Checks tab.
   const checks = useMemo(() => (design ? allChecks(design.checks, part, measured) : []), [design, part, measured]);
-  const cautions = checks.filter((c) => c.level === "caution").length;
+  const cautions = cautionCount(checks);
   const notes = checks.filter((c) => c.level === "info").length;
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
 

@@ -10,7 +10,6 @@ import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/d
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import { catalogPart, type LoadedPart } from "@/lib/part";
 import type { Units } from "@/lib/units";
-import { anim } from "./motion";
 import { loadStandards, saveStandards, type KeyValueStore } from "./standardsStorage";
 import { DEFAULT_UNITS, loadUnits, saveUnits } from "./unitsStorage";
 
@@ -35,13 +34,6 @@ interface Hover {
   key?: string;
   assembly?: Assembly;
   source: "list" | "3d";
-}
-
-/** A size label drawn in the DOM over the canvas; the scene positions it each frame. */
-interface SizeLabel {
-  text: string;
-  /** Part dimension (ice blue) rather than crate dimension. */
-  inner: boolean;
 }
 
 interface Tooltip {
@@ -102,7 +94,6 @@ export interface DesignerState {
   hover: Hover | null;
   pin: string | null;
   tooltip: Tooltip | null;
-  labels: SizeLabel[];
   panelsHidden: boolean;
   insets: Insets;
   loadMessage: string;
@@ -173,7 +164,6 @@ export interface DesignerState {
   setHover: (h: Hover | null) => void;
   setPin: (key: string | null) => void;
   setTooltip: (t: Tooltip | null) => void;
-  setLabels: (l: SizeLabel[]) => void;
   togglePanels: () => void;
   setInsets: (i: Insets) => void;
   setLoadMessage: (m: string, kind?: LoadMessageKind) => void;
@@ -299,7 +289,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     hover: null,
     pin: null,
     tooltip: null,
-    labels: [],
     panelsHidden: false,
     insets: { left: 0, top: 0, right: 0, bottom: 0 },
     loadMessage: "",
@@ -407,10 +396,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     setTab: (tab) => set({ tab }),
     setMode: (mode) => {
       const view = { ...get().view, lid: mode !== "open", front: mode !== "open", explode: mode === "exploded" ? 1 : 0 };
-      if (reducedMotion()) {
-        anim.explode = view.explode;
-        anim.lidAlpha = anim.frontAlpha = view.lid ? 1 : 0;
-      }
       set({ view, fit: { nonce: get().fit.nonce + 1, instant: false } });
     },
     setView: (patch) => set({ view: { ...get().view, ...patch } }),
@@ -421,11 +406,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     },
     setPin: (pin) => set({ pin }),
     setTooltip: (tooltip) => set({ tooltip }),
-    setLabels: (labels) => {
-      const a = get().labels;
-      const same = a.length === labels.length && a.every((l, i) => l.text === labels[i].text && l.inner === labels[i].inner);
-      if (!same) set({ labels });
-    },
     togglePanels: () => set({ panelsHidden: !get().panelsHidden }),
     setInsets: (insets) => {
       const a = get().insets;

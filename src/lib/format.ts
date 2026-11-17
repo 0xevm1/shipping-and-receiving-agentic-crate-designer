@@ -1,7 +1,7 @@
 import type { BomLine } from "@/domain/crate";
 import type { Layout } from "@/domain/packing";
 import { lumberText, plywoodText } from "./lumber";
-import { cut, type Units } from "./units";
+import { cut, lengthUnit, type Units } from "./units";
 
 /**
  * Metric: "19 × 89 lumber", "12 mm plywood". Imperial uses shop names: "1x4",
@@ -118,4 +118,14 @@ export function modelNote(matches: boolean | null, readAsMm: boolean | undefined
 /** "1 caution, see Checks": what the Export pill says when the design has cautions; "" for none. */
 export function cautionNote(count: number): string {
   return count > 0 ? `${count} ${count === 1 ? "caution" : "cautions"}, see Checks` : "";
+}
+
+/**
+ * The second line of a board's hover tooltip: the stock, the cut and how many are in the crate,
+ * e.g. `1/2″ plywood, cut 35 7/16″ × 25 1/4″. 2 in this crate`. Imperial cuts carry their own inch
+ * mark; metric cuts are bare numbers, so they get the unit once at the end.
+ */
+export function boardTooltipDetail(line: BomLine, units: Units): string {
+  const unit = units === "metric" ? ` ${lengthUnit(units)}` : "";
+  return `${stockText(line, units)}, cut ${cutText(line, units)}${unit}. ${line.qty} in this crate`;
 }
