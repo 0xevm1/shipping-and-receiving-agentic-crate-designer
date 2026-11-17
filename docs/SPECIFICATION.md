@@ -822,14 +822,14 @@ hadrian.co**, read from its live CSS:
   To use real Söhne, license it and point `--font-sans`, `--font-wide` and the mono variable at
   `next/font/local` in `src/app/layout.tsx`.
 - All values are in `src/app/globals.css`.
-- **App icons (#58):** the mark is a navy gear with an isometric crate cut out of it and a gold
-  `#D9A938` lid. The supplied artwork is used as is; regenerate it from the master SVG rather
-  than editing the rasters.
-  - `src/app/icon.svg` is the master (64 × 64 viewBox), navy `#0C2548` with no dark-mode
-    variant, so on very dark tab bars the gold lid carries the mark.
+- **App icons (#58):** the mark is a white gear with an isometric crate in it: navy `#0C2548`
+  sides and a gold `#D9A938` lid. The supplied artwork is used as is; regenerate it from the
+  master SVG rather than editing the rasters.
+  - `src/app/icon.svg` is the master (64 × 64 viewBox) and has no dark-mode variant. The white
+    gear reads on dark tab bars; on white ones the navy and gold crate carries the mark.
   - The rasters (`src/app/favicon.ico` at 16/32/48, `icon1.png` at 96, `apple-icon.png` at 180
-    and the manifest's 192 and 512 PNGs) are rendered in the same navy, so browsers that fall
-    back to the ICO match the SVG. They are transparent and fill the canvas edge to edge.
+    and the manifest's 192 and 512 PNGs) match the SVG. They are transparent and fill the canvas
+    edge to edge by choice (no padding), so iOS shows them on its own background.
   - Next's metadata file conventions generate the `<link rel="icon">` and
     `<link rel="apple-touch-icon">` tags; don't add them by hand.
   - `public/site.webmanifest` ("Crate Designer", short name "Crates", navy theme and
