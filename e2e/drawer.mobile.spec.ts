@@ -194,9 +194,9 @@ test("resizing across 980 px and rotating to landscape switch cleanly", async ({
 
 test("all five tabs fit the drawer without scrolling or clipping, with a caution badge on Checks", async ({ page }) => {
   await openApp(page);
+  await openDrawer(page);
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
   await expect(tab(page, "Checks").getByTestId("caution-count")).toBeVisible();
-  await openDrawer(page);
   const strip = drawer(page).getByRole("tablist");
   const fits = await strip.evaluate((el) => {
     const right = el.getBoundingClientRect().right;

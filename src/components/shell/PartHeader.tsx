@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX } from "@/domain/partDetails";
 import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
@@ -246,6 +246,12 @@ interface InlineFieldProps {
 function InlineField(p: InlineFieldProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  // Focus swaps a rounded display for the full value, which moves the caret: select it all, as a click into a field would expect.
+  useLayoutEffect(() => {
+    if (focused && p.display !== undefined && p.display !== p.value) input.current?.select();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
   const text = draft ?? (focused ? p.value : (p.display ?? p.value));
 
   const finish = () => {
@@ -272,6 +278,7 @@ function InlineField(p: InlineFieldProps) {
 
   return (
     <input
+      ref={input}
       type="text"
       className={className}
       value={text}
