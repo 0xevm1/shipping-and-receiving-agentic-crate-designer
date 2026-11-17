@@ -5,9 +5,10 @@
  */
 
 /**
- * 5 s without deliberate input counts as idle.
- * Deliberate input is a click or tap, a drag, the wheel or a key (`isDeliberateInput`); hovering
- * never counts.
+ * 5 s without input on the 3D view counts as idle.
+ * That input is a click or tap, a drag, the wheel or a key (`isDeliberateInput`) aimed at a 3D
+ * canvas or at a control that drives the view (`isViewInput`). Hovering never counts, and neither
+ * does anything done in the island or the header: reading tabs and editing rules leave the crate turning.
  */
 export const IDLE_MS = 5000;
 
@@ -45,22 +46,34 @@ export const autoplay = {
 
 let lastInput = -Infinity;
 
-/** Window events that may stop auto-play; `isDeliberateInput` decides per event. */
+/** Window events that may stop auto-play; `isDeliberateInput` and `isViewInput` decide per event. */
 export const INPUT_EVENTS = ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"] as const;
 
 /**
- * Whether an event is a deliberate action that stops auto-play: a click or tap, the
- * wheel, a key, a touch, or a pointer moving with a button held (a drag). A pointer moving with
- * no button down is a hover, over the canvas, a board or the island, and doesn't count.
+ * Whether an event is a deliberate action: a click or tap, the wheel, a key, a touch, or a pointer
+ * moving with a button held (a drag). A pointer moving with no button down is a hover and doesn't count.
  */
 export function isDeliberateInput(e: { type: string; buttons?: number }) {
   if (e.type === "pointermove") return (e.buttons ?? 0) !== 0;
   return (INPUT_EVENTS as readonly string[]).includes(e.type);
 }
 
-/** Window listener: marks deliberate input only. */
+/**
+ * What input on the 3D view lands on: a canvas (the crate, or the part's turntable), or a control
+ * marked `data-view-input` because it sets the view itself (the mode button, the View popover, the
+ * pinned-row bar). Auto-play would otherwise undo what such a control just did.
+ */
+export const VIEW_INPUT_SELECTOR = "canvas, [data-view-input]";
+
+/** Whether the event's target is the 3D view or one of its controls. */
+export function isViewInput(target: unknown) {
+  const el = target as { closest?: (selector: string) => unknown } | null;
+  return typeof el?.closest === "function" && el.closest(VIEW_INPUT_SELECTOR) != null;
+}
+
+/** Window listener: only deliberate input on the 3D view stops auto-play. */
 export function onInputEvent(e: Event) {
-  if (isDeliberateInput(e as Event & { buttons?: number })) markInput();
+  if (isDeliberateInput(e as Event & { buttons?: number }) && isViewInput(e.target)) markInput();
 }
 
 /**
@@ -69,7 +82,7 @@ export function onInputEvent(e: Event) {
  */
 export const pointer = { inCanvas: false };
 
-/** Any user input stops auto-play immediately. */
+/** Input on the 3D view stops auto-play immediately. */
 function markInput() {
   lastInput = performance.now();
   autoplay.on = false;

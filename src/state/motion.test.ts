@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IDLE_MS, isDeliberateInput } from "./motion";
+import { IDLE_MS, isDeliberateInput, isViewInput, VIEW_INPUT_SELECTOR } from "./motion";
 
 describe("idle input", () => {
   it("idles after 5 s", () => {
@@ -18,5 +18,20 @@ describe("idle input", () => {
 
   it("ignores other events", () => {
     expect(isDeliberateInput({ type: "pointerover" })).toBe(false);
+  });
+
+  it("only counts input aimed at a 3D canvas or a view control", () => {
+    const inside = { closest: (sel: string) => (sel === VIEW_INPUT_SELECTOR ? {} : null) };
+    const outside = { closest: () => null };
+    expect(isViewInput(inside)).toBe(true);
+    // A click in the island or the header, or a key pressed with nothing focused (the target is the body).
+    expect(isViewInput(outside)).toBe(false);
+    // Targets that aren't elements: the window, the document, nothing.
+    expect(isViewInput({})).toBe(false);
+    expect(isViewInput(null)).toBe(false);
+  });
+
+  it("names canvases and marked view controls", () => {
+    expect(VIEW_INPUT_SELECTOR).toBe("canvas, [data-view-input]");
   });
 });

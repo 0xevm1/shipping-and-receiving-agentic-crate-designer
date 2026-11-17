@@ -38,6 +38,7 @@ export function ViewBar() {
       <button
         type="button"
         className={`iconbtn ${styles.hideable} ${styles.modeButton}`}
+        data-view-input
         aria-label={title}
         title={title}
         onClick={() => {
@@ -76,7 +77,7 @@ function PinBar() {
   const line = useDesigner((s) => s.result.design?.bom.find((l) => l.key === s.pin));
   if (!pin || !line) return null;
   return (
-    <div className={styles.pinBar}>
+    <div className={styles.pinBar} data-view-input>
       <span>
         Showing {line.qty} × {line.label.toLowerCase()}
       </span>
@@ -94,7 +95,7 @@ function ViewPopover() {
   const { setView, requestFit } = useDesigner.getState();
 
   return (
-    <div className={`${styles.viewWrap} ${styles.hideable}`} {...wrapProps}>
+    <div className={`${styles.viewWrap} ${styles.hideable}`} data-view-input {...wrapProps}>
       {/* aria-controls only while the popover exists, so it never points at a missing id. */}
       <button
         ref={triggerRef}
