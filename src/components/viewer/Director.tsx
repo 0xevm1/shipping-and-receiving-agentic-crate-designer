@@ -15,7 +15,9 @@ import {
   isIdle,
 } from "@/state/motion";
 import { currentMode, reducedMotion, useDesigner, type CameraPreset, type DesignerState } from "@/state/store";
-import { EXPLODE_LID_MM, EXPLODE_WALL_MM } from "./scene";
+import type { CrateDesign } from "@/domain/crate";
+import { crateLabelAnchors } from "./DimensionLines";
+import { EXPLODE_LID_MM, EXPLODE_WALL_MM, sceneOrigin } from "./scene";
 
 export const FOV_DEG = 34;
 const MM_TO_M = 0.001;
@@ -65,6 +67,8 @@ export function Director() {
   const insets = useDesigner((s) => s.insets);
   const fit = useDesigner((s) => s.fit);
   const goal = useRef<Goal | null>(null);
+  /** The orbit target last placed, kept for when the controls aren't registered yet. */
+  const aim = useRef(new Vector3());
   const dragging = useRef(false);
 
   // Shift the projection so the crate sits in the middle of the free area, not the window.
@@ -94,10 +98,20 @@ export function Director() {
     };
   }, [controls]);
 
+  // OrbitControls registers as the default controls after the first render, so the first fit
+  // runs without them (#43). `place` keeps the target here meanwhile, and the controls take it
+  // over as soon as they exist; otherwise they keep aiming at the floor (0, 0, 0).
+  useEffect(() => {
+    if (!controls) return;
+    controls.target.copy(aim.current);
+    controls.update();
+  }, [controls]);
+
   const place = (g: Goal) => {
     sph.set(g.radius, g.phi, g.theta);
     camera.position.copy(g.target).add(tmp.setFromSpherical(sph));
     camera.lookAt(g.target);
+    aim.current.copy(g.target);
     if (controls) {
       controls.target.copy(g.target);
       controls.update();
@@ -105,7 +119,7 @@ export function Director() {
   };
 
   const currentAngles = () => {
-    const target = controls?.target ?? new Vector3();
+    const target = controls?.target ?? aim.current;
     sph.setFromVector3(tmp.copy(camera.position).sub(target));
     return { theta: sph.theta, phi: sph.phi, radius: sph.radius, target: target.clone() };
   };
@@ -218,10 +232,56 @@ function fitGoal(s: DesignerState, H: number, W: number, now: { theta: number; p
   // Mode from the view targets; a custom mix is treated by its nearest mode.
   const mode = e > 0.5 ? "exploded" : s.view.lid ? "closed" : "open";
   const zoom = MODE_ZOOM[mode] * (s.panelsHidden ? PANELS_HIDDEN_ZOOM : 1);
-  return {
-    target: new Vector3(0, (ext[2] / 2 + (EXPLODE_LID_MM / 2) * e) * MM_TO_M, 0),
-    theta: autoplay.on ? now.theta : angles.theta,
-    phi: angles.phi,
-    radius: (r / Math.sin(half)) * 0.9 * zoom,
-  };
+  const target = new Vector3(0, (ext[2] / 2 + (EXPLODE_LID_MM / 2) * e) * MM_TO_M, 0);
+  const theta = autoplay.on ? now.theta : angles.theta;
+  let radius = (r / Math.sin(half)) * 0.9 * zoom;
+  if (s.view.dims) radius = Math.max(radius, labelRadius(d, e, target, theta, angles.phi, { fw, fh, H }, t));
+  return { target, theta, phi: angles.phi, radius };
+}
+
+/**
+ * Half a crate size label's screen size plus a small gap, px. A `.dim` pill (12 px mono,
+ * globals.css) reads "1692 mm" or "66.6 in" at about 70 × 20 px.
+ */
+const LABEL_HALF_PX = { x: 44, y: 14 };
+const UP = new Vector3(0, 1, 0);
+const axisX = new Vector3();
+const axisY = new Vector3();
+const axisZ = new Vector3();
+const q = new Vector3();
+
+/**
+ * The closest camera distance, looking from (`theta`, `phi`) at `target`, at which every crate
+ * size label sits wholly inside the free area (#43). The sphere fit covers the label anchors but
+ * not the labels' own size, and the closer mode zooms crop it, so a long crate's end labels
+ * could land under the island. The view offset puts `target` at the middle of the free area, so
+ * a point at camera-space (x, y) and depth z lands `x / z · (H / 2) / tan(fov / 2)` px from it
+ * horizontally (likewise for y); solving for the depth that keeps the label inside gives the
+ * distance. Returns 0 when nothing constrains it.
+ */
+function labelRadius(
+  d: CrateDesign,
+  e: number,
+  target: Vector3,
+  theta: number,
+  phi: number,
+  free: { fw: number; fh: number; H: number },
+  tanHalfFov: number,
+): number {
+  // Camera axes as `lookAt` builds them: z from the target toward the camera.
+  axisZ.setFromSpherical(sph.set(1, phi, theta));
+  axisX.crossVectors(UP, axisZ).normalize();
+  axisY.crossVectors(axisZ, axisX);
+  const px = free.H / 2 / tanHalfFov;
+  const roomX = Math.max(20, free.fw / 2 - LABEL_HALF_PX.x) / px;
+  const roomY = Math.max(20, free.fh / 2 - LABEL_HALF_PX.y) / px;
+  const o = sceneOrigin(d);
+  let need = 0;
+  for (const a of crateLabelAnchors(d, e)) {
+    // Domain (Z up, mm) → three.js (Y up, m), as the scene's root group does.
+    q.set(a[0] + o[0], a[2] + o[2], -(a[1] + o[1])).multiplyScalar(MM_TO_M).sub(target);
+    const depth = Math.max(Math.abs(q.dot(axisX)) / roomX, Math.abs(q.dot(axisY)) / roomY);
+    need = Math.max(need, q.dot(axisZ) + depth);
+  }
+  return need;
 }
