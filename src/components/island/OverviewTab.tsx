@@ -8,6 +8,7 @@ import { plywoodText, sectionText } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
+import { SavedDesigns } from "./SavedDesigns";
 import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
@@ -94,6 +95,9 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           );
         })}
       </div>
+
+      {/* The design library (#14): save, list and reuse this part's designs; share links. */}
+      <SavedDesigns />
     </>
   );
 }
