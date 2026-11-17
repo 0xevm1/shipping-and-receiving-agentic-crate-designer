@@ -318,6 +318,15 @@ export function createRepository(db: Executor) {
           .where(and(eq(idempotencyKey.orgId, orgId), eq(idempotencyKey.key, key)));
         return row!;
       },
+      /** The stored record for `key`, if a request finished with it (read-only: claims nothing). */
+      async get(ctx: OrgContext, key: string): Promise<IdempotencyRecord | undefined> {
+        const orgId = requireOrg(ctx);
+        const [row] = await db
+          .select()
+          .from(idempotencyKey)
+          .where(and(eq(idempotencyKey.orgId, orgId), eq(idempotencyKey.key, key)));
+        return row;
+      },
       async complete(ctx: OrgContext, key: string, statusCode: number, response: unknown): Promise<void> {
         const orgId = requireOrg(ctx);
         await db

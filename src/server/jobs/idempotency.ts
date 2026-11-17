@@ -37,6 +37,21 @@ export function requestHash(method: string, path: string, body: unknown): string
 export type Work<T> = { status: number; body: T; emit?: () => Promise<unknown> };
 
 /**
+ * The stored answer for `key`, read outside any transaction, or null when the key is new. Lets a
+ * request skip expensive work (a save's engine recompute) that a repeat doesn't need. `once`
+ * still decides inside the transaction, so two first requests racing on one key stay correct.
+ */
+export async function storedOutcome<T>(repo: Repository, ctx: OrgContext, key: string | null, hash: string): Promise<Outcome<T> | null> {
+  if (key === null) return null;
+  const seen = await repo.idempotency.get(ctx, key);
+  if (!seen) return null;
+  if (seen.requestHash !== hash) {
+    throw new ApiFailure(422, "idempotency_conflict", `This ${IDEMPOTENCY_KEY_HEADER} was already used for a different request.`);
+  }
+  return { status: seen.statusCode, body: seen.response as T, replayed: true };
+}
+
+/**
  * Runs `work` once per key, inside the caller's transaction `tx`. Without a key it just runs.
  * Errors aren't stored: a request that failed can be retried with the same key.
  */

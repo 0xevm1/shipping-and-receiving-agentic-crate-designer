@@ -11,6 +11,7 @@ import { designShipment } from "@/engine/engine";
 import { buildBundleZip } from "@/engine/files";
 import { bytesModelReader } from "@/engine/glb";
 import { rankConfigurations, runSweep } from "@/engine/sweep";
+import { checkConfiguration } from "@/server/jobs/check";
 import type { EngineTaskMessage, EngineTaskResult } from "./tasks";
 
 async function run(msg: EngineTaskMessage): Promise<unknown> {
@@ -21,6 +22,8 @@ async function run(msg: EngineTaskMessage): Promise<unknown> {
       return rankConfigurations(msg.input);
     case "design":
       return designShipment(msg.input);
+    case "verify":
+      return checkConfiguration(msg.input);
     case "bundle":
       return buildBundleZip(msg.input.bundle, bytesModelReader(msg.input.glb));
     case "artifact":

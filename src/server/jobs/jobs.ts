@@ -24,11 +24,13 @@ import { emitEvent } from "../events/emit";
 import { ApiFailure, readJson, requireId } from "../http";
 import { partResponse } from "../parts/create";
 import { runJobCreatedHooks } from "./hooks";
-import { idempotencyKey, once, type Outcome, requestHash } from "./idempotency";
+import { idempotencyKey, once, type Outcome, requestHash, storedOutcome } from "./idempotency";
 import { artifactResponse, configurationResponse, jobResponse } from "./serialize";
-import { verifyConfiguration } from "./verify";
+import { type RunCheck, verifyConfiguration } from "./verify";
 
 export type JobsDeps = { db: Database; org: OrgContext };
+/** A save also needs the engine, off the request thread: normally `(input) => pool.run("verify", input)`. */
+export type SaveConfigurationDeps = JobsDeps & { check: RunCheck };
 
 const NO_JOB = "No such job.";
 
@@ -140,19 +142,29 @@ export async function getJobSnapshot(id: string, { db, org }: JobsDeps): Promise
  * `POST /api/v1/jobs/:id/configs`. Recomputes the configuration with the engine (`verify.ts`),
  * stores it content-addressed, links it to the job and emits `config.added`. 201 when the job
  * gained it, 200 when it already had it (no second row, no second event).
+ *
+ * Order, so no pool connection waits on the engine: (1) outside any transaction, the job must
+ * exist and a repeated `Idempotency-Key` gets its stored answer (before the recompute, so a change
+ * replayed after a deploy still gets it); (2) the recompute, in an engine worker thread; (3) a
+ * short transaction that stores, links and emits, where `once` settles any race on the key.
  */
-export async function saveConfiguration(id: string, request: Request, { db, org }: JobsDeps): Promise<Outcome<SaveConfigurationResponse>> {
+export async function saveConfiguration(id: string, request: Request, { db, org, check }: SaveConfigurationDeps): Promise<Outcome<SaveConfigurationResponse>> {
   const raw = await readJson(request);
   const body = parse(SaveConfigurationRequestSchema, raw);
   const key = idempotencyKey(request);
   const jobId = requireId(id, "job");
+  const hash = requestHash("POST", `/api/v1/jobs/${jobId}/configs`, raw);
+  const repo = createRepository(db);
+  const [, stored] = await Promise.all([requireJob(repo, org, jobId), storedOutcome<SaveConfigurationResponse>(repo, org, key, hash)]);
+  if (stored) return stored;
+
+  const { request: designRequest, design } = await verifyConfiguration(body, check);
+  const { summary } = design;
+  const first = summary.crates[0]!;
+
   return inTransaction(db, (tx) =>
-    once(tx, org, key, requestHash("POST", `/api/v1/jobs/${jobId}/configs`, raw), async () => {
+    once(tx, org, key, hash, async () => {
       const job = await requireJob(tx, org, jobId);
-      // After the replay check, so a change replayed after a deploy still gets its stored answer.
-      const { request: designRequest, design } = verifyConfiguration(body);
-      const { summary } = design;
-      const first = summary.crates[0]!;
       const saved = await tx.configurations.save(org, {
         inputHash: design.inputHash,
         quantityPerCrate: first.quantity,
