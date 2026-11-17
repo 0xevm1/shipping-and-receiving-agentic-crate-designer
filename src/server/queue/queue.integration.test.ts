@@ -277,7 +277,7 @@ describe("the sweep job", () => {
     expect(String(events[0]!.payload.message)).not.toContain("engine thread died");
   });
 
-  it("a bundle job dead-letters until the artifacts slice provides its handler", async () => {
+  it("a bundle job dead-letters when no bundle handler is given", async () => {
     const job = await designJob();
     const queued = (await store.enqueue(DEFAULT_ORG, { kind: "bundle", payload: { jobId: job.id, configurationIds: [] } })).job;
     const r = runner(createJobHandlers({ db: t.db, pool }));

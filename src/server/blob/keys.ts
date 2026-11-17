@@ -6,6 +6,9 @@
  *   org/<orgId>/models/<sha256>.glb
  *   org/<orgId>/artifacts/<inputHash>/<engineVersion>/{crate.glb,spec.pdf,cutlist.csv}
  *   org/<orgId>/bundles/<id>.zip
+ *
+ * The engine version's `+` ("0.1.0+engine.3") is written as `_` in keys: S3 lists `+` among the
+ * characters that need special handling (some stacks read it as a space).
  */
 import { orgContext, type OrgContext, requireOrg } from "../db/org";
 
@@ -32,10 +35,13 @@ export function modelKey(ctx: OrgContext, sha256: string): BlobKey {
   return `${orgPrefix(ctx)}models/${sha256}.glb` as BlobKey;
 }
 
+/** An engine version as a key segment: "0.1.0+engine.3" → "0.1.0_engine.3". */
+export const versionSegment = (engineVersion: string): string => segment("engine version", engineVersion.replace(/\+/g, "_"));
+
 /** A generated file for a configuration, by the engine's input hash and version. */
 export function artifactKey(ctx: OrgContext, inputHash: string, engineVersion: string, file: ArtifactFile): BlobKey {
   if (!ARTIFACT_FILES.includes(file)) throw new Error(`Not an artifact file: ${JSON.stringify(file)}`);
-  return `${orgPrefix(ctx)}artifacts/${segment("input hash", inputHash)}/${segment("engine version", engineVersion)}/${file}` as BlobKey;
+  return `${orgPrefix(ctx)}artifacts/${segment("input hash", inputHash)}/${versionSegment(engineVersion)}/${file}` as BlobKey;
 }
 
 /** A "Download all" bundle. */

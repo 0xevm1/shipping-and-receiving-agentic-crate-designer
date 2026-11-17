@@ -5,8 +5,8 @@
  * - `sweep`: for a design job, run the quantity sweep on the engine pool, save the shortlist as
  *   `precomputed` configurations, select the recommendation, and emit `configs.ready`, all in one
  *   transaction. Dead-lettered: the job goes to `error` and `job.error` is emitted.
- * - `bundle`: the server-built `bundle.zip` (slice 6, artifacts). Only the payload and the enqueue
- *   call are fixed here; the artifacts slice passes its handler to `createJobHandlers`.
+ * - `bundle`: the server-built `bundle.zip` (slice 6). Its handler is `createBundleHandler` in
+ *   src/server/artifacts, passed in as `createJobHandlers({ …, bundle })` (it needs blob storage).
  */
 import { z } from "zod";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
@@ -49,18 +49,21 @@ export async function enqueueSweep(ctx: OrgContext, jobId: string, repo: Reposit
   return job;
 }
 
-/** Queues a server-built bundle for design job `jobId`. */
-export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, repo: Repository): Promise<QueueJob> {
+/**
+ * Queues a server-built bundle for design job `jobId`. With a `dedupeKey` (the bundle id, see
+ * src/server/artifacts), a bundle already queued or running under that key is returned, not doubled.
+ */
+export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, repo: Repository, { dedupeKey }: { dedupeKey?: string } = {}): Promise<QueueJob> {
   const payload = BundleJobPayloadSchema.parse(input);
   await requireJob(repo, ctx, payload.jobId);
-  const { job } = await repo.queue.enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3 });
+  const { job } = await repo.queue.enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3, dedupeKey });
   return job;
 }
 
 export interface JobHandlerDeps {
   db: Database;
   pool: EnginePool;
-  /** The artifacts slice's bundle builder. Until then a bundle job dead-letters with "not built yet". */
+  /** `createBundleHandler` (src/server/artifacts). Without it a bundle job dead-letters with "not available". */
   bundle?: JobHandler;
 }
 

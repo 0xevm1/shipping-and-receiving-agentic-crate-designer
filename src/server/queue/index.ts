@@ -30,5 +30,9 @@ export { PermanentJobError, type JobContext, type JobHandler } from "./runner";
 export const enqueueSweep = (ctx: OrgContext, jobId: string, repo: Repository = getRepository()): Promise<QueueJob> => enqueueSweepOn(ctx, jobId, repo);
 
 /** Queues a server-built bundle for a design job. */
-export const enqueueBundle = (ctx: OrgContext, input: BundleJobPayload, repo: Repository = getRepository()): Promise<QueueJob> =>
-  enqueueBundleOn(ctx, input, repo);
+export const enqueueBundle = (
+  ctx: OrgContext,
+  input: BundleJobPayload,
+  repo: Repository = getRepository(),
+  options: { dedupeKey?: string } = {},
+): Promise<QueueJob> => enqueueBundleOn(ctx, input, repo, options);
