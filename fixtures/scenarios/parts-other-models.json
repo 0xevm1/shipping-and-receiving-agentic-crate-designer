@@ -1,0 +1,16 @@
+{
+  "parts": [
+    {
+      "id": "SCN-960",
+      "name": "Part SCN-960",
+      "model": "bracket.glb",
+      "mass_kg": 5
+    },
+    {
+      "id": "SCN-961",
+      "name": "Part SCN-961",
+      "model": "housing.glb",
+      "mass_kg": 5
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "parts": [
+    {
+      "id": "SCN-920",
+      "name": "Post with the bare minimum",
+      "model": "tall-part.glb",
+      "mass_kg": 12
+    }
+  ]
+}

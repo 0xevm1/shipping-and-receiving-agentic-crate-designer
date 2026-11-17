@@ -1,0 +1,16 @@
+{
+  "parts": [
+    {
+      "id": "SCN-951",
+      "name": "Part SCN-951",
+      "model": "shaft-millimetres.glb",
+      "mass_kg": 5,
+      "dimensions_mm": [
+        300,
+        200,
+        200
+      ],
+      "model_units": "meters"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "coordinate_system": "right-handed; Z up",
+  "model_units": "meters",
+  "parts": [
+    {
+      "id": "SCN-901",
+      "name": "Heavy block 1500 kg",
+      "model": "heavy-1500kg.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 1500,
+      "dimensions_mm": [
+        900,
+        700,
+        500
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-910",
+      "name": "Part SCN-910",
+      "model": "tall-part.glb",
+      "mass_kg": "21.5 kg"
+    },
+    {
+      "id": "SCN-911",
+      "name": "Part SCN-911",
+      "model": "tiny-light.glb",
+      "mass_kg": -5
+    },
+    {
+      "name": "Part without an id",
+      "model": "lopsided.glb",
+      "mass_kg": 5
+    },
+    {
+      "id": "SCN-913",
+      "name": "Part SCN-913",
+      "model": "bracket.step",
+      "mass_kg": 5
+    },
+    {
+      "id": "SCN-901",
+      "name": "Part SCN-901",
+      "model": "heavy-2000kg.glb",
+      "mass_kg": 5
+    },
+    {
+      "id": "SCN-915",
+      "name": "Part SCN-915",
+      "model": "heavy-1500kg.glb",
+      "mass_kg": 5
+    }
+  ]
+}

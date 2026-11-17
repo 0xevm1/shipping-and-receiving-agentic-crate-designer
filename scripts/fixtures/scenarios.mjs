@@ -4,7 +4,7 @@
 //   bun run fixtures        (or: bun scripts/fixtures/scenarios.mjs)
 //
 // The units / Y-up / off-origin files are a different script (scripts/fixtures/units-axis.mjs, #105).
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const OUT = "fixtures/scenarios";
@@ -99,7 +99,15 @@ const PARTS = [
   // The catalog (parts-size-mismatch.json) says 360 x 220 x 258 mm; this model is 360 x 220 x 300.
   ["size-mismatch.glb", 20, [solid(0.36, 0.22, 0.3)], "Bracket whose model disagrees with the catalog"],
   ["missing-field.glb", 20, [solid(0.3, 0.2, 0.2)], "Part whose catalog entry has no mass"],
+  // File check (#106). A box with no thickness, one that is almost flat, and one 866 m from the origin.
+  ["flat.glb", 5, [solid(0.3, 0.2, 0)], "Plate with no thickness"],
+  ["sliver.glb", 5, [solid(1.0, 0.5, 0.0004)], "Plate 0.4 mm thick and 1 m across"],
+  ["single-point.glb", 5, [solid(0, 0, 0)], "Geometry at a single point"],
+  ["far-from-origin.glb", 5, [box(500, 500, 500, 500.3, 500.2, 500.2)], "Small part far from the origin"],
 ];
+
+// The same 300 x 200 x 200 mm block, with its numbers in millimetres.
+const SHAFT_MM = boxesGlb([solid(300, 200, 200)]);
 
 // --- Files that should get a plain message --------------------------------------------------------
 const MESSAGES = {
@@ -111,6 +119,15 @@ const MESSAGES = {
   "text.gltf": Buffer.from(JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }] }, null, 2)),
   "not-a-model.txt": Buffer.from("Not a model. The app asks for a .glb or a design .json.\n"),
   "not-json.json": Buffer.from("{ this is not json"),
+  // File check (#106): a text glTF and an STL renamed to .glb, a glTF 1.0 header, and a parts.json with a trailing comma (line 4, column 3).
+  "renamed-gltf.glb": Buffer.from(JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }] }, null, 2)),
+  "renamed-stl.glb": Buffer.from("solid part\n  facet normal 0 0 1\n"),
+  "old-version.glb": (() => {
+    const b = Buffer.from(boxesGlb([solid(0.3, 0.2, 0.2)]));
+    b.writeUInt32LE(1, 4);
+    return b;
+  })(),
+  "parts-trailing-comma.json": Buffer.from('{\n  "parts": [\n    { "id": "A", "name": "Part A", "model": "a.glb", "mass_kg": 3 },\n  ]\n}\n'),
 };
 
 const entry = (id, [file, mass, boxes, name]) => {
@@ -134,10 +151,11 @@ mkdirSync(OUT, { recursive: true });
 const write = (name, data) => writeFileSync(join(OUT, name), data);
 
 for (const p of PARTS) write(p[0], boxesGlb(p[2]));
+write("shaft-millimetres.glb", SHAFT_MM);
 for (const [name, data] of Object.entries(MESSAGES)) write(name, data);
 
-// One catalog that knows every part file above, except the two catalog scenarios, which have their own.
-const own = new Set(["size-mismatch.glb", "missing-field.glb"]);
+// One catalog that knows every part file above, except the ones with their own catalog or no valid size.
+const own = new Set(["size-mismatch.glb", "missing-field.glb", "flat.glb", "sliver.glb", "single-point.glb", "far-from-origin.glb"]);
 const entries = PARTS.filter((p) => !own.has(p[0])).map((p, i) => entry(`SCN-${String(i + 1).padStart(3, "0")}`, p));
 write("parts.json", catalog(entries));
 
@@ -154,4 +172,69 @@ const mismatch = entry(
 );
 write("parts-size-mismatch.json", catalog([{ ...mismatch, dimensions_mm: [360, 220, 258] }]));
 
-console.log(`Wrote ${PARTS.length + Object.keys(MESSAGES).length + 3} files to ${OUT}/`);
+// --- File check (#106): one parts.json per kind of finding -----------------------------------------------------------------
+const hand = (id, model, extra = {}) => ({ id, name: `Part ${id}`, model, mass_kg: 5, ...extra });
+const raw = (json) => JSON.stringify(json, null, 2) + "\n";
+const GOOD = entry("SCN-901", PARTS[0]);
+
+// The top level is a list, not {"parts": [...]}.
+write("parts-wrong-shape.json", raw([GOOD]));
+
+// Seven entries, one good: a mass written as text, a negative mass, no id, a model that is not a .glb, a repeated id, a repeated model.
+write(
+  "parts-bad-entries.json",
+  catalog([
+    GOOD,
+    hand("SCN-910", "tall-part.glb", { mass_kg: "21.5 kg" }),
+    hand("SCN-911", "tiny-light.glb", { mass_kg: -5 }),
+    { name: "Part without an id", model: "lopsided.glb", mass_kg: 5 },
+    hand("SCN-913", "bracket.step"),
+    hand("SCN-901", "heavy-2000kg.glb"),
+    hand("SCN-915", "heavy-1500kg.glb"),
+  ]),
+);
+
+// Only the four required fields: no material, density, size or quantities. Loads with tall-part.glb; the size comes from the model.
+write("parts-lenient.json", raw({ parts: [hand("SCN-920", "tall-part.glb", { name: "Post with the bare minimum", mass_kg: 12 })] }));
+
+// A newer schema_version, an unknown model_units, fields the app does not use, and optional fields of the wrong kind.
+write(
+  "parts-ignored-fields.json",
+  raw({
+    schema_version: "2.0",
+    model_units: "cubits",
+    owner: "Plant 4",
+    parts: [
+      hand("SCN-930", "tall-part.glb", {
+        mass_kg: 12,
+        colour: "grey",
+        supplier: "Acme",
+        material: 42,
+        density_kg_m3: 0,
+        dimensions_mm: [150, 150],
+        suggested_quantities: "all",
+      }),
+    ],
+  }),
+);
+
+// An absurd mass (a digit slip), a mass in grams, a density and a size that cannot be right (#122). Load with lopsided.glb.
+write(
+  "parts-implausible.json",
+  raw({
+    parts: [
+      hand("SCN-940", "lopsided.glb", { name: "Shaft with a mass of 99,999,999 kg", mass_kg: 99999999 }),
+      hand("SCN-941", "not-loaded.glb", { mass_kg: 0.0002, density_kg_m3: 50000, dimensions_mm: [0.5, 30, 40000] }),
+    ],
+  }),
+);
+
+// Units given in words. Both load shaft-millimetres.glb: the first agrees with the file, the second says metres and is overruled by its size.
+const mmEntry = (id, units) => ({ ...hand(id, "shaft-millimetres.glb"), dimensions_mm: [300, 200, 200], model_units: units });
+write("parts-units-mm.json", raw({ parts: [mmEntry("SCN-950", "millimeters")] }));
+write("parts-units-wrong.json", raw({ parts: [mmEntry("SCN-951", "meters")] }));
+
+// Entries that name files that are not here. Load with tall-part.glb: no entry names it.
+write("parts-other-models.json", raw({ parts: [hand("SCN-960", "bracket.glb"), hand("SCN-961", "housing.glb")] }));
+
+console.log(`Wrote ${readdirSync(OUT).length} files to ${OUT}/`);
