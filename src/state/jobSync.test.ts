@@ -3,9 +3,23 @@ import { getPart } from "@/domain/catalog";
 import { designShipment, inputHash } from "@/engine/engine";
 import { DesignRequestSchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
-import type { ConfigurationResponse, JobSnapshot } from "@/lib/api/jobs";
+import type { ConfigurationResponse, JobResponse, JobSnapshot } from "@/lib/api/jobs";
 import { catalogPart } from "@/lib/part";
-import { configurationBody, partIdentity, saveConfiguration, selectConfiguration, startJobSync, useJobSync } from "./jobSync";
+import { LIVENESS_MAX_DELAY_MS, LIVENESS_MIN_DELAY_MS } from "@/lib/liveness";
+import {
+  configurationBody,
+  keepMyChange,
+  partIdentity,
+  saveConfiguration,
+  saveCurrentDesign,
+  selectConfiguration,
+  startJobSync,
+  takeServerChange,
+  updateJob,
+  useJobSync,
+} from "./jobSync";
+import { cacheJob } from "./jobCache";
+import { memoryPendingStore, setPendingStore, usePendingChanges } from "./pendingChanges";
 import { useDesigner } from "./store";
 
 const JOB = "00000000-0000-4000-8000-0000000000aa";
@@ -89,8 +103,58 @@ const initialSync = useJobSync.getState();
 beforeEach(() => {
   useDesigner.setState(initialDesigner, true);
   useJobSync.setState(initialSync, true);
+  setPendingStore(memoryPendingStore());
   FakeEventSource.instances = [];
 });
+
+/**
+ * A server in memory, enough for the sync: one job for the catalog part, configurations by
+ * inputHash, PATCH at a version, `Idempotency-Key` replays, and a health check. `up = false`
+ * makes every request fail as a dropped network would.
+ */
+function fakeServer() {
+  const s = {
+    up: true,
+    job: { ...job } as JobResponse,
+    configs: new Map<string, ConfigurationResponse>(),
+    keys: new Map<string, { status: number; body: unknown }>(),
+    saveDirect(c: ConfigurationResponse) {
+      s.configs.set(c.inputHash, c);
+    },
+    fetch: (async (url: string, init?: RequestInit) => {
+      if (!s.up) throw new TypeError("Failed to fetch");
+      const method = init?.method ?? "GET";
+      const key = new Headers(init?.headers).get("Idempotency-Key");
+      if (key && s.keys.has(key)) {
+        const seen = s.keys.get(key)!;
+        return json(seen.status, seen.body);
+      }
+      const remember = (status: number, body: unknown) => {
+        if (key && status < 400) s.keys.set(key, { status, body });
+        return json(status, body);
+      };
+      if (url === "/api/v1/health") return json(200, { ok: true });
+      if (url === "/api/v1/jobs" && method === "POST") return json(200, { job: s.job, created: false });
+      if (url === `/api/v1/jobs/${JOB}` && method === "GET") return json(200, snapshot([...s.configs.values()], { job: s.job }));
+      if (url === `/api/v1/jobs/${JOB}/configs` && method === "POST") {
+        const body = JSON.parse(String(init!.body));
+        const existing = s.configs.get(body.inputHash);
+        const c = existing ?? configResponse(body, `00000000-0000-4000-8000-${String(s.configs.size + 1).padStart(12, "0")}`);
+        s.configs.set(c.inputHash, c);
+        return remember(existing ? 200 : 201, { configuration: c, created: !existing });
+      }
+      if (url === `/api/v1/jobs/${JOB}` && method === "PATCH") {
+        const body = JSON.parse(String(init!.body));
+        if (body.version !== s.job.version) return json(409, { error: { code: "version_conflict", message: "Changed" }, job: s.job });
+        const { version, ...changes } = body;
+        s.job = { ...s.job, ...changes, version: version + 1 };
+        return remember(200, { job: s.job });
+      }
+      return json(404, { error: { code: "not_found", message: "?" } });
+    }) as unknown as typeof globalThis.fetch,
+  };
+  return s;
+}
 afterEach(() => vi.unstubAllGlobals());
 
 describe("configurationBody", () => {
@@ -138,16 +202,6 @@ describe("saveConfiguration", () => {
   });
 });
 
-describe("selectConfiguration", () => {
-  it("takes the server's job on a version conflict", async () => {
-    useJobSync.setState({ job: { ...job } });
-    const newer = { ...job, version: 5, notes: "theirs" };
-    const fetch = vi.fn(async () => json(409, { error: { code: "version_conflict", message: "Changed" }, job: newer }));
-    expect(await selectConfiguration(CONFIG, { fetch })).toEqual({ kind: "conflict" });
-    expect(useJobSync.getState().job).toEqual(newer);
-  });
-});
-
 describe("startJobSync", () => {
   it("opens the catalog part's job, reads its snapshot, subscribes from lastEventId, and refreshes on config.added", async () => {
     const saved = configResponse();
@@ -182,21 +236,134 @@ describe("startJobSync", () => {
     expect(es.readyState).toBe(2);
   });
 
-  it("goes offline without throwing when the server can't be reached, and tries again", async () => {
+  it("goes offline without throwing when the server can't be reached, and probes its health until it answers", async () => {
     vi.useFakeTimers();
     try {
-      const fetch = vi.fn(async () => {
+      const fetch = vi.fn(async (url: string) => {
+        void url;
         throw new TypeError("Failed to fetch");
       });
-      const stop = startJobSync({ api: { fetch }, EventSourceImpl: FakeEventSource as unknown as typeof EventSource, retryMs: 1000 });
+      const stop = startJobSync({
+        api: { fetch: fetch as unknown as typeof globalThis.fetch },
+        EventSourceImpl: FakeEventSource as unknown as typeof EventSource,
+      });
       await vi.waitFor(() => expect(useJobSync.getState().status).toBe("offline"));
       expect(fetch).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(LIVENESS_MIN_DELAY_MS);
       expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fetch.mock.calls[1]![0]).toBe("/api/v1/health");
       stop();
       expect(FakeEventSource.instances).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("saves offline on this device, then syncs by itself within 5 s of the server coming back", async () => {
+    vi.useFakeTimers();
+    try {
+      const server = fakeServer();
+      server.up = false;
+      const stop = startJobSync({ api: { fetch: server.fetch }, EventSourceImpl: FakeEventSource as unknown as typeof EventSource, refreshDelayMs: 0 });
+      await vi.waitFor(() => expect(useJobSync.getState().status).toBe("offline"));
+
+      useDesigner.getState().setSettings({ quantity: 3 });
+      const r = saveCurrentDesign();
+      expect(r.kind).toBe("queued");
+      // Kept on this device, marked unsynced, and nothing reached the server.
+      expect(usePendingChanges.getState().items).toMatchObject([
+        { kind: "config", state: "pending", jobId: null, partKey: `catalog:${useDesigner.getState().part.id}` },
+      ]);
+      expect(server.configs.size).toBe(0);
+      // A second save of the same design is the same change.
+      expect(saveCurrentDesign().kind).toBe("duplicate");
+
+      // Long offline: the probe backs off but never waits more than the cap.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(server.configs.size).toBe(0);
+      server.up = true;
+      const back = Date.now();
+      await vi.advanceTimersByTimeAsync(LIVENESS_MAX_DELAY_MS + 100);
+      expect(usePendingChanges.getState().items).toEqual([]);
+      expect(Date.now() - back).toBeLessThan(5000);
+      expect(server.configs.size).toBe(1);
+      expect(useJobSync.getState().configs.map((c) => c.inputHash)).toEqual([configurationBody(useDesigner.getState()).inputHash]);
+      // The change carried its id as the idempotency key.
+      expect(server.keys.size).toBe(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens a job kept on this device with the server stopped, and queues saves against it", async () => {
+    vi.useFakeTimers();
+    const map = new Map<string, string>();
+    const localStorage = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+      removeItem: (k: string) => void map.delete(k),
+    };
+    vi.stubGlobal("window", { localStorage, addEventListener: () => {}, removeEventListener: () => {} });
+    try {
+      const partKey = `catalog:${useDesigner.getState().part.id}`;
+      const kept = configResponse();
+      cacheJob(partKey, { job: { ...job, notes: "kept" }, configurations: [kept] });
+      const server = fakeServer();
+      server.up = false;
+      const stop = startJobSync({ api: { fetch: server.fetch }, EventSourceImpl: FakeEventSource as unknown as typeof EventSource, refreshDelayMs: 0 });
+      await vi.waitFor(() => expect(useJobSync.getState().status).toBe("offline"));
+      expect(useJobSync.getState()).toMatchObject({ fromCache: true, job: { id: JOB, notes: "kept" }, configs: [{ id: CONFIG }] });
+
+      useDesigner.getState().setSettings({ quantity: 2 });
+      expect(saveCurrentDesign().kind).toBe("queued");
+      expect(updateJob({ notes: "offline note" }).kind).toBe("queued");
+      expect(usePendingChanges.getState().items.map((c) => c.jobId)).toEqual([JOB, JOB]);
+
+      server.up = true;
+      await vi.advanceTimersByTimeAsync(LIVENESS_MAX_DELAY_MS + 100);
+      expect(usePendingChanges.getState().items).toEqual([]);
+      expect(server.job.notes).toBe("offline note");
+      expect(useJobSync.getState().fromCache).toBe(false);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a recommendation that conflicts, then sends it again on the server's version when the user keeps theirs", async () => {
+    const server = fakeServer();
+    const stop = startJobSync({ api: { fetch: server.fetch }, EventSourceImpl: FakeEventSource as unknown as typeof EventSource, refreshDelayMs: 0 });
+    await vi.waitFor(() => expect(useJobSync.getState().job?.id).toBe(JOB));
+    server.saveDirect(configResponse());
+    // Someone else changes the job; this tab still has version 1.
+    server.job = { ...server.job, version: 2, notes: "theirs" };
+
+    expect(selectConfiguration({ configurationId: CONFIG }).kind).toBe("queued");
+    await vi.waitFor(() => expect(usePendingChanges.getState().items[0]?.state).toBe("conflict"));
+    const change = usePendingChanges.getState().items[0]!;
+    expect(change).toMatchObject({ kind: "patch", serverJob: { version: 2, notes: "theirs" } });
+    // The tab now shows the server's job; the change waits for the user.
+    expect(useJobSync.getState().job).toMatchObject({ version: 2, notes: "theirs" });
+
+    keepMyChange(change.id);
+    await vi.waitFor(() => expect(usePendingChanges.getState().items).toEqual([]));
+    expect(server.job).toMatchObject({ version: 3, selectedConfigurationId: CONFIG, notes: "theirs" });
+    expect(useJobSync.getState().job).toMatchObject({ version: 3, selectedConfigurationId: CONFIG });
+    stop();
+  });
+
+  it("drops a conflicting change when the user takes the server's job", async () => {
+    const server = fakeServer();
+    const stop = startJobSync({ api: { fetch: server.fetch }, EventSourceImpl: FakeEventSource as unknown as typeof EventSource, refreshDelayMs: 0 });
+    await vi.waitFor(() => expect(useJobSync.getState().job?.id).toBe(JOB));
+    server.job = { ...server.job, version: 4, notes: "theirs" };
+    updateJob({ notes: "mine" });
+    await vi.waitFor(() => expect(usePendingChanges.getState().items[0]?.state).toBe("conflict"));
+    takeServerChange(usePendingChanges.getState().items[0]!.id);
+    expect(usePendingChanges.getState().items).toEqual([]);
+    expect(useJobSync.getState().job).toMatchObject({ version: 4, notes: "theirs" });
+    expect(server.job.notes).toBe("theirs");
+    stop();
   });
 });

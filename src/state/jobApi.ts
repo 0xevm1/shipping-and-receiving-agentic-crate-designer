@@ -42,6 +42,8 @@ export type ApiOptions = {
 };
 
 export const API_TIMEOUT_MS = 8000;
+/** The liveness probe gives up sooner: it runs every few seconds while offline. */
+export const HEALTH_TIMEOUT_MS = 2500;
 
 async function call<S extends z.ZodType>(path: string, init: RequestInit, schema: S, opts: ApiOptions = {}): Promise<Result<z.infer<S>>> {
   const { fetch: doFetch = globalThis.fetch, baseUrl = "", idempotencyKey, timeoutMs = API_TIMEOUT_MS } = opts;
@@ -87,3 +89,14 @@ export const postConfiguration = (jobId: string, body: SaveConfigurationRequest,
 
 export const patchJob = (jobId: string, body: PatchJobRequest, opts?: ApiOptions) =>
   call(`/api/v1/jobs/${encodeURIComponent(jobId)}`, jsonInit("PATCH", body), PatchJobResponseSchema, opts);
+
+/** `GET /api/v1/health` answered 200: the server and its database are up. Never throws. */
+export async function probeHealth(opts: ApiOptions = {}): Promise<boolean> {
+  const { fetch: doFetch = globalThis.fetch, baseUrl = "", timeoutMs = HEALTH_TIMEOUT_MS } = opts;
+  try {
+    const res = await doFetch(`${baseUrl}/api/v1/health`, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
