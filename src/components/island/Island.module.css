@@ -124,6 +124,20 @@
     z-index: 1;
   }
 }
+/* Floating over the tab's content, the pill is opaque and lifted, so it reads as a toast and not as text colliding with text. */
+.parthead[data-folded] .note > span,
+.parthead[data-empty] .note > span {
+  background: var(--navy-deep);
+  border: 1px solid var(--hair);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+@media (max-height: 759px) {
+  .parthead .note > span {
+    background: var(--navy-deep);
+    border: 1px solid var(--hair);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+}
 .tabs {
   display: flex;
   justify-content: space-between;
