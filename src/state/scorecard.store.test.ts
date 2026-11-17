@@ -54,6 +54,16 @@ describe("time to design", () => {
     expect(s().designedInMs).toBe(72_000);
   });
 
+  it("is cleared by an edit, and the next export records the time to the edited design", () => {
+    s().startDesignClock(1000);
+    s().markExported(73_000);
+    expect(s().designedInMs).toBe(72_000);
+    s().setSettings({ quantity: 2 });
+    expect(s().designedInMs).toBeNull();
+    s().markExported(100_000);
+    expect(s().designedInMs).toBe(99_000);
+  });
+
   it("restarts when a part is loaded", () => {
     s().startDesignClock(1000);
     s().markExported(2000);

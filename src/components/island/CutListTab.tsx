@@ -79,8 +79,9 @@ export function CutListTab({ design }: { design: CrateDesign }) {
         <>
           {plan.split && <CrateTypePicker />}
           <p className="lede">
-            {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}Point at a row to see where those boards go. Click it to
-            keep them lit.
+            {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}
+            <span className="hint-mouse">Point at a row to see where those boards go. Click it to keep them lit.</span>
+            <span className="hint-touch">Tap a row to light those boards in 3D and keep them lit. Tap it again to let go.</span>
           </p>
         </>
       )}
@@ -116,7 +117,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                         )}
                       </td>
                       <td className="nominal">{stockText(l, units)}</td>
-                      <td>
+                      <td data-unit={units === "metric" ? "mm" : undefined}>
                         {cutText(l, units)
                           .split(" × ")
                           .map((d, i) => (

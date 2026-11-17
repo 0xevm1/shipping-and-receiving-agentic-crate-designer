@@ -150,7 +150,14 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           ))}
         </div>
       </div>
-      <div className="panel" role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)}>
+      <div
+        className="panel"
+        role="tabpanel"
+        id={PANEL_ID}
+        aria-labelledby={tabId(tab)}
+        // Straight on the element, so scrolling doesn't re-render the island: CSS fades the top edge while scrolled.
+        onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 2)}
+      >
         {!design ? (
           <div role="alert">
             <h2>{problem?.title ?? "No crate to show"}</h2>
@@ -164,7 +171,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             )}
           </div>
         ) : tab === "overview" ? (
-          <OverviewTab design={design} />
+          <OverviewTab design={design} checks={checks} />
         ) : tab === "layouts" ? (
           <LayoutsTab design={design} />
         ) : tab === "cut" ? (

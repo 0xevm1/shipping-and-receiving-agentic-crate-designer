@@ -40,6 +40,22 @@ export function documentDate(iso: string, timeZone?: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+/** "Parts are not restrained" read mid-sentence: "parts are not restrained". Acronyms and numbers keep their case. */
+const sentenceCase = (title: string) => (/^[A-Z][a-z]/.test(title) ? title[0].toLowerCase() + title.slice(1) : title);
+
+/**
+ * The one-line verdict under the Overview's outside size for these caution titles (empty when
+ * there are none): "1 caution: parts are not restrained", "2 cautions: a and b",
+ * "3 cautions: a and 2 more".
+ */
+export function cautionVerdict(titles: readonly string[]): string {
+  const [first, second] = titles.map(sentenceCase);
+  if (!first) return "";
+  if (titles.length === 1) return `1 caution: ${first}`;
+  const rest = titles.length === 2 ? second : `${titles.length - 1} more`;
+  return `${titles.length} cautions: ${first} and ${rest}`;
+}
+
 /** A saved-on date for lists, in this device's locale ("Nov 16, 2026"); the raw text if it isn't a date. */
 export function savedDateText(iso: string): string {
   const d = new Date(iso);

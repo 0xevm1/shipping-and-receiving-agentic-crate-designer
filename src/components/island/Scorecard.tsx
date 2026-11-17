@@ -21,7 +21,13 @@ export function Scorecard({ design }: { design: CrateDesign }) {
 
   return (
     <section className={styles.card} aria-label="Scorecard">
-      <div className={styles.eyebrow}>Scorecard{plan ? " · each crate" : ""}</div>
+      <div className={styles.head}>
+        <div className={styles.eyebrow}>Scorecard{plan ? " · each crate" : ""}</div>
+        {/* Always mounted, so a screen reader announces the text when it appears and nothing moves. */}
+        <span className={styles.clock} role="status">
+          {designedInMs !== null && `Designed in ${elapsedText(designedInMs)}`}
+        </span>
+      </div>
       <dl className={styles.grid}>
         <div>
           <dt>Crate cost</dt>
@@ -32,7 +38,7 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         </div>
         <div>
           <dt>Build time</dt>
-          <dd className={styles.value}>{hoursText(labour.hours)}</dd>
+          <dd className={`${styles.value} tight`}>{hoursText(labour.hours)}</dd>
           <dd>labour at {usd(rate)}/h</dd>
         </div>
         <div>
@@ -52,17 +58,6 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         Material is {usd(cost.woodUsd)} of wood and {usd(cost.fastenersUsd)} of screws. The class is an estimate from the NMFC density scale; rates
         come from the shop standards.
       </p>
-      {plan && (
-        <p className={styles.note}>
-          Whole shipment: <b>{usd(plan.totals.costUsd)}</b> to build {plan.totals.crates} crates, <b>{hoursText(plan.totals.labourHours)}</b> of
-          labour, {lb(plan.totals.dimWeightLb)} dim weight.
-        </p>
-      )}
-      {designedInMs !== null && (
-        <p className={`${styles.note} ${styles.clock}`} role="status">
-          Designed in {elapsedText(designedInMs)}
-        </p>
-      )}
     </section>
   );
 }
