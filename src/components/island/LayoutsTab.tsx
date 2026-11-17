@@ -7,7 +7,8 @@ import type { Layout } from "@/domain/packing";
 import { densityDelta, densityText, describeLayout, usd, usdDelta } from "@/lib/format";
 import { dims, lengthUnit, volume, type Units } from "@/lib/units";
 import { useDesigner } from "@/state/store";
-import { CrateTypePicker } from "./Shipment";
+import { CrateTypePicker } from "./CrateTypePicker";
+import styles from "./LayoutsTab.module.css";
 
 const FIRST_SHOWN = 4;
 
@@ -52,7 +53,7 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
         <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from above,
         then from the side.
       </p>
-      <div className="seg rank" role="group" aria-label="Rank layouts by">
+      <div className={`seg ${styles.rank}`} role="group" aria-label="Rank layouts by">
         {RANKING_LABELS.map((r) => (
           <button key={r.id} type="button" aria-pressed={ranking === r.id} onClick={() => setRanking(r.id)}>
             {r.label}
@@ -65,27 +66,27 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
           <button
             key={l.key}
             type="button"
-            className="opt"
+            className={styles.opt}
             aria-pressed={l.key === current.key}
             onClick={() => setLayoutKey(l.key === best.key ? null : l.key)}
           >
             <Thumb layout={l} design={design} />
             <span>
-              <span className="opt-title">
+              <span className={styles.optTitle}>
                 {describeLayout(l)}
-                {l.key === best.key && <span className="badge">recommended</span>}
-                {!l.stable && <span className="badge tall">may tip</span>}
+                {l.key === best.key && <span className={styles.badge}>recommended</span>}
+                {!l.stable && <span className={`${styles.badge} ${styles.tall}`}>may tip</span>}
               </span>
-              <span className="opt-dims">
+              <span className={styles.optDims}>
                 {dims(l.external, units)}
                 {"\u00a0"}
                 {lengthUnit(units)}
               </span>
-              <span className="opt-meta">
+              <span className={styles.optMeta}>
                 {l.orientation.label}, {volume(l.externalVolumeM3, units)}
               </span>
               <Delta score={scores.get(l.key)} best={scores.get(best.key)} isBest={l.key === best.key} units={units} />
-              <span className="volbar">
+              <span className={styles.volbar}>
                 <i
                   style={{
                     width: `${((l.externalVolumeM3 / maxVolume) * 100).toFixed(0)}%`,
@@ -97,7 +98,7 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
         ))}
       </div>
       {layouts.length > FIRST_SHOWN && (
-        <button type="button" className="more" onClick={() => setShowAll(!showAll)}>
+        <button type="button" className={`btn ${styles.more}`} onClick={() => setShowAll(!showAll)}>
           {showAll ? "Show fewer" : `Show all ${layouts.length} layouts`}
         </button>
       )}
@@ -110,7 +111,7 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   if (!score || !best) return null;
   if (isBest) {
     return (
-      <span className="opt-delta" data-testid="layout-delta">
+      <span className={styles.optDelta} data-testid="layout-delta">
         <span className="nw">{usd(score.costUsd)} to build</span>
         {" · "}
         <span className="nw">class {score.freightClass}</span>
@@ -123,10 +124,10 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   const density = densityDelta(score.densityLbFt3 - best.densityLbFt3, units);
   const sameClass = score.freightClass === best.freightClass;
   return (
-    <span className="opt-delta" data-testid="layout-delta" title="Against the recommended layout">
-      <span className={`nw ${cost > 0 ? "worse" : cost < 0 ? "better" : ""}`}>{usdDelta(cost)}</span>
+    <span className={styles.optDelta} data-testid="layout-delta" title="Against the recommended layout">
+      <span className={`nw ${cost > 0 ? styles.worse : cost < 0 ? styles.better : ""}`}>{usdDelta(cost)}</span>
       {" · "}
-      <span className={`nw ${sameClass ? "" : score.freightClass > best.freightClass ? "worse" : "better"}`}>
+      <span className={`nw ${sameClass ? "" : score.freightClass > best.freightClass ? styles.worse : styles.better}`}>
         {sameClass ? `same class ${score.freightClass}` : `class ${best.freightClass} → ${score.freightClass}`}
       </span>
       {density && (

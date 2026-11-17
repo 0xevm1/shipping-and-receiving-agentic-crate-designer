@@ -9,6 +9,8 @@ import { plywoodLabel } from "@/lib/lumber";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
+import rule from "./rule.module.css";
+import styles from "./RulesTab.module.css";
 import { ShopStandards } from "./ShopStandards";
 
 const MAX_QTY = 200;
@@ -50,32 +52,32 @@ export function RulesTab({ design }: { design: CrateDesign }) {
       <h2>Packing rules</h2>
       <p className="lede">Change these when a part needs different handling. The crate updates as you go.</p>
 
-      <div className="rule">
+      <div className={`${rule.rule} ${rule.stack}`}>
         <b>How many parts</b>
-        <div className="seg qty">
-          <button type="button" className="step" aria-label="One fewer" onClick={() => setQty(settings.quantity - 1)}>
+        <div className={`seg ${rule.seg} ${styles.qty} ${rule.wide}`}>
+          <button type="button" className={styles.step} aria-label="One fewer" onClick={() => setQty(settings.quantity - 1)}>
             −
           </button>
           <QuantityInput value={settings.quantity} onCommit={typeQty} />
-          <button type="button" className="step" aria-label="One more" onClick={() => setQty(settings.quantity + 1)}>
+          <button type="button" className={styles.step} aria-label="One more" onClick={() => setQty(settings.quantity + 1)}>
             +
           </button>
-          <span className="sep" />
+          <span className={styles.sep} />
           {suggested.map((n) => (
-            <button key={n} type="button" className="seg-chip" aria-pressed={settings.quantity === n} onClick={() => setQty(n)}>
+            <button key={n} type="button" className={styles.chip} aria-pressed={settings.quantity === n} onClick={() => setQty(n)}>
               {n}
             </button>
           ))}
         </div>
-        <ChangeNote note={note} className="rule-note" />
+        <ChangeNote note={note} className={rule.fullRow} />
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 
-      <div className="rule">
+      <div className={rule.rule}>
         <b>Keep parts upright</b>
         <input
           type="checkbox"
-          className="switch"
+          className={`switch ${rule.switch}`}
           aria-label="Keep parts upright"
           checked={settings.keepUpright}
           onChange={(e) => setSettings({ keepUpright: e.target.checked })}
@@ -83,9 +85,9 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <small>Turn off to let parts lie on their side or stand on end.</small>
       </div>
 
-      <div className="rule">
+      <div className={rule.rule}>
         <b>Most layers allowed</b>
-        <div className="seg" role="group" aria-label="Most layers allowed">
+        <div className={`seg ${rule.seg}`} role="group" aria-label="Most layers allowed">
           {[1, 2, 3, 4].map((n) => (
             <button key={n} type="button" aria-pressed={settings.maxLayers === n} onClick={() => setSettings({ maxLayers: n })}>
               {n}
@@ -95,7 +97,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <small>A plywood separator goes between layers.</small>
       </div>
 
-      <div className="rule">
+      <div className={rule.rule}>
         <b>Gap between parts</b>
         <output>{mm(settings.partGapMm)}</output>
         <input
@@ -110,7 +112,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <small>Filled with wood blocking. Under {mm(minGap)} leaves no room for it.</small>
       </div>
 
-      <div className="rule">
+      <div className={rule.rule}>
         <b>Clearance to walls</b>
         <output>{mm(settings.wallClearanceMm)}</output>
         <input
@@ -125,9 +127,9 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <small>Bearers go underneath, blocking at the sides.</small>
       </div>
 
-      <div className="rule">
+      <div className={rule.rule}>
         <b>Wall and lid plywood</b>
-        <div className="seg" role="group" aria-label="Wall and lid plywood">
+        <div className={`seg ${rule.seg}`} role="group" aria-label="Wall and lid plywood">
           {panels.map((p) => (
             <button key={p} type="button" aria-pressed={settings.panelThickness === p} onClick={() => setSettings({ panelThickness: p })}>
               {p === "auto" ? "Auto" : units === "imperial" ? plywoodLabel(p, units) : p}

@@ -12,7 +12,8 @@ import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";
 import { Scorecard } from "./Scorecard";
-import { ShipmentSummary, shipmentStyles } from "./Shipment";
+import styles from "./OverviewTab.module.css";
+import { ShipmentSummary } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
 export function OverviewTab({ design, checks }: { design: CrateDesign; checks: readonly CheckItem[] }) {
@@ -39,10 +40,10 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
       <ShipmentSummary />
       <h2>
         {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name}
-        {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
+        {crateType && <small className={styles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
       {/* Values an edit changed flash gold for 1.2 s. */}
-      <div className="big" data-testid="outside-size">
+      <div className={styles.big} data-testid="outside-size">
         <Flash on={["outside"]}>{dims(layout.external, units)}</Flash>
         <small>{lengthUnit(units)}</small>
       </div>
@@ -59,7 +60,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
       </div>
       <Scorecard design={design} />
 
-      <ul className="chain" data-testid="build-chain">
+      <ul className={styles.chain} data-testid="build-chain">
         <Step name="Parts" value={weight(design.payloadKg, units)} flash={["payload"]}>
           {quantity} × {partWeight(part.mass_kg, units)}, {part.material ?? "material not given"}
         </Step>
@@ -100,7 +101,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
       </ul>
 
       <h3>Crate weight by assembly</h3>
-      <div className="bars">
+      <div className={styles.bars}>
         {ASSEMBLIES.filter((a) => design.tareKgByAssembly[a] > 0).map((a) => {
           const kg = design.tareKgByAssembly[a];
           const on = () => setHover({ assembly: a, source: "list" });
@@ -108,7 +109,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
           return (
             <div
               key={a}
-              className="barrow"
+              className={styles.barrow}
               data-testid="weight-bar"
               role="group"
               aria-label={`${ASSEMBLY_NAMES[a]}, ${weight(kg, units)}`}
@@ -119,8 +120,8 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
               onBlur={off}
             >
               <span>{ASSEMBLY_NAMES[a]}</span>
-              <span className="v">{weight(kg, units)}</span>
-              <span className="track">
+              <span className={styles.v}>{weight(kg, units)}</span>
+              <span className={styles.track}>
                 <i style={{ width: `${Math.max(2, (kg / maxAssembly) * 100).toFixed(0)}%` }} />
               </span>
             </div>
@@ -138,7 +139,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
 function Verdict({ cautions, onReview }: { cautions: readonly string[]; onReview: () => void }) {
   if (!cautions.length) {
     return (
-      <p className="verdict clear" data-testid="verdict">
+      <p className={styles.verdict} data-testid="verdict">
         <i aria-hidden="true" />
         All checks clear
       </p>
@@ -146,10 +147,10 @@ function Verdict({ cautions, onReview }: { cautions: readonly string[]; onReview
   }
   const text = cautionVerdict(cautions);
   return (
-    <button type="button" className="verdict caution" data-testid="verdict" title={`${text}. Open Checks.`} onClick={onReview}>
+    <button type="button" className={`${styles.verdict} ${styles.caution}`} data-testid="verdict" title={`${text}. Open Checks.`} onClick={onReview}>
       <i aria-hidden="true" />
       <span>{text}</span>
-      <span className="go" aria-hidden="true">
+      <span className={styles.go} aria-hidden="true">
         Checks →
       </span>
     </button>
@@ -167,9 +168,9 @@ interface StepProps {
 
 function Step({ name, value, flash = [], end, children }: StepProps) {
   return (
-    <li className={end ? "end" : undefined}>
+    <li className={end ? styles.end : undefined}>
       <b>{name}</b>
-      <Flash on={flash} className="v">
+      <Flash on={flash} className={styles.v}>
         {value}
       </Flash>
       <small>{children}</small>

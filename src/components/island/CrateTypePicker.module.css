@@ -1,0 +1,35 @@
+/*
+ * The crate type picker shared by the Overview, Layouts, Cut list and Checks, and the Cut list's
+ * scope toggle: a `.seg` pill whose buttons are two lines (a name, a small caption).
+ */
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 12px 0 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hair);
+}
+/* Last in a block (the Overview's shipment summary): no space below. */
+.flush {
+  margin-bottom: 0;
+}
+/* The Cut list's "This crate / Whole shipment" toggle. */
+.scope {
+  margin: 0 0 10px;
+}
+.picker button {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 14px;
+}
+.picker button small {
+  font: 400 11.5px/1.2 var(--mono);
+  color: var(--muted);
+}
+.picker button[aria-pressed="true"] small {
+  color: var(--soft);
+}

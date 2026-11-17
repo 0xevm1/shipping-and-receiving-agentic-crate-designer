@@ -196,7 +196,7 @@ export function DesignerShell() {
   }, [loadFiles]);
 
   return (
-    <div className={drawer ? "drawer-open" : undefined} data-panels-hidden={panelsHidden || undefined} ref={shellRef}>
+    <div data-panels-hidden={panelsHidden || undefined} ref={shellRef}>
       <PartHeader />
       {/* Narrow screens only (hidden by CSS above 980 px). */}
       <button

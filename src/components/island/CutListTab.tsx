@@ -12,7 +12,8 @@ import { cutText, stockText } from "@/lib/format";
 import { PRINT_PATH, printHash } from "@/lib/printLink";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
-import { CrateTypePicker, shipmentStyles } from "./Shipment";
+import { CrateTypePicker, CutScopeToggle } from "./CrateTypePicker";
+import styles from "./CutListTab.module.css";
 
 /**
  * Cut list grouped by assembly. Hovering a row lights those boards in 3D and
@@ -61,16 +62,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
   return (
     <>
       <h2>{!plan.split ? "Cut list" : whole ? "Cut list for the whole shipment" : `Cut list for crate ${crateType.label}`}</h2>
-      {plan.split && (
-        <div className={`seg ${shipmentStyles.picker} ${shipmentStyles.cutScope}`} role="group" aria-label="Cut list for">
-          <button type="button" aria-pressed={!whole} onClick={() => setScope("crate")}>
-            This crate
-          </button>
-          <button type="button" aria-pressed={whole} onClick={() => setScope("shipment")}>
-            Whole shipment
-          </button>
-        </div>
-      )}
+      {plan.split && <CutScopeToggle whole={whole} onChange={setScope} />}
       {whole ? (
         <p className="lede">
           Every crate: {describeShipment(plan)}. Quantities are for all {plan.totals.crates} crates.
@@ -89,7 +81,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           </p>
         </>
       )}
-      <table className="cut">
+      <table className={styles.cut}>
         <thead>
           <tr>
             <th>Piece</th>
@@ -104,8 +96,10 @@ export function CutListTab({ design }: { design: CrateDesign }) {
             if (!group.length) return null;
             return (
               <Fragment key={a}>
-                <tr className="grp">
-                  <td colSpan={4}>{ASSEMBLY_NAMES[a]}</td>
+                <tr className={styles.grp}>
+                  <td colSpan={4} className="eyebrow-label">
+                    {ASSEMBLY_NAMES[a]}
+                  </td>
                 </tr>
                 {group.map((l) => {
                   const cells = (
@@ -115,7 +109,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                           l.label
                         ) : (
                           // The row's click is the mouse shortcut; this button is the keyboard and screen-reader control.
-                          <button type="button" className="pick" aria-pressed={pin === l.key}>
+                          <button type="button" className={styles.pick} aria-pressed={pin === l.key}>
                             {l.label}
                           </button>
                         )}
@@ -145,7 +139,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                     <tr
                       key={l.key}
                       ref={pin === l.key ? pinnedRow : undefined}
-                      className={`row${hoverKey === l.key ? " hl" : ""}${pin === l.key ? " pin" : ""}`}
+                      className={`${styles.row}${hoverKey === l.key ? ` ${styles.hl}` : ""}${pin === l.key ? ` ${styles.pin}` : ""}`}
                       onMouseEnter={enter}
                       onMouseLeave={leave}
                       onFocus={enter}
@@ -161,7 +155,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
           })}
         </tbody>
       </table>
-      <div className="totals">
+      <div className={styles.totals}>
         <div>
           <b>{area(totals.plywoodM2, units)}</b>plywood
         </div>
