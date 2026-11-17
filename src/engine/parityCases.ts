@@ -51,8 +51,18 @@ const TOTAL_CASES = [
 /** A pallet-position limit that splits a batch of 8 of PART-003, which one crate would not fit (#108). */
 const SIZE_LIMIT_CASE = { part: "PART-003", quantity: 8, sizeLimitMm: { length: 1200, width: 800, height: 1000 } } as const;
 
+/** Long crates whose floor, walls and lid are bigger than a 4 × 8 ft sheet, so the engine splices them (#107). */
+const SPLICE_CASES = [
+  { part: "PART-002", quantity: 42 },
+  { part: "PART-003", quantity: 32 },
+] as const;
+
 export function parityCases(): ParityCase[] {
-  const runs = [...catalog.parts.flatMap((p) => p.suggested_quantities.map((quantity) => ({ part: p.id, quantity, sizeLimitMm: undefined }))), SIZE_LIMIT_CASE];
+  const runs = [
+    ...catalog.parts.flatMap((p) => p.suggested_quantities.map((quantity) => ({ part: p.id, quantity, sizeLimitMm: undefined }))),
+    SIZE_LIMIT_CASE,
+    ...SPLICE_CASES.map((c) => ({ ...c, sizeLimitMm: undefined })),
+  ];
   const totals = TOTAL_CASES.map(({ part, total }) => ({ part, quantity: total, total, sizeLimitMm: undefined }));
   return [...runs.map((r) => ({ ...r, total: undefined })), ...totals].map(({ part, quantity, sizeLimitMm, total }) => {
     const base = total ? totalParityRequest(part, total) : parityRequest(part, quantity);

@@ -6,7 +6,7 @@ import type { Message } from "./message";
  */
 
 /** Produced by `crateChecks.ts`. */
-type CrateCheckId = "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "lid" | "utilization" | "cardboard";
+type CrateCheckId = "spliced" | "lumber-length" | "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "lid" | "utilization" | "cardboard";
 
 /** Produced by `handling.ts`. */
 export type HandlingCheckId = "cog-offset" | "cog-tip" | "hand-carry" | "forklift" | "pallet-jack";

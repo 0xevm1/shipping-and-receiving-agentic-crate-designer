@@ -98,6 +98,9 @@ export interface ScrewLine {
     | "joists"
     | "side-cleats"
     | "end-cleats"
+    | "floor-joints"
+    | "wall-joints"
+    | "lid-joints"
     | "walls-to-floor"
     | "corners"
     | "bearers"
@@ -145,7 +148,10 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
   const count = (kind: MemberKind) => members.filter((m) => m.kind === kind).length;
   const cradles = (stacking: boolean) => members.filter((m) => m.kind === "cradle" && (m.variant === "stacking-cradle") === stacking).length;
   const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
-  const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a;
+  const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a && m.variant !== "joint-cleat";
+  // A joint cleat is screwed to the panel on each side of its seam: two rows, so twice the screws along it.
+  const jointScrews = (match: (m: Member) => boolean) => 2 * along((m) => m.variant === "joint-cleat" && match(m), every.cleat);
+  const jointRule = "along each joint cleat on both sides of the seam, plus 1 per side";
   const joists = count("joist");
   const joistCrossings = joists * count("skid") * SCREWS_PER_JOIST_CROSSING;
   const crossingRule = `${SCREWS_PER_JOIST_CROSSING} where each joist crosses a skid`;
@@ -180,6 +186,30 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
     line("cradles", "inside", "Cradles to floor", null, eachEnd, cradles(false) * SCREWS_PER_CRADLE),
     line("stacking-cradles", "inside", "Stacking cradles through the side walls", null, eachEnd, cradles(true) * SCREWS_PER_CRADLE),
     line("blocking", "inside", cradles(false) ? "End stops" : "Blocking posts", null, blockingRule, count("blocking") * SCREWS_PER_BLOCK),
+    line(
+      "floor-joints",
+      "base",
+      "Floor joint cleats to floor",
+      every.cleat,
+      jointRule,
+      jointScrews((m) => m.assembly === "base"),
+    ),
+    line(
+      "wall-joints",
+      "sides",
+      "Wall joint cleats to panels",
+      every.cleat,
+      jointRule,
+      jointScrews((m) => m.assembly === "sides" || m.assembly === "ends"),
+    ),
+    line(
+      "lid-joints",
+      "lid",
+      "Lid joint cleats to panel",
+      every.cleat,
+      jointRule,
+      jointScrews((m) => m.assembly === "lid"),
+    ),
     line("lid-cleats", "lid", "Lid cleats to lid panel", every.cleat, alongPlusOne, along(cleatOf("lid"), every.cleat)),
     line("lid-to-walls", "lid", "Lid to walls", every.panelJoint, "around the top", joint),
   ];
