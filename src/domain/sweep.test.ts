@@ -3,6 +3,7 @@ import { getPart, parts } from "./catalog";
 import { designCrate } from "./crate";
 import { DEFAULT_SETTINGS, rankLayouts, type DesignPart } from "./design";
 import { CrateSettingsSchema } from "./schema";
+import { planShipment } from "./shipment";
 import { DEFAULT_STANDARDS } from "./standards";
 import {
   compareSweepPoints,
@@ -93,6 +94,20 @@ describe("sweepQuantities: the curve", () => {
     expect(sweep.problem?.id).toBe("part-size");
     expect(sweep.curve).toEqual([]);
     expect(sweep.recommendation).toBeNull();
+  });
+});
+
+describe("the sweep and the shipment plan agree (§7.16, §7.10)", () => {
+  // Applying a recommendation (the Rules tab's Use, a shortlist configuration) sets the quantity
+  // and the layout; the plan must ship exactly that crate, once, with no split.
+  it.each(sweeps)("$p.id (upright $keepUpright): the recommendation and shortlist each plan as that one crate", ({ p, keepUpright, sweep }) => {
+    for (const point of [{ quantity: sweep.recommendation!.quantity, crate: sweep.recommendation!.crate }, ...sweep.shortlist]) {
+      const plan = planShipment(p, settings({ keepUpright, quantity: point.quantity }), point.crate!.layoutKey);
+      expect(plan.split).toBe(false);
+      expect(plan.totals.parts).toBe(point.quantity);
+      expect(plan.crates[0].result.design!.layout.key).toBe(point.crate!.layoutKey);
+      expect(plan.crates[0].result.design!.cost.totalUsd).toBeCloseTo(point.crate!.crateCostUsd, 9);
+    }
   });
 });
 

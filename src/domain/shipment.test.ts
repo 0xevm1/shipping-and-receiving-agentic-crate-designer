@@ -4,6 +4,7 @@ import { computeDesign } from "./design";
 import { describeShipment, planShipment, shipmentBom, withinOutsideLimits, type ShipmentPlan } from "./shipment";
 import type { DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
+import { sweepQuantities } from "./sweep";
 import { custom, settings, metricText as metric } from "./testFixtures";
 
 /**
@@ -186,6 +187,28 @@ describe("planShipment: splitting a batch", () => {
     const picked = planShipment(p, settings({ quantity: 200 }), pick);
     expect(picked.crates[0].result.design!.layout.key).toBe(pick);
     expect(picked.crates.map((c) => [c.count, c.quantity])).toEqual(plan.crates.map((c) => [c.count, c.quantity]));
+  });
+
+  it("keeps a batch whole when the picked layout is within the limits, though the recommended one isn't", () => {
+    // PART-001 upright at the sweep's 34: the volume-best crate is over the base rating, the
+    // sweep's layout is not. Without the pick the batch splits; with it, it ships as one crate.
+    const p = getPart("PART-001");
+    const s = settings({ keepUpright: true });
+    const rec = sweepQuantities(p, s).recommendation!;
+    const q = { ...s, quantity: rec.quantity };
+    expect(planShipment(p, q).split).toBe(true);
+    const plan = planShipment(p, q, rec.crate.layoutKey);
+    expect(plan.split).toBe(false);
+    expect(plan.crates[0].result.design!.layout.key).toBe(rec.crate.layoutKey);
+    expectWithinLimits(plan, DEFAULT_STANDARDS);
+  });
+
+  it("still splits when the picked layout for the whole batch is over the limits too", () => {
+    const p = getPart("PART-001");
+    const whole = computeDesign(p, settings({ quantity: 200 })).layouts;
+    const plan = planShipment(p, settings({ quantity: 200 }), whole[0].key);
+    expect(plan.split).toBe(true);
+    expect(plan.crates.map((c) => [c.count, c.quantity])).toEqual(planShipment(p, settings({ quantity: 200 })).crates.map((c) => [c.count, c.quantity]));
   });
 
   it("adds a per-crate limit check to each crate of a split", () => {

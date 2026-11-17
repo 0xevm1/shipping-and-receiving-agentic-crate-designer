@@ -1,7 +1,7 @@
 // POST /api/v1/designs: stateless headless calculation (#46 slice 7). Multipart GLB + the part's
 // facts in, ranked configurations out, nothing saved. Shapes: src/lib/api/designs.ts; docs/QUEUE.md.
 // Needs an API key (Authorization: Bearer) unless called from the app's own pages.
-import { authenticate } from "@/server/auth/authenticate";
+import { authenticate } from "@/server/auth";
 import { createApiKeyStore, getDb } from "@/server/db";
 import { calculateDesigns } from "@/server/designs/calculate";
 import { ApiFailure, errorResponse, json } from "@/server/http";

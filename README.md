@@ -241,6 +241,14 @@ tab at a time.
 
     The pill shows "Exporting…" for at least 1.5 s (no hold or spinner with reduced motion),
     then "Downloaded crate-PART-001-x4.zip". The separate downloads above stay. Spec §7.13.
+
+    **Download all** (#46), the outlined pill beside it, downloads one .zip comparing the design
+    on screen with the best quantities per crate: a folder each with the GLB, PDF and cut list, a
+    `manifest.json` (engine version, input hash, every file's size and SHA-256) and a
+    `comparison.pdf` (quantity per crate, crates, outside size, gross, cost per part, and why the
+    recommended quantity won). Every file carries the engine version and input hash; each PDF
+    states the quantity rationale and the constraint that stopped a larger crate. No freight
+    dollars appear (there are no freight rates). Spec §7.17.
 12. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
@@ -313,8 +321,9 @@ tab at a time.
   the last-opened crate are saved in the browser's `localStorage` (and the last loaded `.glb` in
   IndexedDB), per browser, under versioned keys; bad data is
   skipped with a warning). Designs also move as JSON files (one design, or the whole library)
-  and share links. The shared store is Postgres (#46), being built in slices:
-  [`docs/POSTGRES.md`](docs/POSTGRES.md); spec §9 has the details.
+  and share links. The shared store is Postgres (#46), being built in slices: a part's
+  configurations can be saved to a shared job on the server that every open tab sees
+  ([`docs/API.md`](docs/API.md), [`docs/POSTGRES.md`](docs/POSTGRES.md)); spec §9 has the details.
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
 
@@ -403,8 +412,9 @@ src/lib/           edge code, may import domain: display units, cut-list formatt
                    loading, part analysis for shaped blocking, the checks the UI shows, the
                    export document, the Export pill's .zip and PDF (tested)
 src/engine/        the crate engine, may import lib and domain: one API (design, cut list,
-                   Export .zip) that runs the same in the page, a Web Worker and Node, every
-                   output stamped with engineVersion and inputHash (spec §5.1)
+                   Export .zip, per-artifact GLB / PDF / CSV builders and the multi-configuration
+                   bundle) that runs the same in the page, a Web Worker and Node, every output
+                   stamped with engineVersion and inputHash (spec §5.1, §7.17)
 src/state/         may import engine, lib and domain: zustand stores, persistence, loading
                    flows, the engine's Web Worker and its client, per-frame animation values
 src/server/        server-only (Postgres via drizzle, S3 blob storage, the job queue, the engine's
@@ -434,13 +444,15 @@ e2e/               Playwright end-to-end UI tests (bun run e2e)
 db/migrations/     SQL migrations written by drizzle-kit (bun run db:generate)
 infra/             blob emulator bucket setup (CORS) for docker-compose.yml
 scripts/           infra, worker (job queue), apikey, blob-gc, pre-commit
-docs/              SPECIFICATION.md, POSTGRES.md, BLOB_STORAGE.md, QUEUE.md, design-handoff/
+docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, QUEUE.md, design-handoff/
 ```
 
 ## Docs
 
 - [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md): the full spec covering the data model,
   algorithms, construction rules, invariants, decisions and roadmap.
+- [`docs/API.md`](docs/API.md): the `/api/v1` HTTP API: parts, design jobs, server-verified
+  configuration saves, error codes, idempotency and the events each write emits.
 - [`docs/POSTGRES.md`](docs/POSTGRES.md): the Postgres data store: tables, org scoping,
   scripts, environment and ports.
 - [`docs/BLOB_STORAGE.md`](docs/BLOB_STORAGE.md): GLBs and generated files in S3-compatible

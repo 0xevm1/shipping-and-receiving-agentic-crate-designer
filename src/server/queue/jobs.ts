@@ -13,8 +13,8 @@ import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
 import { emitEvent } from "../events/emit";
 import { type OrgContext, orgContext } from "../db/org";
-import { createQueueStore, type QueueJob } from "../db/queue";
-import { createRepository, type Database, inTransaction, type Transaction } from "../db/repository";
+import type { QueueJob } from "../db/queue";
+import { createRepository, type Database, inTransaction, type Repository } from "../db/repository";
 import type { EnginePool } from "../workers/pool";
 import { type JobHandler, PermanentJobError } from "./runner";
 
@@ -31,30 +31,29 @@ export type BundleJobPayload = z.infer<typeof BundleJobPayloadSchema>;
 export const JOB_KINDS = ["sweep", "bundle"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
-type Executor = Database | Transaction;
-
-async function requireJob(executor: Executor, ctx: OrgContext, jobId: string) {
-  const job = await createRepository(executor).jobs.get(ctx, jobId);
+async function requireJob(repo: Repository, ctx: OrgContext, jobId: string) {
+  const job = await repo.jobs.get(ctx, jobId);
   if (!job) throw new Error(`No design job ${jobId} in this org.`);
   return job;
 }
 
 /**
- * Queues the sweep for design job `jobId` (POST /jobs calls this, in its own transaction to have
- * both commit together). A sweep already queued or running for the job is returned, not doubled.
+ * Queues the sweep for design job `jobId`. Pass the repository `inTransaction` hands you to commit
+ * the queue row with your change (the `onJobCreated` hook does, see `./register.ts`). A sweep
+ * already queued or running for the job is returned, not doubled.
  */
-export async function enqueueSweep(ctx: OrgContext, jobId: string, executor: Executor): Promise<QueueJob> {
-  await requireJob(executor, ctx, jobId);
+export async function enqueueSweep(ctx: OrgContext, jobId: string, repo: Repository): Promise<QueueJob> {
+  await requireJob(repo, ctx, jobId);
   const payload: SweepJobPayload = { jobId };
-  const { job } = await createQueueStore(executor).enqueue(ctx, { kind: "sweep", payload, dedupeKey: jobId });
+  const { job } = await repo.queue.enqueue(ctx, { kind: "sweep", payload, dedupeKey: jobId });
   return job;
 }
 
 /** Queues a server-built bundle for design job `jobId`. */
-export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, executor: Executor): Promise<QueueJob> {
+export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, repo: Repository): Promise<QueueJob> {
   const payload = BundleJobPayloadSchema.parse(input);
-  await requireJob(executor, ctx, payload.jobId);
-  const { job } = await createQueueStore(executor).enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3 });
+  await requireJob(repo, ctx, payload.jobId);
+  const { job } = await repo.queue.enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3 });
   return job;
 }
 
@@ -105,24 +104,24 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
       const ids: string[] = [];
       for (const c of report.configurations) {
         const { row } = await tx.configurations.save(org, {
-          jobId: job.id,
           inputHash: c.inputHash,
           quantityPerCrate: c.quantityPerCrate,
           layout: c.layoutKey,
           settings: c.settings,
           resultSummary: { ...c, settings: undefined, sweepInputHash: report.inputHash },
           score: c.scoreUsdPerPart,
-          origin: "precomputed",
           engineVersion: report.engineVersion,
         });
+        await tx.configurations.link(org, job.id, row.id, "precomputed");
         ids.push(row.id);
       }
       const recommendedConfigurationId = ids[0] ?? null;
       const current = await tx.jobs.get(org, job.id);
-      if (current) {
+      // The job moves on only from open/running, and a selection someone already made is kept.
+      if (current && (current.status === "open" || current.status === "running")) {
         await tx.jobs.update(org, job.id, current.version, {
           status: report.problem || !recommendedConfigurationId ? "error" : "ready",
-          selectedConfigurationId: recommendedConfigurationId ?? current.selectedConfigurationId,
+          selectedConfigurationId: current.selectedConfigurationId ?? recommendedConfigurationId,
         });
       }
       await emitEvent(tx, org, {

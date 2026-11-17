@@ -4,7 +4,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ORG } from "../db/org";
 import { createQueueStore, type QueueJob, type QueueStore } from "../db/queue";
+import { inTransaction } from "../db/repository";
 import { createTestDatabase, type TestDatabase } from "../db/testing";
+import { runJobCreatedHooks } from "../jobs/hooks";
 import { createEnginePool } from "../workers/engine";
 import type { EnginePool } from "../workers/pool";
 import { createJobHandlers, createOnDead, enqueueSweep, type SweepJobResult } from "./jobs";
@@ -208,9 +210,9 @@ describe("the sweep job", () => {
 
   it("sweeps on the engine pool, saves the shortlist, selects the recommendation and emits configs.ready", async () => {
     const job = await designJob(40);
-    const queued = await enqueueSweep(DEFAULT_ORG, job.id, t.db);
+    const queued = await enqueueSweep(DEFAULT_ORG, job.id, t.repo);
     // A second enqueue while it is pending is the same queue job.
-    expect((await enqueueSweep(DEFAULT_ORG, job.id, t.db)).id).toBe(queued.id);
+    expect((await enqueueSweep(DEFAULT_ORG, job.id, t.repo)).id).toBe(queued.id);
 
     const r = runner(createJobHandlers({ db: t.db, pool }), { onDead: createOnDead(t.db) });
     expect(await r.runOnce()).toBe(true);
@@ -236,8 +238,30 @@ describe("the sweep job", () => {
     expect(events[0]!.payload).toMatchObject({ count: configs.length, recommendedConfigurationId: best.id, inputHash: result.inputHash });
   });
 
+  it("every new design job queues its sweep in the job's own transaction (onJobCreated)", async () => {
+    await import("./register");
+    const part = await t.repo.parts.create(DEFAULT_ORG, { name: "Hook", massKg: 3, sizeXMm: 100, sizeYMm: 100, sizeZMm: 100, source: "upload" });
+    const job = await inTransaction(t.db, async (tx) => {
+      const created = await tx.jobs.create(DEFAULT_ORG, { partId: part.id });
+      await runJobCreatedHooks(tx, DEFAULT_ORG, created);
+      return created;
+    });
+    const [queued] = await t.sql<{ kind: string; payload: { jobId: string } }[]>`select kind, payload from queue_job where dedupe_key = ${job.id}`;
+    expect(queued).toMatchObject({ kind: "sweep", payload: { jobId: job.id } });
+    // A rolled-back job leaves no queue row.
+    await expect(
+      inTransaction(t.db, async (tx) => {
+        const created = await tx.jobs.create(DEFAULT_ORG, { partId: part.id });
+        await runJobCreatedHooks(tx, DEFAULT_ORG, created);
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    const [{ n }] = await t.sql<{ n: number }[]>`select count(*)::int as n from queue_job`;
+    expect(n).toBe(1);
+  });
+
   it("refuses to queue a sweep for a job that isn't the org's", async () => {
-    await expect(enqueueSweep(DEFAULT_ORG, "00000000-0000-4000-8000-00000000ffff", t.db)).rejects.toThrow(/No design job/);
+    await expect(enqueueSweep(DEFAULT_ORG, "00000000-0000-4000-8000-00000000ffff", t.repo)).rejects.toThrow(/No design job/);
   });
 
   it("when it is dead-lettered, the design job goes to error and job.error is emitted", async () => {

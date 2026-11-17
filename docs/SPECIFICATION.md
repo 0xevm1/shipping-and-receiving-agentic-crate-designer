@@ -195,14 +195,16 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 | `engine.ts` `cutList(request)` | The Cut list tab's CSV and file name (crate type or, for a split batch, the shipment), stamped |
 | `engine.ts` `inputHash(request)`, `summarize(plan)` | The stamp's hash; the headline numbers (outside size, gross, tare, screws, cost per crate type, totals, problem) |
 | `sweep.ts` `runSweep(request)`, `rankConfigurations(request)` | The quantity sweep (§7.16) as an engine call: `SweepRequestSchema` (part, rules = settings without the quantity, standards, optional freight rates, `maxQuantity`, `total`), stamped with `engineVersion` and `sweepInputHash` (canonical `{ v: 1, kind: "sweep", part, rules, standards, freightRates, maxQuantity, total }`). `rankConfigurations` adds every shortlisted quantity designed in full, ranked best first: the headless answer of `POST /api/v1/designs`, the queue's sweep job and the CLI ([QUEUE.md](QUEUE.md)) |
-| `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped. Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
+| `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped (every file in it carries the stamp). Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
+| `artifacts.ts` `buildArtifact(kind, request, reader)` | One artifact (`glb`, `pdf`, `csv`) for one configuration: `{ bytes, contentType, fileName, engineVersion, inputHash, sha256 }` (§7.17) |
+| `artifacts.ts` `buildMultiBundleZip(configs, reader, options)` | Download all: a ZIP with a folder per configuration, `manifest.json` and `comparison.pdf` (§7.17) |
 | `glb.ts` | Runtime adapters for GLBs: `urlModelReader` (browser, `GLTFLoader` on the model URL, cached), `bytesModelReader` / `parseGlb` (any runtime, `GLTFLoader.parse` on bytes), `crateGlb` (`GLTFExporter`, adding a minimal `FileReader` where the runtime has none, as Node) |
 | `schemas.ts` | zod schemas for every call: `DesignRequestSchema` (part, settings, standards, layoutKey, ranking), `DesignResponseSchema`, `DesignSummarySchema`, `EngineStampSchema`, `CutListRequestSchema` / `CutListResponseSchema`, and the worker messages. The browser, server and CLI validate the same types; the page's own calls are typed and skip parsing |
 
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
 
 - **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
-  `ENGINE_REVISION`, as `0.1.0+engine.1`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  `ENGINE_REVISION`, as `0.1.0+engine.3`. **Rule:** bump `ENGINE_REVISION` in the same change as
   anything that gives a different output for the same input (a rule, a constant, an algorithm, a
   default standard, or the text of a generated file). A refactor that leaves every output
   identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
@@ -222,8 +224,12 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
   - `v` is bumped if the hashed shape changes, so old and new hashes never collide. The engine
     version is not in the hash: equal inputs hash the same across versions, and a server compares
     both before trusting a result.
-  - File outputs (`cutList`, `buildBundleZip`) carry their design's stamp; their own options
-    (units, scope) are not hashed.
+  - File outputs (`cutList`, `buildBundleZip`, `buildArtifact`) carry their design's stamp; their
+    own options (units, scope, crate type, time) are not hashed. The stamp is also written
+    **inside** every file the engine builds (§7.17): the GLB's scene `extras`, the PDF's keywords
+    and page footer, a `# Engine …, input …` line in the CSV, `engine` in `design.json`, and two
+    lines of `README.txt`. `cutList`'s own CSV text (the Cut list tab's download, the parity
+    baseline) has no stamp line.
 
 **In the browser.** `src/state/engineClient.ts` runs the engine in a Web Worker
 (`src/state/engine.worker.ts`, bundled by Next.js from `new Worker(new URL(…, import.meta.url))`),
@@ -250,6 +256,12 @@ polling, leases, retries, dead letter). See [QUEUE.md](QUEUE.md).
 **Downloads.** The Export pill builds its ZIP through `buildBundleZip` with `urlModelReader`; the
 PDF, ZIP and GLB code is loaded only then, and nothing goes to a server. The same call in Node
 takes `bytesModelReader(glbBytes)`.
+
+**On the server.** A configuration saved from the browser (`POST /api/v1/jobs/:id/configs`,
+`docs/API.md`) is not trusted: the server runs `designShipment` on the same request and stores it
+only if its `engineVersion`, `inputHash` and summary (as canonical JSON) are the browser's
+(`src/server/jobs/verify.ts`). Another engine version is `409` and the tab is asked to reload;
+any other difference is `422`. Parity is what makes an honest save always match.
 
 **Parity.** `parity.node.test.ts` (Node) and `parity.jsdom.test.ts` (jsdom) run the three sample
 parts at each suggested quantity and compare against one committed baseline,
@@ -336,6 +348,10 @@ bump `ENGINE_REVISION`.
 | `src/engine/canonical.ts`, `sha256.ts` | Canonical JSON and a synchronous SHA-256, for `inputHash` |
 | `src/engine/glb.ts` | GLB adapters: `urlModelReader` (browser), `bytesModelReader` / `parseGlb` (any runtime), `crateGlb`, `ensureFileReader`; loaded with `import()` |
 | `src/engine/files.ts` | `buildBundleZip`: the Export package in any runtime, PDF / ZIP / GLB code loaded on first use |
+| `src/engine/artifacts.ts` | `buildArtifact` (one stamped GLB, PDF or CSV), `buildMultiBundleZip` (Download all), `sweepFor`, the manifest types (§7.17) |
+| `src/engine/artifactCases.ts` | The artifact parity cases: each sample part at its recommended quantity, and the CSV baseline text (`__snapshots__/artifacts-csv.txt`) |
+| `src/lib/comparison.ts`, `comparisonPdf.ts` | The multi-configuration comparison summary (`buildComparison`, pure) and its one-sheet PDF (`comparisonToPdf`, jsPDF through `exportPdf.ts`'s `Writer`) |
+| `src/state/downloadAll.ts` | `useDownloadAll`: the Download all run beside the Export pill (`run(configs?)`; default: the design on screen plus the sweep's shortlist, `shortlistConfigs`) |
 | `src/engine/parityCases.ts` | The browser / Node parity cases and the baseline text (`__snapshots__/parity.json`) |
 | `src/state/engineClient.ts` | `engine`: the page's engine client, a Web Worker with an in-thread fallback, latest-wins (`createEngineClient`) |
 | `src/state/engine.worker.ts` | The engine's Web Worker entry (designs and sweeps, `engine/run.ts`) |
@@ -344,7 +360,7 @@ bump `ENGINE_REVISION`.
 | `src/lib/api/designs.ts` | `POST /api/v1/designs` fields and response schemas, client-safe ([QUEUE.md](QUEUE.md)) |
 | `src/server/workers/` | The engine's `worker_threads` pool (`pool.ts`, `engine.ts` `getEnginePool`) and thread entry (`engineThread.ts`, bundled by `bun run engine:build`) |
 | `src/server/queue/`, `src/server/db/queue.ts` | The Postgres job queue: enqueue / claim / lease / retry / dead letter, the runner, LISTEN, job kinds (`enqueueSweep`, `enqueueBundle`) |
-| `src/server/auth/authenticate.ts`, `src/server/db/apiKeys.ts` | `authenticate(request)` → `OrgContext` (API key, or the UI's same-origin marker); hashed API keys |
+| `src/server/auth.ts`, `src/server/db/apiKeys.ts` | `authenticate(request)` → `OrgContext` (API key, or the UI's same-origin marker); hashed API keys |
 | `src/cli/` | `bun run crate`: argument parsing, the API call, the in-process `--offline` run |
 | `src/state/fakeEngineWorker.ts` | A stand-in worker for tests (answers on `flush()`) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
@@ -383,6 +399,12 @@ bump `ENGINE_REVISION`.
 | `src/lib/fileNames.ts` | File names of the cut list CSV and the design file |
 | `src/lib/events.ts` | Live event types (#46 §3), shared by server and browser: `CRATE_EVENT_TYPES`, payload schemas (`parseEventPayload`, 4 KB cap), the NOTIFY payload and the SSE message (`JobEventMessageSchema`); `CRATE_EVENTS_CHANNEL` |
 | `src/lib/jobEvents.ts` | `subscribeJobEvents(jobId, onEvent)`: EventSource on `/api/v1/events` that resumes from the last id and delivers each event once |
+| `src/lib/api/jobs.ts` | Zod shapes of `/api/v1/jobs*` (#46 slice 5), shared by the Route Handlers and the browser: create, snapshot, save configuration, patch, the 409 bodies; reference in `docs/API.md` |
+| `src/state/jobApi.ts` | The browser's calls to `/api/v1/parts` and `/api/v1/jobs*`; never throws, and any network error or 5xx is `offline` |
+| `src/state/jobSync.ts` | `useJobSync` and `startJobSync`: the part on screen as a shared job on the server (register or upload the part, open or reuse its job, snapshot, events); `saveConfiguration` (the one save path, for the offline queue to wrap), `selectConfiguration`, `configurationBody` |
+| `src/components/island/SharedJob.tsx` | "Shared job" under Saved designs on the Overview: save to the job, the job's configurations (use, recommend), connection status, the reload prompt (`SharedJob.module.css`) |
+| `src/server/jobs/` | Jobs and configurations logic behind the Route Handlers: `jobs.ts` (create, snapshot, save, patch), `verify.ts` (recompute and compare a saved configuration), `idempotency.ts` (`Idempotency-Key`), `hooks.ts` (`onJobCreated`, for the queue's sweep) |
+| `src/server/auth.ts` | `callerOrg(request)`: the default org until there are accounts; the one place auth plugs in |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
@@ -683,6 +705,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
+  "engine": { "version": "0.1.0+engine.2", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -1253,7 +1276,12 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
 1. **One crate when it fits.** If the crate for the whole batch is within every limit, the plan
    is that crate: `computeDesign`'s own result, value for value (tested on every sample part ×
    suggested quantity × keep-upright, so the 18-case baseline can't move). A single part is
-   never split (Q = 1 stays as today, with its `door` or `base-rating` cautions).
+   never split (Q = 1 stays as today, with its `door` or `base-rating` cautions). **A layout
+   pick counts:** when `layoutKey` is one of the whole batch's layouts and the crate on it is
+   within every limit, the batch ships as that one crate even if the recommended layout's crate
+   isn't. This is what makes applying the quantity sweep's recommendation (§7.16: quantity and
+   layout) plan as exactly that crate: the sweep's hard checks (`door`, `base-rating`, gross and
+   part limits) imply these limits, so a crate it passes never splits.
 2. **Layouts that fit the trailer first.** For any part count, if the recommended layout is over
    the trailer limits but others aren't, the ones that fit are ranked ahead (each in its usual
    order) and the best of them is recommended.
@@ -1273,8 +1301,8 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
    2 × 4 + 1 × 2.
 6. **When even one part is over the limits,** every part ships in its own crate, `unmet` says
    why, and each crate's `crate-limit` check is a caution.
-7. **Layout picks:** `layoutKey` applies to the first crate type that has that layout; the
-   split itself always uses the recommended layouts.
+7. **Layout picks:** besides keeping a batch whole (step 1), `layoutKey` applies to the first
+   crate type that has that layout; a split itself always uses the recommended layouts.
 
 On a split, every crate type gets the `crate-limit` check (§7.7); its text names the limits as
 "1,000 kg gross or the base rating, the trailer door and floor". `shipmentBom(plan)` merges the
@@ -1532,6 +1560,13 @@ cautions still exports (no confirm dialog), but the pill carries an amber dot, a
 `aria-describedby` note such as "1 caution, see Checks". The zip replaced #27's
 "Download 3D model (.glb)" and its "Include parts" switch; its GLB always includes the parts.
 
+**Stamps and the quantity (#46).** Built by the engine, every file in the package carries
+`engineVersion` and `inputHash` (§5.1): the GLB's scene `extras`, the PDF's keywords and a footer
+line on every page, a `# Engine …` line in each CSV, `engine` in `design.json` and two README lines.
+The PDF also has a **Quantity per crate** section after the part (§7.17), and its creation date
+is the export time and its file id comes from the hash, so equal inputs at the same time give
+equal bytes.
+
 ### 7.14 Centre of gravity and handling (`src/domain/handling.ts`, #8)
 
 `analyseHandling(members, layout, partKg, standards)` reads the finished crate: the members
@@ -1756,8 +1791,15 @@ With the defaults the sample parts are stopped by the base rating or the 1,000 k
 about half the others. A split counts only when every size is `ok` on the curve. The lowest cost
 per part wins (crate types' costs × counts, plus freight with rates, ÷ N); ties go to fewer crates
 (each `c` has one split, so density never breaks a tie here). Null when no split passes (one part
-alone fails a hard check). `planShipment` (§7.10) is unchanged: it plans the quantity on screen by
-the largest crate that fits; `planTotal` plans a total by cost.
+alone fails a hard check). `planShipment` (§7.10) plans the quantity on screen by the largest
+crate that fits; `planTotal` plans a total by cost.
+
+**The sweep and the shipment plan agree.** A quantity and layout from the sweep (the
+recommendation or any shortlist entry) given to `planShipment` as the quantity and `layoutKey`
+plan as one crate of that quantity on that layout, never a split: `planShipment` honours a picked
+layout that is within the limits (§7.10 step 1), and every crate the sweep passes is. Tested for
+every sample part × keep-upright, so the Rules tab's **In use**, the PDF's "Recommended" and the
+bundle's `-recommended` folder all hold for the applied recommendation.
 
 **Speed:** 30–125 ms per sample part on an M-series Mac (the gross-limit cut-off skips most of
 1–200). It runs off the render thread in the engine's Web Worker (`engine.sweep`, §5.1), and on
@@ -1768,6 +1810,84 @@ a fixed CPU loop's time, whichever is larger (load-aware, #48).
 which sets the quantity and the recommended layout. Loading a part does not change the quantity
 (it still starts at the first suggested quantity). The recommendation can move once the model's
 profile is measured (§7.5b), since shaped blocking changes the crate.
+
+### 7.17 Artifacts and the multi-configuration bundle (`src/engine/artifacts.ts`, #46)
+
+The files a configuration leaves the building with, built by the same engine code in the page and
+in Node, so the server's artifact routes (`/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`,
+`bundle.zip`, later) store exactly the bytes the browser would make. A **configuration** is a
+`DesignRequest` (part, settings with the quantity, standards, layout pick, ranking).
+
+**`buildArtifact(kind, request, reader)`** returns `{ kind, bytes, contentType, fileName,
+engineVersion, inputHash, sha256 }`. `request` may add `units` (imperial when absent),
+`crateIndex`, `generatedAt`, `timeZone`, and a precomputed `sweep` or `plan`. `reader` is the GLB
+adapter (§5.1: `urlModelReader` in the browser, `bytesModelReader(bytes)` in Node; null gives the
+boards only).
+
+| Kind | File | Content type | Stamp inside |
+|---|---|---|---|
+| `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
+| `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.2, input …` before the column names |
+
+A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
+
+**Quantity rationale in the PDF (#26 follow-up).** The engine runs the sweep (§7.16, no freight
+rates) for the request's part and rules, and the PDF's **Quantity per crate** section says:
+- whether this crate **is the recommendation** (`isRecommended`: one crate type whose quantity and
+  layout are the recommendation's) — "Recommended: 34 per crate" — or not — "20 per crate; the
+  sweep recommends 34";
+- the sweep's rationale (the score in crate cost per part and what limits it);
+- **the constraint that stopped a larger crate**: "35 per crate fails the base rating" with the
+  failing check's text, or "Nothing up to 200 per crate";
+- "Freight: Not priced" (no rates, so no freight dollars), and, while any cost input is the
+  shipped placeholder (`costsArePlaceholder(standards)`: wood prices, screw price or labour still
+  equal `DEFAULT_STANDARDS`), "Costs use the shipped placeholder … not for a quote".
+
+The `/print` route has no sweep and shows no quantity section.
+
+**`buildMultiBundleZip(configs, reader, { units, generatedAt, timeZone })`** gives one ZIP:
+
+```
+crates-PART-001-6-configs.zip
+├─ 01-x4/                        the configurations in the order given, duplicates (equal inputHash) once
+│  ├─ crate-PART-001-x4.glb      one per crate type of a split batch
+│  ├─ crate-PART-001-x4.pdf
+│  └─ crate-PART-001-x4.csv      the cut list (…-shipment.csv for a split batch)
+├─ 02-x34-recommended/           "-recommended" marks the sweep's recommendation
+│  └─ …
+├─ comparison.pdf                the comparison summary
+└─ manifest.json
+```
+
+A configuration with no crate gets its folder with the PDF only. **`manifest.json`**:
+`{ kind: "crate-designer/bundle", version: 1, engineVersion, bundleHash, created, units, part:
+{ id, name }, costBasis: "crate-only", placeholderCosts, recommendation: { quantity, layoutKey,
+crateCostUsdPerPart, rationale, stoppedBy: { quantity, constraint, reason } | null } | null,
+configurations: [{ folder, engineVersion, inputHash, quantity, layoutKey, layout, ranking,
+recommended, split, crates, perCrate, outsideMm, grossKg, crateCostUsdPerPart, problem, files }],
+files }`. Every file entry is `{ path, kind, contentType, bytes, sha256 }`; `files` lists
+`comparison.pdf` (the manifest doesn't list itself). `bundleHash` is the SHA-256 of the
+configurations' input hashes joined by newlines; it is the comparison PDF's `inputHash`. The ZIP
+entries carry `generatedAt`.
+
+**`comparison.pdf`** (`buildComparison` in `src/lib/comparison.ts`, laid out by
+`comparisonToPdf`): the part; a table with a row per configuration — folder, quantity per crate
+("30 / 20" for a split), crates, outside size and gross (crate A), crate cost per part, and a note
+(Recommended; the split; the hard rule a quantity fails, with its reason; or how much more per part
+than the recommendation); then **Why this quantity**: the recommendation, its rationale and the
+constraint that stopped a larger crate. It always says freight is not priced, and says when costs
+are placeholders. **No freight dollar figure appears** in the PDFs or the manifest: the sweep is run
+without rates (`costBasis: "crate-only"`).
+
+**Download all (browser).** Beside the Export pill (§8.2), an outlined pill **Download all**
+builds this ZIP in the page (`useDownloadAll`, `src/state/downloadAll.ts`): `run(configs?)` takes
+any plain array of `DesignRequest`s, so a job's saved configurations can feed it; without one it
+bundles the design on screen and the sweep's shortlist (`shortlistConfigs(current, sweepFor(current))`,
+each shortlist quantity at its layout with the same rules). The sweep, PDF, ZIP and GLB code load
+with `import()` on the first click; nothing goes to a server. States and timings are the Export
+pill's: "Bundling…" with a spinner (at least 1.5 s unless reduced motion), then "Downloaded
+crates-PART-001-6-configs.zip" in its own `role="status"` note, or one plain error sentence.
 
 ## 8. UI
 
@@ -1858,7 +1978,8 @@ The canvas fills the window. Four regions float above it:
     framing. The **Export pill** (#51) stays in the header under the part lines, 44 px tall,
     rather than moving into the drawer: it is one tap away without opening anything, it belongs
     to the part and crate the header describes, and the top inset is measured, so the crate
-    moves down to make room. Its status note sits beside it, or wraps under it.
+    moves down to make room. Its status note sits beside it, or wraps under it. **Download all**
+    (§7.17), an outlined pill of the same shape, sits after it in the same row.
   - **Hamburger** (top right, 48 px, "Crate details"): opens the drawer. It has `aria-expanded`
     and `aria-controls="island"`.
   - **Drawer:** the island, full height at the right edge, `min(88vw, 440px)` wide, over a
@@ -2368,9 +2489,13 @@ in `db/migrations/`, the first tables (`org`, `part`, `part_model`, `design_job`
 `org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Slice 2
 adds live events: an `event` row written in the same transaction as the change NOTIFYs channel
 `crate_events`, one LISTEN connection per process fans out to `GET /api/v1/events?job=…` (SSE,
-resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Nothing
-in the UI reads or writes it yet: the browser storage above stays the source until the jobs API
-lands. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
+resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Slice 5 adds the
+jobs and configurations API (`docs/API.md`): when a part loads, the app opens (or reuses) a job for
+it on the server and lists the job's saved configurations; **Save to job** posts the crate on
+screen, which the server recomputes with the engine before storing, and other tabs see it through
+the job's events. When the server or database can't be reached nothing is saved there and
+everything else works as before; the browser storage above is still what reopens a crate after a
+reload. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
 through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The
 earlier SQLite WASM plan, `DATA_STORE.md`, was dropped for this.)
 
@@ -2394,6 +2519,22 @@ covers the in-thread fallback, latest-wins and falling back when the worker fail
 `store.worker.test.ts` covers the store with a worker: an edit shows at once, its design lands
 with `designedFrom`, quick edits build on each other, a crate type waits for its plan, and the
 `restoring` hold waits for the reopened design.
+
+**Artifacts (`src/engine/artifacts.node.test.ts`, `artifacts.jsdom.test.ts`, §7.17):** in Node,
+for each sample part at its recommended quantity and layout, with `bytesModelReader`, every
+artifact kind is built and stamped (`sha256` matches the bytes); the GLB reloads with `parseGlb`,
+carries the stamp in `userData`, holds every part, and its crate is the outside size within 1 mm on
+each axis; the PDF holds the hash, the quantity line (recommended, or "the sweep recommends") and
+the constraint that stopped a larger crate; the CSV has its stamp line. The same PDF input and time
+give the same bytes. The multi-configuration bundle (PART-002, current design plus shortlist and a
+duplicate) has a folder per unique configuration with GLB, PDF and CSV, a manifest whose sizes and
+hashes match the ZIP's files and whose input hashes match the engine's, one recommended folder, and
+a comparison PDF with every folder, the rationale and constraint, "Freight is not priced", the
+placeholder note and no freight dollars. **CSV parity:** Node and jsdom both match
+`__snapshots__/artifacts-csv.txt` (the engine version replaced by `<engine>`).
+`src/state/downloadAll.test.ts` checks the default configurations and that `run` takes any array.
+`files.test.ts` checks the stamp in each file of the Export package; `standards.test.ts` checks
+`costsArePlaceholder`.
 
 **`src/domain/domain.test.ts`** checks:
 

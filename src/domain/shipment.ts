@@ -73,7 +73,8 @@ interface Candidate {
 
 /**
  * Plans how `settings.quantity` parts ship. `layoutKey` picks a layout for the crate type
- * that has it (the user's pick on the Layouts tab); the split itself uses each type's
+ * that has it (the user's pick on the Layouts tab). A picked layout for the whole batch that is
+ * within every limit keeps the batch in one crate; otherwise the split uses each type's
  * recommended layout.
  */
 export function planShipment(
@@ -133,6 +134,14 @@ export function planShipment(
     memo.set(total, { quantity: total, result: single, fits: fitsLimits(single.design, total) });
   }
   const whole = candidate(total);
+  // The user's pick for the whole batch counts too: a batch ships in one crate when the crate on
+  // the picked layout is within every limit, even when the recommended one isn't. So a quantity
+  // and layout the sweep recommends (§7.16, whose hard checks imply these limits) never splits.
+  const pick = layoutKey && layoutKey !== whole.result.design?.layout.key ? whole.result.layouts.find((l) => l.key === layoutKey) : undefined;
+  const pickDesign = pick && !whole.fits ? designCrate(part, settings, pick, standards) : null;
+  if (pickDesign && fitsLimits(pickDesign, total)) {
+    return plan([{ label: "A", count: 1, quantity: total, result: { ...ranked(whole.result, total), design: pickDesign } }], null, standards);
+  }
   if (whole.fits || total === 1) {
     // One crate: exactly `computeDesign`, unless a layout had to be skipped for the trailer.
     const result = withLayout(ranked(whole.result, total), part, settings, layoutKey, standards);

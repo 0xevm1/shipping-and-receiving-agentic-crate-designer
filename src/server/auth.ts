@@ -1,19 +1,26 @@
 /**
- * Who is calling (#46 slice 7, docs/QUEUE.md "API keys"): one helper every Route Handler can call
- * to get the `OrgContext` its queries need.
+ * Who is calling (#46, #60). Route Handlers get their `OrgContext` only from here.
  *
- * - `Authorization: Bearer <key>`: an API key (CLI, ERP, batch scripts). Unknown, malformed or
- *   revoked → 401. The key's org is the context.
- * - Otherwise, a request from the app's own pages (`Sec-Fetch-Site: same-origin`, which browsers
- *   set and page scripts can't change) is the UI: `DEFAULT_ORG` until there are sessions.
- * - Otherwise → 401 when the route requires a key (`/designs` does), else `DEFAULT_ORG`.
+ * - `callerOrg(request)`: the UI's routes. No accounts yet, so every request acts for the default
+ *   org; sessions replace this one function later.
+ * - `authenticate(request, …)` (#46 slice 7, docs/QUEUE.md "API keys"): for routes scripts call.
+ *   - `Authorization: Bearer <key>`: an API key (CLI, ERP, batch scripts). Unknown, malformed or
+ *     revoked → 401. The key's org is the context.
+ *   - Otherwise, a request from the app's own pages (`Sec-Fetch-Site: same-origin`, which browsers
+ *     set and page scripts can't change) is the UI: `DEFAULT_ORG` until there are sessions.
+ *   - Otherwise → 401 when the route requires a key (`/designs` does), else `DEFAULT_ORG`.
  *
- * The same-origin marker is routing, not security: a non-browser client can send any header.
- * It keeps scripts on keys from day one; real UI auth (sessions) replaces it later.
+ * The same-origin marker is routing, not security: a non-browser client can send any header. It
+ * keeps scripts on keys from day one; real UI auth (sessions) replaces it later.
  */
-import { DEFAULT_ORG, type OrgContext, orgContext } from "../db/org";
-import type { ApiKeyStore } from "../db/apiKeys";
-import { ApiFailure } from "../http";
+import type { ApiKeyStore } from "./db/apiKeys";
+import { DEFAULT_ORG, type OrgContext, orgContext } from "./db/org";
+import { ApiFailure } from "./http";
+
+export function callerOrg(request: Request): OrgContext {
+  void request;
+  return DEFAULT_ORG;
+}
 
 export type AuthResult = { org: OrgContext; via: "api-key"; keyId: string; keyName: string } | { org: OrgContext; via: "ui" | "anonymous" };
 

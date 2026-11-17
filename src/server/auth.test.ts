@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ORG } from "../db/org";
-import { ApiFailure } from "../http";
-import { authenticate } from "./authenticate";
+import { DEFAULT_ORG } from "./db/org";
+import { ApiFailure } from "./http";
+import { authenticate, callerOrg } from "./auth";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const keys = {
@@ -42,5 +42,9 @@ describe("authenticate", () => {
     expect(await status(authenticate(req(), { keys, requireKeyOutsideUi: true }))).toBe(401);
     expect(await status(authenticate(req({ "Sec-Fetch-Site": "cross-site" }), { keys, requireKeyOutsideUi: true }))).toBe(401);
     expect(await authenticate(req(), { keys })).toEqual({ org: DEFAULT_ORG, via: "anonymous" });
+  });
+
+  it("the UI's routes act for the default org (callerOrg)", () => {
+    expect(callerOrg(req())).toBe(DEFAULT_ORG);
   });
 });

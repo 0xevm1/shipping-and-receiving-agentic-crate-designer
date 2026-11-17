@@ -45,7 +45,7 @@ sweep is 30–400 ms of CPU; on the main thread it would stall every stream on t
 
 ## The queue
 
-One table, `queue_job` (`src/server/db/schema.ts`, migration `0003_queue_api_keys.sql`). Queries
+One table, `queue_job` (`src/server/db/schema.ts`, migration `0004_queue_api_keys.sql`). Queries
 in `src/server/db/queue.ts`, the loop in `src/server/queue/runner.ts`.
 
 | Column | |
@@ -105,17 +105,23 @@ running jobs finish). Run one next to `bun run dev`, or several on several machi
 | `sweep` | `{ jobId }` | For a `design_job`: `rankConfigurations` on the pool (the part's size and mass, the app's default rules and standards, the job's `total_quantity`). Then, in one transaction: each shortlisted configuration saved (`origin = precomputed`, content-addressed by `inputHash`), the job set to `ready` with the recommendation as `selected_configuration_id`, and `configs.ready` emitted (`{ count, recommendedConfigurationId, inputHash }`). The queue row's `result` holds the curve (200 points) and the total plan. Dead-lettered: the job goes to `error` and `job.error` is emitted with a generic message |
 | `bundle` | `{ jobId, configurationIds }` | Server-built `bundle.zip`. **Stub:** the payload, `enqueueBundle` and the pool's `bundle` task (`buildBundleZip` from GLB bytes) exist; the artifacts slice passes its handler as `createJobHandlers({ …, bundle })`. Until then a bundle job dead-letters with "Server-built bundles aren't available yet." |
 
+**Every new design job queues its sweep by itself:** `src/server/queue/register.ts` registers an
+`onJobCreated` hook (`src/server/jobs/hooks.ts`, imported by `src/server/jobs/index.ts`), which
+runs inside the transaction `POST /api/v1/jobs` opens, so the queue row commits or rolls back with
+the job. To queue work in your own transaction, pass the repository `inTransaction` hands you
+(`repo.queue` is the queue store on that transaction):
+
 ```ts
-// POST /api/v1/jobs (jobs slice): create the job and queue its sweep in one transaction.
-import { enqueueSweep } from "@/server/queue";
-await getDb().transaction(async (tx) => {
-  const job = await createRepository(tx).jobs.create(ctx, { partId, totalQuantity });
-  await enqueueSweep(ctx, job.id, tx); // same transaction: both commit, or neither
-});
+import { enqueueBundle } from "@/server/queue";
+await inTransaction(getDb(), (tx) => enqueueBundle(ctx, { jobId, configurationIds }, tx));
 ```
 
 `enqueueSweep` is deduplicated per design job (a second call while one is queued or running
-returns the same queue job).
+returns the same queue job). The sweep job saves each configuration (`configurations.save`, content
+addressed) and links it to the job as `precomputed` (`configurations.link`); it moves the job to
+`ready` only from `open` / `running`, and selects the recommendation only when nothing is selected
+yet. Both bump the job's `version`, so a client holding the old version gets `409` on its next
+`PATCH` and re-reads (docs/API.md).
 
 ## POST /api/v1/designs
 
@@ -156,7 +162,7 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 - **Scripts:** `bun run apikey:create -- --name erp-sync` prints the key once; `bun run apikey:list`;
   `bun run apikey:revoke -- --id <uuid>`. `--org <uuid>` for another org (default: the prototype's
   one org).
-- **`authenticate(request, { keys, requireKeyOutsideUi })`** (`src/server/auth/authenticate.ts`) is
+- **`authenticate(request, { keys, requireKeyOutsideUi })`** (`src/server/auth.ts`) is
   the one helper a Route Handler calls for its `OrgContext`:
   1. `Authorization` present: it must be `Bearer <live key>`, else **401** (even from the UI). The
      key's org is the context.
@@ -191,7 +197,7 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 | `src/server/workers/pool.test.ts` | Pool: size, FIFO, errors, a crashed thread replaced, timeouts, close (stand-in threads, no bundle) |
 | `src/engine/sweep.test.ts`, `src/state/engineClient.test.ts` | The sweep call, its hash and schema, `rankConfigurations`; the browser client's sweep lane |
 | `src/cli/args.test.ts`, `src/cli/run.test.ts` | Argument parsing; an offline run writes every file; the API path with a stubbed fetch |
-| `src/server/auth/authenticate.test.ts` | Key, UI marker, refusal rules |
+| `src/server/auth.test.ts` | Key, UI marker, refusal rules |
 
 ## Known gaps
 
@@ -203,5 +209,3 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 - Fair scheduling, per-org concurrency caps and quotas: deferred until a second org (#60).
 - Jobs use the app's default rules and standards; per-job rules and the `shop_standard` table come
   with the jobs and standards slices.
-- Configurations are unique per `(org, inputHash)`, not per job: two jobs for the same part and
-  rules share rows (the second job's sweep finds the first job's configurations).

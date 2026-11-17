@@ -1,16 +1,18 @@
 /**
  * The job queue (#46 slice 7, docs/QUEUE.md) for Route Handlers. Server-only.
  *
- *   await inTransaction(getDb(), async (tx) => { … create the job … });
- *   await enqueueSweep(ctx, job.id);                // or pass the drizzle transaction to commit together
+ * New design jobs queue their sweep by themselves (`./register.ts`, an `onJobCreated` hook). To
+ * queue work inside your own transaction, pass the repository `inTransaction` gives you:
+ *
+ *   await inTransaction(getDb(), (tx) => enqueueBundle(ctx, { jobId, configurationIds }, tx));
  *
  * `bun run worker` runs the jobs (scripts/worker.ts).
  */
 import "server-only";
-import { getDb } from "../db/client";
+import { getRepository } from "../db/client";
 import type { OrgContext } from "../db/org";
 import type { QueueJob } from "../db/queue";
-import type { Database, Transaction } from "../db/repository";
+import type { Repository } from "../db/repository";
 import { type BundleJobPayload, enqueueBundle as enqueueBundleOn, enqueueSweep as enqueueSweepOn } from "./jobs";
 
 export {
@@ -24,10 +26,9 @@ export {
 } from "./jobs";
 export { PermanentJobError, type JobContext, type JobHandler } from "./runner";
 
-/** Queues the quantity sweep for a design job (deduplicated per job). `executor`: a drizzle transaction to join. */
-export const enqueueSweep = (ctx: OrgContext, jobId: string, executor: Database | Transaction = getDb()): Promise<QueueJob> =>
-  enqueueSweepOn(ctx, jobId, executor);
+/** Queues the quantity sweep for a design job (deduplicated per job). */
+export const enqueueSweep = (ctx: OrgContext, jobId: string, repo: Repository = getRepository()): Promise<QueueJob> => enqueueSweepOn(ctx, jobId, repo);
 
 /** Queues a server-built bundle for a design job. */
-export const enqueueBundle = (ctx: OrgContext, input: BundleJobPayload, executor: Database | Transaction = getDb()): Promise<QueueJob> =>
-  enqueueBundleOn(ctx, input, executor);
+export const enqueueBundle = (ctx: OrgContext, input: BundleJobPayload, repo: Repository = getRepository()): Promise<QueueJob> =>
+  enqueueBundleOn(ctx, input, repo);

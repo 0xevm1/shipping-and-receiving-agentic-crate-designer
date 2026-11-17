@@ -448,6 +448,18 @@ export function sameStandards(a: ShopStandards, b: ShopStandards): boolean {
   return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 }
 
+/** The cost inputs that ship as placeholders (spec §7.12): wood and screw prices, shop times and rate. */
+const costInputs = (s: ShopStandards) => ({ wood: s.rates.costUsdPerM3, screws: s.rates.screwCostUsdPer100, labour: s.labour });
+
+/**
+ * True while any cost input is still the shipped placeholder (spec §6.4, §7.12): the crate cost
+ * is then good for comparing designs, not for quoting, and documents say so.
+ */
+export function costsArePlaceholder(s: ShopStandards): boolean {
+  const [mine, shipped] = [costInputs(s), costInputs(DEFAULT_STANDARDS)];
+  return (Object.keys(mine) as (keyof typeof mine)[]).some((k) => JSON.stringify(sortKeys(mine[k])) === JSON.stringify(sortKeys(shipped[k])));
+}
+
 function sortKeys(v: unknown): unknown {
   if (!isPlainObject(v)) return v;
   return Object.fromEntries(

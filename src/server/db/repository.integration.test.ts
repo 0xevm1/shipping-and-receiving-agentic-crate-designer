@@ -25,15 +25,13 @@ beforeAll(async () => {
 });
 afterAll(() => t?.drop());
 
-const config = (jobId: string, inputHash: string): NewConfiguration => ({
-  jobId,
+const config = (inputHash: string): NewConfiguration => ({
   inputHash,
   quantityPerCrate: 12,
   layout: "grid",
   settings: { clearanceMm: 25 },
   resultSummary: { outsideMm: [1200, 1000, 800] },
   score: 4.2,
-  origin: "user",
   engineVersion: "test",
 });
 
@@ -65,27 +63,61 @@ describe("org-scoped repository", () => {
 
   it("stores a configuration once per (org, inputHash)", async () => {
     const job = await t.repo.jobs.create(DEFAULT_ORG, { partId: widget.id, totalQuantity: 40 });
-    const first = await t.repo.configurations.save(DEFAULT_ORG, config(job.id, "hash-a"));
-    const again = await t.repo.configurations.save(DEFAULT_ORG, { ...config(job.id, "hash-a"), score: 99 });
+    const first = await t.repo.configurations.save(DEFAULT_ORG, config("hash-a"));
+    const again = await t.repo.configurations.save(DEFAULT_ORG, { ...config("hash-a"), score: 99 });
     expect(first.created).toBe(true);
     expect(again.created).toBe(false);
     expect(again.row).toEqual(first.row);
-    expect(await t.repo.configurations.listForJob(DEFAULT_ORG, job.id)).toHaveLength(1);
+    expect(await t.repo.configurations.link(DEFAULT_ORG, job.id, first.row.id, "user")).toEqual({ created: true });
+    expect(await t.repo.configurations.link(DEFAULT_ORG, job.id, again.row.id, "precomputed")).toEqual({ created: false });
+    const listed = await t.repo.configurations.listForJob(DEFAULT_ORG, job.id);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ id: first.row.id, origin: "user" });
+
+    // A second job with the same inputs shares the row through its own link.
+    const job2 = await t.repo.jobs.create(DEFAULT_ORG, { partId: widget.id });
+    await t.repo.configurations.link(DEFAULT_ORG, job2.id, first.row.id, "precomputed");
+    expect((await t.repo.configurations.listForJob(DEFAULT_ORG, job2.id)).map((c) => c.id)).toEqual([first.row.id]);
 
     // The database enforces it too, not just the repository.
     await expect(
-      t.sql`insert into configuration (org_id, job_id, input_hash, quantity_per_crate, layout, settings, origin, engine_version)
-            values (${DEFAULT_ORG.orgId}, ${job.id}, 'hash-a', 1, 'grid', '{}', 'user', 'test')`,
+      t.sql`insert into configuration (org_id, input_hash, quantity_per_crate, layout, settings, engine_version)
+            values (${DEFAULT_ORG.orgId}, 'hash-a', 1, 'grid', '{}', 'test')`,
     ).rejects.toThrow(/configuration_org_id_input_hash_key/);
 
     // The same hash in another org is a different row, and invisible across orgs.
     const { name, massKg, sizeXMm, sizeYMm, sizeZMm } = widget;
     const otherPart = await t.repo.parts.create(other, { name, massKg, sizeXMm, sizeYMm, sizeZMm, source: "catalog" });
     const otherJob = await t.repo.jobs.create(other, { partId: otherPart.id });
-    const theirs = await t.repo.configurations.save(other, config(otherJob.id, "hash-a"));
+    const theirs = await t.repo.configurations.save(other, config("hash-a"));
     expect(theirs.created).toBe(true);
     expect(theirs.row.id).not.toBe(first.row.id);
     expect((await t.repo.configurations.getByHash(DEFAULT_ORG, "hash-a"))?.id).toBe(first.row.id);
+    // Linking another org's configuration to a job fails in the database (composite foreign keys).
+    await expect(t.repo.configurations.link(DEFAULT_ORG, job.id, theirs.row.id, "user")).rejects.toThrow();
+    await expect(t.repo.configurations.link(other, otherJob.id, first.row.id, "user")).rejects.toThrow();
+  });
+
+  it("only lets a job select one of its own configurations", async () => {
+    const job = await t.repo.jobs.create(DEFAULT_ORG, { partId: widget.id });
+    const linked = await t.repo.configurations.save(DEFAULT_ORG, config("hash-sel-a"));
+    const unlinked = await t.repo.configurations.save(DEFAULT_ORG, config("hash-sel-b"));
+    await t.repo.configurations.link(DEFAULT_ORG, job.id, linked.row.id, "user");
+    await expect(t.repo.jobs.update(DEFAULT_ORG, job.id, 1, { selectedConfigurationId: unlinked.row.id })).rejects.toThrow();
+    expect(await t.repo.jobs.update(DEFAULT_ORG, job.id, 1, { selectedConfigurationId: linked.row.id })).toMatchObject({ version: 2 });
+  });
+
+  it("registers a catalog part once per org and finds a reusable job by part identity", async () => {
+    const input = { name: "Bracket", massKg: 2, sizeXMm: 10, sizeYMm: 10, sizeZMm: 10, source: "catalog" as const, catalogId: "PART-001" };
+    const a = await t.repo.parts.ensureCatalog(DEFAULT_ORG, input);
+    const b = await t.repo.parts.ensureCatalog(DEFAULT_ORG, input);
+    expect(a.created).toBe(true);
+    expect(b).toEqual({ row: a.row, created: false });
+    expect(await t.repo.jobs.findReusable(DEFAULT_ORG, a.row)).toBeUndefined();
+    const job = await t.repo.jobs.create(DEFAULT_ORG, { partId: a.row.id });
+    expect((await t.repo.jobs.findReusable(DEFAULT_ORG, a.row))?.id).toBe(job.id);
+    await t.repo.jobs.update(DEFAULT_ORG, job.id, 1, { status: "archived" });
+    expect(await t.repo.jobs.findReusable(DEFAULT_ORG, a.row)).toBeUndefined();
   });
 
   it("updates a job only at the version it read (optimistic concurrency)", async () => {

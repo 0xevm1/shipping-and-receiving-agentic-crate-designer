@@ -15,19 +15,19 @@
  */
 import { jsPDF } from "jspdf";
 import type { DimLine, Drawing, DrawingRect } from "./drawings";
-import type { PrintableCrate, PrintableDesign, PrintableLabel, Row } from "./printable";
+import type { PrintableCrate, PrintableDesign, PrintableLabel, PrintableQuantity, PrintableStamp, Row } from "./printable";
 
 /** US Letter in points, with the print route's 0.5″ margins. */
 const PAGE_W = 612;
 const PAGE_H = 792;
-const M = 36;
-const CW = PAGE_W - 2 * M;
+export const M = 36;
+export const CW = PAGE_W - 2 * M;
 /** Room kept at the foot of every page for the page number. */
 const FOOT = 22;
-const BOTTOM = PAGE_H - M - FOOT + 8;
+export const BOTTOM = PAGE_H - M - FOOT + 8;
 
 const LH = 1.3;
-const GREY = 96;
+export const GREY = 96;
 const LIGHT = 236;
 
 /**
@@ -74,16 +74,41 @@ interface TextOpts {
   align?: "left" | "right" | "center";
 }
 
+/** What every page's header and footer show; a `PrintableDesign` is one. */
+export interface PdfHead {
+  title: string;
+  date: string;
+  unitsNote: string;
+  /** The engine's stamp: in the footer and the PDF's keywords. */
+  stamp?: PrintableStamp;
+  /** ISO time: the PDF's creation date (and, with the stamp, its file id), so equal inputs give equal bytes. */
+  createdAt?: string;
+}
+
+/** "Engine 0.1.0+engine.2 · input 3f2a…", the footer and keywords line. */
+export const stampText = (s: PrintableStamp) => `Engine ${s.engineVersion} · input ${s.inputHash}`;
+
 /** A cursor over the pages, with the header of the sheet being written repeated on overflow. */
-class Writer {
+export class Writer {
   readonly pdf: jsPDF;
   y = M;
   private header: (() => void) | null = null;
   private first = true;
 
-  constructor(readonly doc: PrintableDesign) {
+  constructor(
+    readonly doc: PdfHead,
+    subject = "Crate spec, build sheet and shipping label",
+  ) {
     this.pdf = new jsPDF({ unit: "pt", format: "letter", orientation: "portrait", compress: false });
-    this.pdf.setProperties({ title: pdfSafe(doc.title), subject: "Crate spec, build sheet and shipping label", creator: "Crate Designer" });
+    this.pdf.setProperties({
+      title: pdfSafe(doc.title),
+      subject,
+      creator: "Crate Designer",
+      ...(doc.stamp ? { keywords: `engineVersion=${doc.stamp.engineVersion} inputHash=${doc.stamp.inputHash}` } : {}),
+    });
+    if (doc.createdAt) this.pdf.setCreationDate(new Date(doc.createdAt));
+    // jsPDF's default file id is random; derive it from the stamp so the bytes are reproducible.
+    if (doc.stamp) this.pdf.setFileId(doc.stamp.inputHash.slice(0, 32).toUpperCase());
     this.pdf.setLineHeightFactor(LH);
   }
 
@@ -173,6 +198,7 @@ class Writer {
     for (let i = 1; i <= n; i++) {
       this.pdf.setPage(i);
       this.textAt(`${this.doc.title} · page ${i} of ${n}`, PAGE_H - M - 6, { size: 7.5, gray: GREY, align: "right" });
+      if (this.doc.stamp) this.textAt(stampText(this.doc.stamp), PAGE_H - M + 4, { size: 6, gray: GREY });
     }
     return new Uint8Array(this.pdf.output("arraybuffer"));
   }
@@ -195,7 +221,7 @@ function rows(w: Writer, list: Row[], x: number, colW: number, y: number, draw: 
 }
 
 /** Two columns of rows side by side, each under a small heading; moves the cursor below both. */
-interface Col {
+export interface Col {
   title: string;
   /** Sentences before and after the rows. */
   lead?: string[];
@@ -203,7 +229,7 @@ interface Col {
   extra?: string[];
 }
 
-function twoCols(w: Writer, left: Col, right: Col | null) {
+export function twoCols(w: Writer, left: Col, right: Col | null) {
   const colW = right ? (CW - 18) / 2 : CW;
   const col = (c: Col, x: number, draw: boolean) => {
     let h = draw ? w.h3(c.title, x, colW) : 12;
@@ -242,6 +268,16 @@ function crateSpec(w: Writer, c: PrintableCrate, split: boolean) {
     w.pdf.line(M, w.y, M + CW, w.y);
     w.y += 3;
   }
+}
+
+/** The quantity per crate and why (spec §7.16): the recommendation, its rationale and what stopped a larger crate. */
+function quantitySpec(w: Writer, q: PrintableQuantity) {
+  w.ensure(120);
+  w.h2(q.recommended ? "Quantity per crate" : "Quantity per crate (not the recommendation)");
+  w.para(q.heading, { style: "bold" }, 2);
+  w.para(q.rationale);
+  twoCols(w, { title: "The sweep", rows: q.rows }, null);
+  if (q.costNote) w.para(q.costNote, { gray: GREY, size: 8 });
 }
 
 /** One drawing in a box, as `DrawingSvg` draws it: black on white, sections hatched, parts dashed. */
@@ -544,6 +580,7 @@ export function printableToPdf(doc: PrintableDesign): Uint8Array {
       ? { title: "Shipment", lead: [doc.shipment.text ?? ""], rows: doc.shipment.rows, extra: doc.shipment.unmet ? [doc.shipment.unmet] : [] }
       : null,
   );
+  if (doc.quantity) quantitySpec(w, doc.quantity);
   for (const c of doc.crates) crateSpec(w, c, doc.shipment.split);
   for (const c of doc.crates) buildSheet(w, doc, c);
   for (const c of doc.crates) shippingLabel(w, c.label);

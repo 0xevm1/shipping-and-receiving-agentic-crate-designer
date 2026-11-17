@@ -49,8 +49,15 @@ describe("engine files in Node", () => {
     const files = unzipSync(out.zip);
     expect(Object.keys(files)).toEqual(["crate-PART-001-x4.glb", "crate-PART-001-x4.pdf", "cut-list.csv", "design.json", "README.txt"]);
     expect(new TextDecoder().decode(files["crate-PART-001-x4.pdf"].subarray(0, 5))).toBe("%PDF-");
+    // Every file carries the stamp (spec §5.1).
+    const text = (n: string) => new TextDecoder("latin1").decode(files[n]);
+    expect(text("crate-PART-001-x4.pdf")).toContain(`inputHash=${inputHash}`);
+    expect(text("cut-list.csv")).toContain(`# Engine ${engineVersion}, input ${inputHash}\n`);
+    expect(JSON.parse(text("design.json")).engine).toEqual({ version: engineVersion, inputHash });
+    expect(text("README.txt")).toContain(`Input:     ${inputHash}`);
     // The GLB holds the four parts in their slots.
     const glb = await parseGlb(files["crate-PART-001-x4.glb"].slice().buffer as ArrayBuffer);
     expect(glb.getObjectByName(PARTS_NODE)?.children).toHaveLength(4);
+    expect(glb.userData).toEqual({ engineVersion, inputHash });
   });
 });
