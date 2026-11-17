@@ -9,7 +9,7 @@ import { crate, fileInput, openApp, openTab, panel, pollCrate, sampleFile, setUn
  * README. Each test unzips the download and checks every entry opens.
  */
 
-const pill = (page: Page) => page.getByRole("banner").getByRole("button", { name: /^(Export|Exporting…)$/ });
+const pill = (page: Page) => page.getByRole("banner").getByRole("button", { name: /^(Export specs|Exporting…)$/ });
 const note = (page: Page) => page.getByRole("banner").locator(".exportnote");
 
 /** Clicks Export, waits for the .zip and returns its name and entries. */
@@ -48,7 +48,7 @@ async function reimport(page: Page, design: Uint8Array, extra: { name: string; m
 
 test("Export downloads one .zip with every file, in imperial, and the design re-imports", async ({ page }) => {
   await openApp(page);
-  await expect(pill(page)).toHaveText("Export");
+  await expect(pill(page)).toHaveText("Export specs");
   await expect(pill(page)).toBeEnabled();
   // The pill is under the part lines, left-aligned with them.
   const meta = await page.locator(".partmeta").boundingBox();
@@ -162,7 +162,7 @@ test("the busy state holds for at least 1.5 s with motion on", async ({ page }) 
   await downloaded;
   expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
   await expect(note(page)).toHaveText("Downloaded crate-PART-001-x4.zip");
-  await expect(pill(page)).toHaveText("Export");
+  await expect(pill(page)).toHaveText("Export specs");
 });
 
 test("Hide panels hides the pill with the header", async ({ page }) => {

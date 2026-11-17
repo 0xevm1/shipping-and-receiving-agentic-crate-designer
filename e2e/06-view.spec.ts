@@ -161,8 +161,8 @@ test.describe("view controls", () => {
 
     const pop = await openViewPopover(page);
     await expect(pop.getByLabel("Include parts", { exact: true })).toHaveCount(0);
-    const button = pop.getByRole("button", { name: /^(Export \(\.zip\)|Exporting…)$/ });
-    const pill = page.getByRole("banner").getByRole("button", { name: /^(Export|Exporting…)$/ });
+    const button = pop.getByRole("button", { name: /^(Export specs|Exporting…)$/ });
+    const pill = page.getByRole("banner").getByRole("button", { name: /^(Export specs|Exporting…)$/ });
 
     const downloaded = page.waitForEvent("download");
     await button.click();
@@ -182,7 +182,7 @@ test.describe("view controls", () => {
     expect(names).not.toContain("Part 5");
     await expect(pop.getByRole("status")).toHaveText("Downloaded crate-PART-001-x4.zip");
     await expect(page.getByRole("banner").locator(".exportnote")).toHaveText("Downloaded crate-PART-001-x4.zip");
-    await expect(button).toHaveText("Export (.zip)");
+    await expect(button).toHaveText("Export specs");
   });
 
   test("Hide panels hides the island but keeps the credit", async ({ page }) => {

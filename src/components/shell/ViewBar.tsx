@@ -166,7 +166,7 @@ function ViewPopover() {
 }
 
 /**
- * Export (.zip): the same export as the Export pill (#51, #77), sharing its run and state. The
+ * Export specs: the same export as the Export pill (#51, #77), sharing its run and state. The
  * zip holds the assembled crate's GLB with the parts, the PDF, the cut list and the design file.
  */
 function ViewExport() {
@@ -185,7 +185,7 @@ function ViewExport() {
         title="Download a .zip with the 3D model, the PDF (spec, build sheet, label), the cut list and the design file"
         onClick={() => void run()}
       >
-        {busy ? "Exporting…" : "Export (.zip)"}
+        {busy ? "Exporting…" : "Export specs"}
       </button>
       <span className="lab" role="status">
         {exportNote(state)}
