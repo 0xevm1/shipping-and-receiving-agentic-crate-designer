@@ -1,74 +1,73 @@
-==> crate-PART-001-x34.csv 384d82b758b294ddc73e9a95378b0801b9aeabe4a88ee17f14b90d7452bd2c6e
-# Crate for 34 x PART-001 Machined steel bracket
+==> crate-PART-001-x8.csv ea07a2d81e46a7d74e688df1aea62673f4b582f505e1c481ebc6caf924173590
+# Crate for 8 x PART-001 Machined steel bracket
 # Part 4140 steel, 47.4 lb each
-# External 68.7 x 53.4 x 38.2 in, gross 2,196 lb
-# Layout 6 x 3 x 2, Turned 90°
+# External 36.9 x 25.9 x 32.4 in, gross 548 lb
+# Layout 2 x 2 x 2, As modeled
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 384d82b758b294ddc73e9a95378b0801b9aeabe4a88ee17f14b90d7452bd2c6e
+# Engine <engine>, input ea07a2d81e46a7d74e688df1aea62673f4b582f505e1c481ebc6caf924173590
 component,material,stock,cut_in,qty
-Base: Floor,plywood,3/4 in,68 3/4 in x 53 3/8 in,1
-Base: Floor joist,lumber,2x4,53 3/8 in,6
-Base: Skid,lumber,4x6,68 3/4 in,3
-Side walls: Side panel,plywood,3/4 in,67 1/4 in x 26 15/16 in,2
-Side walls: Side rail,lumber,1x4,67 1/4 in,4
-Side walls: Side upright,lumber,1x4,19 15/16 in,8
-End walls: End panel,plywood,3/4 in,50 3/8 in x 26 15/16 in,2
-End walls: End rail,lumber,1x4,53 3/8 in,4
-End walls: End upright,lumber,1x4,19 15/16 in,8
-Lid: Lid panel,plywood,3/4 in,67 1/4 in x 51 7/8 in,1
-Lid: Lid edge cleat,lumber,1x4,67 1/4 in,2
-Lid: Lid cross cleat,lumber,1x4,44 7/8 in,4
-Inside the crate: Layer separator,plywood,3/4 in,65 3/4 in x 50 3/8 in,1
-Inside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,8 11/16 in,36
-Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,14 1/8 in,45
-Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 3/16 in,41
-Wood screws (approx),fastener,,,630
+Base: Floor,plywood,3/4 in,36 15/16 in x 25 7/8 in,1
+Base: Skid,lumber,4x4,36 15/16 in,2
+Side walls: Side panel,plywood,5/8 in,35 7/16 in x 26 13/16 in,2
+Side walls: Side rail,lumber,1x4,35 7/16 in,4
+Side walls: Side upright,lumber,1x4,19 13/16 in,6
+End walls: End panel,plywood,5/8 in,26 13/16 in x 23 1/4 in,2
+End walls: End rail,lumber,1x4,25 7/8 in,4
+End walls: End upright,lumber,1x4,19 13/16 in,6
+Lid: Lid panel,plywood,5/8 in,35 7/16 in x 24 7/16 in,1
+Lid: Lid edge cleat,lumber,1x4,35 7/16 in,2
+Lid: Lid cross cleat,lumber,1x4,17 3/8 in,3
+Inside the crate: Layer separator,plywood,5/8 in,34 1/4 in x 23 1/4 in,1
+Inside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,8
+Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,14 1/8 in,12
+Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 3/16 in,12
+Wood screws (approx),fastener,,,258
 
-==> crate-PART-002-x16.csv 7d2ee0effcbb804bf0681b24ed50f5f54b6c11aa35214c958def975270c0c6ce
-# Crate for 16 x PART-002 Long steel shaft
+==> crate-PART-002-x4.csv e366a9b6d439c147ba9bfb6592be08ab8f5c31db18a8c0795d8b1a36074a4cbc
+# Crate for 4 x PART-002 Long steel shaft
 # Part 4140 steel, 59.52 lb each
-# External 74.6 x 66.9 x 25.6 in, gross 1,391 lb
-# Layout 8 x 1 x 2, Turned 90°
+# External 66.6 x 21.9 x 25.4 in, gross 397 lb
+# Layout 1 x 2 x 2, As modeled
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 7d2ee0effcbb804bf0681b24ed50f5f54b6c11aa35214c958def975270c0c6ce
+# Engine <engine>, input e366a9b6d439c147ba9bfb6592be08ab8f5c31db18a8c0795d8b1a36074a4cbc
 component,material,stock,cut_in,qty
-Base: Floor,plywood,3/4 in,74 9/16 in x 66 7/8 in,1
-Base: Skid,lumber,4x4,74 9/16 in,4
-Side walls: Side panel,plywood,5/8 in,73 1/16 in x 20 1/16 in,2
-Side walls: Side rail,lumber,1x4,73 1/16 in,4
-Side walls: Side upright,lumber,1x4,13 1/16 in,10
-End walls: End panel,plywood,5/8 in,64 3/16 in x 20 1/16 in,2
-End walls: End rail,lumber,1x4,66 7/8 in,4
-End walls: End upright,lumber,1x4,13 1/16 in,8
-Lid: Lid panel,plywood,5/8 in,73 1/16 in x 65 3/8 in,1
-Lid: Lid edge cleat,lumber,1x4,73 1/16 in,2
-Lid: Lid cross cleat,lumber,1x4,58 3/8 in,5
-Inside the crate: Cradle,lumber,1 1/2 in x 3 11/16 in from 2x6,71 7/8 in,4
-Inside the crate: Stacking cradle,lumber,1 1/2 in x 5 15/16 in from 2x8,71 7/8 in,4
-Inside the crate: End stop,lumber,1 15/16 in x 3 1/2 in from 4x4,18 1/16 in,16
-Wood screws (approx),fastener,,,441
+Base: Floor,plywood,3/4 in,66 5/8 in x 21 7/8 in,1
+Base: Skid,lumber,4x4,66 5/8 in,2
+Side walls: Side panel,plywood,1/2 in,65 1/8 in x 19 15/16 in,2
+Side walls: Side rail,lumber,1x4,65 1/8 in,4
+Side walls: Side upright,lumber,1x4,12 15/16 in,8
+End walls: End panel,plywood,1/2 in,19 15/16 in x 19 7/16 in,2
+End walls: End rail,lumber,1x4,21 7/8 in,4
+End walls: End upright,lumber,1x4,12 15/16 in,4
+Lid: Lid panel,plywood,1/2 in,65 1/8 in x 20 3/8 in,1
+Lid: Lid edge cleat,lumber,1x4,65 1/8 in,2
+Lid: Lid cross cleat,lumber,1x4,13 3/8 in,4
+Inside the crate: Cradle,lumber,1 1/2 in x 3 11/16 in from 2x6,19 7/16 in,4
+Inside the crate: Stacking cradle,lumber,1 1/2 in x 5 13/16 in from 2x8,19 7/16 in,4
+Inside the crate: End stop,lumber,1 15/16 in x 3 1/2 in from 4x4,17 15/16 in,4
+Wood screws (approx),fastener,,,272
 
-==> crate-PART-003-x38.csv bcafcac2be2a306456c140bcd2b4a76eb8352f742dfc49251af754b96b819b42
-# Crate for 38 x PART-003 Irregular aluminum housing
+==> crate-PART-003-x8.csv 0d8bb6cd0b068d21a9e35a3d25fe46db16e1d626044571b9389466f7eb2ca522
+# Crate for 8 x PART-003 Irregular aluminum housing
 # Part 6061-T6 aluminum, 26.01 lb each
-# External 100.1 x 82.6 x 34.1 in, gross 1,879 lb
-# Layout 5 x 4 x 2, As modeled
+# External 43.4 x 42.6 x 31.9 in, gross 430 lb
+# Layout 2 x 2 x 2, Turned 90°
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input bcafcac2be2a306456c140bcd2b4a76eb8352f742dfc49251af754b96b819b42
+# Engine <engine>, input 0d8bb6cd0b068d21a9e35a3d25fe46db16e1d626044571b9389466f7eb2ca522
 component,material,stock,cut_in,qty
-Base: Floor,plywood,3/4 in,100 1/8 in x 82 5/8 in,1
-Base: Skid,lumber,4x6,100 1/8 in,4
-Side walls: Side panel,plywood,5/8 in,98 5/8 in x 26 1/2 in,2
-Side walls: Side rail,lumber,1x4,98 5/8 in,4
-Side walls: Side upright,lumber,1x4,19 1/2 in,12
-End walls: End panel,plywood,5/8 in,79 15/16 in x 26 1/2 in,2
-End walls: End rail,lumber,1x4,82 5/8 in,4
-End walls: End upright,lumber,1x4,19 1/2 in,10
-Lid: Lid panel,plywood,5/8 in,98 5/8 in x 81 1/8 in,1
-Lid: Lid edge cleat,lumber,1x4,98 5/8 in,2
-Lid: Lid cross cleat,lumber,1x4,74 1/8 in,6
-Inside the crate: Layer separator,plywood,5/8 in,97 7/16 in x 79 15/16 in,1
-Inside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/8 in,40
-Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,49
-Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,45
-Wood screws (approx),fastener,,,778
+Base: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1
+Base: Skid,lumber,4x4,43 3/8 in,3
+Side walls: Side panel,plywood,1/2 in,41 7/8 in x 26 3/8 in,2
+Side walls: Side rail,lumber,1x4,41 7/8 in,4
+Side walls: Side upright,lumber,1x4,19 3/8 in,6
+End walls: End panel,plywood,1/2 in,40 3/16 in x 26 3/8 in,2
+End walls: End rail,lumber,1x4,42 5/8 in,4
+End walls: End upright,lumber,1x4,19 3/8 in,6
+Lid: Lid panel,plywood,1/2 in,41 7/8 in x 41 1/8 in,1
+Lid: Lid edge cleat,lumber,1x4,41 7/8 in,2
+Lid: Lid cross cleat,lumber,1x4,34 1/8 in,3
+Inside the crate: Layer separator,plywood,1/2 in,40 15/16 in x 40 3/16 in,1
+Inside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,8
+Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,12
+Inside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,12
+Wood screws (approx),fastener,,,308

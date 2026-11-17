@@ -99,6 +99,11 @@
   stroke: var(--red);
   stroke-width: 1.5;
 }
+.cand {
+  fill: var(--navy);
+  stroke: var(--sky);
+  stroke-width: 1.5;
+}
 .pick {
   fill: var(--gold);
   stroke: var(--navy);
@@ -128,9 +133,16 @@
   margin-left: auto;
 }
 .keyLine,
+.keyCand,
 .keyPick,
 .keyFail {
   display: inline-block;
+}
+.keyCand {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sky);
 }
 .keyLine {
   width: 14px;

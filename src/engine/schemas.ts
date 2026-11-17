@@ -31,6 +31,8 @@ export const PartProfileSchema = z.object({
 export const DesignPartSchema = PartSchema.pick({ id: true, name: true, mass_kg: true, dimensions_mm: true }).extend({
   material: z.string().optional(),
   profile: PartProfileSchema.optional(),
+  /** The quantities the part is usually shipped in (#133); the sweep recommends among them. */
+  suggested_quantities: z.array(z.int().positive()).optional(),
 });
 
 export const RankingSchema = z.enum(RANKINGS);

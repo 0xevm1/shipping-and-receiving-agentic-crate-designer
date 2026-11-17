@@ -243,7 +243,10 @@ describe("the sweep job", () => {
     expect(after.status).toBe("ready");
     expect(after.selectedConfigurationId).toBe(result.recommendedConfigurationId);
     const best = configs.find((c) => c.id === after.selectedConfigurationId)!;
-    expect(best.score).toBe(Math.min(...configs.map((c) => c.score!)));
+    // The recommendation is the cheapest of the part's suggested quantities (1, 4 and 8 for a part with none, #133);
+    // the total plan's crate types are saved too, and may be cheaper per part.
+    expect([1, 4, 8]).toContain(best.quantityPerCrate);
+    expect(best.score).toBe(Math.min(...configs.filter((c) => [1, 4, 8].includes(c.quantityPerCrate)).map((c) => c.score!)));
 
     const events = await t.repo.events.listAfter(DEFAULT_ORG, job.id);
     expect(events.map((e) => e.type)).toEqual(["configs.ready"]);

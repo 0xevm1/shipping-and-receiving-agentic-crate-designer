@@ -146,3 +146,34 @@ describe("the sweep under a per-crate size limit (#108)", () => {
     expect(parsed.standards.limits.perCrate.maxOutsideMm).toEqual({ length: 0, width: 0, height: 0 });
   });
 });
+
+describe("candidates: the quantities the recommendation chooses among (#133)", () => {
+  it("are validated, deduplicated and sorted on parse; absent stays absent", () => {
+    expect(SweepRequestSchema.parse(request({ candidates: [8, 4, 8, 1] })).candidates).toEqual([1, 4, 8]);
+    expect(SweepRequestSchema.parse(request()).candidates).toBeUndefined();
+    for (const bad of [[], [0], [201], [2.5], [-1]]) expect(SweepRequestSchema.safeParse({ ...request(), candidates: bad }).success).toBe(false);
+  });
+
+  it("count in the hash (in any order), and a request without them keeps its hash", () => {
+    const base = sweepInputHash(request());
+    expect(sweepInputHash(request({ candidates: [1, 4, 8] }))).not.toBe(base);
+    expect(sweepInputHash(request({ candidates: [8, 1, 4, 4] }))).toBe(sweepInputHash(request({ candidates: [1, 4, 8] })));
+    expect(sweepInputHash(request({ candidates: [2, 6] }))).not.toBe(sweepInputHash(request({ candidates: [1, 4, 8] })));
+  });
+
+  it("make runSweep and the headless answer recommend among them, over the full curve", () => {
+    const req = request({ candidates: [2, 6], total: 40 });
+    const out = runSweep(req);
+    expect(out.sweep.candidates).toEqual([2, 6]);
+    expect(out.sweep.curve).toHaveLength(200);
+    expect(out.total).toEqual(runSweep(request({ total: 40 })).total);
+    const report = rankConfigurations(req);
+    expect(DesignsResponseSchema.safeParse(report).success).toBe(true);
+    expect(report.candidates).toEqual([2, 6]);
+    expect([2, 6]).toContain(report.recommendation!.quantityPerCrate);
+    expect(report.configurations.map((c) => c.quantityPerCrate).sort()).toEqual([2, 6]);
+    expect(report.recommendation!.rationale).toMatch(/^Of 2 and 6 per crate, \d costs least per part/);
+    expect(report.curve).toHaveLength(200);
+    expect(rankConfigurations(request()).candidates).toBeNull();
+  });
+});

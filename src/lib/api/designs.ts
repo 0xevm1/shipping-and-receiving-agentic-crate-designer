@@ -116,6 +116,8 @@ export const DesignsResponseSchema = z.object({
   part: z.object({ name: z.string(), massKg: z.number().positive(), sizeMm: Vec3Schema }),
   basis: z.enum(["crate-and-freight", "crate-only"]),
   maxQuantity: z.int().positive(),
+  /** The quantities per crate the recommendation chose among (the part's suggested quantities); null when it chose among all of them. */
+  candidates: z.array(z.int().positive()).nullable(),
   recommendation: z
     .object({
       quantityPerCrate: z.int().positive(),

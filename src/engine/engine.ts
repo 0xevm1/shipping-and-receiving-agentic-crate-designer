@@ -1,5 +1,6 @@
 import type { DesignPart } from "@/domain/schema";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
+import { candidateQuantities } from "@/domain/sweep";
 import { bomToCsv, shipmentToCsv } from "@/lib/csv";
 import { cutListFileName } from "@/lib/fileNames";
 import { metricText } from "@/lib/message";
@@ -26,6 +27,9 @@ export const designPartOf = (p: DesignPart): DesignPart => ({
   dimensions_mm: p.dimensions_mm,
   material: p.material,
   profile: p.profile,
+  // The suggested quantities choose the sweep's recommendation (#133), so they travel with the part
+  // and are hashed with it: the server's sweep and the PDF's quantity rationale read them.
+  ...(p.suggested_quantities ? { suggested_quantities: candidateQuantities(p.suggested_quantities) } : {}),
 });
 
 /**

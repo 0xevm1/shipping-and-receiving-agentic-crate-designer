@@ -13,6 +13,7 @@ function curve(maxQuantity: number, cost: (q: number) => number, max = maxQuanti
   return {
     basis: "crate-only",
     maxQuantity,
+    candidates: null,
     curve: Array.from({ length: maxQuantity }, (_, i) => {
       const q = i + 1;
       return q <= max
