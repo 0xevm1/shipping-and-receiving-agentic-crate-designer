@@ -44,7 +44,7 @@ const sample = (): LastDesign => ({
   ranking: "cost",
 });
 
-describe("last-opened crate (#71)", () => {
+describe("last-opened crate", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("round-trips the design file, tab and ranking under a versioned key", () => {
@@ -116,7 +116,7 @@ describe("last-opened crate (#71)", () => {
   });
 });
 
-describe("debounced save (#71)", () => {
+describe("debounced save", () => {
   afterEach(() => vi.useRealTimers());
 
   it("writes once after the edits stop, with the latest value", () => {

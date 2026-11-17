@@ -1,217 +1,45 @@
-import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTerms, type LabourEstimate } from "./cost";
-import { addCradleDunnage, SCREWS_PER_CRADLE, STACKING_CRADLE_LABEL, usesCradles, type CradleProfile } from "./cradles";
-import { analyseHandling, handlingChecks, type Handling } from "./handling";
-import { dimsMessage, joinMessages, kg, mm, msg, parts, shopMm, type Message } from "./message";
+import { buildBom, screwCount } from "./bom";
+import { constructionFor, resolveConstruction, structureMaterials } from "./construction";
+import { crateCost, estimateLabour, freightTerms } from "./cost";
+import { addCradleDunnage, usesCradles } from "./cradles";
+import { evaluateChecks } from "./crateChecks";
+import type { CrateDesign } from "./crateDesign";
+import { addDunnage } from "./dunnage";
+import { analyseHandling } from "./handling";
+import { materialTotals } from "./materials";
+import type { AddMember, Member } from "./members";
 import type { Layout } from "./packing";
-import { planShapedBlocking, restraint, slotPlans, usableProfile, type BlockBox, type PartProfile, type Restraint } from "./profile";
-import type { CrateSettings, DesignPart, Vec3 } from "./schema";
-import { DEFAULT_STANDARDS, minInteriorMm, type ShopStandards } from "./standards";
-import { frameCount, planStructure, type LaidSection, type StructureMaterials, type StructurePlan } from "./structure";
+import { restraint, usableProfile } from "./profile";
+import type { CrateSettings, DesignPart } from "./schema";
+import { addShell } from "./shell";
+import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
+import { planStructure } from "./structure";
 
 /**
- * Turns a packing layout into a buildable wooden crate: every board as an
- * axis-aligned box, plus a cut list, weights, fastener count and warnings.
+ * Turns a packing layout into a buildable wooden crate: every board as an axis-aligned box,
+ * plus a cut list, weights, fastener count and checks. This module only wires the steps
+ * together; each lives in its own module:
  *
- * Coordinates: interior min corner at the origin (top face of the floor), Z up,
- * X along the crate's length (skids run along X, forklift entry from the ends).
+ * - `construction.ts`: board sizes picked from the payload and the structural plan,
+ * - `shell.ts`: floor, skids, walls and lid; `dunnage.ts` and `cradles.ts`: what holds the parts,
+ * - `bom.ts`: the cut list and screw schedule; `materials.ts`: weights and wood quantities,
+ * - `crateChecks.ts` and `handling.ts`: the rules.
+ *
+ * Every size, threshold, limit and rate comes from the shop standards (`standards.ts`).
+ * Coordinates: interior min corner at the origin (top face of the floor), Z up, X along the
+ * crate's length (skids run along X, forklift entry from the ends).
  */
 
-// Every size, threshold, limit and rate comes from the shop standards (standards.ts).
-
-/**
- * Smallest interior on any axis with the default standards: room for the top and
- * bottom rails of a wall (and the two lid edge cleats) without them overlapping or
- * overhanging. Only very small parts hit it; the packer pads their crate up to it.
- * Designs use `minInteriorMm(standards)`.
- */
-export const MIN_INTERIOR_MM = minInteriorMm(DEFAULT_STANDARDS);
-
-export type MemberKind =
-  | "skid"
-  | "floor"
-  | "side"
-  | "end"
-  | "lid"
-  | "cleat"
-  | "lid-cleat"
-  | "separator"
-  | "bearer"
-  | "blocking"
-  | "cradle"
-  /** Floor joists across the skids, under the floor (#7). */
-  | "joist";
-
-export type WoodMaterial = "plywood" | "lumber";
-
-/** The sub-assemblies a carpenter builds, in build order. The cut list groups by these. */
-export const ASSEMBLIES = ["base", "sides", "ends", "lid", "inside"] as const;
-export type Assembly = (typeof ASSEMBLIES)[number];
-
-/**
- * Which face of the crate a board belongs to, so the viewer can move it when
- * exploded or fade it when opened. `side-` is the front (−Y) wall.
- */
-export type Face = "base" | "side-" | "side+" | "end-" | "end+" | "lid" | "inside";
-
-export interface Member {
-  kind: MemberKind;
-  material: WoodMaterial;
-  assembly: Assembly;
-  face: Face;
-  /** Shop name for the piece, e.g. "Side rail". */
-  label: string;
-  /** Key of the cut-list line this board belongs to. */
-  bomKey: string;
-  min: Vec3;
-  size: Vec3;
-  /** Cradles only (#6): the notches cut into the board's bounding box. */
-  cradle?: CradleProfile;
-}
-
-export interface Construction {
-  panelMm: number;
-  floorMm: number;
-  skid: { wide: number; tall: number };
-  /** Cleat section for the wall and lid frames. */
-  cleat: { thick: number; wide: number };
-  skidCount: number;
-  /** Floor joists across the skids (#7): section as laid (`wide` along X, `tall`) and count; null when none. */
-  joist: { wide: number; tall: number; count: number } | null;
-  /** Lid edge and cross members (#7): section as laid, cross-member count, and whether they are joists on edge. */
-  lid: { wide: number; tall: number; count: number; joists: boolean };
-  /** Bottom of the skids to the top of the floor, mm: skids + joists + floor. */
-  baseMm: number;
-}
-
-/** What `resolveConstruction` picks from the payload alone; `skid` is the smallest skid allowed. */
-export type ConstructionMaterials = Pick<Construction, "panelMm" | "floorMm" | "skid" | "cleat">;
-
-export interface BomLine {
-  /** Unique per line; equals `bomKey` on its members. */
-  key: string;
-  assembly: Assembly;
-  label: string;
-  kind: MemberKind;
-  material: WoodMaterial;
-  /** e.g. "19 × 89" lumber section or "12 mm" plywood. */
-  stock: string;
-  /** Cut size: length for lumber, L × W for plywood. */
-  cut: string;
-  /** Stock in mm: [thickness] for plywood, [thickness, width] for lumber. */
-  stockMm: number[];
-  /** Cut in mm: [length] for lumber, [length, width] for plywood. */
-  cutMm: number[];
-  qty: number;
-  /** Cradles only (#6): notches cut in each piece, each an extra saw cut. */
-  notches?: number;
-}
-
-export interface Check {
-  id:
-    | "door"
-    | "oversize"
-    | "blocking"
-    | "stack"
-    | "stable"
-    | "base-rating"
-    | "lid"
-    | "cog-offset"
-    | "cog-tip"
-    | "forklift"
-    | "pallet-jack"
-    | "utilization"
-    | "cardboard"
-    | "crate-limit";
-  /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
-  level: "ok" | "caution" | "info";
-  title: string;
-  /** The sentence with its lengths and masses as data; render it with `renderMessage` (src/lib/message.ts). */
-  detail: Message;
-}
-
-export interface CrateDesign {
-  layout: Layout;
-  construction: Construction;
-  members: Member[];
-  bom: BomLine[];
-  payloadKg: number;
-  tareKg: number;
-  /** Empty-crate weight split by sub-assembly; sums to `tareKg`. */
-  tareKgByAssembly: Record<Assembly, number>;
-  grossKg: number;
-  plywoodM2: number;
-  lumberM: number;
-  screws: number;
-  /** Plywood and lumber only (`rates.costUsdPerM3`); `cost` adds screws and labour. */
-  materialCostUsd: number;
-  /** Build time and labour cost (#17, spec §7.12). */
-  labour: LabourEstimate;
-  /** Wood + screws + labour (#17). */
-  cost: CrateCost;
-  /** Domestic LTL terms: gross lb, volume, dimensional weight, density and estimated class (#17). */
-  freight: FreightTerms;
-  /** `freight.freightClass`, at the top level for exports and the build sheet (#26). */
-  freightClass: number;
-  /** `freight.densityLbFt3`. */
-  densityLbFt3: number;
-  /** `freight.dimWeightLb`. */
-  dimWeightLb: number;
-  /** Structural sizing (#7, spec §7.15): the base and lid plan, the dead load and the base rating. */
-  structure: StructurePlan;
-  /**
-   * Combined centre of gravity of the crate and the parts (#8, spec §7.14), in the crate-interior
-   * frame of `members` (origin at the interior min corner, on top of the floor; Z up).
-   */
-  centerOfGravityMm: Vec3;
-  /** Centre of gravity, tip angle and fork openings (#8, `handling.ts`). */
-  handling: Handling;
-  /** Every rule, passed or not, in a fixed order. */
-  checks: Check[];
-  /**
-   * Set when blocking was shaped to a measured part profile (#16, spec §7.5b): how well it holds
-   * the parts, and how well bounding-box blocking would have, measured the same way.
-   */
-  shapedBlocking?: { shaped: Restraint; boundingBox: Restraint; blocks: number };
-}
-
-/**
- * Choose board sizes from payload mass, using the shop's stock and thresholds. The skid here is
- * the smallest allowed for the payload; `planStructure` sizes the skids, joists and lid (#7).
- */
-export function resolveConstruction(
-  settings: CrateSettings,
-  payloadKg: number,
-  standards: ShopStandards = DEFAULT_STANDARDS,
-): ConstructionMaterials {
-  const { stock, construction: rule } = standards;
-  const ply = stock.panelPlywoodMm;
-  const panelMm =
-    settings.panelThickness !== "auto"
-      ? settings.panelThickness
-      : payloadKg <= rule.panelLightMaxKg
-        ? ply.light
-        : payloadKg <= rule.panelMediumMaxKg
-          ? ply.medium
-          : ply.heavy;
-  const skid = payloadKg <= rule.heavySkidOverKg ? stock.skidMm.standard : stock.skidMm.heavy;
-  return { panelMm, floorMm: stock.floorPlywoodMm, skid: { ...skid }, cleat: { ...stock.cleatMm } };
-}
-
-/** The materials `planStructure` sizes from: skid stock from the resolved skid up, by strength. */
-export function structureMaterials(c: ConstructionMaterials, standards: ShopStandards = DEFAULT_STANDARDS): StructureMaterials {
-  const modulus = (k: LaidSection) => k.wide * k.tall * k.tall;
-  const { standard, heavy } = standards.stock.skidMm;
-  const skids = [standard, heavy]
-    .filter((k) => modulus(k) >= modulus(c.skid))
-    .sort((a, b) => modulus(a) - modulus(b) || a.wide * a.tall - b.wide * b.tall);
-  return { panelMm: c.panelMm, floorMm: c.floorMm, cleat: c.cleat, skids: skids.map((k) => ({ wide: k.wide, tall: k.tall })) };
-}
-
-/** What the structure adds to the interior on each axis — fed to the packer, per layout (#7). */
-export function structureAllowance(c: Pick<Construction, "panelMm" | "cleat">, plan: Pick<StructurePlan, "baseMm" | "lid">): Vec3 {
-  const wall = 2 * (c.panelMm + c.cleat.thick);
-  return [wall, wall, plan.baseMm + c.panelMm + plan.lid.member.tall];
-}
+// The crate's public types and entry points, importable from this one path.
+export { ASSEMBLIES } from "./members";
+export type { Assembly, Face, Member, MemberKind } from "./members";
+export type { BomLine, ScrewLine } from "./bom";
+export { screwSchedule } from "./bom";
+export type { Check } from "./check";
+export type { Construction } from "./construction";
+export { resolveConstruction, structureAllowance, structureMaterials } from "./construction";
+export type { CrateDesign } from "./crateDesign";
+export { SHAPED_BLOCK } from "./dunnage";
 
 export function designCrate(
   part: DesignPart,
@@ -222,113 +50,30 @@ export function designCrate(
   const payloadKg = part.mass_kg * settings.quantity;
   const materials = resolveConstruction(settings, payloadKg, standards);
   const structure = planStructure(layout, structureMaterials(materials, standards), payloadKg, settings.partGapMm, standards);
-  const { base: plan, lid: lidPlan } = structure;
-  const base = { ...materials, skid: plan.skid };
-  const t = base.panelMm;
-  const ct = base.cleat.thick;
-  const cw = base.cleat.wide;
-  const [L, W, H] = layout.interior;
-  const extW = W + 2 * (t + ct);
-  const skidCount = plan.skidCount;
-  const verticalCount = (span: number) => frameCount(span, standards);
-  const construction: Construction = {
-    ...base,
-    skidCount,
-    joist: plan.joist ? { ...plan.joist, count: plan.joistCount } : null,
-    lid: { ...lidPlan.member, count: lidPlan.count, joists: lidPlan.joists },
-    baseMm: structure.baseMm,
-  };
+  const construction = constructionFor(materials, structure);
 
   const members: Member[] = [];
   const add: AddMember = (kind, material, tag, min, size, cradle) => {
     if (size.every((s) => s > 0.5)) members.push({ kind, material, ...tag, bomKey: "", min, size, ...(cradle && { cradle }) });
   };
+  addShell(layout.interior, construction, add, standards);
 
-  // Base: floor sheet over the full footprint, floor joists across the skids (#7), skids underneath.
-  const x0 = -t - ct;
-  const y0 = -t - ct;
-  const extL = L + 2 * (t + ct);
-  const baseTag = (label: string): Tag => ({ assembly: "base", face: "base", label });
-  add("floor", "plywood", baseTag("Floor"), [x0, y0, -base.floorMm], [extL, extW, base.floorMm]);
-  const joist = construction.joist;
-  if (joist) {
-    spread(x0, extL, joist.wide, joist.count).forEach((x) =>
-      add("joist", "lumber", baseTag("Floor joist"), [x, y0, -base.floorMm - joist.tall], [joist.wide, extW, joist.tall]),
-    );
-  }
-  const skidZ = -structure.baseMm;
-  spread(y0, extW, base.skid.wide, skidCount).forEach((y) =>
-    add("skid", "lumber", baseTag("Skid"), [x0, y, skidZ], [extL, base.skid.wide, base.skid.tall]),
-  );
-
-  // Long side walls (−Y and +Y). Panels run the full outside length of the end walls.
-  for (const side of [-1, 1] as const) {
-    const panelY = side < 0 ? -t : W;
-    const cleatY = side < 0 ? -t - ct : W + t;
-    const tag = (label: string): Tag => ({ assembly: "sides", face: side < 0 ? "side-" : "side+", label });
-    add("side", "plywood", tag("Side panel"), [-t, panelY, 0], [L + 2 * t, t, H]);
-    // Perimeter frame + intermediate verticals.
-    add("cleat", "lumber", tag("Side rail"), [-t, cleatY, 0], [L + 2 * t, ct, cw]);
-    add("cleat", "lumber", tag("Side rail"), [-t, cleatY, H - cw], [L + 2 * t, ct, cw]);
-    spread(-t, L + 2 * t, cw, verticalCount(L + 2 * t)).forEach((x) =>
-      add("cleat", "lumber", tag("Side upright"), [x, cleatY, cw], [cw, ct, H - 2 * cw]),
-    );
-  }
-
-  // End walls (−X and +X). Their cleats wrap the corners over the side cleats.
-  for (const side of [-1, 1] as const) {
-    const panelX = side < 0 ? -t : L;
-    const cleatX = side < 0 ? -t - ct : L + t;
-    const tag = (label: string): Tag => ({ assembly: "ends", face: side < 0 ? "end-" : "end+", label });
-    add("end", "plywood", tag("End panel"), [panelX, 0, 0], [t, W, H]);
-    add("cleat", "lumber", tag("End rail"), [cleatX, y0, 0], [ct, extW, cw]);
-    add("cleat", "lumber", tag("End rail"), [cleatX, y0, H - cw], [ct, extW, cw]);
-    spread(y0, extW, cw, verticalCount(extW)).forEach((y) =>
-      add("cleat", "lumber", tag("End upright"), [cleatX, y, cw], [ct, cw, H - 2 * cw]),
-    );
-  }
-
-  // Lid: panel plus a cleat frame on top, screwed down (removable for unpacking). When crates
-  // are stacked (#7) the frame is sized for the load, possibly as joists on edge.
-  const lidTag = (label: string): Tag => ({ assembly: "lid", face: "lid", label });
-  const { wide: lw, tall: lt, count: lidCount, joists: lidJoists } = construction.lid;
-  const [edgeLabel, crossLabel] = lidJoists ? ["Lid edge joist", "Lid joist"] : ["Lid edge cleat", "Lid cross cleat"];
-  add("lid", "plywood", lidTag("Lid panel"), [-t, -t, H], [L + 2 * t, W + 2 * t, t]);
-  add("lid-cleat", "lumber", lidTag(edgeLabel), [-t, -t, H + t], [L + 2 * t, lw, lt]);
-  add("lid-cleat", "lumber", lidTag(edgeLabel), [-t, W + t - lw, H + t], [L + 2 * t, lw, lt]);
-  spread(-t, L + 2 * t, lw, lidCount).forEach((x) =>
-    add("lid-cleat", "lumber", lidTag(crossLabel), [x, -t + lw, H + t], [lw, W + 2 * t - 2 * lw, lt]),
-  );
-
-  // Slender parts lying flat sit in notched cradles (#6, cradles.ts); everything else is blocked,
-  // shaped to the part when it has a measured profile (#16, profile.ts).
+  // Slender parts lying flat sit in notched cradles; everything else is blocked,
+  // shaped to the part when it has a measured profile.
   const cradled = usesCradles(part.dimensions_mm, layout, standards);
   const profile = cradled ? null : usableProfile(part);
   if (cradled) addCradleDunnage(layout, settings, standards, add);
-  const pieces = cradled ? [] : addDunnage(layout, settings, t, standards, add, profile);
+  const pieces = cradled ? [] : addDunnage(layout, settings, construction.panelMm, standards, add, profile);
 
   const bom = buildBom(members);
-  const density = standards.rates.densityKgM3;
-  const volumes = { plywood: 0, lumber: 0 };
-  const tareKgByAssembly: Record<Assembly, number> = { base: 0, sides: 0, ends: 0, lid: 0, inside: 0 };
-  let plywoodM2 = 0;
-  let lumberM = 0;
-  for (const m of members) {
-    const volumeM3 = (m.size[0] * m.size[1] * m.size[2]) / 1e9;
-    volumes[m.material] += volumeM3;
-    tareKgByAssembly[m.assembly] += volumeM3 * density[m.material];
-    const sorted = [...m.size].sort((p, q) => q - p);
-    if (m.material === "plywood") plywoodM2 += (sorted[0] * sorted[1]) / 1e6;
-    else lumberM += sorted[0] / 1000;
-  }
-  const tareKg = volumes.plywood * density.plywood + volumes.lumber * density.lumber;
-  const cost = standards.rates.costUsdPerM3;
-  const materialCostUsd = volumes.plywood * cost.plywood + volumes.lumber * cost.lumber;
-  const screws = estimateScrews(members, layout.interior, standards);
+  const { volumeM3, tareKg, tareKgByAssembly, plywoodM2, lumberM } = materialTotals(members, standards);
+  const costPerM3 = standards.rates.costUsdPerM3;
+  const materialCostUsd = volumeM3.plywood * costPerM3.plywood + volumeM3.lumber * costPerM3.lumber;
+  const screws = screwCount(members, layout.interior, standards);
   const grossKg = payloadKg + tareKg;
   const labour = estimateLabour(bom, screws, layout.counts[2], standards);
   const freight = freightTerms(grossKg, layout.external, standards);
-  // Read-only over the finished members and part placements (#8).
+  // Read-only over the finished members and part placements.
   const handling = analyseHandling(members, layout, part.mass_kg, standards);
 
   const design: CrateDesign = {
@@ -356,387 +101,13 @@ export function designCrate(
     checks: [],
   };
   if (profile) {
-    const boxPieces = addDunnage(layout, settings, t, standards, () => {}, null);
+    const boxPieces = addDunnage(layout, settings, construction.panelMm, standards, () => {}, null);
     design.shapedBlocking = {
       shaped: restraint(profile, layout, pieces),
       boundingBox: restraint(profile, layout, boxPieces),
-      blocks: members.filter((m) => m.label === SHAPED_BLOCK).length,
+      blocks: members.filter((m) => m.variant === "shaped-block").length,
     };
   }
   design.checks = evaluateChecks(design, part, settings, standards);
   return design;
-}
-
-/**
- * Internal wooden dunnage that holds the parts in place:
- * - bearers lift the bottom layer off the floor by the wall clearance,
- * - plywood separators between layers,
- * - blocking posts in every gap around each part, running floor-to-separator
- *   so they also carry the layer above.
- * - with a part `profile` (#16), posts sit where the part is solid and shaped blocks reach into
- *   its recesses (spec §7.5b).
- * Returns the blocking pieces and the axis each one blocks along, for measuring restraint.
- */
-function addDunnage(
-  layout: Layout,
-  settings: CrateSettings,
-  separatorMm: number,
-  standards: ShopStandards,
-  add: AddMember,
-  profile: PartProfile | null,
-): BlockBox[] {
-  const blockWidth = standards.stock.blockWidthMm;
-  const minBlockingGap = standards.construction.minBlockingGapMm;
-  const [L, W] = layout.interior;
-  const [a, b, c] = layout.cellSize;
-  const [, , nz] = layout.counts;
-  const gap = settings.partGapMm;
-  // Per-axis clearance: the setting, or more where a tiny part's crate was padded.
-  const [clearX, clearY, clearZ] = layout.clearance;
-  const layerBase = (k: number) => clearZ + k * (c + gap + separatorMm);
-
-  for (let k = 1; k < nz; k++) {
-    add("separator", "plywood", insideTag("Layer separator"), [0, 0, layerBase(k) - separatorMm], [L, W, separatorMm]);
-  }
-
-  const placed = new Set<string>();
-  const pieces: BlockBox[] = [];
-  const block = (min: Vec3, size: Vec3, kind: "blocking" | "bearer" = "blocking", axis: 0 | 1 = 0, label = "Blocking post") => {
-    const key = [...min, ...size].map((v) => Math.round(v)).join(",");
-    if (placed.has(key)) return;
-    placed.add(key);
-    add(kind, "lumber", insideTag(kind === "bearer" ? "Bearer" : label), min, size);
-    if (kind === "blocking" && size.every((s) => s > 0.5)) pieces.push({ min, size, axis });
-  };
-  const shaped = profile ? planShapedBlocking(profile, layout, blockWidth) : null;
-
-  for (const slot of layout.slots) {
-    const [x, y, z] = slot.min;
-    const k = slot.index[2];
-    const floorZ = k === 0 ? 0 : layerBase(k);
-    const topZ = k < nz - 1 ? layerBase(k + 1) - separatorMm : z + c;
-    const h = topZ - floorZ;
-
-    if (k === 0 && clearZ > 0) {
-      for (const fy of [0.2, 0.8]) {
-        // Kept inside the walls when the side clearance is too small for a centred strip.
-        const by = Math.min(W - blockWidth, Math.max(0, y + b * fy - blockWidth / 2));
-        block([x, by, 0], [a, blockWidth, clearZ], "bearer");
-      }
-    }
-
-    // Gap on each side: to the wall (clearance) or to the neighbour (part gap).
-    const [i, j] = slot.index;
-    const [nx, ny] = layout.counts;
-    const gx0 = i === 0 ? clearX : gap;
-    const gx1 = i === nx - 1 ? clearX : gap;
-    const gy0 = j === 0 ? clearY : gap;
-    const gy1 = j === ny - 1 ? clearY : gap;
-    const bwx = Math.min(blockWidth, a);
-    const bwy = Math.min(blockWidth, b);
-    // Shaped (#16): each post where its plan puts it, plus shaped blocks against this part's faces.
-    const plans = shaped && slotPlans(shaped, slot.index, layout.counts);
-    const cx0 = plans ? x + plans.y.low.offset : x + a / 2 - bwx / 2;
-    const cx1 = plans ? x + plans.y.high.offset : cx0;
-    const cy0 = plans ? y + plans.x.low.offset : y + b / 2 - bwy / 2;
-    const cy1 = plans ? y + plans.x.high.offset : cy0;
-    const shape = (min: Vec3, size: Vec3, axis: 0 | 1) => block(min, size, "blocking", axis, SHAPED_BLOCK);
-    if (gx0 >= minBlockingGap) {
-      block([x - gx0, cy0, floorZ], [gx0, bwy, h]);
-      plans?.x.low.fillHigh.forEach((f) => shape([x, cy0, z + f.z0], [f.depth, bwy, f.z1 - f.z0], 0));
-    }
-    if (gx1 >= minBlockingGap) {
-      block([x + a, cy1, floorZ], [gx1, bwy, h]);
-      plans?.x.high.fillLow.forEach((f) => shape([x + a - f.depth, cy1, z + f.z0], [f.depth, bwy, f.z1 - f.z0], 0));
-    }
-    if (gy0 >= minBlockingGap) {
-      block([cx0, y - gy0, floorZ], [bwx, gy0, h], "blocking", 1);
-      plans?.y.low.fillHigh.forEach((f) => shape([cx0, y, z + f.z0], [bwx, f.depth, f.z1 - f.z0], 1));
-    }
-    if (gy1 >= minBlockingGap) {
-      block([cx1, y + b, floorZ], [bwx, gy1, h], "blocking", 1);
-      plans?.y.high.fillLow.forEach((f) => shape([cx1, y + b - f.depth, z + f.z0], [bwx, f.depth, f.z1 - f.z0], 1));
-    }
-  }
-  return pieces;
-}
-
-/** Cut-list name of a block shaped to the part (#16, spec §7.5b). */
-export const SHAPED_BLOCK = "Shaped block";
-
-export type Tag = Pick<Member, "assembly" | "face" | "label">;
-export type AddMember = (kind: MemberKind, material: WoodMaterial, tag: Tag, min: Vec3, size: Vec3, cradle?: CradleProfile) => void;
-
-function insideTag(label: string): Tag {
-  return { assembly: "inside", face: "inside", label };
-}
-
-/** `count` evenly spaced start positions for boards of `width` across [start, start + span]. */
-function spread(start: number, span: number, width: number, count: number): number[] {
-  if (count <= 1) return [start];
-  const step = (span - width) / (count - 1);
-  return Array.from({ length: count }, (_, i) => start + i * step);
-}
-
-/** Groups members into cut-list lines by assembly, piece name, stock and cut, and links each member to its line. */
-function buildBom(members: Member[]): BomLine[] {
-  const lines = new Map<string, BomLine>();
-  for (const m of members) {
-    const s = [...m.size].map((v) => Math.round(v)).sort((p, q) => q - p);
-    const plywood = m.material === "plywood";
-    const stockMm = plywood ? [s[2]] : [s[2], s[1]];
-    const cutMm = plywood ? [s[0], s[1]] : [s[0]];
-    const stock = plywood ? `${s[2]} mm` : `${s[2]} × ${s[1]}`;
-    const cut = cutMm.join(" × ");
-    // Cradles with a different number of notches are different pieces.
-    const notches = m.cradle?.notches.length;
-    const key = `${m.assembly}|${m.label}|${stock}|${cut}${notches ? `|${notches} notches` : ""}`;
-    m.bomKey = key;
-    const line = lines.get(key);
-    if (line) line.qty++;
-    else {
-      const { assembly, label, kind, material } = m;
-      lines.set(key, { key, assembly, label, kind, material, stock, cut, stockMm, cutMm, qty: 1, ...(notches && { notches }) });
-    }
-  }
-  return [...lines.values()];
-}
-
-/** One line of the fastener schedule (#26): where the screws go, how they are spaced, how many. */
-export interface ScrewLine {
-  id:
-    | "skids"
-    | "joists"
-    | "side-cleats"
-    | "end-cleats"
-    | "walls-to-floor"
-    | "corners"
-    | "bearers"
-    | "cradles"
-    | "stacking-cradles"
-    | "blocking"
-    | "lid-cleats"
-    | "lid-to-walls";
-  /** The sub-assembly the screws are driven in, for the build order. */
-  assembly: Assembly;
-  /** "Floor to skids". */
-  title: string;
-  /** Spacing rule; the spacing in mm (null for a fixed count per piece). */
-  everyMm: number | null;
-  /** "along each skid, plus 1", "per bearer". */
-  rule: string;
-  qty: number;
-}
-
-/**
- * The screw estimate line by line (spec §7.6), at the standard spacings (`rates.screwSpacingMm`;
- * defaults: cleats every 150 mm, panel joints every 200 mm, skids every 300 mm), plus 2 per
- * block or bearer and 4 per cradle (#6). `CrateDesign.screws` is the sum. Lines with no screws are left out.
- */
-export function screwSchedule(members: Member[], interior: Vec3, standards: ShopStandards = DEFAULT_STANDARDS): ScrewLine[] {
-  const [L, W, H] = interior;
-  const every = standards.rates.screwSpacingMm;
-  const along = (match: (m: Member) => boolean, spacing: number) =>
-    members.filter(match).reduce((n, m) => n + Math.ceil(Math.max(...m.size) / spacing) + 1, 0);
-  const count = (kind: MemberKind) => members.filter((m) => m.kind === kind).length;
-  const cradles = (stacking: boolean) => members.filter((m) => m.kind === "cradle" && (m.label === STACKING_CRADLE_LABEL) === stacking).length;
-  const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
-  const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a;
-  const joists = count("joist");
-  const lines: ScrewLine[] = [
-    joists > 0
-      ? { id: "skids", assembly: "base", title: "Floor joists to skids", everyMm: null, rule: "2 where each joist crosses a skid", qty: joists * count("skid") * 2 }
-      : { id: "skids", assembly: "base", title: "Floor to skids", everyMm: every.skid, rule: "along each skid, plus 1", qty: along((m) => m.kind === "skid", every.skid) },
-    { id: "joists", assembly: "base", title: "Floor to joists", everyMm: every.skid, rule: "along each joist, plus 1", qty: along((m) => m.kind === "joist", every.skid) },
-    { id: "side-cleats", assembly: "sides", title: "Side wall cleats to panels", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("sides"), every.cleat) },
-    { id: "end-cleats", assembly: "ends", title: "End wall cleats to panels", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("ends"), every.cleat) },
-    { id: "walls-to-floor", assembly: "sides", title: "Walls to floor", everyMm: every.panelJoint, rule: "around the base", qty: joint },
-    { id: "corners", assembly: "sides", title: "Wall corners", everyMm: every.panelJoint, rule: "up each of the 4 corners", qty: Math.ceil(H / every.panelJoint) * 4 },
-    { id: "bearers", assembly: "inside", title: "Bearers to floor", everyMm: null, rule: "2 per bearer", qty: count("bearer") * 2 },
-    { id: "cradles", assembly: "inside", title: "Cradles to floor", everyMm: null, rule: "2 at each end of each cradle", qty: cradles(false) * SCREWS_PER_CRADLE },
-    {
-      id: "stacking-cradles",
-      assembly: "inside",
-      title: "Stacking cradles through the side walls",
-      everyMm: null,
-      rule: "2 at each end of each cradle",
-      qty: cradles(true) * SCREWS_PER_CRADLE,
-    },
-    { id: "blocking", assembly: "inside", title: cradles(false) ? "End stops" : "Blocking posts", everyMm: null, rule: "2 per post", qty: count("blocking") * 2 },
-    { id: "lid-cleats", assembly: "lid", title: "Lid cleats to lid panel", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("lid"), every.cleat) },
-    { id: "lid-to-walls", assembly: "lid", title: "Lid to walls", everyMm: every.panelJoint, rule: "around the top", qty: joint },
-  ];
-  return lines.filter((l) => l.qty > 0);
-}
-
-/** Total wood screws: the sum of `screwSchedule`. */
-function estimateScrews(members: Member[], interior: Vec3, standards: ShopStandards): number {
-  return screwSchedule(members, interior, standards).reduce((n, l) => n + l.qty, 0);
-}
-
-/** The default 53' dry van limits (`limits.trailerMm`); the checks read the standards. */
-export const DRY_VAN_53FT_MM = DEFAULT_STANDARDS.limits.trailerMm;
-
-/** The default LTL excessive-length threshold (`limits.ltlExcessiveLengthMm`). */
-export const LTL_EXCESSIVE_LENGTH_MM = DEFAULT_STANDARDS.limits.ltlExcessiveLengthMm;
-
-/** The default carton limits (`limits.cardboard`). */
-export const CARDBOARD_LIMITS = DEFAULT_STANDARDS.limits.cardboard;
-
-/** Actual -> nominal US lumber size in inches, for naming sections ("4×4"). */
-const NOMINAL_IN: Record<number, number> = { 19: 1, 38: 2, 64: 3, 89: 4, 140: 6, 184: 8, 235: 10, 286: 12 };
-
-/** "4×6" for standard US lumber, otherwise the actual size in mm. */
-function sectionName(a: number, b: number): Message {
-  const [na, nb] = [NOMINAL_IN[a], NOMINAL_IN[b]];
-  return na && nb ? parts(`${na}×${nb}`) : msg`${shopMm(a)} × ${shopMm(b)}`;
-}
-
-/**
- * The narrowest gap beside a part in the drawn crate, where blocking posts go: the
- * per-axis wall clearance (larger than the setting when a tiny crate was padded), and
- * the part gap only on an axis with more than one part.
- */
-function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where: string } {
-  const [nx, ny] = layout.counts;
-  const [clearX, clearY] = layout.clearance;
-  const gaps = [
-    ...(nx > 1 || ny > 1 ? [{ mm: partGapMm, where: "between parts" }] : []),
-    clearX === clearY ? { mm: clearX, where: "to the walls" } : { mm: clearX, where: "to the end walls" },
-    ...(clearX === clearY ? [] : [{ mm: clearY, where: "to the side walls" }]),
-  ];
-  return gaps.reduce((a, b) => (b.mm < a.mm ? b : a));
-}
-
-/**
- * The shaped-blocking sentence for the `blocking` check (#16): the restraint metric for this
- * crate against bounding-box blocking, or "" when blocking follows the bounding box.
- */
-function shapedText(d: CrateDesign): Message {
-  const s = d.shapedBlocking;
-  if (!s) return [];
-  const pct = (r: Restraint) => `${Math.round(r.contact * 100)}%`;
-  // Infinite only if nothing on some side touches the part: say so rather than print "Infinity".
-  const shift = (r: Restraint) => {
-    const most = Math.max(...r.freeMm);
-    return Number.isFinite(most) ? msg`${shopMm(most)}` : parts("unlimited");
-  };
-  const blocks = s.blocks ? ` with ${s.blocks} shaped block${s.blocks === 1 ? "" : "s"} in its recesses` : "";
-  return msg` They are shaped to the part${blocks}: ${pct(s.shaped)} of the blocking face touches it (bounding box: ${pct(s.boundingBox)}), and the most a part can shift is ${shift(s.shaped)} (bounding box: ${shift(s.boundingBox)}).`;
-}
-
-
-/**
- * The computed base rating (#7, spec §7.15): "Base rated 1,240 kg; this crate's payload is 820 kg
- * (66%)", with the skids, joists and floor, and what governs.
- */
-function baseRatingCheck(d: CrateDesign, standards: ShopStandards): Check {
-  const c = d.construction;
-  const { ratedPayloadKg: rated, base } = d.structure;
-  const pct = rated > 0 ? `${Math.round((d.payloadKg / rated) * 100)}%` : "over";
-  const head = msg`Base rated ${kg(Math.floor(rated))}; this crate's payload is ${kg(d.payloadKg)} (${pct}).`;
-  const joists = c.joist ? msg`, ${c.joist.count} ${sectionName(c.joist.wide, c.joist.tall)} floor joists` : [];
-  const built = msg`${c.skidCount} × ${sectionName(c.skid.wide, c.skid.tall)} skids${joists} and a ${shopMm(c.floorMm)} floor`;
-  const governs = `${base.governing.label} governs`;
-  return base.ok && d.payloadKg <= rated
-    ? {
-        id: "base-rating",
-        level: "ok",
-        title: "Within the base rating",
-        detail: msg`${head} ${built}, sized for ${standards.structure.loadFactor}× the load (${governs}).`,
-      }
-    : {
-        id: "base-rating",
-        level: "caution",
-        title: "Over the base rating",
-        detail: msg`${head} Even ${built} can't carry it (${governs}). Split the batch, or add heavier skid or joist stock.`,
-      };
-}
-
-/** Only when crates may be stacked (`structure.lidStackKg` > 0): whether the lid carries it. */
-function lidRatingCheck(d: CrateDesign): Check | null {
-  const lid = d.structure.lid;
-  if (lid.stackKg <= 0 || lid.capacityKg === null) return null;
-  const c = d.construction.lid;
-  const frame = msg`${c.count} ${c.joists ? sectionName(c.wide, c.tall) : sectionName(c.tall, c.wide)} ${c.joists ? "joists on edge" : "cross cleats"}`;
-  const head = msg`Sized for ${kg(lid.stackKg)} stacked on top; rated ${kg(lid.capacityKg)}`;
-  return lid.ok
-    ? { id: "lid", level: "ok", title: "Lid carries the stacking load", detail: msg`${head}, with ${frame}.` }
-    : { id: "lid", level: "caution", title: "Lid can't take the stacking load", detail: msg`${head} even with ${frame}. Don't stack on this crate, or add heavier joist stock.` };
-}
-
-/** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
-function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings, standards: ShopStandards): Check[] {
-  const checks: Check[] = [];
-  const lim = standards.limits;
-  const minBlockingGap = standards.construction.minBlockingGapMm;
-  const [eL, eW, eH] = d.layout.external;
-  const nz = d.layout.counts[2];
-
-  const van = lim.trailerMm;
-  const tooBig = [
-    eL > van.interiorLength && msg`Length is over the ${mm(van.interiorLength)} trailer floor.`,
-    eW > van.doorWidth && msg`Width is over the ${mm(van.doorWidth)} door opening.`,
-    eH > van.doorHeight && msg`Height is over the ${mm(van.doorHeight)} door opening.`,
-  ].filter((m): m is Message => !!m);
-  checks.push(
-    tooBig.length
-      ? { id: "door", level: "caution", title: "Too big for a 53' dry van", detail: msg`${joinMessages(tooBig, " ")} Confirm open-deck or oversize transport with the carrier.` }
-      : { id: "door", level: "ok", title: "Fits a 53' dry van", detail: msg`Within the ${mm(van.doorWidth)} × ${mm(van.doorHeight)} door and the ${mm(van.interiorLength)} floor.` },
-  );
-
-  const ratio = eH / Math.min(eL, eW);
-  checks.push(
-    d.layout.stable
-      ? { id: "stable", level: "ok", title: "Stable footprint", detail: msg`Height is ${ratio.toFixed(2)}× the short side. The limit is ${lim.stableHeightRatio}×.` }
-      : { id: "stable", level: "caution", title: "Tip-over risk", detail: msg`Height is ${ratio.toFixed(2)}× the short side, over the ${lim.stableHeightRatio}× limit. Strap it down or pick a lower layout.` },
-  );
-
-  const posts = d.members.filter((m) => m.kind === "blocking" && m.label !== SHAPED_BLOCK).length;
-  const cradles = d.members.filter((m) => m.kind === "cradle").length;
-  const held = cradles
-    ? msg`${cradles} notched cradles hold the parts across their length, and ${posts} end stops hold them along it.`
-    : msg`${posts} blocking posts hold the parts on all four sides.${shapedText(d)}`;
-  const tightest = smallestSideGap(d.layout, settings.partGapMm);
-  const betweenParts = tightest.where === "between parts";
-  const gapText = msg`${shopMm(tightest.mm)} ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
-  checks.push(
-    tightest.mm < minBlockingGap
-      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: msg`The ${gapText} is under the ${shopMm(minBlockingGap)} that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.` }
-      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: msg`${held} The smallest gap is ${shopMm(tightest.mm)}, ${tightest.where}.` },
-  );
-
-  if (nz > 1) {
-    const stackedKg = part.mass_kg * (nz - 1);
-    checks.push(
-      stackedKg > lim.stackKg
-        ? { id: "stack", level: "caution", title: "Heavy stack on the bottom layer", detail: msg`Each bottom position carries ${kg(stackedKg)} from above. Consider fewer layers.` }
-        : { id: "stack", level: "ok", title: "Stack load is light", detail: msg`Each bottom position carries ${kg(stackedKg)} from above. The limit is ${kg(lim.stackKg)}.` },
-    );
-  }
-
-  checks.push(baseRatingCheck(d, standards));
-  const lidCheck = lidRatingCheck(d);
-  if (lidCheck) checks.push(lidCheck);
-
-  checks.push(...handlingChecks(d.handling, standards));
-
-  if (eL > lim.ltlExcessiveLengthMm) {
-    const ft = Math.round((lim.ltlExcessiveLengthMm / 304.8) * 10) / 10;
-    checks.push({ id: "oversize", level: "info", title: "LTL length surcharge likely", detail: msg`Length is over ${mm(lim.ltlExcessiveLengthMm)} (${ft} ft). Most LTL carriers add an excessive-length charge.` });
-  }
-  if (d.layout.utilization < lim.lowUtilization) {
-    checks.push({ id: "utilization", level: "info", title: "Mostly empty space", detail: parts("Parts are packed by their bounding box, so irregular shapes leave air. A nested layout could be smaller.") });
-  }
-  const [iL, iW, iH] = d.layout.interior;
-  const box = lim.cardboard;
-  if (part.mass_kg <= box.partKg && d.payloadKg <= box.payloadKg && iL + iW + iH <= box.boxDimSumMm) {
-    checks.push({
-      id: "cardboard",
-      level: "info",
-      title: "A cardboard box may be enough",
-      detail: msg`${kg(d.payloadKg)} in a ${dimsMessage([iL, iW, iH])} space is within what a 32 ECT single-wall carton is rated for (${kg(29.5)} gross, ${mm(box.boxDimSumMm)} L + W + H). The crate design is still here if you want one.`,
-    });
-  }
-  return checks;
 }

@@ -48,7 +48,7 @@ test.describe("bounding-box blocking", () => {
   test("Checks lists the centre of gravity and the forklift and pallet-jack checks", async ({
     page,
   }) => {
-    // The pallet jack is info (forklift only) on the default crate, so there is still no badge.
+    // The pallet jack is a pass (use a forklift) on the default crate, so there is still no badge.
     await expect(tab(page, "Checks")).toHaveText("Checks");
     await openTab(page, "Checks");
     const p = panel(page);
@@ -64,13 +64,38 @@ test.describe("bounding-box blocking", () => {
     await expect(p).toContainText(
       "Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm.",
     );
-    await expect(p).toContainText(
-      "Forklift only: too narrow for a pallet jack",
-    );
-    await p
-      .getByText("Forklift only: too narrow for a pallet jack")
-      .scrollIntoViewIfNeeded();
+    const jack = p.locator(".check", { hasText: "Pallet jack won't fit: use a forklift" });
+    await expect(jack).toHaveClass(/\bok\b/);
+    await expect(jack).toContainText("The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.");
+    await jack.scrollIntoViewIfNeeded();
+    await shot(page, "25-handling-checks-metric");
+    await setUnits(page, "imperial");
+    await expect(jack).toContainText("The widest gap between the skids is 18 11/16″. A pallet jack needs 20 1/2″–27 3/16″ across its forks.");
     await shot(page, "25-handling-checks");
+  });
+
+  test("the pallet-jack row is a pass in print, and a caution when no forklift fits either", async ({
+    page,
+    context,
+  }) => {
+    await context.addInitScript(() => {
+      window.print = () => {};
+    });
+    await openTab(page, "Cut list");
+    const [popup] = await Promise.all([page.waitForEvent("popup"), panel(page).getByRole("button", { name: "Print / save PDF" }).click()]);
+    const row = popup.getByRole("region", { name: "Crate spec" }).locator("table.checks tr", { hasText: "Pallet jack won't fit: use a forklift" });
+    await expect(row).toContainText("Pass");
+    await popup.setViewportSize({ width: 1000, height: 1400 });
+    await popup.getByRole("region", { name: "Crate spec" }).locator("table.checks").screenshot({ path: "e2e/screenshots/25-handling-print-checks.png" });
+    await popup.close();
+
+    // One part is too small for a forklift as well, so the jack row stays a caution (not a pass).
+    await openTab(page, "Rules");
+    await panel(page).getByLabel("Quantity").fill("1");
+    await pollCrate(page, (s) => s.quantity).toBe(1);
+    await openTab(page, "Checks");
+    await expect(panel(page).locator(".check.caution", { hasText: "Pallet jack may not fit" })).toBeVisible();
+    await expect(panel(page)).not.toContainText("use a forklift");
   });
 
   test("the 3D view marks the centre of gravity and the fork entry, with the size labels", async ({

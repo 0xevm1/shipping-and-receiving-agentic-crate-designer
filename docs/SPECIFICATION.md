@@ -102,9 +102,10 @@ buildable crate design and cut list in under a minute, without needing CAD.
   is unchanged. Nominal names keep a plain `x`: the spans that show them carry `.nominal`
   (`font-feature-settings: "calt" 0`), because Inter's contextual alternates would draw "4x4"
   as "4×4" (#62). Real dimensions ("932 × 652 × 497") use the true `×` character.
-- **Rotations** are XYZ-order Euler angles in multiples of π/2. Packing and rendering both use
-  three.js `Euler`/`Matrix4` (`orientations.ts`), so packed bounding boxes always match the
-  rendered models.
+- **Rotations** are XYZ-order Euler angles in multiples of π/2. Packing uses the exact integer
+  rotation matrix of those angles (`orientations.ts`, no three.js in the domain) and the viewer
+  applies the same angles with three.js's `Euler`; a test compares the two for every orientation,
+  so packed bounding boxes always match the rendered models.
 
 ## 5. Architecture
 
@@ -151,16 +152,27 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 
 | File | Responsibility |
 |---|---|
-| `src/domain/schema.ts` | zod schemas and types: `Part`, `PartsCatalog`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
+| `src/domain/schema.ts` | zod schemas and types: `Part`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart` and `modelUrl` |
-| `src/domain/orientations.ts` | The 6 orientations; `rotatedSize()` |
+| `src/domain/orientations.ts` | The 6 orientations; `rotationMatrix()` (integer, as three.js's XYZ Euler) and `rotatedSize()` |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
-| `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
+| `src/domain/packing.ts` | `enumerateLayouts()` |
 | `src/domain/cradles.ts` | Cradles for slender parts (#6, §7.5a): `isSlender`, `usesCradles`, `cradleStations`, `notchFor`, `addCradleDunnage`, and the notch outline (`cradleProfile`, `cradleSolidAt`) |
 | `src/lib/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB (`components/viewer/cradleGeometry.ts` re-exports it) |
 | `src/lib/sceneMaterials.ts` | The wood colours and part material the viewer and the GLB share (`components/viewer/scene.ts` re-exports them), so `lib` imports nothing from `components` |
-| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
-| `src/domain/profile.ts` | Shaped blocking (#16, §7.5b): the `PartProfile` type, `usableProfile`, rotating a profile into the crate (`rotationMatrix`, `sideGrid`), post placement and shaped blocks (`planShapedBlocking`, `slotPlans`), and the restraint metric (`restraint`) |
+| `src/domain/crate.ts` | `designCrate`: wires the steps below into a `CrateDesign`, and re-exports the crate's public types and entry points (`Member`, `BomLine`, `Check`, `CrateDesign`, `ASSEMBLIES`, `SHAPED_BLOCK`, `screwSchedule`, `resolveConstruction`, ...) so importers keep one path |
+| `src/domain/members.ts` | The boards: `Member`, `MemberKind`, `MemberVariant` (shaped blocks and stacking cradles, found by variant not label), `Assembly`, `Face`, `ASSEMBLIES`, the cradle `Notch` types, `memberBounds()`, `sortDesc()` |
+| `src/domain/check.ts` | `Check` and its id groups, each owned by the module that produces it (`crateChecks.ts`, `handling.ts`, `shipment.ts`) |
+| `src/domain/construction.ts` | `resolveConstruction` (§7.3: panel, floor, cleat and the smallest skid from the payload), `structureMaterials`, `structureAllowance`, `constructionFor` |
+| `src/domain/shell.ts` | `addShell`: floor, joists, skids, the four walls and the lid as boards (§7.4) |
+| `src/domain/dunnage.ts` | `addDunnage` (§7.5): bearers, separators, blocking posts and shaped blocks; `SHAPED_BLOCK`; the `insideTag` and `placementKey` helpers `cradles.ts` shares |
+| `src/domain/bom.ts` | `buildBom` (the cut list) and `screwSchedule` / `screwCount` (§7.6) |
+| `src/domain/materials.ts` | `memberKg`, `materialTotals`: tare by assembly, wood volumes, plywood area and lumber length from the boards |
+| `src/domain/crateDesign.ts` | The `CrateDesign` type |
+| `src/domain/crateChecks.ts` | `evaluateChecks` and the base-rating, lid, blocking, door, stack, LTL, utilization and cardboard checks (§7.7) |
+| `src/domain/lumber.ts` | `NOMINAL_LUMBER` and `nominalLumber()`: the plain-`x` names ("4x6") check text uses; `src/lib/lumber.ts` should import this table |
+| `src/domain/units.ts` | `MM_PER_IN`, `MM_PER_FT`, `LB_PER_KG`, `IN3_PER_FT3` and the mm to m conversions the domain uses |
+| `src/domain/profile.ts` | Shaped blocking (#16, §7.5b): the `PartProfile` type, `usableProfile`, rotating a profile into the crate (`sideGrid`), post placement and shaped blocks (`planShapedBlocking`, `slotPlans`), and the restraint metric (`restraint`) |
 | `src/domain/message.ts` | `Message`: sentences with lengths and masses as data (`msg`, `mm`, `shopMm`, `kg`), so checks stay unit-free (#62, §7.7) |
 | `src/domain/handling.ts` | Centre of gravity, fork openings, tine placement and the handling checks (`analyseHandling`, `forkOpenings`, `placeTines`, `handlingChecks`; §7.14, #8). Read-only over the members |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
@@ -176,6 +188,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/shareLink.ts` | Share links (#14, §9): base64url, `shareHash` / `shareUrl`, `readShareHash` (validated by `parseDesignFile`) |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
+| `src/domain/testFixtures.ts` | Shared test builders: `custom` standards, `settings`, `designOf` |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
@@ -203,9 +216,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill (#51; #77 briefly shared it with a View popover button, removed in #62) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
-| `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
-| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and the saved units in `localStorage` (§9) |
-| `src/state/libraryStorage.ts` | Loads and saves the design library in `localStorage` (§9) |
+| `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
+| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
+| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
+| `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
@@ -476,8 +490,7 @@ shop choice — the 0.5 mm smallest board, bearers at 20% and 80% of the part wi
 skids and two uprights per wall, the six orientations — plus input validation: the settings
 ranges (§6.2), `MAX_PART_MM` (20 m, a units-mistake guard, §7.9) and the manual panel choices
 12 / 15 / 19 mm in the Rules tab (`CrateSettingsSchema`). Auto picks from `panelPlywoodMm`;
-choosing by hand still offers the three standard sheets. The 29.5 kg carton rating quoted in the
-`cardboard` check's text is a fact about 32 ECT board, not a setting.
+choosing by hand still offers the three standard sheets.
 
 **In the store.** `standards` starts as `DEFAULT_STANDARDS` (frozen). `setStandards(patch)`
 deep-merges a partial patch onto the current standards (`mergeStandards`, which ignores
@@ -962,17 +975,15 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
 | `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). For a cradled slender part (§7.5b) the pass text names the cradles and end stops instead of the posts. The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36). With shaped blocking (§7.5b) the pass text adds "They are shaped to the part with N shaped blocks in its recesses: C% of the blocking face touches it (bounding box: B%), and the most a part can shift is F mm (bounding box: G mm)." ("unlimited" when nothing on some side touches the part); the post count leaves out the shaped blocks |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
-| `base-rating` | Within the base rating ("Base rated 859 kg; this crate's payload is 645 kg (75%). 3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).") | caution: Over the base rating ("… Even 3 × 4×6 skids … can't carry it (skid bending governs). Split the batch, or add heavier skid or joist stock.") | payload ≤ the computed base rating (§7.15, #7; it replaced the fixed 1,000 kg `limits.baseRatingKg`). Sections are named "4×4", "4×6", "2×4", or in mm for non-standard stock |
+| `base-rating` | Within the base rating ("Base rated 859 kg; this crate's payload is 645 kg (75%). 3 × 4x6 skids, 7 2x4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).") | caution: Over the base rating ("… Even 3 × 4x6 skids … can't carry it (skid bending governs). Split the batch, or add heavier skid or joist stock.") | payload ≤ the computed base rating (§7.15, #7; it replaced the fixed 1,000 kg `limits.baseRatingKg`). Sections are named with a plain `x` ("4x4", "4x6", "2x4"; the table is `src/domain/lumber.ts`), or in mm for non-standard stock |
 | `lid` | Lid carries the stacking load | caution: Lid can't take the stacking load | Only when `structure.lidStackKg` > 0 (§7.15): the lid's rated stacking load ≥ `lidStackKg` |
 | `cog-offset`, `cog-tip`, `forklift`, `pallet-jack` | §7.14 | §7.14 | Centre of gravity and handling (#8), in this order after `base-rating` |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% (`limits.lowUtilization`) |
-| `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`) |
+| `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`). The text states those three limits as configured ("… within the shop's carton limits (parts up to 15 kg, payload up to 25 kg, 1,905 mm L + W + H).") |
 | `crate-limit` | Within the per-crate limits | caution: Over the per-crate limit | Only on a split batch (§7.10), added by `planShipment` to each crate type: ok names the plan and the limits; caution when one part alone is over them |
 
-The figures in this table are the defaults. `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and
-`CARDBOARD_LIMITS` in `crate.ts` are read-only views of them, kept for tests; the checks read
-the standards passed in.
+The figures in this table are the defaults; the checks read the standards passed in.
 
 **Trailer limits.** Typical published dimensions for a 53' × 102" dry van are an interior of
 about 52'6" × 101" × 110" and a rear door opening of about 98–100" × 108–110". The door, not the
@@ -987,7 +998,8 @@ cardboard boxes. `cardboard` suggests it, while still producing the crate design
 - each part is ≤ 15 kg, light enough not to punch through corrugated board. The 11.8 kg
   aluminum housing qualifies; the 21.5 kg steel bracket and 27 kg steel shaft do not.
 - the payload is ≤ 25 kg, which leaves room for the box and dunnage under the 65 lb (29.5 kg)
-  gross limit of a 32 ECT single-wall box (NMFC Item 222 / UFC Rule 41).
+  gross limit of a 32 ECT single-wall box (NMFC Item 222 / UFC Rule 41). That rating is the
+  reason for the default; the shop's limit is the setting, and it is what the check's text states.
 - the crate interior's L + W + H is ≤ 1905 mm (75 in), the same rule's size limit for that box.
 
 Of the sample parts at their suggested quantities, only a single PART-003 triggers it (11.8 kg,
@@ -1408,10 +1420,11 @@ narrow (20.5″) and a standard (27″) jack; any one jack has a fixed spread.
 | `cog-offset` | Centre of gravity near the middle ("It is on both centre lines, within 10% of the length (93 mm) and width (65 mm). 265 mm above the ground.") | caution: Off-centre centre of gravity ("Centre of gravity is 120 mm toward the left end; mark it on the crate. The limit is 10% …") | \|offset X\| ≤ `cogOffsetRatio` × outside length and \|offset Y\| ≤ `cogOffsetRatio` × outside width |
 | `cog-tip` | Low centre of gravity ("… the crate tips over a side only past 51°. The limit is 30°.") | caution: Top-heavy ("… tips over a side at 24°, under the 30° limit. Strap it down, mark the centre of gravity, or pick a lower layout.") | tip angle ≥ `minTipAngleDeg` |
 | `forklift` | Forklift fits from the ends ("Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, …") | caution: Forklift may not fit (too low: "… 70 mm clear under the floor, needs 75 mm. Use taller skids."; too narrow: "the widest opening between the skids is 156 mm; it needs room for …") | `placeTines` with `handling.forklift` |
-| `pallet-jack` | Pallet jack fits from the ends | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either); **info**: "Forklift only: too narrow for a pallet jack" when only the width rules the jack out and a forklift fits | `placeTines` with `handling.palletJack` |
+| `pallet-jack` | Pallet jack fits from the ends; also **"Pallet jack won't fit: use a forklift"** ("The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.") when only the width rules the jack out and a forklift fits | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either) | `placeTines` with `handling.palletJack` |
 
 A crate needs one way to be lifted. A small crate too narrow for a pallet jack is a fact of its
-size rather than a defect, so while a forklift fits it is info, and the default PART-001 × 4
+size rather than a defect, so while a forklift fits it is a pass (an answered question: use a
+forklift, not an open one), and the default PART-001 × 4
 crate (one 474 mm opening, under a jack's 520 mm spread) still has no cautions. Too little height
 under the floor is always a caution.
 
@@ -1524,7 +1537,7 @@ default standards.
 | Joist bending, shear, bearing | ss = 455.5; S = 38 × 89² / 6 = 50,166 mm³ | 2,581 / 1,559 / 3,739 kg |
 | **Base rating** | the smallest: floor bending governs | **1,255 kg; 800 kg is 64%** |
 
-And in the app, **PART-001 × 30** (645 kg of brackets in a 2176 × 936 mm crate): 3 × 4×6 skids
+And in the app, **PART-001 × 30** (645 kg of brackets in a 2176 × 936 mm crate): 3 × 4x6 skids
 (4×4 would allow less than 645 kg over a 2.2 m span), 7 2×4 joists (over 450 kg), and "Base
 rated 859 kg; this crate's payload is 645 kg (75%) … (skid bending governs)". The default
 **PART-001 × 4** (86 kg) keeps 2 × 4×4 skids and no joists, rated 299 kg (29%), with the floor
@@ -1917,6 +1930,13 @@ version or an invalid value falls back to the defaults with a `console.warn`, an
 is missing or throws (server, private mode, quota) is treated as empty. The version is in the
 key, so an incompatible future format starts fresh rather than misreading old data.
 
+All four saved items (standards, units, library, last design) go through `src/state/persist.ts`
+with one contract: a save never throws and returns `true` only if the value is stored, so a
+missing store (server, blocked) is a failed save. Standards and units save inside their
+`useDesigner` actions, the library inside `useLibrary`, and the last design from a debounced
+subscriber in `lastDesignLoader.ts`. The library shows the "browser refused to store it"
+message when a save, rename, delete (`remove(...).saveError`) or undo fails to store.
+
 **Display units** (#15) are saved under `crate-designer.units.v1` (`src/state/unitsStorage.ts`)
 as `"imperial"` or `"metric"` on every `setUnits`. Either choice is saved, so a later change of
 default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
@@ -2278,9 +2298,22 @@ without `#`), a custom part with non-ASCII text too; `shareUrl` keeps the query 
 design in the hash; a hash without a design is ignored; damaged, truncated and tampered links
 (out-of-range quantity, wrong kind, newer version, not an object) are refused.
 
+**`src/state/persist.test.ts`** checks `readJson` (missing, no store or throwing store give the
+fallback silently; a rejected or throwing parser warns), `writeJson` (store, remove for null,
+false for no store or a throwing store) and that all four save functions return false for null
+and throwing storage. Its fixtures (`src/state/fixtures/*.json`) are the stored text of the
+shop standards, library and last design, and the bare units word, under the four unchanged keys:
+they must keep loading (the standards fixture must also write back byte for byte).
+
+**`src/state/checks.test.ts`** checks `modelMatchesCatalog` (null without a size or measurement;
+the 1 mm tolerance per axis) and `allChecks` (model ok / caution / info notes, the stand-in mass
+caution, cautions-first sorting, domain checks left untouched).
+
 **`src/state/library.store.test.ts`** checks the library's storage (versioned key; empty when
 nothing is saved and nothing stored when empty; unreadable JSON, another kind or a newer version
-fall back to empty with one warning; good entries survive bad ones; throwing storage) and
+fall back to empty with one warning; good entries survive bad ones; throwing storage; a failed
+save with null or throwing storage) and the store reporting the storage-failed message from
+save, rename, remove and undo, and
 `useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
 each time, export and import with duplicates and bad entries counted).
 
@@ -2317,7 +2350,8 @@ given settings and layout pick (unlike `setPart`). It also checks
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
 record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
 `setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
-a profile for another model or a failed analysis, survives a mass edit and is dropped with a new
+a profile for another model or a failed analysis, drops a pin or hover on a cut-list line that is
+gone, survives a mass edit and is dropped with a new
 part.
 
 **`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5b) with synthetic profiles: the
@@ -2557,8 +2591,9 @@ HTML report as `playwright-report`.
     `09-header-*`.
   - `25-handling` (#8, #87): with **bounding-box blocking** (shape analysis stubbed off) the
     Checks tab lists "Centre of gravity near the middle" (on both centre lines), "Low centre of
-    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and "Forklift only: too
-    narrow for a pallet jack", still with no badge; the test hook's `cog.mm` is exactly on the
+    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and the ticked "Pallet jack
+    won't fit: use a forklift" (text in metric and imperial; also at quantity 1, and Pass in the
+    print checks table), still with no badge; the test hook's `cog.mm` is exactly on the
     interior centre lines, there is no CoG marker (centred and low) and there are 2 arrows (one
     opening, both ends), in closed and exploded modes; Size labels off hides the arrows but not
     the CoG. With **shaped blocking** (#16) the blocks in each bracket's −X recess move the CoG

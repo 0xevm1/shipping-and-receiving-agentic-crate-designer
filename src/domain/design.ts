@@ -1,4 +1,6 @@
-import { designCrate, resolveConstruction, structureAllowance, structureMaterials, type CrateDesign } from "./crate";
+import { resolveConstruction, structureAllowance, structureMaterials } from "./construction";
+import { designCrate } from "./crate";
+import type { CrateDesign } from "./crateDesign";
 import { enumerateLayouts, type Layout } from "./packing";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, ShopStandardsSchema, type ShopStandards } from "./standards";
@@ -32,8 +34,7 @@ export interface DesignResult {
  * UI can recompute it on every change with `useMemo`. Never throws: input it
  * can't design for comes back as a `problem` instead of a design.
  *
- * `standards` are the shop's house rules (stock, thresholds, limits, rates); the
- * defaults reproduce every design from before they were configurable.
+ * `standards` are the shop's house rules (stock, thresholds, limits, rates).
  */
 export function computeDesign(
   part: DesignPart,
@@ -54,7 +55,7 @@ export function computeDesign(
 }
 
 /**
- * How the recommended layout is chosen (#17, spec §7.2). `volume` is the default ranking
+ * How the recommended layout is chosen (spec §7.2). `volume` is the default ranking
  * (stable, then least outside volume, then lowest). `cost` and `density` re-rank by total
  * crate cost (lowest first) or by freight (lowest estimated freight class, then lightest gross).
  */
@@ -100,7 +101,7 @@ export function rankByObjective(
   return { layouts: scored.map((s) => s.layout), designs };
 }
 
-/** The scorecard numbers for one layout of the batch, for comparing layouts (#17). */
+/** The scorecard numbers for one layout of the batch, for comparing layouts. */
 export interface LayoutScore {
   costUsd: number;
   labourHours: number;
@@ -141,7 +142,7 @@ export function rankLayouts(part: DesignPart, settings: CrateSettings, standards
       partGapMm: settings.partGapMm,
       wallClearanceMm: settings.wallClearanceMm,
       separatorMm: construction.panelMm,
-      // The base and lid are sized per layout (#7), exactly as `designCrate` will build them.
+      // The base and lid are sized per layout, exactly as `designCrate` will build them.
       structureAllowance: (grid) =>
         structureAllowance(construction, planStructure(grid, materials, payloadKg, settings.partGapMm, standards)),
       minInteriorMm: minInteriorMm(standards),
@@ -212,7 +213,7 @@ export type LayoutExplanation =
   | { kind: "tie" }
   /** The user picked a different layout, which ships `morePct`% more than the recommendation. */
   | { kind: "picked"; morePct: number }
-  /** Recommended under a cost or freight-density ranking (#17). */
+  /** Recommended under a cost or freight-density ranking. */
   | { kind: "ranked"; by: Exclude<Ranking, "volume"> };
 
 export function explainLayout(

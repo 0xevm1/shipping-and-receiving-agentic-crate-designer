@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { screwSchedule } from "./crate";
-import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
+import { DEFAULT_SETTINGS } from "./design";
+import { memberKg } from "./materials";
+import type { Member } from "./members";
 import type { CrateSettings } from "./schema";
 import { crateGrossLimitKg, planShipment } from "./shipment";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
+import { DEFAULT_STANDARDS } from "./standards";
 import {
   floorCheck,
   frameCount,
@@ -20,14 +22,9 @@ import {
   skidShare,
   type BaseInput,
 } from "./structure";
+import { custom, designOf } from "./testFixtures";
 
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
-const design = (part: DesignPart, patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
-  computeDesign(part, { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
+const design = designOf;
 
 const STD = { wide: 89, tall: 89 };
 const HEAVY = { wide: 89, tall: 140 };
@@ -181,7 +178,7 @@ describe("lid", () => {
     const d = design(getPart("PART-001"), { quantity: 8 }, custom({ structure: { lidStackKg: 500 } }));
     const lid = d.checks.find((c) => c.id === "lid")!;
     expect(lid.level).toBe("ok");
-    expect(metric(lid.detail)).toMatch(/^Sized for 500 kg stacked on top; rated [\d,]+ kg, with \d+ 2×4 joists on edge\.$/);
+    expect(metric(lid.detail)).toMatch(/^Sized for 500 kg stacked on top; rated [\d,]+ kg, with \d+ 2x4 joists on edge\.$/);
     expect(d.bom.some((l) => l.label === "Lid joist" && l.stock === "38 × 89")).toBe(true);
     // The lid is taller, and the crate with it.
     const nominal = design(getPart("PART-001"), { quantity: 8 });
@@ -214,7 +211,7 @@ describe("designCrate with structural sizing", () => {
     for (const s of skids) expect(s.min[2]).toBe(-248);
   });
 
-  it("keeps the fork openings as tall as the skids: the joists sit on top of them (#8)", () => {
+  it("keeps the fork openings as tall as the skids: the joists sit on top of them", () => {
     const openings = heavy.handling.openings;
     expect(openings).toHaveLength(2);
     for (const o of openings) {
@@ -246,7 +243,7 @@ describe("designCrate with structural sizing", () => {
     expect(check.title).toBe("Within the base rating");
     expect(metric(check.detail)).toBe(
       `Base rated ${rated} kg; this crate's payload is 645 kg (${Math.round((645 / heavy.structure.ratedPayloadKg) * 100)}%). ` +
-        "3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).",
+        "3 × 4x6 skids, 7 2x4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).",
     );
     expect(rated).toBe(859);
   });
@@ -279,7 +276,7 @@ describe("designCrate with structural sizing", () => {
   });
 });
 
-describe("shipment planning on the computed rating (#25 with #7)", () => {
+describe("shipment planning on the computed rating", () => {
   const settings = (patch: Partial<CrateSettings>) => ({ ...DEFAULT_SETTINGS, ...patch });
 
   it("limits a crate to the smaller of the per-crate gross and the base rating", () => {
@@ -314,5 +311,24 @@ describe("shipment planning on the computed rating (#25 with #7)", () => {
       [6, 30],
       [1, 20],
     ]);
+  });
+});
+
+describe("dead-load estimate", () => {
+  // The base is sized from an estimate made before the crate is drawn (`estimateDeadLoad`), so the
+  // estimate must never be lighter than the boards that end up above the skids.
+  const kgOf = (members: Member[]) => members.reduce((n, m) => n + memberKg(m, DEFAULT_STANDARDS), 0);
+  const cases = parts.flatMap((p) => [...p.suggested_quantities, 1, 7, 40].map((quantity) => [p.id, quantity] as const));
+
+  it.each(cases)("covers the weight above the skids for %s x %i", (id, quantity) => {
+    const d = design(getPart(id), { quantity });
+    // Everything above the skids counts, floor joists included.
+    const actual = kgOf(d.members.filter((m) => m.kind !== "skid"));
+    expect(d.structure.dead.allKg).toBeGreaterThanOrEqual(actual - 1e-9);
+  });
+
+  it.each(cases)("covers the dunnage that loads the floor for %s x %i", (id, quantity) => {
+    const d = design(getPart(id), { quantity });
+    expect(d.structure.dead.contentsKg).toBeGreaterThanOrEqual(kgOf(d.members.filter((m) => m.assembly === "inside")) - 1e-9);
   });
 });

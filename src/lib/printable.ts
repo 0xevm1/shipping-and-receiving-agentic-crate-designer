@@ -15,9 +15,9 @@
  * lumber names and lb; metric when chosen. Formatted with the same helpers as the UI and CSV.
  */
 import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
-import { CRADLE_LABEL, longAxis } from "@/domain/cradles";
-import type { BomLine, Check, CrateDesign, ScrewLine } from "@/domain/crate";
-import { SHAPED_BLOCK, screwSchedule } from "@/domain/crate";
+import { longAxis } from "@/domain/cradles";
+import type { BomLine, Check, CrateDesign, Member, ScrewLine } from "@/domain/crate";
+import { screwSchedule } from "@/domain/crate";
 import { explainLayout, type LayoutExplanation, type Ranking } from "@/domain/design";
 import { fileProfile, parseDesignFile, restoreDesign } from "@/domain/designFile";
 import type { Message } from "@/domain/message";
@@ -226,13 +226,12 @@ const STEP_BLOCKING = 3;
 const STEP_LID = 4;
 
 /**
- * The assembly step of a cut-list line (or member). Base, walls and lid follow their
- * assembly. Inside the crate, bearers and the floor cradles go down before the parts are
- * loaded; every other inside piece (blocking, end stops, separators, stacking cradles) comes
- * after. The floor cradle is the one piece the domain tells apart from the stacking cradle only
- * by its label (both are `cradle` members), hence `CRADLE_LABEL`.
+ * The assembly step of a board. Base, walls and lid follow their assembly. Inside the crate,
+ * bearers and the floor cradles go down before the parts are loaded; every other inside piece
+ * (blocking, end stops, separators, stacking cradles) comes after. A stacking cradle is the
+ * `cradle` member with the `stacking-cradle` variant.
  */
-export function stepOfMember(m: Pick<BomLine, "assembly" | "kind" | "label">): number {
+export function stepOfMember(m: Pick<Member, "assembly" | "kind" | "variant">): number {
   switch (m.assembly) {
     case "base":
       return STEP_BASE;
@@ -242,7 +241,7 @@ export function stepOfMember(m: Pick<BomLine, "assembly" | "kind" | "label">): n
     case "lid":
       return STEP_LID;
     case "inside": {
-      return m.kind === "bearer" || (m.kind === "cradle" && m.label === CRADLE_LABEL) ? STEP_LOAD : STEP_BLOCKING;
+      return m.kind === "bearer" || (m.kind === "cradle" && m.variant !== "stacking-cradle") ? STEP_LOAD : STEP_BLOCKING;
     }
   }
 }
@@ -251,7 +250,7 @@ export function stepOfMember(m: Pick<BomLine, "assembly" | "kind" | "label">): n
 const LOAD_STEP_SCREWS: readonly ScrewLine["id"][] = ["bearers", "cradles"];
 
 function stepOfScrews(s: Pick<ScrewLine, "assembly" | "id">): number {
-  if (s.assembly !== "inside") return stepOfMember({ assembly: s.assembly, kind: "blocking", label: "" });
+  if (s.assembly !== "inside") return stepOfMember({ assembly: s.assembly, kind: "blocking" });
   return LOAD_STEP_SCREWS.includes(s.id) ? STEP_LOAD : STEP_BLOCKING;
 }
 
@@ -269,8 +268,11 @@ function partGap(layout: Layout): number | null {
 function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblyStep[] {
   const { layout, construction: c, members } = design;
   const out: AssemblyStep[] = ASSEMBLY_STEPS.map((title, i) => ({ n: i + 1, title, text: "", pieces: [], screws: 0 }));
+  // A cut-list line holds equal boards, so its first board gives the step of the line.
+  const stepOfLine = new Map<string, number>();
+  for (const m of members) if (!stepOfLine.has(m.bomKey)) stepOfLine.set(m.bomKey, stepOfMember(m));
   for (const l of design.bom) {
-    out[stepOfMember(l)].pieces.push({ piece: l.label, stock: stockText(l, u), cut: cutText(l, u), qty: l.qty });
+    out[stepOfLine.get(l.key) ?? STEP_BLOCKING].pieces.push({ piece: l.label, stock: stockText(l, u), cut: cutText(l, u), qty: l.qty });
   }
   for (const s of schedule) out[stepOfScrews(s)].screws += s.qty;
 
@@ -293,7 +295,7 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
     "Screw the rails and uprights to the outside of each side and end panel. Stand the side walls on the floor, fit the end walls " +
     "between them, then screw the walls to the floor and at the four corners.";
   const grid = nz > 1 ? `${nx} × ${ny} per layer, ${nz} layers` : `${nx} × ${ny}`;
-  const cradles = members.filter((m) => m.label === CRADLE_LABEL).length;
+  const cradles = members.filter((m) => m.kind === "cradle" && m.variant !== "stacking-cradle").length;
   const notch = members.find((m) => m.cradle?.notches.length)?.cradle?.notches[0];
   const notchText = !notch
     ? ""
@@ -367,7 +369,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   const { layout } = design;
   const schedule = screwSchedule(design.members, layout.interior, standards);
   const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed, readAsMm: false }, null);
-  const shaped = design.members.some((m) => m.label === SHAPED_BLOCK);
+  const shaped = design.members.some((m) => m.variant === "shaped-block");
   const both = (kg: number): Row => ({ label: "", value: weight(kg, u), note: weight(kg, other(u)) });
   return {
     letter: type.label,

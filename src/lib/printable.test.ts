@@ -294,12 +294,14 @@ describe("assembly steps", () => {
   });
 
   it("orders bearers and floor cradles before the parts, blocking and stacking cradles after", () => {
-    const at = (assembly: "inside", kind: "bearer" | "blocking" | "cradle" | "separator", label: string) => stepOfMember({ assembly, kind, label });
-    expect(at("inside", "bearer", "Bearer")).toBe(2);
-    expect(at("inside", "cradle", "Cradle")).toBe(2);
-    expect(at("inside", "cradle", "Stacking cradle")).toBe(3);
-    expect(at("inside", "blocking", "Blocking post")).toBe(3);
-    expect(at("inside", "separator", "Separator")).toBe(3);
+    const at = (kind: "bearer" | "blocking" | "cradle" | "separator", variant?: "shaped-block" | "stacking-cradle") =>
+      stepOfMember({ assembly: "inside", kind, variant });
+    expect(at("bearer")).toBe(2);
+    expect(at("cradle")).toBe(2);
+    expect(at("cradle", "stacking-cradle")).toBe(3);
+    expect(at("blocking")).toBe(3);
+    expect(at("blocking", "shaped-block")).toBe(3);
+    expect(at("separator")).toBe(3);
   });
 });
 
