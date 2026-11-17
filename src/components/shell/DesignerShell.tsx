@@ -80,8 +80,9 @@ export function DesignerShell() {
   }, []);
   const closeDrawer = useCallback(() => useView.getState().setDrawerOpen(false), []);
 
-  // Deliberate input anywhere (click or tap, drag, wheel, key) stops idle auto-play; hovering
-  // doesn't. Escape closes the drawer, or else clears a pinned row.
+  // Deliberate input on the 3D view (click or tap, drag, wheel, key on a canvas or a view control)
+  // stops idle auto-play; hovering, and anything in the island or header, doesn't. Escape closes
+  // the drawer, or else clears a pinned row.
   useEffect(() => {
     const opts = { passive: true, capture: true };
     INPUT_EVENTS.forEach((e) => window.addEventListener(e, onInputEvent, opts));

@@ -27,7 +27,7 @@ import {
  * checks every entry opens.
  */
 
-const pill = (page: Page) => header(page).getByRole("button", { name: /^(Export specs|Exporting…)$/ });
+const pill = (page: Page) => header(page).getByRole("button", { name: /^(Export Packing Specs|Exporting…)$/ });
 const note = (page: Page) => header(page).getByTestId("export-note");
 
 /** Clicks Export, waits for the .zip and returns its name and entries. */
@@ -71,7 +71,7 @@ async function reimport(page: Page, design: Uint8Array, extra: ReturnType<typeof
 
 test("Export downloads one .zip with every file, in imperial, and the design re-imports", async ({ page }) => {
   await openApp(page);
-  await expect(pill(page)).toHaveText("Export specs");
+  await expect(pill(page)).toHaveText("Export Packing Specs");
   await expect(pill(page)).toBeEnabled();
   // The pill is under the part lines, left-aligned with them.
   const meta = (await header(page).getByTestId("part-meta").boundingBox())!;
@@ -194,12 +194,12 @@ test("the busy state holds for at least 1.5 s with motion on", async ({ page }) 
   await downloaded;
   expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
   await expect(note(page)).toHaveText("Downloaded crate-PART-001-x4.zip");
-  await expect(pill(page)).toHaveText("Export specs");
+  await expect(pill(page)).toHaveText("Export Packing Specs");
 });
 
 test("the pill notes cautions with a dot, a title and a description; none without", async ({ page }) => {
   await openApp(page);
-  const cautionPill = page.getByRole("button", { name: /Export specs/ });
+  const cautionPill = page.getByRole("button", { name: /Export Packing Specs/ });
   await expect(page.getByTestId("export-caution-dot")).toHaveCount(0);
   await expect(cautionPill).not.toHaveAttribute("title", /caution/);
   // A model with no catalog data comes with a stand-in mass: a caution.

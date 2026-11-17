@@ -1443,7 +1443,7 @@ header repeats when it runs onto another page, and every page has "page i of n".
 **Loading.** `jspdf` (about 125 KB gzipped) and the bundle code load with `import()` on the first
 click, never with the page. `fflate` (`zipSync`) zips.
 
-**The pill** (§8.2): idle "Export specs"; busy "Exporting…" with a spinner, held for at least
+**The pill** (§8.2): idle "Export Packing Specs"; busy "Exporting…" with a spinner, held for at least
 `MIN_BUSY_MS` (1.5 s) even when the work is faster, so the action registers; with
 `prefers-reduced-motion`, no spin and no hold. On success the file downloads,
 `markExported()` stops the design clock (§7.12) and a `role="status"` note says "Downloaded
@@ -1808,7 +1808,7 @@ open question for the user (see #20).
   under 981 px it hangs under the header as wide as it. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
   region and goes after 9 s; an error is `role="alert"`, has a gold edge and stays until
   dismissed or the next load. Both have a dismiss button.
-- **Export specs:** only the header's Export pill (§7.13) exports; the View popover has no export
+- **Export Packing Specs:** only the header's Export pill (§7.13) exports; the View popover has no export
   button (#77 added one, removed in #62). The zip's `crate-{part id}-x{quantity}.glb` (#27) is built from the
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
   it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
@@ -1872,18 +1872,20 @@ open question for the user (see #20).
 - **Opacity:** `setOpacity` (`scene.ts`) moves a material between the opaque and transparent
   passes and recompiles it, because three bakes an `OPAQUE` define into opaque shaders.
 - **Idle auto-play:**
-  - After **5 s** (6 s until #64, shortened at the user's request) with no deliberate input
-    anywhere, the camera turns at
-    **0.18 rad/s** (slowed from the handoff's 0.3 at the user's request) and steps closed → exploded → open → exploded → …, half a turn per mode. The
-    next mode starts 0.12 turn early so it lands as the half-turn completes.
-  - **Deliberate input** (#64) stops it at once and restarts the idle timer: `pointerdown` (a
-    click or tap), a drag (`pointermove` with a button held, so orbiting the crate or grabbing
-    the part view), `wheel`, `keydown` and `touchstart`, listened for on `window` in
-    `DesignerShell` and classified by `isDeliberateInput` (`src/state/motion.ts`).
-  - **Hovering is not input:** a `pointermove` with no button held, over empty canvas, a board
-    or the island (cut-list rows, weight bars), neither stops nor delays it. It still holds
-    while a row is pinned (pinning is a click), during an orbit drag, or while the narrow-screen
-    drawer is open (#42), and resumes from the mode on screen. It runs on first load.
+  - After **5 s** with no input on the 3D view, the camera turns at **0.18 rad/s** and steps
+    closed → exploded → open → exploded → …, half a turn per mode. The next mode starts 0.12 turn
+    early so it lands as the half-turn completes.
+  - **Input on the 3D view** stops it at once and restarts the idle timer. It is a deliberate
+    event (`isDeliberateInput`: `pointerdown`, a drag, `wheel`, `keydown`, `touchstart`) whose
+    target is a canvas (the crate, or the part's turntable in the island) or a control marked
+    `data-view-input` because it sets the view itself: the mode button, the View popover and the
+    pinned-row bar (`isViewInput`, `src/state/motion.ts`; listened for on `window` in
+    `DesignerShell`). Without that mark auto-play would undo what such a control just did.
+  - **The island and the header are not input:** clicking tabs, editing rules or shop standards,
+    typing in a field, scrolling a panel or pressing a key outside the view leave the crate
+    turning. So does **hovering** anywhere (a `pointermove` with no button held). It still holds
+    while a row is pinned, during an orbit drag, or while the narrow-screen drawer is open, and
+    resumes from the mode on screen. It runs on first load.
   - **Hover while turning:** r3f only picks on pointer events, so while auto-play turns the
     crate under a still pointer `Director` re-picks about 10 times a second
     (`events.update()`, only while the pointer is over the canvas). The board tooltip and
