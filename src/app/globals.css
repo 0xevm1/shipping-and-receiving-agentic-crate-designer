@@ -321,6 +321,15 @@ h1.brand {
   padding: 1px 6px;
   font: 400 12.5px/1.4 var(--mono);
 }
+.partmeta input.text {
+  width: 168px;
+}
+.partmeta input::placeholder {
+  color: var(--muted);
+}
+.partmeta input.bad {
+  border-color: var(--gold);
+}
 
 /* Bottom left: credit, with the load hint above it */
 .credit {

@@ -129,6 +129,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES` |
 | `src/domain/design.ts` | `computeDesign()`, `explainLayout()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
+| `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
@@ -137,7 +138,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
-| `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata, mass input for unknown parts |
+| `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata; name, material and mass fields for unknown parts |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover, Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
 | `src/components/island/*.tsx` | The island and its five tabs |
@@ -200,6 +201,25 @@ The UI wraps it in a **`LoadedPart`** (`src/state/store.ts`), which adds:
 - `readAsMm`
 
 Mass is never inferred from the mesh.
+
+**Entered details.** For an unknown part (no `catalogDims`) the user can edit the **name**,
+**material** and **mass** through the store action `setPartDetails({ name?, material?, mass_kg? })`.
+Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
+
+- `name`: whitespace and control characters collapsed, then 1–80 characters (`PART_NAME_MAX`).
+- `material`: tidied the same way, at most 60 characters (`PART_MATERIAL_MAX`). Blank clears it,
+  and the UI shows "material not given". Free text; `MATERIAL_SUGGESTIONS` are only offered.
+- `mass_kg`: a finite number above 0. Any accepted mass, even 10, clears `massAssumed`.
+
+Invalid input changes nothing and returns a message. Catalog parts are read-only. A mass change
+recomputes the design and resets the layout pick, like any other input. A name or material
+change refreshes the result but keeps the layout pick and the camera.
+
+**Material → look.** `partFinish(material)` returns `"aluminum"` when the text contains "alum"
+(case-insensitive, so "aluminium" counts) and `"steel"` for everything else, including no
+material. `partMaterial()` in `scene.ts` draws aluminum lighter and smoother. The material text
+also shows in the part header, the Overview "Parts" step, the 3D part tooltip and the CSV header;
+the name shows in the island title, the Overview heading, the tooltip and the CSV header.
 ### 6.3 Derived types
 
 - **`Layout`:** `key`, `orientation`, `cellSize` (rotated bbox), `counts [nx,ny,nz]`,
@@ -359,7 +379,8 @@ Each member is tagged where it is created:
   - **Plywood:** stock is `"{thickness} mm"` and cut is `"{largest} × {second}"`.
   - **Lumber:** stock is `"{smallest} × {middle}"` and cut is `"{length}"`.
   - Regrouping by label instead of kind changes how many lines there are, not the total quantity.
-- **CSV** (always metric): three `#` header lines (part, external size and gross, layout), then
+- **CSV** (always metric): four `#` header lines (part id and name; part material and mass each;
+  external size and gross; layout), then
   `component,material,stock,cut_mm,qty` with component as `"{Assembly}: {label}"`, then a final
   wood-screws line.
 
@@ -536,8 +557,11 @@ open question for the user (see #20).
 - Dropping a `parts.json` alongside the GLB merges its valid entries into the lookup first.
 - **A known GLB** (file name equals a catalog `model`) takes that entry's mass, material and
   quantities, and gets the model check.
-- **An unknown GLB** gets a 10 kg stand-in mass, an editable mass field and a caution until a
-  real mass is entered.
+- **An unknown GLB** gets a name from its file name, no material, and a 10 kg stand-in mass. The
+  part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
+  steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
+  mass is entered (§6.2a). Each field applies as soon as its text is valid; invalid text is
+  outlined in gold and reverts on blur.
 - **Rejected files:** text `.gltf`, Draco- or Meshopt-compressed files, and non-GLB data, each
   with a plain message.
 - Files are read through `URL.createObjectURL`, so nothing is uploaded anywhere.
@@ -576,6 +600,15 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
   layouts.
 - `explainLayout` covers `only`, the recommended layout and a user pick.
 
+**`src/domain/partDetails.test.ts`** checks the entered-details path: names and materials are
+tidied, a blank material clears it, a blank or overlong name, an overlong material and a mass
+that isn't a positive number are rejected, `partFinish` maps "alum" text to aluminum and
+everything else to steel, and the CSV header carries the entered name, material and mass.
+
+**`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
+changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
+flag, invalid input changes nothing, and catalog parts are read-only.
+
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions. **`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
 names, and filtering a `parts.json`.
@@ -610,7 +643,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 |---|---|
 | #1 | Commit the prototype as a baseline |
 | #2 | README and this spec |
-| #3 | Upload a custom GLB part, with user-entered mass and material. Loading and mass entry landed with #20; entering a material is still open |
+| #3 | Upload a custom GLB part, with user-entered name, mass and material. Loading and mass entry landed with #20; name and material entry followed |
 | #4 | Capture and export LLM logs (a deliverable) |
 | #5 | Architecture and decision notes for the on-site walkthrough |
 | #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |
