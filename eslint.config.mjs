@@ -69,6 +69,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Design reference prototype; not app code.
     "docs/**",
+    // Agents' git worktrees are whole copies of the repo (with their own .next); each lints itself.
+    ".claude/**",
     // Playwright output (#34); the specs in e2e/ are linted.
     "playwright-report/**",
     "test-results/**",

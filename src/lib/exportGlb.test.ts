@@ -161,7 +161,9 @@ describe("GLB export (#27)", () => {
   });
 
   it("gives no node above the meshes a transform, like the sample part files' world node", async () => {
-    const back = (await parse(await exportCrateGlb(design("PART-001", 4), { scene: await sampleModel("PART-001-machined-steel-bracket.glb"), mmPerUnit: 1000 }))).scene;
+    const back = (
+      await parse(await exportCrateGlb(design("PART-001", 4), { scene: await sampleModel("PART-001-machined-steel-bracket.glb"), mmPerUnit: 1000 }))
+    ).scene;
     const crate = back.getObjectByName(CRATE_NODE)!;
     for (const node of [crate, ...crate.children]) {
       expect(node.position.length()).toBe(0);
