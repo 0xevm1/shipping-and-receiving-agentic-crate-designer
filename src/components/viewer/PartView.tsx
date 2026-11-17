@@ -7,6 +7,7 @@ import { Box3, MathUtils, Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { isIdle, reducedMotion } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { probeStats, PROBE } from "./probeStats";
 import { cloneWithMaterial, FOV_DEG, MM_TO_M, partMaterial } from "./scene";
 import { type LoadedPart } from "@/lib/part";
 import { framedScene } from "@/lib/partFrame";
@@ -30,7 +31,15 @@ const turn = new Spherical();
 export default function PartView() {
   const part = useDesigner((s) => s.part);
   return (
-    <Canvas className={partViewClass} camera={{ fov: FOV_DEG, near: 0.001, far: 50 }} dpr={[1, 2]} gl={{ alpha: true }}>
+    <Canvas
+      className={partViewClass}
+      camera={{ fov: FOV_DEG, near: 0.001, far: 50 }}
+      dpr={[1, 2]}
+      gl={{ alpha: true }}
+      onCreated={({ gl }) => {
+        if (PROBE) probeStats.thumbnail = gl;
+      }}
+    >
       <hemisphereLight args={["#e9edf2", "#2a3f57", 1.4]} />
       <directionalLight position={[3, 5, 4]} intensity={1.6} color="#fff1dc" />
       <Suspense fallback={null}>
