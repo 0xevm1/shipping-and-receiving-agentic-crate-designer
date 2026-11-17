@@ -3,10 +3,10 @@ import { designCrate } from "./crate";
 import { smallestSideGap } from "./crateChecks";
 import type { CrateDesign } from "./crateDesign";
 import { inputProblem, rankLayouts, type DesignProblem } from "./design";
-import { dimsMessage, kg, msg, parts, type Message } from "./message";
+import { dimsMessage, joinMessages, kg, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart } from "./schema";
-import { sizeLimitText, withinOutsideLimits, withinSizeLimit } from "./shipment";
+import { sizeLimitText, sizeOverSides, withinOutsideLimits, withinSizeLimit } from "./shipment";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
@@ -208,7 +208,10 @@ export function hardFailure(d: CrateDesign, k: number, standards: ShopStandards 
   if (!withinSizeLimit(d.layout.external, standards)) {
     return {
       binding: "max-size",
-      reason: msg`The crate is ${dimsMessage(d.layout.external)} outside, over the shop's size limit (${sizeLimitText(standards) ?? ""}).`,
+      reason: msg`The crate is ${dimsMessage(d.layout.external)} outside, over the shop's size limit (${sizeLimitText(standards) ?? ""}) on the ${joinMessages(
+        sizeOverSides(d.layout.external, standards).map((s) => parts(s.side)),
+        " and ",
+      )}.`,
     };
   }
   if (d.grossKg > maxGrossKg) return { binding: "max-gross", reason: msg`Gross ${kg(d.grossKg)} is over the ${kg(maxGrossKg)} per-crate limit.` };

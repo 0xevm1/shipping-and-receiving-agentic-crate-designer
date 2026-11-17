@@ -19,6 +19,15 @@ describe("size limit messages", () => {
     const tiny = custom({ limits: { perCrate: { maxOutsideMm: { length: 600, width: 400, height: 400 } } } });
     const plan = planShipment(getPart("PART-001"), settings({ quantity: 3 }), null, tiny);
     expect(renderMessage(plan.unmet!, "imperial")).toContain("23.6 in × 15.7 in × 15.7 in outside");
+    // At quantity 1 the check reads the same, in both units (#144).
+    for (const quantity of [1, 3]) {
+      const one = planShipment(getPart("PART-001"), settings({ quantity }), null, tiny).crates[0].result.design!.checks.find((c) => c.id === "crate-limit")!;
+      expect(one.level).toBe("caution");
+      expect(renderMessage(one.detail, "imperial")).toMatch(
+        /23\.6 in × 15\.7 in × 15\.7 in outside.*height \(\d+\.\d in against 15\.7 in\) is over the size limit/,
+      );
+      expect(renderMessage(one.detail, "metric")).toMatch(/height \([\d,]+ mm against 400 mm\) is over the size limit/);
+    }
     const heightOnly = sizeLimitText(custom({ limits: { perCrate: { maxOutsideMm: { length: 0, width: 0, height: 1000 } } } }))!;
     expect(renderMessage(heightOnly, "imperial")).toBe("outside height 39.4 in at most");
     expect(renderMessage(heightOnly, "metric")).toBe("outside height 1,000 mm at most");

@@ -231,10 +231,16 @@ describe("planShipment: splitting a batch", () => {
     expect(plan.crates[0]).toMatchObject({ count: 3, quantity: 1 });
     expect(metric(plan.unmet!)).toMatch(/one part/i);
     expect(plan.crates[0].result.design!.checks.find((x) => x.id === "crate-limit")?.level).toBe("caution");
-    // A single heavy part stays as today: one crate, with the base-rating caution.
+    // A single heavy part is one crate, the same design as `computeDesign`, with the same caution (#144).
     const single = planShipment(heavy, settings({ quantity: 1 }));
     expect(single.split).toBe(false);
-    expect(single.crates[0].result).toEqual(computeDesign(heavy, settings({ quantity: 1 })));
+    expect(single.crates[0]).toMatchObject({ count: 1, quantity: 1 });
+    expect(single.crates[0].result.design!.layout).toEqual(computeDesign(heavy, settings({ quantity: 1 })).design!.layout);
+    expect(metric(single.unmet!)).toContain("gross weight");
+    const check = single.crates[0].result.design!.checks.find((x) => x.id === "crate-limit")!;
+    expect(check.level).toBe("caution");
+    expect(metric(check.detail)).toContain("over the 1,000 kg");
+    expect(metric(plan.unmet!)).toContain("gross weight");
   });
 
   it("is fast at 200 parts", () => {

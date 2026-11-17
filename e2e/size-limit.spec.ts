@@ -70,3 +70,18 @@ test("a part that is over the limit on its own ships in a crate each, and Checks
   await over.scrollIntoViewIfNeeded();
   await shot(page, "size-limit-one-part-over-checks");
 });
+
+test("one part over the limit at quantity 1 is cautioned in Checks, naming the side (#144)", async ({ page }) => {
+  await setQuantity(page, 1);
+  const h1 = (await crate(page)).outside![2];
+  const limit = Math.max(200, Math.floor(h1) - 40);
+  expect(limit, "the bracket's crate is taller than the smallest limit the field takes").toBeLessThan(h1);
+
+  await setStandard(page, "Max crate height", limit);
+  await openTab(page, "Checks");
+  const over = checks(page, "caution").filter({ hasText: "Over the per-crate limit" });
+  await expect(over).toContainText("over the per-crate limit");
+  await expect(over).toContainText(`against ${limit.toLocaleString("en-US")} mm) is over the size limit`);
+  await over.scrollIntoViewIfNeeded();
+  await shot(page, "size-limit-single-part-over-checks");
+});
