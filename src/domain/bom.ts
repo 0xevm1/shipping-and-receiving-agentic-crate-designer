@@ -136,6 +136,8 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
   const joists = count("joist");
   const joistCrossings = joists * count("skid") * SCREWS_PER_JOIST_CROSSING;
   const crossingRule = `${SCREWS_PER_JOIST_CROSSING} where each joist crosses a skid`;
+  // The blocking count includes shaped blocks (variant "shaped-block"), so the rule says what it counts.
+  const blockingRule = `${SCREWS_PER_BLOCK} per post${members.some((m) => m.variant === "shaped-block") ? " or shaped block" : ""}`;
   const alongPlusOne = "along each cleat, plus 1";
   const eachEnd = "2 at each end of each cradle"; // SCREWS_PER_CRADLE is 4: two at each end
   const lines: ScrewLine[] = [
@@ -150,7 +152,7 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
     line("bearers", "inside", "Bearers to floor", null, `${SCREWS_PER_BLOCK} per bearer`, count("bearer") * SCREWS_PER_BLOCK),
     line("cradles", "inside", "Cradles to floor", null, eachEnd, cradles(false) * SCREWS_PER_CRADLE),
     line("stacking-cradles", "inside", "Stacking cradles through the side walls", null, eachEnd, cradles(true) * SCREWS_PER_CRADLE),
-    line("blocking", "inside", cradles(false) ? "End stops" : "Blocking posts", null, `${SCREWS_PER_BLOCK} per post`, count("blocking") * SCREWS_PER_BLOCK),
+    line("blocking", "inside", cradles(false) ? "End stops" : "Blocking posts", null, blockingRule, count("blocking") * SCREWS_PER_BLOCK),
     line("lid-cleats", "lid", "Lid cleats to lid panel", every.cleat, alongPlusOne, along(cleatOf("lid"), every.cleat)),
     line("lid-to-walls", "lid", "Lid to walls", every.panelJoint, "around the top", joint),
   ];

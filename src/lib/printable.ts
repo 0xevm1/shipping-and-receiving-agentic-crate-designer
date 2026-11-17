@@ -354,15 +354,6 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
   };
 }
 
-/**
- * The rule for a fixed count per piece. The blocking line counts every blocking member, shaped
- * blocks included, so with shaped blocks it says "per post or shaped block" (the quantity is
- * screws, not posts).
- */
-function fixedRule(s: Pick<ScrewLine, "id" | "rule">, shaped: boolean): string {
-  return s.id === "blocking" && shaped ? s.rule.replace(/per post$/, "per post or shaped block") : s.rule;
-}
-
 function crateSection(input: PrintableInput, type: CrateType, split: boolean): PrintableCrate | null {
   const { part, standards, units: u } = input;
   const { design, layouts } = type.result;
@@ -370,7 +361,6 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   const { layout } = design;
   const schedule = screwSchedule(design.members, layout.interior, standards);
   const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed, readAsMm: false }, null);
-  const shaped = design.members.some((m) => m.variant === "shaped-block");
   const both = (kg: number): Row => ({ label: "", value: weight(kg, u), note: weight(kg, other(u)) });
   return {
     letter: type.label,
@@ -407,7 +397,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       ],
       fasteners: schedule.map((s) => ({
         title: s.title,
-        rule: s.everyMm === null ? fixedRule(s, shaped) : `1 every ${shopSize(s.everyMm, u)} ${s.rule}`,
+        rule: s.everyMm === null ? s.rule : `1 every ${shopSize(s.everyMm, u)} ${s.rule}`,
         qty: s.qty,
       })),
       fastenerTotal: schedule.reduce((n, s) => n + s.qty, 0),
