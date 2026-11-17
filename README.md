@@ -294,6 +294,9 @@ tab at a time.
   and share links. The shared store is Postgres (#46), being built in slices: a part's
   configurations can be saved to a shared job on the server that every open tab sees
   ([`docs/API.md`](docs/API.md), [`docs/POSTGRES.md`](docs/POSTGRES.md)); spec §9 has the details.
+  Saves are local first: with the server or its database down they are kept in this browser,
+  marked "Not synced yet", and sent by themselves within a few seconds of the server coming back
+  (`docs/API.md` "Offline"). Until then nobody else sees them.
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
 

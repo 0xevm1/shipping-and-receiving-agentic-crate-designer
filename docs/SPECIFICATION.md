@@ -2473,6 +2473,18 @@ reload. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`
 through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The
 earlier SQLite WASM plan, `DATA_STORE.md`, was dropped for this.)
 
+**Offline saves (#46 slice 7a).** Saves to the shared job are local first: each is written to
+`localStorage` under `crate-designer.pending-changes.v1` (`src/state/pendingChanges.ts`, behind a
+`PendingStore` interface) before any network call, with a client-generated id that the server
+takes as its `Idempotency-Key`, and sent oldest first once the server is reachable (its event
+stream open, or `GET /api/v1/health` answering; the probe backs off to at most 3 s). Until then
+the Shared job section marks them **Not synced yet** and says they exist only on this device. The
+last 5 opened jobs (about 1 MB of JSON) are kept under `crate-designer.job-cache.v1`
+(`src/state/jobCache.ts`), so a job opened once can be reopened and saved to with the server
+stopped. Version conflicts and results an earlier engine made are kept for the user to resolve,
+never dropped. Like everything else here, every read and write is wrapped and a refused write is
+reported, not thrown. `docs/API.md` "Offline" has the details.
+
 The ranking option (#17) is saved only as part of the last-opened crate; the time-to-design clock is in memory only.
 
 ## 10. Invariants and tests
