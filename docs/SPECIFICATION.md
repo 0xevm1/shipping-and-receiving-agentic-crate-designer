@@ -2599,30 +2599,43 @@ Measured with `bun run load` (`docs/LOAD_TEST.md`, which has the method, the ful
 machine: one `next start` process on an M1 Max laptop, Postgres 18 in Docker Desktop, the load
 generator on the same machine). One org, so load is varied by jobs: a save is delivered to every
 stream open on its job, so the work is *saves/s × streams per job*. Limits are the highest stage
-with p95 save → other tabs under 1 s and no errors.
+with p95 save → other tabs under 1 s and no errors. "Before" is the first run; "after" is the
+same ramp after the four fixes below, on a busier machine (its p95s carry ~1–1.5 s machine-wide
+stalls, so p50s are quoted too).
 
-| Limit, one process | `DB_POOL_MAX` 10 (default) | `DB_POOL_MAX` 30 |
-|---|---|---|
-| Saves per second (few streams) | ~60 (p95 389 ms; 70/s: 2 s) | ~100 (p95 528 ms) |
-| Events delivered per second, all streams | ~1000–1200 (500 streams × 50/s: p95 745 ms) | ~2500 (1000 streams × 50/s: p95 328 ms) |
-| Open SSE streams | 4000 tested at 411 deliveries/s: p95 133 ms; streams cost little until events flow | — |
-| Postgres connections | pool + 1 listener, independent of the number of streams | same |
-| Tab A → tab B (save to the event on the other tab) | idle p95 67 ms (target < 1 s); its snapshot re-read p95 129 ms | — |
+| Limit, one process | Before, `DB_POOL_MAX` 10 | Before, `DB_POOL_MAX` 30 | After, `DB_POOL_MAX` 10 |
+|---|---|---|---|
+| Saves per second (few streams) | ~60 (p95 389 ms; 70/s: 2 s) | ~100 (p95 528 ms) | ≥ 150 (p50 12 ms, p95 990 ms) |
+| Events delivered per second, all streams | ~1000–1200 (500 streams × 50/s: p95 745 ms) | ~2500 (1000 × 50/s: p95 328 ms) | ~5000 (1000 × 100/s: p50 17, p95 979 ms; 2000 × 50/s: p95 393 ms) |
+| Open SSE streams | 4000 tested at 411 deliveries/s: p95 133 ms; streams cost little until events flow | — | 2000 × 100 saves/s (~10 000 events/s) saturates: p95 3.8 s, nothing lost |
+| Postgres connections | pool + 1 listener, independent of the number of streams | same | same |
+| Tab A → tab B (save to the event on the other tab) | idle p95 67 ms (target < 1 s); snapshot re-read p95 129 ms | — | idle p95 58 ms; snapshot re-read p95 79 ms |
 
-- **Nothing was lost at any load.** Every expected delivery arrived in every stage, saturated
-  ones included; `pg_notification_queue_usage()` stayed at ~0.
-- **The limit is the Node event loop and the pool**, not Postgres: the engine recompute (~15 ms)
-  runs on the request thread inside the save's transaction, and each delivery is one
-  `listForStream` query per stream. Moving the recompute to a worker thread, coalescing the reads
-  per job, and a larger pool raise both ceilings; then add instances.
+- **Nothing was lost at any load**, before or after. Every expected delivery arrived in every
+  stage, saturated ones included; `pg_notification_queue_usage()` stayed at ~0.
+- **The fixes** (all in place):
+  - The save's engine recompute (~15 ms) runs in the engine worker pool (`verify` task), never
+    on the request thread, and before the save's transaction opens, so no pool connection or
+    ordering lock waits on it. A repeated `Idempotency-Key` is answered without the engine.
+  - A job's SSE streams share one read per notification (`src/server/events/feed.ts`): one
+    `listForStream` per job, not per stream, and each message encoded once. A stream behind the
+    batch reads from its own cursor, so replay stays gap-free and duplicate-free.
+  - `events.append` takes the ordering lock and inserts in one statement.
+  - The listener's liveness probe no longer misfires under overload (deadline from the
+    NOTIFY's commit, verdict after pending I/O, two misses in a row to reconnect); before, a
+    saturated process tore down a healthy listener and made every stream resync.
+- **What limits it now** is the one event loop serialising and writing SSE messages at
+  ~5000–10 000 deliveries/s, and then the machine. Add instances next; a larger pool raised
+  both ceilings before the fixes and wasn't needed after.
 - **The event-ordering lock** (`EVENT_ORDER_LOCK`) caps event-writing commits at ~220–330/s per
-  database (vs 400–1000/s without it, `bun run load:lock`), about 4× the per-process save ceiling.
-  Under overload it amplifies queueing, because loop lag delays the COMMIT that releases it.
-- **Move to a dedicated broker** (swap the `EventBus` implementation) when, sustained and after
-  those fixes, event-writing transactions exceed ~200/s across all instances, advisory-lock
-  waiters average more than 1 while the app isn't CPU-bound, the NOTIFY queue stays above 1 %, or
-  the deployment needs more than ~20 instances or several regions. A broker doesn't raise the
-  per-process limits above.
+  database with lock-then-insert, ~200–450/s (noisy) with the one-statement append (vs 400–1000/s
+  without the lock, `bun run load:lock`). With one process now writing ≥ 150 events/s, it is the
+  first shared limit as instances are added.
+- **Move to a dedicated broker** (swap the `EventBus` implementation) when, sustained, event-
+  writing transactions exceed ~200/s across all instances, advisory-lock waiters average more
+  than 1 while the app isn't CPU-bound, the NOTIFY queue stays above 1 %, or the deployment
+  needs more than ~20 instances or several regions. A broker doesn't raise the per-process
+  limits above.
 - `GET /api/v1/health` reports the process's event-loop lag and utilisation (`eventLoop`) for
   watching this in production.
 

@@ -318,6 +318,15 @@ export function createRepository(db: Executor) {
           .where(and(eq(idempotencyKey.orgId, orgId), eq(idempotencyKey.key, key)));
         return row!;
       },
+      /** The stored record for `key`, if a request finished with it (read-only: claims nothing). */
+      async get(ctx: OrgContext, key: string): Promise<IdempotencyRecord | undefined> {
+        const orgId = requireOrg(ctx);
+        const [row] = await db
+          .select()
+          .from(idempotencyKey)
+          .where(and(eq(idempotencyKey.orgId, orgId), eq(idempotencyKey.key, key)));
+        return row;
+      },
       async complete(ctx: OrgContext, key: string, statusCode: number, response: unknown): Promise<void> {
         const orgId = requireOrg(ctx);
         await db
@@ -331,24 +340,33 @@ export function createRepository(db: Executor) {
       /**
        * Appends an event; its trigger NOTIFYs `crate_events` when the transaction commits.
        *
-       * Takes a transaction-level advisory lock first, so event-writing transactions commit in
-       * id order: without it, a transaction holding id 10 could commit after one holding id 11,
-       * and a reader that already saw 11 would skip 10 for good (`id > Last-Event-ID`). Inside a
-       * caller's transaction (`emitEvent`, `inTransaction`) this runs in a savepoint and the lock
-       * is held until that transaction ends, so append the event last.
+       * Takes a transaction-level advisory lock in the same statement as the insert, so
+       * event-writing transactions commit in id order: without it, a transaction holding id 10
+       * could commit after one holding id 11, and a reader that already saw 11 would skip 10 for
+       * good (`id > Last-Event-ID`). The CTE runs first, so the lock is held before `nextval`
+       * hands out the id. One statement, not lock-then-insert in a savepoint, because the lock is
+       * held until COMMIT and every round trip while holding it is time other writers wait
+       * (docs/LOAD_TEST.md, `bun run load:lock`: 1.3–1.6× the commits/s at 16–32 writers). Inside a
+       * caller's transaction (`emitEvent`, `inTransaction`) append the event last; on its own the
+       * statement is its own transaction.
        */
       async append(ctx: OrgContext, input: NewCrateEvent): Promise<CrateEvent> {
         const orgId = requireOrg(ctx);
-        // Database and Transaction both have `transaction` (a transaction, or a savepoint).
-        return (db as Database).transaction(async (tx) => {
-          await tx.execute(sql`select pg_advisory_xact_lock(${EVENT_ORDER_LOCK})`);
-          return one(
-            await tx
-              .insert(event)
-              .values({ ...input, orgId })
-              .returning(),
-          );
-        });
+        const rows = await db.execute<Record<"id" | "org_id" | "job_id" | "type" | "payload" | "created_at", unknown>>(sql`
+          with ordered as (select pg_advisory_xact_lock(${EVENT_ORDER_LOCK}))
+          insert into ${event} (org_id, job_id, type, payload)
+          select ${orgId}::uuid, ${input.jobId ?? null}::uuid, ${input.type}::text, ${JSON.stringify(input.payload ?? {})}::jsonb from ordered
+          returning id, org_id, job_id, type, payload, created_at`);
+        const row = one([...rows]);
+        // Raw rows: the columns' own decoders give exactly what a drizzle `returning()` would.
+        return {
+          id: event.id.mapFromDriverValue(row.id as number) as number,
+          orgId: row.org_id as string,
+          jobId: row.job_id as string | null,
+          type: row.type as string,
+          payload: event.payload.mapFromDriverValue(row.payload) as Record<string, unknown>,
+          createdAt: event.createdAt.mapFromDriverValue(row.created_at as string) as Date,
+        };
       },
       /** The newest event id a stream for `jobId` would send (0 when none): a snapshot's resume point. */
       async lastIdForStream(ctx: OrgContext, jobId: string): Promise<number> {

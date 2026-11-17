@@ -8,6 +8,7 @@ import type { DesignRequest, DesignResponse } from "@/engine/schemas";
 import type { SweepRequest, SweepResponse } from "@/engine/sweep";
 import type { BundleInput } from "@/lib/exportBundle";
 import type { DesignsResponse } from "@/lib/api/designs";
+import type { ConfigurationCheck, ConfigurationCheckInput } from "@/server/jobs/check";
 
 export interface EngineTasks {
   /** `runSweep`: the curve, shortlist, recommendation and total plan. */
@@ -16,6 +17,8 @@ export interface EngineTasks {
   designs: { input: SweepRequest; output: DesignsResponse };
   /** `designShipment`: one design. */
   design: { input: DesignRequest; output: DesignResponse };
+  /** `checkConfiguration`: a save's recompute and comparison (`POST /jobs/:id/configs`), small answer only. */
+  verify: { input: ConfigurationCheckInput; output: ConfigurationCheck };
   /** `buildBundleZip` from the part's GLB bytes: the ZIP with GLB, PDF, CSV and design.json. */
   bundle: {
     input: { bundle: BundleInput & { layoutKey: string | null }; glb: ArrayBuffer };

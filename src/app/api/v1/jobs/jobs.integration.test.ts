@@ -18,11 +18,13 @@ import {
 } from "@/lib/api/jobs";
 import { ApiErrorSchema } from "@/lib/api/parts";
 import type { JobEventMessage } from "@/lib/events";
-import { closeDb, DEFAULT_ORG, orgContext } from "@/server/db";
+import { closeDb, DEFAULT_ORG, getDb, orgContext } from "@/server/db";
 import { org } from "@/server/db/schema";
 import { createTestDatabase, type TestDatabase } from "@/server/db/testing";
 import { peekEventBus } from "@/server/events";
-import { onJobCreated } from "@/server/jobs";
+import { onJobCreated, saveConfiguration } from "@/server/jobs";
+import { checkConfiguration } from "@/server/jobs/check";
+import { closeEnginePool, getEnginePool } from "@/server/workers/engine";
 import { GET as eventsGET } from "../events/route";
 import { GET, PATCH } from "./[id]/route";
 import { POST as saveConfig } from "./[id]/configs/route";
@@ -39,6 +41,7 @@ afterAll(async () => {
   await peekEventBus()?.stop();
   (globalThis as { __crateDesignerEventBus?: unknown }).__crateDesignerEventBus = undefined;
   await closeDb();
+  await closeEnginePool();
   Object.assign(process.env, saved);
   await t?.drop();
 });
@@ -235,6 +238,48 @@ describe("POST /api/v1/jobs/:id/configs", () => {
     expect(res.status).toBe(409);
     const body = EngineMismatchErrorSchema.parse(await res.json());
     expect(body.engineVersion).toBe(ENGINE_VERSION);
+  });
+
+  it("recomputes in an engine worker thread, with no transaction open meanwhile", async () => {
+    const job = await newJob();
+    let openTransactions = -1;
+    const res = await saveConfiguration(job.id, jsonRequest("POST", `/jobs/${job.id}/configs`, saveBody(5)), {
+      db: getDb(),
+      org: DEFAULT_ORG,
+      check: async (input) => {
+        const [row] = await t.sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and state like 'idle in transaction%'`;
+        openTransactions = row!.n as number;
+        return checkConfiguration(input);
+      },
+    });
+    expect(res.status).toBe(201);
+    expect(openTransactions).toBe(0);
+    // The route itself sends the check to the process's engine pool.
+    const before = getEnginePool().stats();
+    expect((await save(job.id, saveBody(6))).status).toBe(201);
+    expect(getEnginePool().stats().threads).toBeGreaterThanOrEqual(Math.max(1, before.threads));
+  });
+
+  it("answers a repeated Idempotency-Key from storage without running the engine again", async () => {
+    const job = await newJob();
+    const key = `save-${randomUUID()}`;
+    const first = await save(job.id, saveBody(10), { "Idempotency-Key": key });
+    expect(first.status).toBe(201);
+    const repeat = await saveConfiguration(job.id, jsonRequest("POST", `/jobs/${job.id}/configs`, saveBody(10), { "Idempotency-Key": key }), {
+      db: getDb(),
+      org: DEFAULT_ORG,
+      check: () => Promise.reject(new Error("the engine must not run for a replay")),
+    });
+    expect(repeat).toMatchObject({ status: 201, replayed: true, body: await first.json() });
+  });
+
+  it("answers an unknown job with 404 before running the engine", async () => {
+    const res = await saveConfiguration(randomUUID(), jsonRequest("POST", `/jobs/x/configs`, saveBody()), {
+      db: getDb(),
+      org: DEFAULT_ORG,
+      check: () => Promise.reject(new Error("the engine must not run for a missing job")),
+    }).catch((e: unknown) => e);
+    expect(res).toMatchObject({ status: 404, code: "not_found" });
   });
 
   it("answers an invalid design request with 400", async () => {

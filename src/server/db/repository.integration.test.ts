@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ORG, MissingOrgContextError, type OrgContext, orgContext } from "./org";
-import type { NewConfiguration, Part } from "./repository";
+import { inTransaction, type NewConfiguration, type Part } from "./repository";
 import { org } from "./schema";
 import { createTestDatabase, type TestDatabase } from "./testing";
 
@@ -144,5 +144,36 @@ describe("org-scoped repository", () => {
     expect((await t.repo.events.listAfter(DEFAULT_ORG, job.id)).map((e) => e.id)).toEqual([a.id, b.id]);
     expect((await t.repo.events.listAfter(DEFAULT_ORG, job.id, a.id)).map((e) => e.id)).toEqual([b.id]);
     expect(await t.repo.events.listAfter(other, job.id)).toEqual([]);
+    // The one-statement append returns the row exactly as a read decodes it.
+    expect(await t.repo.events.listAfter(DEFAULT_ORG, job.id)).toEqual([a, b]);
+    expect(b).toMatchObject({ orgId: DEFAULT_ORG.orgId, jobId: job.id, type: "configs.ready", payload: { n: 3 } });
+    expect(b.createdAt).toBeInstanceOf(Date);
+    const orgWide = await t.repo.events.append(DEFAULT_ORG, { jobId: null, type: "engine.updated", payload: { engineVersion: "2" } });
+    expect(orgWide).toMatchObject({ jobId: null, payload: { engineVersion: "2" } });
+  });
+
+  it("commits events in id order: a second writer waits on the ordering lock until the first commits", async () => {
+    const job = await t.repo.jobs.create(DEFAULT_ORG, { partId: widget.id });
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let firstId = 0;
+    const first = inTransaction(t.db, async (tx) => {
+      firstId = (await tx.events.append(DEFAULT_ORG, { jobId: job.id, type: "job.created" })).id;
+      await held; // Still open, holding the lock (and its id).
+    });
+    await vi.waitFor(() => expect(firstId).toBeGreaterThan(0));
+    let secondDone = false;
+    const second = t.repo.events.append(DEFAULT_ORG, { jobId: job.id, type: "job.error", payload: { message: "second" } }).then((row) => {
+      secondDone = true;
+      return row;
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(secondDone).toBe(false);
+    const [row] =
+      await t.sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted and database = (select oid from pg_database where datname = current_database())`;
+    expect(row!.n).toBeGreaterThanOrEqual(1);
+    release();
+    await first;
+    expect((await second).id).toBeGreaterThan(firstId);
   });
 });
