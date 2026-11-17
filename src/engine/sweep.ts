@@ -10,6 +10,7 @@ import { explanationText } from "@/lib/explanation";
 import { metricText } from "@/lib/message";
 import { canonicalJson } from "./canonical";
 import { designPartOf, designShipment } from "./engine";
+import { designRequestFor } from "./request";
 import { DesignPartSchema, EngineStampSchema, type DesignRequest, type EngineStamp } from "./schemas";
 import { sha256Text } from "./sha256";
 import { ENGINE_VERSION } from "./version";
@@ -81,7 +82,7 @@ export function runSweep(req: SweepRequest): SweepResponse {
 
 /** The design request for one quantity per crate on the sweep, with the layout the sweep picked. */
 export function sweepDesignRequest(req: SweepRequest, quantity: number, layoutKey: string | null): DesignRequest {
-  return { part: req.part, settings: { ...req.rules, quantity }, standards: req.standards, layoutKey, ranking: "cost" };
+  return designRequestFor({ part: req.part, settings: { ...req.rules, quantity }, standards: req.standards, layoutKey, ranking: "cost" });
 }
 
 function totalRationale(sweep: QuantitySweep, total: TotalPlan) {

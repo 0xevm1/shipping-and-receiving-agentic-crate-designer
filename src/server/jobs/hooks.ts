@@ -1,5 +1,5 @@
 /**
- * What happens when a job opens, or its total quantity needs a plan (#46). The job queue
+ * What happens when a job opens, its total quantity needs a plan, or its part changes (#46). The job queue
  * registers hooks here that enqueue the server-side sweep (`src/server/queue/register.ts`; the
  * worker then saves the shortlist and the total plan and emits `configs.ready`, docs/QUEUE.md).
  * The browser still sweeps for its own hint (`useBestQuantity`) and saves what the user keeps
@@ -16,8 +16,12 @@ export type JobCreatedHook = (tx: Repository, ctx: OrgContext, job: DesignJob) =
 /** The job (as changed) has a new total quantity to plan. */
 export type TotalPlanNeededHook = JobCreatedHook;
 
+/** The job (as changed) is designed from a new version of its part (`applyDesignPart`). */
+export type PartChangedHook = JobCreatedHook;
+
 const created = new Set<JobCreatedHook>();
 const totalChanged = new Set<TotalPlanNeededHook>();
+const partChanged = new Set<PartChangedHook>();
 
 /** Registers `hook` for every new job. Returns a function that removes it. */
 export function onJobCreated(hook: JobCreatedHook): () => void {
@@ -37,4 +41,14 @@ export function onTotalPlanNeeded(hook: TotalPlanNeededHook): () => void {
 
 export async function runTotalPlanNeededHooks(tx: Repository, ctx: OrgContext, job: DesignJob): Promise<void> {
   for (const hook of totalChanged) await hook(tx, ctx, job);
+}
+
+/** Registers `hook` for every job whose design part changes (`PUT /jobs/:id/part`, or `POST /jobs` with `designPart`). */
+export function onPartChanged(hook: PartChangedHook): () => void {
+  partChanged.add(hook);
+  return () => partChanged.delete(hook);
+}
+
+export async function runPartChangedHooks(tx: Repository, ctx: OrgContext, job: DesignJob): Promise<void> {
+  for (const hook of partChanged) await hook(tx, ctx, job);
 }

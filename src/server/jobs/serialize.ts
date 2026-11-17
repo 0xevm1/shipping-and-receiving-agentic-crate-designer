@@ -10,6 +10,7 @@ export function jobResponse(job: DesignJob): JobResponse {
     totalQuantity: job.totalQuantity,
     selectedConfigurationId: job.selectedConfigurationId,
     notes: job.notes,
+    partHash: job.designPartHash,
     version: job.version,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),

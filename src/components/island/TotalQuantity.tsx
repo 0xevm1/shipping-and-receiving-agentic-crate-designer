@@ -12,8 +12,8 @@ import styles from "./TotalQuantity.module.css";
 
 const SOURCE_LABEL: Record<PlanView["source"], string> = {
   both: "This browser and the server agree",
-  browser: "Planned in this browser, for the crate on screen (its rules and the part's measured outline)",
-  server: "The shared plan on the server (default rules, the part's overall size)",
+  browser: "Planned in this browser, with the packing rules and standards on screen",
+  server: "The shared plan on the server, with the default packing rules and the shop's standards",
 };
 
 /**

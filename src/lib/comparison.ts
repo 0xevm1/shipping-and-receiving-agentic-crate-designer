@@ -10,7 +10,7 @@
  */
 import { CONSTRAINT_TEXT } from "@/domain/explainRecommendation";
 import type { CrateSettings, DesignPart } from "@/domain/schema";
-import { describeShipment, type ShipmentPlan } from "@/domain/shipment";
+import { crateCostPerPart, describeShipment, type ShipmentPlan } from "@/domain/shipment";
 import { costsArePlaceholder, PLACEHOLDER_COST_NOTE, type ShopStandards } from "@/domain/standards";
 import type { QuantitySweep } from "@/domain/sweep";
 import type { ExplanationText } from "./explanation";
@@ -71,7 +71,7 @@ export interface ComparisonInput {
 
 const FREIGHT_NOT_PRICED = "Freight is not priced: no freight rates were given, so cost per part is the crate cost (wood, screws and labour) only.";
 
-const costPerPart = (plan: ShipmentPlan) => plan.totals.costUsd / Math.max(1, plan.totals.parts);
+const costPerPart = (plan: ShipmentPlan) => crateCostPerPart(plan.totals) ?? 0;
 
 function row(c: ComparisonConfig, u: Units): ComparisonRow {
   const { plan, sweep } = c;

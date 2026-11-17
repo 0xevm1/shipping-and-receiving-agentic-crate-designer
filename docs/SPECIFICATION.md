@@ -261,6 +261,7 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 | `artifacts.ts` `buildArtifact(kind, request, reader)` | One artifact (`glb`, `pdf`, `csv`) for one configuration: `{ bytes, contentType, fileName, engineVersion, inputHash, sha256 }` (§7.17) |
 | `artifacts.ts` `buildMultiBundleZip(configs, reader, options)` | Download all: a ZIP with a folder per configuration, `manifest.json` and `comparison.pdf` (§7.17) |
 | `glb.ts` | Runtime adapters for GLBs: `urlModelReader` (browser, `GLTFLoader` on the model URL, cached), `bytesModelReader` / `parseGlb` (any runtime, `GLTFLoader.parse` on bytes), `crateGlb` (`GLTFExporter`, adding a minimal `FileReader` where the runtime has none, as Node) |
+| `request.ts` `sweepRequestFor(…)`, `designRequestFor(…)`, `designPartHash(part)` | **The one request builder** (#46 "same inputs"): every engine request is built here, in the browser (the store's designs, the sweeper, a saved configuration) and on the server (the queue's sweep job, `POST /api/v1/designs`, the CLI), so the two sides can't build different requests from the same part. The part is cut to its design fields (`designPartOf`); `designPartHash` is the SHA-256 of their canonical JSON (`{ v: 1, part }`), the version of a part a job's server results are for (§5.2) |
 | `schemas.ts` | zod schemas for every call: `DesignRequestSchema` (part, settings, standards, layoutKey, ranking), `DesignResponseSchema`, `DesignSummarySchema`, `EngineStampSchema`, `CutListRequestSchema` / `CutListResponseSchema`, and the worker messages. The browser, server and CLI validate the same types; the page's own calls are typed and skip parsing |
 
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
@@ -334,6 +335,23 @@ only if its `engineVersion`, `inputHash` and summary (as canonical JSON) are the
 any other difference is `422`. A server starting on a new engine also emits `engine.updated`
 (§5.2), so open tabs show the reload prompt before their next save. Parity is what makes an honest save always match.
 
+**Same inputs, browser and server (#46).** Sharing the engine is half of it; the other half is
+giving it the same inputs. The browser designs from more than the server's `part` row knows:
+above all the part's measured outline (shaped blocking, §7.5b), which only the browser can measure
+(it rasterises the rendered mesh). So the browser sends its engine part (`designPartOf`, outline
+included) with the job: `designPart` on `POST /api/v1/jobs`, and `PUT /api/v1/jobs/:id/part`
+whenever it changes (the outline measured after the job opened, a mass entered), debounced and
+once per `designPartHash` (`src/state/jobSync.ts`). The server stores it on the job, validated with
+`DesignPartSchema` (`design_job.design_part`, content-addressed by `design_part_hash`), and every
+server-side engine call for the job builds its request from it through `sweepRequestFor`. Saved
+configurations carry their whole `DesignRequest`, so the server's files for one (§7.17) are built
+from that request, never from the part row. With the same packing rules and standards, the
+server's stored recommendation, shortlist and total plan are then exactly the browser's:
+`src/app/api/v1/jobs/sameInputs.integration.test.ts` runs the browser's store and sweeper and the
+queue's sweep job on the engine's worker threads for the three sample parts with their measured
+outlines and compares them. Before this, PART-001 × 60 planned as 2 crates × 30 at $22.89 a part
+in the browser (outline) and $19.57 on the server (bounding box).
+
 **Parity.** `parity.node.test.ts` (Node) and `parity.jsdom.test.ts` (jsdom) run the three sample
 parts at each suggested quantity and compare against one committed baseline,
 `src/engine/__snapshots__/parity.json`: the summary (outside size, gross, tare, screws, cost),
@@ -365,6 +383,7 @@ out). It runs the same engine, so the browser and the server can't disagree.
 |---|---|---|
 | API | `src/app/api/v1/` (Node.js runtime) over `src/server/`; shapes in `src/lib/api/*`, `src/lib/events.ts` | Every endpoint and event type: [API.md](API.md) |
 | Org scoping | `src/server/auth.ts`, `src/server/db/org.ts`, `repository.ts` | No query runs without an `OrgContext`; another org's row answers like a missing one (`404`). One default org until there are accounts; row-level security, per-org channels, fair scheduling and quotas are deferred to a second org (#60) |
+| Same inputs | `src/server/jobs/designPart.ts`, `src/engine/request.ts` | A job is designed from the part as the browser sends it (`designPart`, `PUT /api/v1/jobs/:id/part`, with the measured outline), else the part row's facts; every server engine call builds its request with `sweepRequestFor`. A new part version (`design_part_hash`) drops the total plan, clears a selection a sweep made, puts a finished job back to `running`, queues the sweep (deduplicated per job, part version and total) and emits `job.part_changed`; a sweep's configurations are listed only for the job's current part (`configuration.part_hash`), and a sweep that finishes for an older part stores no plan and moves no selection. A part sent without an outline never replaces the same part with one (§5.1) |
 | Trust | `src/server/jobs/verify.ts` | A configuration from a browser is recomputed with the running engine and stored only if `engineVersion`, `inputHash` and summary match: another engine is `409` (the tab reloads), anything else `422` (§5.1) |
 | Events | `src/server/events/` | A write and its `event` row commit in one transaction; a trigger NOTIFYs `crate_events` with ids only; one dedicated LISTEN connection per process (reconnecting with backoff) fans out to SSE streams, which replay from the `event` table after `Last-Event-ID` (§9, [POSTGRES.md](POSTGRES.md#events)) |
 | Engine work | `src/server/workers/` | Sweeps, files and bundles never run on the thread that serves requests and SSE: a `worker_threads` pool (`bun run engine:build` bundles its entry). A test holds the event-loop lag under 50 ms during full sweeps. The ~2 ms recompute of a save still runs on the request thread for now |
@@ -413,7 +432,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/domain/sweep.ts` | Choosing the best quantity (#46, §7.16): `sweepQuantities()` (the curve over 1–200 per crate, hard checks first, cost per part, the recommendation and shortlist), `planTotal()` and `evenSplit()` (total-quantity mode), `FreightRatesSchema` / `freightCostUsd()` (caller-supplied rates) |
 | `src/domain/totalPlan.ts` | `explainTotalPlan()`: why a total ships as so many crates (§7.16), from the curve; `splitOutcome()`, `planText()` |
 | `src/domain/explainRecommendation.ts` | Why the sweep recommends its quantity (§7.16): `explainRecommendation()` (five sections, the cost lines, the shortlist and the curve, from the sweep alone), `CONSTRAINT_TEXT` |
-| `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
+| `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()`, `crateCostPerPart()` (the score a saved configuration is listed by, browser, server and files alike) |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file, the library, the shop standards file and the last-design entry |
 | `src/domain/profileCodec.ts` | `encodeProfile` / `decodeProfile`: a part profile packed losslessly for the design file (§6.5) |
@@ -475,6 +494,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/state/engineClient.ts` | `engine`: the page's engine client, a Web Worker with an in-thread fallback, latest-wins (`createEngineClient`) |
 | `src/state/engine.worker.ts` | The engine's Web Worker entry (designs and sweeps, `engine/run.ts`) |
 | `src/engine/sweep.ts` | `runSweep`, `rankConfigurations`, `SweepRequestSchema`, `sweepInputHash`, `DEFAULT_SWEEP_RULES` (§5.1, §7.16) |
+| `src/engine/request.ts` | The one request builder for browser and server (§5.1 "Same inputs"): `sweepRequestFor`, `designRequestFor`, `designPartHash` |
+| `src/server/jobs/designPart.ts` | The part a job is designed from (§5.2): `jobDesignPart`, `rowDesignPart`, `jobPartHash`, `partToStore`, `applyDesignPart`, `isCurrentConfiguration` |
 | `src/engine/run.ts` | `runWorkerRequest`: one worker message's call, shared by the worker and its test stand-in |
 | `src/lib/api/designs.ts` | `POST /api/v1/designs` fields and response schemas, client-safe ([QUEUE.md](QUEUE.md)) |
 | `src/server/workers/` | The engine's `worker_threads` pool (`pool.ts`, `engine.ts` `getEnginePool`) and thread entry (`engineThread.ts`, bundled by `bun run engine:build`) |
@@ -2131,9 +2152,10 @@ the engine worker keeps for the rules on screen (`useTotalPlan`, `src/state/tota
 offline), and by the server's sweep job, stored on the job as the shared record (§9,
 [API.md](API.md#total-quantity-spec-716)). With the same rules and standards they are the same
 plan and one card shows it ("This browser and the server agree", with the server's configurations
-for files); they differ when the rules or standards on screen differ from the server's (default rules, the
-org's standards) or the part on screen has a measured outline (shaped blocking, §7.5b, changes the
-crate's wood and weight) that the server's part, known by its overall size, lacks; then the
+for files). Both sweep the same part: the browser sends the job its part with the measured outline
+(shaped blocking, §7.5b, changes the crate's wood and weight), and the server designs from it
+through the engine's one request builder (§5.1 "Same inputs"). They differ only when the rules or
+standards on screen differ from the server's (default rules, the org's standards); then the
 server's plan is shown under the browser's, labelled. A server plan for another total or engine version is never shown. **Use** on a crate
 type puts it on screen (its saved configuration, else its quantity and layout).
 
@@ -2216,6 +2238,18 @@ recommendation: `onRecommendation`, which `recommendOnStartup` sets too) starts 
 after it settled: a quantity swept for a misread size means nothing, and the corrected file then
 opens at the crate the same part in the right units gets. After an edit, the person's rules are
 kept. The e2e hook reports it (`autoRecommend`: `waiting`, `measuring` or null, and `recommended`, §10).
+
+**The Layouts tab and the recommendation.** The Layouts list is ranked by its own option (volume
+by default, or crate cost or freight class), while the recommendation ranks whole crates by cost
+per part, so the recommended crate's layout need not be the list's top. When the crate on screen
+is the sweep's recommendation (`isRecommended`: its quantity and layout, in one crate type;
+applied on load, on a first visit or with **Use**) and its layout isn't the list's top, the tab
+says **"Recommended: cheapest per part — why?"** (the **why?** link opens **Why this crate?** in
+place), that the list is ranked by volume (or the option chosen) and how much more volume it ships
+than the top layout, with **Use the top-ranked layout**; the crate spec PDF says the same
+(`whyText`). Only a layout picked by hand (neither the list's top nor the recommendation's) reads
+"Your pick ships N% more volume than the recommended layout" ("This layout was picked by hand" in
+the PDF). The e2e hook reports which (`layoutPick`: `ranking`, `recommendation` or `hand`, §10).
 
 ### 7.17 Artifacts and the multi-configuration bundle (`src/engine/artifacts.ts`, #46)
 
@@ -3648,7 +3682,8 @@ copies chosen shots there on request.
   from the inputs the shown design was made from, `designedFrom`, §5.1), crate types, frame count, pulses,
   `shapedBlocking`, `profileMs`, the recommendation on load (`autoRecommend`: `waiting` for the first sweep result,
   `measuring` until the measured outline's, null when settled or stopped by an edit; `recommended`, the current
-  sweep's quantity, §7.16) and the CoG and fork-arrow marks, and `canvasCoverage()` (share of canvas pixels
+  sweep's quantity; `layoutPick`, what the Layouts tab says of the layout on screen: `ranking`, `recommendation` or
+  `hand`, §7.16) and the CoG and fork-arrow marks, and `canvasCoverage()` (share of canvas pixels
   drawn). After loading a part, a spec calls `waitForRecommended(page)` (`e2e/helpers/probe.ts`) before reading
   numbers, so the recommendation landing later can't move them. It is loaded only when built with `NEXT_PUBLIC_E2E=1`; `next.config.ts` always inlines the flag (`"0"` when unset),
   so normal builds drop the branch and don't bundle the module.
@@ -3659,7 +3694,10 @@ copies chosen shots there on request.
     false }` on a page that stops the outline analysis); a spec about a particular crate sets its quantity (`setQuantity`).
   - `recommendation-why` (and `.mobile`, in the drawer): **Why this crate?** opens the five sections, the cost table with
     freight "Not priced", the best-quantities table and the cost curve, and closes again.
-  - `island`: each tab's contents (Overview chain and weight bars, Layouts cards, Cut list groups, Rules controls); the tab
+  - `island`: each tab's contents (Overview chain and weight bars, Layouts cards, Cut list groups, Rules controls); Layouts
+    says the crate on screen is the recommendation ("Recommended: cheapest per part", **why?** opens **Why this crate?**,
+    probe `layoutPick`), and a layout picked by hand says so; `useTopRankedLayout` goes to the list's top for specs that
+    re-pick by the ranking; the tab
     strip is one tab stop with arrows, Home and End and a labelled panel; the scroll fade; one island height on every tab.
   - `rules`: quantity resizes the crate; a typed 500 clamps to 200 with a note; Reset rules keeps the quantity.
   - `units`: imperial by default (header, Overview, size labels, nominal lumber in the Overview, Cut list and CSV); the toggle;

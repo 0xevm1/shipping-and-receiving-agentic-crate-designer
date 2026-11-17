@@ -267,6 +267,15 @@ function crateLimitCheck(text: string, unmet: Message | null, standards: ShopSta
 }
 
 /** "3 × crate A (64 each) + 1 × crate B (8)". */
+/**
+ * Crate cost per part shipped, USD (wood, screws and labour, §7.12, without freight): what a saved
+ * configuration is scored and listed by, in the browser, on the server and in the files (#46). Null
+ * when nothing ships.
+ */
+export function crateCostPerPart(totals: { costUsd: number; parts: number }): number | null {
+  return totals.parts > 0 ? totals.costUsd / totals.parts : null;
+}
+
 export function describeShipment(plan: { crates: Pick<CrateType, "label" | "count" | "quantity">[] }): string {
   return plan.crates.map((t) => `${t.count} × crate ${t.label} (${t.quantity}${t.count > 1 ? " each" : ""})`).join(" + ");
 }

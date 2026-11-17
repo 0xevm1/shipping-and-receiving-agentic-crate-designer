@@ -12,6 +12,8 @@ import {
   JobSnapshotSchema,
   type PatchJobRequest,
   PatchJobResponseSchema,
+  type PutJobPartRequest,
+  PutJobPartResponseSchema,
   type SaveConfigurationRequest,
   SaveConfigurationResponseSchema,
   VersionConflictErrorSchema,
@@ -89,6 +91,10 @@ export const postConfiguration = (jobId: string, body: SaveConfigurationRequest,
 
 export const patchJob = (jobId: string, body: PatchJobRequest, opts?: ApiOptions) =>
   call(`/api/v1/jobs/${encodeURIComponent(jobId)}`, jsonInit("PATCH", body), PatchJobResponseSchema, opts);
+
+/** `PUT /api/v1/jobs/:id/part`: the part as this browser's engine designs it (#46 "same inputs"). */
+export const putJobPart = (jobId: string, body: PutJobPartRequest, opts?: ApiOptions) =>
+  call(`/api/v1/jobs/${encodeURIComponent(jobId)}/part`, jsonInit("PUT", body), PutJobPartResponseSchema, opts);
 
 /** `GET /api/v1/health` answered 200: the server and its database are up. Never throws. */
 export async function probeHealth(opts: ApiOptions = {}): Promise<boolean> {

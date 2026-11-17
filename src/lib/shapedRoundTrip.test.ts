@@ -10,6 +10,7 @@ import { decodeProfile, encodeProfile } from "@/domain/profileCodec";
 import { shareHash } from "@/domain/shareLink";
 import { planShipment } from "@/domain/shipment";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
+import { sweepQuantities } from "@/domain/sweep";
 import { catalogPart, type LoadedPart } from "./part";
 import { APP } from "./appInfo";
 import { designFilePart } from "./loadPart";
@@ -206,5 +207,17 @@ describe("the ranking travels with the design", () => {
     const picked = planShipment(part, { ...DEFAULT_SETTINGS, quantity: 4 }, other.key, DEFAULT_STANDARDS, "cost");
     const doc = buildPrintable({ part, plan: picked, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "cost", generatedAt: NOW });
     expect(doc.crates[0].spec.layout.why).toMatch(/picked by hand/);
+  });
+
+  it("the sweep's recommended crate says it is the recommendation, not a pick by hand, and how the list is ranked", () => {
+    const { part } = savedDesign("PART-001", 4);
+    const sweep = sweepQuantities(part, { ...DEFAULT_SETTINGS, quantity: 1 }, DEFAULT_STANDARDS);
+    const rec = sweep.recommendation!;
+    const plan = planShipment(part, { ...DEFAULT_SETTINGS, quantity: rec.quantity }, rec.crate.layoutKey, DEFAULT_STANDARDS, "volume");
+    // Ranked by volume, the list's top is another layout than the one cheapest per part.
+    expect(plan.crates[0].result.layouts[0].key).not.toBe(rec.crate.layoutKey);
+    const doc = buildPrintable({ part, plan, sweep, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: NOW });
+    expect(doc.crates[0].spec.layout.why).toMatch(/^Recommended: cheapest per part\. .* ranked by volume, where it ships/);
+    expect(doc.crates[0].spec.layout.why).not.toMatch(/picked by hand/);
   });
 });

@@ -23,7 +23,7 @@ import {
   setUnits,
   SHAFT,
   shot,
-  useRecommendedLayout,
+  useTopRankedLayout,
   waitForRecommended,
 } from "./helpers";
 
@@ -110,7 +110,7 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
 
 test("a design whose layout no longer exists falls back to the recommended one", async ({ page }) => {
   // The app opens at the sweep's layout; the fallback is the Layouts ranking's recommended one.
-  await useRecommendedLayout(page);
+  await useTopRankedLayout(page);
   const { outside } = await crate(page);
   const saved = await downloadDesign(page);
   const stale = { ...saved.json, layoutKey: "u:1x1x1:999" };

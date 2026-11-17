@@ -19,7 +19,7 @@ export type NewPart = Omit<typeof part.$inferInsert, "orgId" | "id" | "createdAt
 export type PartModel = typeof partModel.$inferSelect;
 export type NewPartModel = Omit<typeof partModel.$inferInsert, "orgId" | "createdAt">;
 export type DesignJob = typeof designJob.$inferSelect;
-export type NewDesignJob = Pick<typeof designJob.$inferInsert, "partId" | "totalQuantity" | "createdBy" | "notes">;
+export type NewDesignJob = Pick<typeof designJob.$inferInsert, "partId" | "totalQuantity" | "createdBy" | "notes" | "designPart" | "designPartHash">;
 export type DesignJobPatch = Partial<Pick<DesignJob, "status" | "selectedConfigurationId" | "notes" | "totalQuantity" | "totalPlan">>;
 export type Configuration = typeof configuration.$inferSelect;
 export type NewConfiguration = Omit<typeof configuration.$inferInsert, "orgId" | "id" | "createdAt">;
@@ -168,14 +168,49 @@ export function createRepository(db: Executor) {
        * only while the job's total is still `total`: a plan for a total someone has since changed
        * is dropped. True when it was stored.
        */
-      async setTotalPlan(ctx: OrgContext, id: string, total: number, plan: unknown): Promise<boolean> {
+      async setTotalPlan(ctx: OrgContext, id: string, total: number, plan: unknown, partHash: string | null = null): Promise<boolean> {
         const orgId = requireOrg(ctx);
         const rows = await db
           .update(designJob)
           .set({ totalPlan: plan })
-          .where(and(eq(designJob.orgId, orgId), eq(designJob.id, id), eq(designJob.totalQuantity, total)))
+          .where(
+            and(
+              eq(designJob.orgId, orgId),
+              eq(designJob.id, id),
+              eq(designJob.totalQuantity, total),
+              // ...and for the part it was planned from (`design_part_hash`, null for the part row's facts).
+              sql`${designJob.designPartHash} is not distinct from ${partHash}`,
+            ),
+          )
           .returning({ id: designJob.id });
         return rows.length > 0;
+      },
+      /**
+       * Stores the part the job is designed from (#46 "same inputs"), with what it invalidates: the
+       * total plan (made for the old part) is dropped, a job that had finished goes back to
+       * `running` for the sweep that follows, and a selection the old sweep made (`precomputed`) is
+       * cleared. Derived data, like the total plan: no version bump, so no client's pending change
+       * conflicts with a browser's measurement. Returns the job as it now is.
+       */
+      async setDesignPart(
+        ctx: OrgContext,
+        id: string,
+        input: { designPart: unknown; designPartHash: string; status?: DesignJob["status"]; clearSelection: boolean },
+      ): Promise<DesignJob | undefined> {
+        const orgId = requireOrg(ctx);
+        const [row] = await db
+          .update(designJob)
+          .set({
+            designPart: input.designPart,
+            designPartHash: input.designPartHash,
+            totalPlan: null,
+            ...(input.status ? { status: input.status } : {}),
+            ...(input.clearSelection ? { selectedConfigurationId: null } : {}),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(designJob.orgId, orgId), eq(designJob.id, id)))
+          .returning();
+        return row;
       },
       /**
        * Jobs (not archived) with a total whose stored plan is missing, for another total, or from

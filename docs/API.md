@@ -75,6 +75,7 @@ saves on the device and sends them later, without showing an error (`src/state/j
 | `GET` | `/jobs/:id` | Snapshot: job, part, configurations, artifacts, `lastEventId` |
 | `POST` | `/jobs/:id/configs` | Save a configuration made in the browser; the server recomputes it first |
 | `PATCH` | `/jobs/:id` | Change the selection (recommendation), status, notes or total quantity, at a `version` |
+| `PUT` | `/jobs/:id/part` | The part as the browser's engine designs it (its measured outline); the job re-sweeps when it changed ([The job's part](#the-jobs-part)) |
 | `POST` | `/designs` | Stateless headless calculation: a GLB and the part's facts in, the ranked configurations, recommendation, 1–200 curve and (with `total`) the even split out. Nothing saved; needs an API key from scripts. Runs on the engine's worker threads ([QUEUE.md](QUEUE.md#post-apiv1designs)) |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
 | `GET` | `/health` | Database and event-listener liveness, NOTIFY queue usage, event-loop lag |
@@ -87,7 +88,7 @@ saves on the device and sends them later, without showing an error (`src/state/j
 
 ```json
 { "catalogId": "PART-001", "totalQuantity": 40, "reuse": true }
-{ "partId": "5f0c…", "reuse": true }
+{ "partId": "5f0c…", "reuse": true, "designPart": { "id": "PART-004", "name": "Cover", "mass_kg": 12, "dimensions_mm": [400, 300, 80], "profile": { … } } }
 ```
 
 Name the part by exactly one of `partId` (a part already on the server, e.g. from `POST /parts`)
@@ -100,8 +101,16 @@ part, the same catalog entry, or an upload of the same GLB by sha256) is returne
 identity are serialised with an advisory lock. Otherwise a new job is created: `201`, a
 `Location` header, `created: true`, and a `job.created` event.
 
+`designPart` (optional) is the part as the client's engine designs it, the engine's `DesignPart`
+(`id`, `name`, `mass_kg`, `dimensions_mm`, `material`, `profile`), checked with `DesignPartSchema`
+(a bad one is `400` with `field` like `designPart.mass_kg`). A new job is designed from it when it
+differs from the part's own facts; a reused job takes it as `PUT /jobs/:id/part` would. See
+[The job's part](#the-jobs-part).
+
 Response (`CreateJobResponseSchema`): `{ job: Job, created: boolean }`, where `Job` is
-`{ id, partId, status, totalQuantity, selectedConfigurationId, notes, version, createdAt, updatedAt }`.
+`{ id, partId, status, totalQuantity, selectedConfigurationId, notes, partHash, version, createdAt, updatedAt }`.
+`partHash` is the `designPartHash` of the part the job is designed from as a client sent it, or
+null while it is designed from the part's own facts.
 
 **Server-side sweep.** Opening a job queues its quantity sweep: an `onJobCreated` hook
 (`src/server/queue/register.ts`) runs inside the creating transaction, before `job.created`, so
@@ -120,7 +129,7 @@ The job's snapshot, for first load and reconnects (`JobSnapshotSchema`):
 |---|---|
 | `job` | As above; `version` is what a `PATCH` must send |
 | `part` | The part (`PartResponseSchema`), with `catalogId` for catalog parts |
-| `configurations` | Every configuration linked to the job, oldest first: `{ id, inputHash, engineVersion, quantityPerCrate, layout, score, origin, summary, design, createdAt, addedAt }`. `summary` is the engine's `DesignSummary`; `design` is what to put back on screen (`settings`, `layoutKey`, `ranking`); `score` is crate cost per part in USD; `origin` is `user` or `precomputed` |
+| `configurations` | Every configuration linked to the job, oldest first (a sweep's `precomputed` ones only for the job's current part, see [The job's part](#the-jobs-part)): `{ id, inputHash, engineVersion, quantityPerCrate, layout, score, origin, summary, design, createdAt, addedAt }`. `summary` is the engine's `DesignSummary`; `design` is what to put back on screen (`settings`, `layoutKey`, `ranking`); `score` is crate cost per part in USD; `origin` is `user` or `precomputed` |
 | `artifacts` | Generated files of those configurations (`{ id, configurationId, kind, sha256, sizeBytes, builtBy, createdAt }`) |
 | `totalPlan` | How the job's `totalQuantity` ships (`TotalPlanSchema`, see "Total quantity" below), or null: no total, or not planned yet for this total and engine |
 | `lastEventId` | The newest event id this job's stream would send |
@@ -190,6 +199,43 @@ there. The job row is locked, then:
   the total and its plan and queues nothing; the same total again changes nothing. The plan
   arrives with `configs.ready`.
 
+### The job's part
+
+The browser designs from more than the server's `part` row knows: above all the part's **measured
+outline** (`profile`, shaped blocking, spec §7.5b), which only the browser measures, from the
+rendered model. Without it the server's sweep would design bounding-box blocking and price another
+crate (PART-001 × 60: $19.57 a part on the server against the browser's $22.89). So the client
+sends its part, and every server-side engine call for the job designs from it through the engine's
+one request builder (`sweepRequestFor`, `src/engine/request.ts`; spec §5.1 "Same inputs").
+
+```json
+PUT /api/v1/jobs/:id/part
+{ "part": { "id": "PART-001", "name": "Machined steel bracket", "mass_kg": 12.4, "dimensions_mm": [360, 220, 258], "material": "6061-T6 aluminum", "profile": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 4, "faces": { … } } } }
+```
+
+`PutJobPartRequestSchema`; `part` is checked with `DesignPartSchema` (`400` with `field` like
+`part.mass_kg` otherwise). No `version`: it is the part's facts, not an edit, and it never
+conflicts with a client's pending change. The answer is `200 { job, changed }`:
+
+- **Content-addressed.** A part version is its `designPartHash` (SHA-256 of the canonical design
+  fields). The same part again, or one equal to the part row's facts on a job that has none, is
+  `changed: false` and does nothing.
+- **An outline is never dropped.** A part sent without `profile` (a client that hasn't measured it
+  yet, or couldn't) doesn't replace the same part with one; with another mass, name or material it
+  keeps the stored outline when the size is the same.
+- **A new version** is stored on the job (`design_job.design_part`, `design_part_hash`, no
+  `version` bump), the total plan is dropped, a selection that a sweep made (`precomputed`) is
+  cleared, a `ready` or `error` job goes back to `running`, the sweep is queued (an `onPartChanged`
+  hook; deduplicated per job, part version and total) and `job.part_changed` is emitted.
+- **Stale results are never served.** A sweep's configurations carry the part version they were
+  made from (`configuration.part_hash`) and the snapshot lists them only while it is the job's; a
+  sweep that finishes for an older version stores no total plan and moves no selection.
+  Configurations a person saved stay listed (each carries its own part in its `DesignRequest`, and
+  the server builds its files from that request, never from the part row).
+
+The browser sends `designPart` with `POST /jobs` and `PUT /part` whenever the part on screen
+changes (its outline measured, a mass entered), debounced and once per version (`jobSync.ts`).
+
 ### Total quantity (spec §7.16)
 
 A job's `totalQuantity` is how many parts ship in all. The queue's sweep job plans it with
@@ -225,14 +271,15 @@ the default packing rules, and:
 the snapshot carries `totalPlan` only when its `total` is the job's `totalQuantity` and its
 `engineVersion` is the server's; otherwise `null` ("still planning"). The first server to start on
 a new engine version queues the sweep for every job whose plan is missing or from another engine
-(`replanTotals`, alongside `engine.updated`). Sweeps are deduplicated per job **and total**
-(`sweepDedupeKey`: `<jobId>` without a total, `<jobId>:total:<n>` with one).
+(`replanTotals`, alongside `engine.updated`). Sweeps are deduplicated per job, part version **and
+total** (`sweepDedupeKey`: `<jobId>`, then `:part:<first 16 hex of the part hash>` once a client
+has sent the job's part, then `:total:<n>` with a total).
 
 The browser plans the same total itself, at once and offline (`planTotal` over the sweep its engine
 worker keeps for the rules on screen); the same engine with the same inputs gives the same plan, so
-the UI shows one. The inputs can differ (rules or standards on screen, or the measured outline of a
-loaded model, which the server's part doesn't have); then the UI shows both, labelled. See "In the
-UI".
+the UI shows one. The part is the same on both sides ([The job's part](#the-jobs-part)); the rules
+or standards on screen can differ from the server's, and then the UI shows both, labelled. See "In
+the UI".
 
 ### Shop standards
 
@@ -357,6 +404,7 @@ Writes emit events in the same transaction, as its last statements (POSTGRES.md 
 | `POST /jobs` creating a job | `job.created` | the job | `partId` |
 | `POST /jobs/:id/configs` adding a configuration to the job | `config.added` | the job | `configurationId`, `inputHash` |
 | `PATCH /jobs/:id` moving the selection | `recommendation.changed` | the job | `configurationId` (null when cleared) |
+| `PUT /jobs/:id/part` (or `POST /jobs` with `designPart` reusing a job) storing a new part version | `job.part_changed` | the job | `partHash` |
 | The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash`, `totalPlan` (`{ total, crates, perCrate, scoreUsdPerPart }` when it stored a plan for the job's total, else null; the plan itself is in the snapshot) |
 | The queue, when a sweep is dead-lettered | `job.error` | the job | `message` (generic; the cause is in `queue_job.last_error`) |
 | A server-built file or bundle stored (first request, or the queue's bundle job) | `artifact.ready` | the job | `artifactId`, `configurationId` (a bundle's first), `kind` (`glb`, `pdf`, `csv`, `zip`), plus `file` or `bundleId` |
@@ -369,9 +417,11 @@ shows the reload prompt on an `engine.updated` naming another engine version.
 
 - **When a part loads**, `startJobSync` (started by `SavedStateLoader` once the restored crate is
   on screen) makes sure the server has a job for it: a catalog part by `catalogId`, a loaded GLB
-  uploaded once per page through `POST /parts`, then `POST /jobs` with `reuse: true`. It reads the
-  snapshot and subscribes to the job's events. Edits never touch the network; the engine stays in
-  the browser.
+  uploaded once per page through `POST /parts`, then `POST /jobs` with `reuse: true` and the part
+  as its engine designs it (`designPart`). It reads the snapshot and subscribes to the job's events.
+  When the part's design facts change (the outline measured after the job opened, a mass entered)
+  it sends them with `PUT /jobs/:id/part` (debounced, once per version). Other edits never touch
+  the network; the engine stays in the browser.
 - **Saving** is explicit and local first: the Overview's *Shared job* section queues the crate on
   screen (`saveCurrentDesign`), a recommendation (`selectConfiguration`) or the job's notes
   (`updateJob`) as a pending change on the device, and the queue sends it (see "Offline").
@@ -470,6 +520,16 @@ plan from another engine is not served and `replanTotals` re-plans it; a total c
 with its `Idempotency-Key` applies once with one sweep; clearing the total clears the plan.
 `src/server/jobs/totalPlan.test.ts`, `src/state/totalPlan.test.ts` and `src/domain/totalPlan.test.ts`
 are the unit tests.
+
+`src/app/api/v1/jobs/sameInputs.integration.test.ts` covers [the job's part](#the-jobs-part): for
+each sample part with its measured outline, the browser's store and sweeper (`startSweeps`, the
+page's own code) and the queue's sweep job on the engine's worker threads give the same
+recommendation, shortlist (quantity, layout, cost per part) and total plan (the job card shows one,
+"This browser and the server agree"); a job opened without the part plans the bounding box, then
+`PUT /part` with the outline drops the old plan and configurations, re-sweeps under the part's
+dedupe key, emits `job.part_changed` and agrees with the browser; the same part, or the part
+without its outline, changes nothing; a late sweep for an older part stores no plan; a bad part is
+`400`. `src/engine/request.test.ts` and `src/server/jobs/designPart.test.ts` are the unit tests.
 
 `src/app/api/v1/jobs/artifacts.integration.test.ts` covers the artifact and bundle routes: built
 on the first request and then served from storage (one object, one row, one `artifact.ready`),

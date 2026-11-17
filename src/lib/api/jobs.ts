@@ -6,6 +6,7 @@
  *   GET   /api/v1/jobs/:id             snapshot: job, part, configurations, artifacts, total plan, lastEventId
  *   POST  /api/v1/jobs/:id/configs     save a configuration made in the browser (server-verified)
  *   PATCH /api/v1/jobs/:id             selection, status, notes, total quantity; optimistic on `version`
+ *   PUT   /api/v1/jobs/:id/part        the part as the browser designs it (its measured outline); re-sweeps when it changed
  *
  * lib sits below the engine (eslint layers), so the engine's own types appear here as plain JSON
  * objects: the server parses `request` with `DesignRequestSchema` and recomputes `summary`, and
@@ -39,6 +40,12 @@ export const CreateJobRequestSchema = z
     catalogId: z.string().min(1).max(64).optional(),
     totalQuantity: z.int().positive().max(1_000_000).optional(),
     reuse: z.boolean().optional(),
+    /**
+     * The part as the client's engine designs it: the engine's `DesignPart` (id, name, mass_kg,
+     * dimensions_mm, material, profile), checked with `DesignPartSchema`. Optional: without it the
+     * job is designed from the part's own facts. See `PutJobPartRequestSchema`.
+     */
+    designPart: json.optional(),
   })
   .refine((b) => (b.partId === undefined) !== (b.catalogId === undefined), { message: "Name the part by partId or catalogId (one of them)." });
 export type CreateJobRequest = z.infer<typeof CreateJobRequestSchema>;
@@ -50,6 +57,12 @@ export const JobSchema = z.object({
   totalQuantity: z.int().positive().nullable(),
   selectedConfigurationId: id.nullable(),
   notes: z.string().nullable(),
+  /**
+   * `designPartHash` of the part the job is designed from, as a client sent it (`designPart`, `PUT
+   * /jobs/:id/part`); null while it is designed from the part's own facts. A client whose part
+   * hashes differently sends its own. Absent from servers (and job copies cached) before it existed.
+   */
+  partHash: z.string().nullable().optional(),
   /** Bumped by every PATCH; send it back as `version` to change the job. */
   version: z.int().positive(),
   createdAt: datetime,
@@ -195,6 +208,24 @@ export const PatchJobRequestSchema = z
 export type PatchJobRequest = z.infer<typeof PatchJobRequestSchema>;
 
 export const PatchJobResponseSchema = z.object({ job: JobSchema });
+
+/**
+ * `PUT /api/v1/jobs/:id/part` (#46 "same inputs"): the part as the client's engine designs it,
+ * the engine's `DesignPart` with the measured outline (`profile`, spec §7.5b) once the model has
+ * been measured. When it differs from what the job's results were made from, it is stored, the
+ * total plan is dropped and the sweep re-runs; the old sweep's configurations are no longer listed.
+ * A part sent without an outline never replaces the same part with one. No `version`: it is the
+ * part's facts, not an edit, and it never conflicts with one.
+ */
+export const PutJobPartRequestSchema = z.object({ part: json });
+export type PutJobPartRequest = z.infer<typeof PutJobPartRequestSchema>;
+
+export const PutJobPartResponseSchema = z.object({
+  job: JobSchema,
+  /** True when the job is now designed from this part (and re-sweeps); false when it already was. */
+  changed: z.boolean(),
+});
+export type PutJobPartResponse = z.infer<typeof PutJobPartResponseSchema>;
 
 /** 409 `engine_version_mismatch`: the browser runs another engine. Reload, then save again. */
 export const EngineMismatchErrorSchema = ApiErrorSchema.extend({

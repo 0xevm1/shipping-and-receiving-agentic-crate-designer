@@ -1,5 +1,5 @@
 import { CONSTRAINT_TEXT } from "@/domain/explainRecommendation";
-import type { ShipmentPlan } from "@/domain/shipment";
+import { crateCostPerPart, type ShipmentPlan } from "@/domain/shipment";
 import { costsArePlaceholder } from "@/domain/standards";
 import { sweepQuantities, type QuantitySweep } from "@/domain/sweep";
 import { stampCsv } from "@/lib/csv";
@@ -281,7 +281,7 @@ export async function buildMultiBundleZip(configs: DesignRequest[], read: PartMo
       perCrate: plan.crates.map((t) => t.quantity),
       outsideMm: first ? [...first.layout.external] : null,
       grossKg: first?.grossKg ?? null,
-      crateCostUsdPerPart: hasCrate ? plan.totals.costUsd / Math.max(1, plan.totals.parts) : null,
+      crateCostUsdPerPart: hasCrate ? crateCostPerPart(plan.totals) : null,
       problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,
       files,
     });

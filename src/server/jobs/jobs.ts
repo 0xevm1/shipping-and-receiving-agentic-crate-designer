@@ -7,6 +7,10 @@
  * an optional `Idempotency-Key` (`once`).
  */
 import { catalog } from "@/domain/catalog";
+import type { DesignPart } from "@/domain/schema";
+import { crateCostPerPart } from "@/domain/shipment";
+import { designPartHash } from "@/engine/request";
+import { DesignPartSchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
 import {
   type CreateJobResponse,
@@ -14,6 +18,8 @@ import {
   type JobSnapshot,
   PatchJobRequestSchema,
   type PatchJobResponseSchema,
+  PutJobPartRequestSchema,
+  type PutJobPartResponse,
   SaveConfigurationRequestSchema,
   type SaveConfigurationResponse,
 } from "@/lib/api/jobs";
@@ -25,6 +31,7 @@ import { ApiFailure, readJson, requireId } from "../http";
 import { partResponse } from "../parts/create";
 import { runJobCreatedHooks, runTotalPlanNeededHooks } from "./hooks";
 import { idempotencyKey, once, type Outcome, requestHash, storedOutcome } from "./idempotency";
+import { applyDesignPart, isCurrentConfiguration, jobPartHash, partToStore } from "./designPart";
 import { artifactResponse, configurationResponse, jobResponse } from "./serialize";
 import { currentTotalPlan } from "./totalPlan";
 import { type RunCheck, verifyConfiguration } from "./verify";
@@ -54,10 +61,21 @@ async function requireJob(tx: Repository, org: OrgContext, id: string, forUpdate
 /** The lock key that makes "find or open a job" one at a time per part identity. */
 const identityKey = (p: Part) => (p.catalogId ? `catalog:${p.catalogId}` : p.modelSha256 && p.source === "upload" ? `model:${p.modelSha256}` : `part:${p.id}`);
 
+/** A client's design part (`designPart`, `PUT /part` `part`), checked with the engine's own schema. */
+function parseDesignPart(value: unknown, field: string): DesignPart {
+  const parsed = DesignPartSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    throw new ApiFailure(400, "invalid_request", `The part isn't one the engine can design: ${issue.message}`, [field, ...issue.path].join("."));
+  }
+  return parsed.data;
+}
+
 /** `POST /api/v1/jobs`. 201 with a new job, or 200 with the reused one (`reuse: true`). */
 export async function createJob(request: Request, { db, org }: JobsDeps): Promise<Outcome<CreateJobResponse>> {
   const raw = await readJson(request);
   const body = parse(CreateJobRequestSchema, raw);
+  const designPart = body.designPart === undefined ? undefined : parseDesignPart(body.designPart, "designPart");
   const key = idempotencyKey(request);
   return inTransaction(db, (tx) =>
     once<CreateJobResponse>(tx, org, key, requestHash("POST", "/api/v1/jobs", raw), async () => {
@@ -87,19 +105,30 @@ export async function createJob(request: Request, { db, org }: JobsDeps): Promis
 
       if (body.reuse) {
         await tx.jobs.lock(org, identityKey(part));
-        const existing = await tx.jobs.findReusable(org, part);
-        if (existing) {
+        const found = await tx.jobs.findReusable(org, part);
+        if (found) {
+          // The reused job's own part (an upload of the same GLB may be another row).
+          const jobPart = found.partId === part.id ? part : (await tx.parts.get(org, found.partId))!;
+          const { job: existing, changed } = designPart ? await applyDesignPart(tx, org, found, jobPart, designPart) : { job: found, changed: false };
           return {
             status: 200,
             body: { job: jobResponse(existing), created: false },
             emit: async () => {
               if (partCreated) await emitEvent(tx, org, { jobId: null, type: "part.created", payload: { partId: part.id } });
+              if (changed) await emitEvent(tx, org, { jobId: existing.id, type: "job.part_changed", payload: { partHash: existing.designPartHash! } });
             },
           };
         }
       }
 
-      const job = await tx.jobs.create(org, { partId: part.id, totalQuantity: body.totalQuantity ?? null });
+      // Designed from the client's part when it differs from the part's own facts (before the
+      // hooks, so the sweep they queue is for it).
+      const stored = designPart ? partToStore({ designPart: null, designPartHash: null }, part, designPart) : null;
+      const job = await tx.jobs.create(org, {
+        partId: part.id,
+        totalQuantity: body.totalQuantity ?? null,
+        ...(stored ? { designPart: stored.designPart, designPartHash: stored.hash } : {}),
+      });
       await runJobCreatedHooks(tx, org, job);
       return {
         status: 201,
@@ -129,10 +158,12 @@ export async function getJobSnapshot(id: string, { db, org }: JobsDeps): Promise
     repo.configurations.listForJob(org, job.id),
     repo.artifacts.listForJob(org, job.id),
   ]);
+  // A sweep's configurations for an older version of the job's part are never served.
+  const partHash = jobPartHash(job, part!);
   return {
     job: jobResponse(job),
     part: partResponse(part!),
-    configurations: configurations.map(configurationResponse),
+    configurations: configurations.filter((c) => isCurrentConfiguration(c, partHash)).map(configurationResponse),
     artifacts: artifacts.map(artifactResponse),
     totalPlan: currentTotalPlan(job),
     lastEventId,
@@ -173,8 +204,9 @@ export async function saveConfiguration(id: string, request: Request, { db, org,
         layout: first.layoutKey ?? "auto",
         settings: designRequest,
         resultSummary: summary,
-        score: summary.totals.parts > 0 ? summary.totals.costUsd / summary.totals.parts : null,
+        score: crateCostPerPart(summary.totals),
         engineVersion: design.engineVersion,
+        partHash: designPartHash(designRequest.part),
       });
       const link = await tx.configurations.link(org, job.id, saved.row.id, "user");
       const linked = await tx.configurations.getForJob(org, job.id, saved.row.id);
@@ -237,4 +269,22 @@ export async function patchJob(id: string, request: Request, { db, org }: JobsDe
       };
     }),
   );
+}
+
+/**
+ * `PUT /api/v1/jobs/:id/part` (#46 "same inputs"): the part as the client designs it. Stored, with
+ * the sweep queued again and `job.part_changed` emitted, when it differs from what the job's
+ * results were made from (`applyDesignPart`); otherwise nothing changes. 200 either way.
+ */
+export async function putJobPart(id: string, request: Request, { db, org }: JobsDeps): Promise<Outcome<PutJobPartResponse>> {
+  const raw = await readJson(request);
+  const designPart = parseDesignPart(parse(PutJobPartRequestSchema, raw).part, "part");
+  const jobId = requireId(id, "job");
+  return inTransaction(db, async (tx) => {
+    const current = await requireJob(tx, org, jobId, true);
+    const part = await tx.parts.get(org, current.partId);
+    const { job, changed } = await applyDesignPart(tx, org, current, part!, designPart);
+    if (changed) await emitEvent(tx, org, { jobId, type: "job.part_changed", payload: { partHash: job.designPartHash! } });
+    return { status: 200, body: { job: jobResponse(job), changed }, replayed: false };
+  });
 }

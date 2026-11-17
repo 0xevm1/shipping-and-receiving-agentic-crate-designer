@@ -18,7 +18,8 @@ import { designShipment } from "@/engine/engine";
 import { buildBundleZip } from "@/engine/files";
 import { bytesModelReader } from "@/engine/glb";
 import { sha256Hex } from "@/engine/sha256";
-import { DEFAULT_SWEEP_RULES, rankConfigurations, sweepDesignRequest, type SweepRequest } from "@/engine/sweep";
+import { sweepRequestFor } from "@/engine/request";
+import { DEFAULT_SWEEP_RULES, rankConfigurations, sweepDesignRequest } from "@/engine/sweep";
 import { type DesignsApiResponse, DesignsApiResponseSchema } from "@/lib/api/designs";
 import { ApiErrorSchema } from "@/lib/api/parts";
 import type { LoadedPart } from "@/lib/part";
@@ -51,7 +52,7 @@ export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new 
   const sizeUnits = checkGlb(bytes, fileName);
   const { frame, guessed, sizeMm } = readFrame(sizeUnits, { units: opts.units ?? undefined, up: opts.up ?? undefined });
   const sha256 = sha256Hex(bytes);
-  const req: SweepRequest = {
+  const req = sweepRequestFor({
     part: {
       id: idFromFile(fileName),
       name: opts.name ?? nameFromFile(fileName),
@@ -63,7 +64,7 @@ export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new 
     standards: DEFAULT_STANDARDS,
     freightRates: opts.freightRates,
     total: opts.total,
-  };
+  });
   const report: DesignsApiResponse = {
     ...rankConfigurations(req),
     model: { sha256, sizeBytes: bytes.byteLength, readAsMm: frame.units === "mm", units: frame.units, up: frame.up, unitsGuessed: guessed },
