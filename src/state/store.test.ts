@@ -208,3 +208,53 @@ describe("setPartProfile", () => {
     expect(s().result.design!.shapedBlocking).toBeUndefined();
   });
 });
+
+describe("setPartFrame (#105)", () => {
+  // A loaded 0.3 × 0.2 × 0.1 file: read as inches it is 7.62 × 5.08 × 2.54 mm, as Y up its sides swap.
+  const loaded: LoadedPart = { ...unknownPart, rawSize: [0.3, 0.2, 0.1], modelUrl: "blob:frame" };
+
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    s().setPart(loaded);
+  });
+
+  it("re-measures the part and re-plans the crate at once", () => {
+    const before = s().result.design!.layout.external;
+    expect(s().setPartFrame({ units: "mm" })).toBeNull();
+    expect(s().part).toMatchObject({ modelUnits: "mm", mmPerUnit: 1, unitsGuessed: false });
+    expect(s().part.dimensions_mm).toEqual([0.3, 0.2, 0.1]);
+    expect(s().measured).toEqual([0.3, 0.2, 0.1]);
+    expect(s().result.design!.layout.external).not.toEqual(before);
+    expect(s().lastChange?.source).toBe("frame");
+    expect(s().fit.nonce).toBeGreaterThan(0);
+  });
+
+  it("turns the part upright for Y up: the two other sides swap", () => {
+    s().setPartFrame({ up: "y" });
+    expect(s().part).toMatchObject({ upAxis: "y", modelUnits: "m" });
+    expect(s().part.dimensions_mm).toEqual([300, 100, 200]);
+  });
+
+  it("drops the part's measured outline, which was taken the old way, and settles a guess only by choosing units", () => {
+    useDesigner.setState({ part: { ...s().part, profile: { version: 1 } as never } });
+    s().setPartFrame({ up: "y" });
+    expect(s().part.profile).toBeUndefined();
+    expect(s().part.unitsGuessed).toBe(true);
+    s().setPartFrame({ units: "in" });
+    expect(s().part.unitsGuessed).toBe(false);
+  });
+
+  it("does nothing, and says nothing, when the choice is the one in use", () => {
+    const result = s().result;
+    expect(s().setPartFrame({ units: "m", up: "z" })).toBeNull();
+    expect(s().result).toBe(result);
+    expect(s().lastChange).toBeNull();
+  });
+
+  it("is not for the catalog's own files", () => {
+    s().setPart(catalogPart(getPart("PART-001")));
+    const part = s().part;
+    expect(s().setPartFrame({ units: "in" })).toMatch(/Catalog/);
+    expect(s().part).toBe(part);
+  });
+});

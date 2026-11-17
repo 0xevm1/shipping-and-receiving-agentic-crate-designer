@@ -1,0 +1,24 @@
+{
+  "kind": "crate-designer.last-design",
+  "version": 1,
+  "tab": "layouts",
+  "ranking": "volume",
+  "design": {
+    "kind": "crate-design",
+    "schemaVersion": 2,
+    "app": { "name": "crate-designer", "version": "0.1.0" },
+    "savedAt": "2026-11-16T18:00:00.000Z",
+    "part": {
+      "source": "custom",
+      "id": "bracket-inches",
+      "name": "Bracket inches",
+      "mass_kg": 21.5,
+      "dimensions_mm": [360, 220, 258],
+      "model": "bracket-inches.glb"
+    },
+    "settings": { "quantity": 4, "keepUpright": true, "maxLayers": 2, "partGapMm": 50, "wallClearanceMm": 50, "panelThickness": "auto" },
+    "ranking": "volume",
+    "layoutKey": "u:870x590x358:221",
+    "summary": { "quantity": 4, "layout": "2 × 2 × 1, As modeled", "outsideMm": [932, 652, 497], "grossKg": 134.9 }
+  }
+}
