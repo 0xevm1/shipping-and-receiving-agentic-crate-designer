@@ -49,7 +49,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           {layoutName(layout)}. Inside is {dims(layout.interior, units)} {lengthUnit(units)}
         </Step>
         <Step name="Walls and lid" value={`${mm(c.panelMm)} ply`}>
-          {auto ? "Sized for the load" : "Set by hand"}, stiffened with {section(19, 89)} cleats
+          {auto ? "Sized for the load" : "Set by hand"}, stiffened with {section(c.cleat.thick, c.cleat.wide)} cleats
         </Step>
         <Step name="Base" value={`${c.skidCount} skids`}>
           {section(c.skid.wide, c.skid.tall)} skids under a {mm(c.floorMm)} floor, open for forklift tines

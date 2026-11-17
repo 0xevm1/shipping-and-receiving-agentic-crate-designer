@@ -9,13 +9,13 @@ import { dims, lengthUnit, volume } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 
 const FIRST_SHOWN = 4;
-const CLEAT_MM = 19;
 
 /** Every way to pack the batch, recommended first, each with a top and side drawing. */
 export function LayoutsTab({ design }: { design: CrateDesign }) {
   const layouts = useDesigner((s) => s.result.layouts);
   const units = useDesigner((s) => s.units);
   const setLayoutKey = useDesigner((s) => s.setLayoutKey);
+  const standards = useDesigner((s) => s.standards);
   const [showAll, setShowAll] = useState(false);
   const current = design.layout;
   const best = layouts[0];
@@ -28,7 +28,7 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
     <>
       <h2>Ways to pack it</h2>
       <p className="lede">
-        <Why explanation={explainLayout(layouts, current)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from
+        <Why explanation={explainLayout(layouts, current, standards)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate from
         above, then from the side.
       </p>
       {shown.map((l) => (
@@ -92,7 +92,7 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
 /** Top view above side view, to scale, parts in slate on plywood. */
 function Thumb({ layout: l, design }: { layout: Layout; design: CrateDesign }) {
   const c = design.construction;
-  const wall = c.panelMm + CLEAT_MM;
+  const wall = c.panelMm + c.cleat.thick;
   const base = c.floorMm + c.skid.tall;
   const [EL, EW, EH] = l.external;
   const [a, b, h] = l.cellSize;

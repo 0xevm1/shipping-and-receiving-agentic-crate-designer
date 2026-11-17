@@ -1,5 +1,6 @@
-import { STABLE_HEIGHT_RATIO, type Layout } from "./packing";
+import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
+import { DEFAULT_STANDARDS, minInteriorMm, type ShopStandards } from "./standards";
 
 /**
  * Turns a packing layout into a buildable wooden crate: every board as an
@@ -9,22 +10,15 @@ import type { CrateSettings, DesignPart, Vec3 } from "./schema";
  * X along the crate's length (skids run along X, forklift entry from the ends).
  */
 
-// Nominal US lumber, actual dimensions in mm.
-const CLEAT = { thick: 19, wide: 89 }; // 1x4
-const BLOCK_WIDTH = 89; // blocking cut from 2x4 / 4x4 stock
-const FLOOR_THICKNESS = 19;
-const MAX_CLEAT_SPACING = 600;
-const MIN_BLOCKING_GAP = 19;
-/**
- * Smallest interior on any axis: room for the top and bottom rails of a wall
- * (and the two lid edge cleats) without them overlapping or overhanging.
- * Only very small parts hit it; the packer pads their crate up to this.
- */
-export const MIN_INTERIOR_MM = 2 * CLEAT.wide;
+// Every size, threshold, limit and rate comes from the shop standards (standards.ts).
 
-const DENSITY_KG_M3 = { plywood: 600, lumber: 480 };
-/** Placeholder material rates for a rough cost comparison between designs. */
-const COST_PER_M3_USD = { plywood: 1100, lumber: 650 };
+/**
+ * Smallest interior on any axis with the default standards: room for the top and
+ * bottom rails of a wall (and the two lid edge cleats) without them overlapping or
+ * overhanging. Only very small parts hit it; the packer pads their crate up to it.
+ * Designs use `minInteriorMm(standards)`.
+ */
+export const MIN_INTERIOR_MM = minInteriorMm(DEFAULT_STANDARDS);
 
 export type MemberKind =
   | "skid"
@@ -67,6 +61,8 @@ export interface Construction {
   panelMm: number;
   floorMm: number;
   skid: { wide: number; tall: number };
+  /** Cleat section for the wall and lid frames. */
+  cleat: { thick: number; wide: number };
   skidCount: number;
 }
 
@@ -114,35 +110,47 @@ export interface CrateDesign {
   checks: Check[];
 }
 
-/** Choose board sizes from payload mass. Simple, documented thresholds. */
-export function resolveConstruction(settings: CrateSettings, payloadKg: number): Omit<Construction, "skidCount"> {
+/** Choose board sizes from payload mass, using the shop's stock and thresholds. */
+export function resolveConstruction(
+  settings: CrateSettings,
+  payloadKg: number,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): Omit<Construction, "skidCount"> {
+  const { stock, construction: rule } = standards;
+  const ply = stock.panelPlywoodMm;
   const panelMm =
     settings.panelThickness !== "auto"
       ? settings.panelThickness
-      : payloadKg <= 150
-        ? 12
-        : payloadKg <= 500
-          ? 15
-          : 19;
-  const skid = payloadKg <= 700 ? { wide: 89, tall: 89 } : { wide: 89, tall: 140 };
-  return { panelMm, floorMm: FLOOR_THICKNESS, skid };
+      : payloadKg <= rule.panelLightMaxKg
+        ? ply.light
+        : payloadKg <= rule.panelMediumMaxKg
+          ? ply.medium
+          : ply.heavy;
+  const skid = payloadKg <= rule.heavySkidOverKg ? stock.skidMm.standard : stock.skidMm.heavy;
+  return { panelMm, floorMm: stock.floorPlywoodMm, skid: { ...skid }, cleat: { ...stock.cleatMm } };
 }
 
 /** What the structure adds to the interior on each axis — fed to the packer. */
 export function structureAllowance(c: Omit<Construction, "skidCount">): Vec3 {
-  const wall = 2 * (c.panelMm + CLEAT.thick);
-  return [wall, wall, c.skid.tall + c.floorMm + c.panelMm + CLEAT.thick];
+  const wall = 2 * (c.panelMm + c.cleat.thick);
+  return [wall, wall, c.skid.tall + c.floorMm + c.panelMm + c.cleat.thick];
 }
 
-export function designCrate(part: DesignPart, settings: CrateSettings, layout: Layout): CrateDesign {
+export function designCrate(
+  part: DesignPart,
+  settings: CrateSettings,
+  layout: Layout,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): CrateDesign {
   const payloadKg = part.mass_kg * settings.quantity;
-  const base = resolveConstruction(settings, payloadKg);
+  const base = resolveConstruction(settings, payloadKg, standards);
   const t = base.panelMm;
-  const ct = CLEAT.thick;
-  const cw = CLEAT.wide;
+  const ct = base.cleat.thick;
+  const cw = base.cleat.wide;
   const [L, W, H] = layout.interior;
   const extW = W + 2 * (t + ct);
-  const skidCount = Math.max(2, Math.ceil(extW / 800) + 1);
+  const skidCount = Math.max(2, Math.ceil(extW / standards.construction.skidSpacingMm) + 1);
+  const verticalCount = (span: number) => Math.max(2, Math.ceil(span / standards.construction.maxCleatSpacingMm) + 1);
   const construction: Construction = { ...base, skidCount };
 
   const members: Member[] = [];
@@ -197,9 +205,10 @@ export function designCrate(part: DesignPart, settings: CrateSettings, layout: L
     add("lid-cleat", "lumber", lidTag("Lid cross cleat"), [x, -t + cw, H + t], [cw, W + 2 * t - 2 * cw, ct]),
   );
 
-  addDunnage(layout, settings, t, add);
+  addDunnage(layout, settings, t, standards, add);
 
   const bom = buildBom(members);
+  const density = standards.rates.densityKgM3;
   const volumes = { plywood: 0, lumber: 0 };
   const tareKgByAssembly: Record<Assembly, number> = { base: 0, sides: 0, ends: 0, lid: 0, inside: 0 };
   let plywoodM2 = 0;
@@ -207,13 +216,14 @@ export function designCrate(part: DesignPart, settings: CrateSettings, layout: L
   for (const m of members) {
     const volumeM3 = (m.size[0] * m.size[1] * m.size[2]) / 1e9;
     volumes[m.material] += volumeM3;
-    tareKgByAssembly[m.assembly] += volumeM3 * DENSITY_KG_M3[m.material];
+    tareKgByAssembly[m.assembly] += volumeM3 * density[m.material];
     const sorted = [...m.size].sort((p, q) => q - p);
     if (m.material === "plywood") plywoodM2 += (sorted[0] * sorted[1]) / 1e6;
     else lumberM += sorted[0] / 1000;
   }
-  const tareKg = volumes.plywood * DENSITY_KG_M3.plywood + volumes.lumber * DENSITY_KG_M3.lumber;
-  const materialCostUsd = volumes.plywood * COST_PER_M3_USD.plywood + volumes.lumber * COST_PER_M3_USD.lumber;
+  const tareKg = volumes.plywood * density.plywood + volumes.lumber * density.lumber;
+  const cost = standards.rates.costUsdPerM3;
+  const materialCostUsd = volumes.plywood * cost.plywood + volumes.lumber * cost.lumber;
 
   const design: CrateDesign = {
     layout,
@@ -226,11 +236,11 @@ export function designCrate(part: DesignPart, settings: CrateSettings, layout: L
     grossKg: payloadKg + tareKg,
     plywoodM2,
     lumberM,
-    screws: estimateScrews(members, layout.interior),
+    screws: estimateScrews(members, layout.interior, standards),
     materialCostUsd,
     checks: [],
   };
-  design.checks = evaluateChecks(design, part, settings);
+  design.checks = evaluateChecks(design, part, settings, standards);
   return design;
 }
 
@@ -245,8 +255,11 @@ function addDunnage(
   layout: Layout,
   settings: CrateSettings,
   separatorMm: number,
+  standards: ShopStandards,
   add: AddMember,
 ) {
+  const blockWidth = standards.stock.blockWidthMm;
+  const minBlockingGap = standards.construction.minBlockingGapMm;
   const [L, W] = layout.interior;
   const [a, b, c] = layout.cellSize;
   const [, , nz] = layout.counts;
@@ -277,8 +290,8 @@ function addDunnage(
     if (k === 0 && clearZ > 0) {
       for (const fy of [0.2, 0.8]) {
         // Kept inside the walls when the side clearance is too small for a centred strip.
-        const by = Math.min(W - BLOCK_WIDTH, Math.max(0, y + b * fy - BLOCK_WIDTH / 2));
-        block([x, by, 0], [a, BLOCK_WIDTH, clearZ], "bearer");
+        const by = Math.min(W - blockWidth, Math.max(0, y + b * fy - blockWidth / 2));
+        block([x, by, 0], [a, blockWidth, clearZ], "bearer");
       }
     }
 
@@ -289,14 +302,14 @@ function addDunnage(
     const gx1 = i === nx - 1 ? clearX : gap;
     const gy0 = j === 0 ? clearY : gap;
     const gy1 = j === ny - 1 ? clearY : gap;
-    const bwx = Math.min(BLOCK_WIDTH, a);
-    const bwy = Math.min(BLOCK_WIDTH, b);
+    const bwx = Math.min(blockWidth, a);
+    const bwy = Math.min(blockWidth, b);
     const cx = x + a / 2 - bwx / 2;
     const cy = y + b / 2 - bwy / 2;
-    if (gx0 >= MIN_BLOCKING_GAP) block([x - gx0, cy, floorZ], [gx0, bwy, h]);
-    if (gx1 >= MIN_BLOCKING_GAP) block([x + a, cy, floorZ], [gx1, bwy, h]);
-    if (gy0 >= MIN_BLOCKING_GAP) block([cx, y - gy0, floorZ], [bwx, gy0, h]);
-    if (gy1 >= MIN_BLOCKING_GAP) block([cx, y + b, floorZ], [bwx, gy1, h]);
+    if (gx0 >= minBlockingGap) block([x - gx0, cy, floorZ], [gx0, bwy, h]);
+    if (gx1 >= minBlockingGap) block([x + a, cy, floorZ], [gx1, bwy, h]);
+    if (gy0 >= minBlockingGap) block([cx, y - gy0, floorZ], [bwx, gy0, h]);
+    if (gy1 >= minBlockingGap) block([cx, y + b, floorZ], [bwx, gy1, h]);
   }
 }
 
@@ -312,10 +325,6 @@ function spread(start: number, span: number, width: number, count: number): numb
   if (count <= 1) return [start];
   const step = (span - width) / (count - 1);
   return Array.from({ length: count }, (_, i) => start + i * step);
-}
-
-function verticalCount(span: number): number {
-  return Math.max(2, Math.ceil(span / MAX_CLEAT_SPACING) + 1);
 }
 
 /** Groups members into cut-list lines by assembly, piece name, stock and cut, and links each member to its line. */
@@ -340,75 +349,53 @@ function buildBom(members: Member[]): BomLine[] {
   return [...lines.values()];
 }
 
-/** Wood screws: cleats every 150 mm, panel joints every 200 mm, 2 per block, skids every 300 mm. */
-function estimateScrews(members: Member[], interior: Vec3): number {
+/**
+ * Wood screws at the standard spacings (`rates.screwSpacingMm`; defaults: cleats every 150 mm,
+ * panel joints every 200 mm, skids every 300 mm), plus 2 per block.
+ */
+function estimateScrews(members: Member[], interior: Vec3, standards: ShopStandards): number {
   const [L, W, H] = interior;
+  const every = standards.rates.screwSpacingMm;
   let screws = 0;
   for (const m of members) {
     const length = Math.max(...m.size);
-    if (m.kind === "cleat" || m.kind === "lid-cleat") screws += Math.ceil(length / 150) + 1;
-    else if (m.kind === "skid") screws += Math.ceil(length / 300) + 1;
+    if (m.kind === "cleat" || m.kind === "lid-cleat") screws += Math.ceil(length / every.cleat) + 1;
+    else if (m.kind === "skid") screws += Math.ceil(length / every.skid) + 1;
     else if (m.kind === "blocking" || m.kind === "bearer") screws += 2;
   }
   const perimeter = 2 * (L + W);
-  screws += Math.ceil(perimeter / 200) * 2; // walls to floor, lid to walls
-  screws += Math.ceil(H / 200) * 4; // four vertical corners
+  screws += Math.ceil(perimeter / every.panelJoint) * 2; // walls to floor, lid to walls
+  screws += Math.ceil(H / every.panelJoint) * 4; // four vertical corners
   return screws;
 }
 
-/**
- * Shipping is domestic only (US truckload or LTL), so the crate must go through
- * the rear door of a standard 53' dry van. Typical published dimensions for a
- * 53' × 102" dry van (trailer makers' spec sheets and carrier equipment
- * guides; values vary a few inches by make and wall type): interior about 52'6" × 101" × 110", rear door
- * opening about 98–100" wide × 108–110" high. We use the low end of the door
- * range, since the door, not the interior, is what limits width and height.
- */
-export const DRY_VAN_53FT_MM = {
-  /** 52'6" (630 in) usable floor length. */
-  interiorLength: 16000,
-  /** 101 in between the side walls (logistic posts eat into it on some vans). */
-  interiorWidth: 2565,
-  /** 110 in floor to roof. */
-  interiorHeight: 2794,
-  /** 98 in rear door opening. */
-  doorWidth: 2489,
-  /** 108 in rear door opening, floor to header. */
-  doorHeight: 2743,
-};
+/** The default 53' dry van limits (`limits.trailerMm`); the checks read the standards. */
+export const DRY_VAN_53FT_MM = DEFAULT_STANDARDS.limits.trailerMm;
 
-/**
- * LTL carriers add an "excessive length" accessorial for handling units over
- * 8 ft (96 in) in many carriers' rules tariffs, stepping up at longer lengths.
- * Thresholds differ by carrier, so this is an info note, not a caution.
- */
-export const LTL_EXCESSIVE_LENGTH_MM = 2438;
+/** The default LTL excessive-length threshold (`limits.ltlExcessiveLengthMm`). */
+export const LTL_EXCESSIVE_LENGTH_MM = DEFAULT_STANDARDS.limits.ltlExcessiveLengthMm;
 
-/**
- * When a wooden crate is overkill: the brief says smaller aluminum parts might
- * ship in ordinary cardboard boxes. We suggest it when all of these hold:
- * - each part is at most 15 kg, light enough not to punch through corrugated
- *   board or need fixing to a base (the 11.8 kg aluminum housing qualifies; the
- *   21.5 kg steel bracket and 27 kg steel shaft don't);
- * - the whole payload is at most 25 kg, leaving room for the box and dunnage
- *   under the 65 lb (29.5 kg) gross limit of a 32 ECT single-wall box
- *   (NMFC Item 222 / UFC Rule 41);
- * - the crate interior's L + W + H is at most 1905 mm (75 in), the same rule's
- *   size limit for that box.
- */
-export const CARDBOARD_LIMITS = { partKg: 15, payloadKg: 25, boxDimSumMm: 1905 };
+/** The default carton limits (`limits.cardboard`). */
+export const CARDBOARD_LIMITS = DEFAULT_STANDARDS.limits.cardboard;
 
-const STACK_LIMIT_KG = 100;
-const BASE_RATING_KG = 1000;
-const LOW_UTILIZATION = 0.25;
+/** Actual -> nominal US lumber size in inches, for naming sections ("4×4"). */
+const NOMINAL_IN: Record<number, number> = { 19: 1, 38: 2, 64: 3, 89: 4, 140: 6, 184: 8, 235: 10, 286: 12 };
+
+/** "4×6" for standard US lumber, otherwise the actual size in mm. */
+function sectionName(a: number, b: number): string {
+  const [na, nb] = [NOMINAL_IN[a], NOMINAL_IN[b]];
+  return na && nb ? `${na}×${nb}` : `${a} × ${b} mm`;
+}
 
 /** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
-function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings): Check[] {
+function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings, standards: ShopStandards): Check[] {
   const checks: Check[] = [];
+  const lim = standards.limits;
+  const minBlockingGap = standards.construction.minBlockingGapMm;
   const [eL, eW, eH] = d.layout.external;
   const nz = d.layout.counts[2];
 
-  const van = DRY_VAN_53FT_MM;
+  const van = lim.trailerMm;
   const mm = (v: number) => `${v.toLocaleString("en-US")} mm`;
   const tooBig = [
     eL > van.interiorLength && `Length is over the ${mm(van.interiorLength)} trailer floor.`,
@@ -424,41 +411,43 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
   const ratio = eH / Math.min(eL, eW);
   checks.push(
     d.layout.stable
-      ? { id: "stable", level: "ok", title: "Stable footprint", detail: `Height is ${ratio.toFixed(2)}× the short side. The limit is ${STABLE_HEIGHT_RATIO}×.` }
-      : { id: "stable", level: "caution", title: "Tip-over risk", detail: `Height is ${ratio.toFixed(2)}× the short side, over the ${STABLE_HEIGHT_RATIO}× limit. Strap it down or pick a lower layout.` },
+      ? { id: "stable", level: "ok", title: "Stable footprint", detail: `Height is ${ratio.toFixed(2)}× the short side. The limit is ${lim.stableHeightRatio}×.` }
+      : { id: "stable", level: "caution", title: "Tip-over risk", detail: `Height is ${ratio.toFixed(2)}× the short side, over the ${lim.stableHeightRatio}× limit. Strap it down or pick a lower layout.` },
   );
 
   const posts = d.members.filter((m) => m.kind === "blocking").length;
   checks.push(
-    Math.min(settings.partGapMm, settings.wallClearanceMm) < MIN_BLOCKING_GAP
-      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `Gaps under ${MIN_BLOCKING_GAP} mm leave no room for blocking. Widen the gap or the wall clearance.` }
+    Math.min(settings.partGapMm, settings.wallClearanceMm) < minBlockingGap
+      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `Gaps under ${minBlockingGap} mm leave no room for blocking. Widen the gap or the wall clearance.` }
       : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides.` },
   );
 
   if (nz > 1) {
     const stackedKg = part.mass_kg * (nz - 1);
     checks.push(
-      stackedKg > STACK_LIMIT_KG
+      stackedKg > lim.stackKg
         ? { id: "stack", level: "caution", title: "Heavy stack on the bottom layer", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. Consider fewer layers.` }
-        : { id: "stack", level: "ok", title: "Stack load is light", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. The limit is ${STACK_LIMIT_KG} kg.` },
+        : { id: "stack", level: "ok", title: "Stack load is light", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. The limit is ${lim.stackKg} kg.` },
     );
   }
 
-  const skidName = d.construction.skid.tall === 89 ? "4×4" : "4×6";
+  const skidName = sectionName(d.construction.skid.wide, d.construction.skid.tall);
+  const rating = `${lim.baseRatingKg.toLocaleString("en-US")} kg`;
   checks.push(
-    d.grossKg > BASE_RATING_KG
-      ? { id: "base-rating", level: "caution", title: "Over 1,000 kg gross", detail: "Needs heavier skids and floor joists than this design includes." }
-      : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under 1,000 kg, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
+    d.grossKg > lim.baseRatingKg
+      ? { id: "base-rating", level: "caution", title: `Over ${rating} gross`, detail: "Needs heavier skids and floor joists than this design includes." }
+      : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under ${rating}, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
   );
 
-  if (eL > LTL_EXCESSIVE_LENGTH_MM) {
-    checks.push({ id: "oversize", level: "info", title: "LTL length surcharge likely", detail: `Length is over ${mm(LTL_EXCESSIVE_LENGTH_MM)} (8 ft). Most LTL carriers add an excessive-length charge.` });
+  if (eL > lim.ltlExcessiveLengthMm) {
+    const ft = Math.round((lim.ltlExcessiveLengthMm / 304.8) * 10) / 10;
+    checks.push({ id: "oversize", level: "info", title: "LTL length surcharge likely", detail: `Length is over ${mm(lim.ltlExcessiveLengthMm)} (${ft} ft). Most LTL carriers add an excessive-length charge.` });
   }
-  if (d.layout.utilization < LOW_UTILIZATION) {
+  if (d.layout.utilization < lim.lowUtilization) {
     checks.push({ id: "utilization", level: "info", title: "Mostly empty space", detail: "Parts are packed by their bounding box, so irregular shapes leave air. A nested layout could be smaller." });
   }
   const [iL, iW, iH] = d.layout.interior;
-  const box = CARDBOARD_LIMITS;
+  const box = lim.cardboard;
   if (part.mass_kg <= box.partKg && d.payloadKg <= box.payloadKg && iL + iW + iH <= box.boxDimSumMm) {
     checks.push({
       id: "cardboard",

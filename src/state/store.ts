@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import { catalog, modelUrl } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
-import { computeDesign, DEFAULT_SETTINGS, type DesignResult } from "@/domain/design";
+import { computeDesign, DEFAULT_SETTINGS, settingsFromStandards, type DesignResult } from "@/domain/design";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import type { Units } from "@/lib/units";
 import { anim } from "./motion";
+import { loadStandards, saveStandards } from "./standardsStorage";
 
 /** The part being crated: catalog metadata or a GLB loaded at runtime. */
 export interface LoadedPart extends DesignPart {
@@ -75,6 +77,8 @@ export interface DesignerState {
   result: DesignResult;
   /** Extra catalog entries from a dropped parts.json. */
   extraParts: Part[];
+  /** The shop's house rules every design is built to (#19). Saved in localStorage. */
+  standards: ShopStandards;
 
   units: Units;
   tab: Tab;
@@ -100,6 +104,16 @@ export interface DesignerState {
   setSettings: (patch: Partial<CrateSettings>) => void;
   resetRules: () => void;
   setLayoutKey: (key: string | null) => void;
+  /**
+   * Deep-merges a patch onto the shop standards, validates the result and re-designs.
+   * Returns an error message (and changes nothing) if the result is invalid. Changing a
+   * default gap, clearance or layer count also applies it to the current rules.
+   */
+  setStandards: (patch: DeepPartial<ShopStandards>) => string | null;
+  /** Back to the shipped standards (and their default rules). */
+  resetStandards: () => void;
+  /** Reads the standards saved in this browser. Called once after the app mounts. */
+  loadSavedStandards: () => void;
   addCatalogParts: (parts: Part[]) => void;
   setUnits: (u: Units) => void;
   setTab: (t: Tab) => void;
@@ -149,7 +163,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
   /** Recompute the design after any input change, dropping a pin whose cut-list line is gone. */
   const recompute = (patch: Partial<DesignerState>) => {
     const next = { ...get(), ...patch };
-    const result = computeDesign(next.part, next.settings, next.layoutKey);
+    const result = computeDesign(next.part, next.settings, next.layoutKey, next.standards);
     const pinGone = next.pin && !result.design?.bom.some((l) => l.key === next.pin);
     const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
     set({
@@ -161,6 +175,17 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     });
   };
 
+  /** Switches to new standards: carries changed defaults into the rules, re-designs and saves. */
+  const applyStandards = (standards: ShopStandards, save = true) => {
+    const { settings, standards: old } = get();
+    const next = { ...settings };
+    for (const key of ["partGapMm", "wallClearanceMm", "maxLayers"] as const) {
+      if (standards.defaults[key] !== old.defaults[key]) next[key] = standards.defaults[key];
+    }
+    recompute({ standards, settings: normalizeSettings(next, settings), layoutKey: null });
+    if (save) saveStandards(standards);
+  };
+
   return {
     part: initialPart,
     measured: null,
@@ -168,6 +193,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     layoutKey: null,
     result: computeDesign(initialPart, DEFAULT_SETTINGS),
     extraParts: [],
+    standards: DEFAULT_STANDARDS,
 
     units: "metric",
     tab: "overview",
@@ -208,14 +234,25 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       }
       // Name and material don't move anything: refresh the result (checks may quote the
       // part) without re-framing the camera or dropping the user's layout pick.
-      const { settings, layoutKey } = get();
-      set({ part, result: computeDesign(part, settings, layoutKey) });
+      const { settings, layoutKey, standards } = get();
+      set({ part, result: computeDesign(part, settings, layoutKey, standards) });
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
     setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }),
-    resetRules: () => recompute({ settings: { ...DEFAULT_SETTINGS, quantity: get().settings.quantity }, layoutKey: null }),
+    resetRules: () => recompute({ settings: settingsFromStandards(get().standards, get().settings.quantity), layoutKey: null }),
     setLayoutKey: (layoutKey) => recompute({ layoutKey }),
+    setStandards: (patch) => {
+      const r = parseStandards(mergeStandards(get().standards, patch));
+      if (!r.ok) return r.error;
+      applyStandards(r.standards);
+      return null;
+    },
+    resetStandards: () => applyStandards(DEFAULT_STANDARDS),
+    loadSavedStandards: () => {
+      const standards = loadStandards();
+      if (standards !== get().standards) applyStandards(standards, false);
+    },
     addCatalogParts: (parts) => {
       const byModel = new Map(get().extraParts.map((p) => [p.model, p]));
       for (const p of parts) byModel.set(p.model, p);
