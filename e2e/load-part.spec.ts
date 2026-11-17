@@ -50,6 +50,8 @@ test("a catalog GLB fills in its mass and material", async ({ page }) => {
 
 test("a new part opens at the recommended quantity and layout, and says so", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
+  // The preloaded part has already opened at its own recommendation (and said so): wait for the new part's.
+  await pollCrate(page, (s) => s.partId).toBe("PART-002");
   await expect(island(page).getByTestId("change-note")).toContainText(/^Set to the recommended \d+ per crate\. Details: /);
   const s = await waitForRecommended(page);
   expect(s.recommended).not.toBeNull();
