@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalog, getPart } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
+import { shipmentToCsv } from "./export";
 import { describeShipment, planShipment, shipmentBom, withinOutsideLimits, type ShipmentPlan } from "./shipment";
 import type { CrateSettings, DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
@@ -234,5 +235,15 @@ describe("shipmentBom", () => {
     expect(pieces(all.lines)).toBe(expected);
     expect(new Set(all.lines.map((l) => l.key)).size).toBe(all.lines.length);
     expect(all.screws).toBe(plan.crates.reduce((n, c) => n + c.count * c.result.design!.screws, 0));
+    // Each piece's sizes sit together.
+    const labels = all.lines.map((l) => `${l.assembly}|${l.label}`);
+    for (const label of new Set(labels)) {
+      const at = labels.flatMap((x, i) => (x === label ? [i] : []));
+      expect(at[at.length - 1] - at[0]).toBe(at.length - 1);
+    }
+    const csv = shipmentToCsv(getPart("PART-003"), plan);
+    expect(csv).toMatch(/^# Shipment of 10 x PART-003 .*: 2 x crate A \(4 each\) \+ 1 x crate B \(2\)\n/);
+    expect(csv).toContain("# 3 crates, gross");
+    expect(csv.trim().endsWith(`Wood screws (approx),fastener,,,${all.screws}`)).toBe(true);
   });
 });
