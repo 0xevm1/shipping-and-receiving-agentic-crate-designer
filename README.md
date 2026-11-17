@@ -345,11 +345,20 @@ All of these live in one zod-validated object, `ShopStandards` (`src/domain/stan
 ## Project layout
 
 ```
-src/domain/        pure TypeScript, no React; all crate logic, unit-tested
-src/lib/           display units, cut-list formatting, part-file loading, part analysis for
-                   shaped blocking, the export document, the Export pill's .zip and PDF (tested)
-src/state/         zustand store; per-frame animation values; checks for the UI
-src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
+src/domain/        pure TypeScript (mm, kg, Z-up), no React, three.js or DOM; all crate logic, unit-tested
+src/lib/           edge code, may import domain: display units, cut-list formatting, part-file
+                   loading, part analysis for shaped blocking, the checks the UI shows, the
+                   export document, the Export pill's .zip and PDF (tested)
+src/state/         may import lib and domain: zustand stores, persistence, loading flows,
+                   per-frame animation values
+src/components/    may import everything below: shell/ (overlays), island/ (tabs), viewer/
+                   (three.js via react-three-fiber); src/app/ is the same layer
+```
+
+Imports point down only (components and app, then state, then lib, then domain). ESLint enforces
+it (`eslint.config.mjs`, `bun run lint`), including for type-only imports and tests.
+
+```
 src/data/          parts.json catalog
 public/parts/      GLB models
 public/            also site.webmanifest and its 192/512 icons (tab icons: src/app/icon.svg etc.)
