@@ -7,11 +7,11 @@ import { APP } from "@/lib/appInfo";
  * that leave every output byte-identical don't bump it; the parity baseline
  * (`src/engine/__snapshots__/parity.json`) shows which kind a change is.
  */
-export const ENGINE_REVISION = 3;
+export const ENGINE_REVISION = 4;
 
 /**
  * Stamped on every engine output: the app's package version plus the engine revision, as
- * "0.1.0+engine.3". A saved result whose `engineVersion` differs from the running engine's was
+ * "0.1.0+engine.4". A saved result whose `engineVersion` differs from the running engine's was
  * made by other rules, so a server compares it before trusting an `inputHash` match.
  */
 export const ENGINE_VERSION = `${APP.version}+engine.${ENGINE_REVISION}`;

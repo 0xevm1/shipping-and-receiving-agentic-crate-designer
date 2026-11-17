@@ -10,6 +10,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("quantity 8 resizes the crate", async ({ page }) => {
+  // From 4 (the app opens at the recommendation, a larger batch).
+  await setQuantity(page, 4);
   const before = (await crate(page)).outside!;
   await setQuantity(page, 8);
   await pollCrate(page, (s) => s.outside).not.toEqual(before);

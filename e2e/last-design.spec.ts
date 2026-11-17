@@ -6,11 +6,13 @@ import {
   island,
   loadMessage,
   massField,
+  mmText,
   openApp,
   openFresh,
   openTab,
   otherLayout,
   panel,
+  pickedLayout,
   pollCrate,
   reloadApp,
   sampleFile,
@@ -20,6 +22,7 @@ import {
   shot,
   tab,
   triangleGlb,
+  waitForRecommended,
   waitForScene,
 } from "./helpers";
 
@@ -67,6 +70,8 @@ test("a reload reopens the same crate: rules, layout, ranking, tab and units", a
   await ranking.getByRole("button", { name: "Crate cost" }).click();
   // A layout card that isn't the recommended one.
   await otherLayout(page).first().click();
+  // Read the crate once the picked card's design has landed.
+  await expect.poll(async () => ((await pickedLayout(page).textContent()) ?? "").includes(mmText((await crate(page)).outside!))).toBe(true);
   const before = await crate(page);
   await expect.poll(() => savedQuantity(page)).toBe(8);
   await shot(page, "last-design-before-reload");
@@ -167,9 +172,10 @@ test("corrupt saved data opens the default part without an error", async ({ page
   page.on("pageerror", (e) => errors.push(e));
   page.on("console", (m) => m.type() === "warning" && warnings.push(m.text()));
   await reloadApp(page);
-  const s = await crate(page);
+  // Nothing to restore: the default part, opened at its recommendation (spec §7.16).
+  const s = await waitForRecommended(page);
   expect(s.partId).toBe("PART-001");
-  expect(s.quantity).toBe(4);
+  expect(s.quantity).toBe(s.recommended);
   expect(s.tab).toBe("overview");
   await expect(loadMessage(page)).toHaveCount(0);
   expect(errors).toEqual([]);

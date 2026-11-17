@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { crate, cutTable, header, inText, mmText, openApp, openTab, panel, readDownloadText, reloadApp, setUnits, shot } from "./helpers";
+import { crate, cutTable, header, inText, mmText, openApp, openTab, panel, readDownloadText, reloadApp, setQuantity, setUnits, shot } from "./helpers";
 
 /**
  * Display units: the app opens in inches and pounds with nominal lumber names, metric is one toggle
@@ -17,7 +17,7 @@ test("first load is imperial: inches and pounds in the header, Overview and size
   await expect(unitsGroup(page).getByRole("button", { name: "in lb" })).toHaveAttribute("aria-pressed", "true");
 
   await expect(header(page)).toContainText(/\d+\.\d × \d+\.\d × \d+\.\d in/);
-  await expect(header(page)).toContainText(/4140 steel · [\d.]+ lb each · crate gross \d+ lb/);
+  await expect(header(page)).toContainText(/4140 steel · [\d.]+ lb each · crate gross [\d,]+ lb/);
   await expect(panel(page)).toContainText(inText(outside!));
   // The other-unit line under the size is in millimetres.
   await expect(panel(page)).toContainText(`${mmText(outside!)} mm`);
@@ -55,6 +55,9 @@ test("a part's mass reads the same in the header and the Overview", async ({ pag
 
 test("imperial names lumber and plywood by their sold sizes, in the Overview, the Cut list and the CSV", async ({ page }) => {
   await openApp(page);
+  // The light bracket × 4 crate: skids under a floor, no joists (the recommendation is heavier).
+  await setQuantity(page, 4);
+  await openTab(page, "Overview");
   await expect(panel(page)).toContainText(/\d\/\d″ ply/);
   await expect(panel(page)).toContainText(/stiffened with \dx\d cleats/);
   await expect(panel(page)).toContainText(/\dx\d skids under a \d\/\d″ floor/);
@@ -71,7 +74,7 @@ test("imperial names lumber and plywood by their sold sizes, in the Overview, th
 
   // The CSV follows the units: inches and pounds, nominal stock.
   const [download] = await Promise.all([page.waitForEvent("download"), panel(page).getByRole("button", { name: "Download cut list" }).click()]);
-  expect(download.suggestedFilename()).toBe("crate-PART-001-x4.csv");
+  expect(download.suggestedFilename()).toBe(`crate-PART-001-x${(await crate(page)).quantity}.csv`);
   const csv = await readDownloadText(download);
   expect(csv).toMatch(/# Part 4140 steel, [\d.]+ lb each\n/);
   expect(csv).toContain("# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\n");

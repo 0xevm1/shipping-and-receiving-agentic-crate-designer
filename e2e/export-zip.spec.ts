@@ -81,22 +81,24 @@ test("Export downloads one .zip with every file, in imperial, and the design re-
   expect(Math.abs(box.x - meta.x)).toBeLessThan(6);
   await shot(page, "export-zip-idle");
 
-  const before = (await crate(page)).outside!;
+  // The app opens at the recommended quantity (spec §7.16); the file names carry it.
+  const { outside: before, quantity } = await crate(page);
+  const stem = `crate-PART-001-x${quantity}`;
   const { name, files } = await exportZip(page);
   await shot(page, "export-zip-success");
-  expect(name).toBe("crate-PART-001-x4.zip");
-  expect(Object.keys(files).sort()).toEqual(["README.txt", "crate-PART-001-x4.glb", "crate-PART-001-x4.pdf", "cut-list.csv", "design.json"]);
-  expectGlb(files["crate-PART-001-x4.glb"]);
-  const pdf = expectPdf(files["crate-PART-001-x4.pdf"], 4);
+  expect(name).toBe(`${stem}.zip`);
+  expect(Object.keys(files).sort()).toEqual(["README.txt", `${stem}.glb`, `${stem}.pdf`, "cut-list.csv", "design.json"]);
+  expectGlb(files[`${stem}.glb`]);
+  const pdf = expectPdf(files[`${stem}.pdf`], 4);
   expect(pdf, "the PDF follows the units: inches, to the nearest 1/16").toMatch(/\d+( \d+\/\d+)? in/);
-  await attach("export.pdf", files["crate-PART-001-x4.pdf"], "application/pdf");
+  await attach("export.pdf", files[`${stem}.pdf`], "application/pdf");
   expect(text(files["cut-list.csv"])).toContain("# Units: inches");
   const readme = text(files["README.txt"]);
   expect(readme).toMatch(/Units: +inches and pounds/);
   expect(readme).toMatch(/App: +crate-designer \d+\.\d+\.\d+/);
   const design = JSON.parse(text(files["design.json"]));
-  expect(design).toMatchObject({ kind: "crate-design", part: { id: "PART-001" }, settings: { quantity: 4 } });
-  expect(design.summary.outsideMm).toEqual(roundedMm(before));
+  expect(design).toMatchObject({ kind: "crate-design", part: { id: "PART-001" }, settings: { quantity } });
+  expect(design.summary.outsideMm).toEqual(roundedMm(before!));
 
   // The design file reopens to the same crate.
   await setUnits(page, "metric");
@@ -107,13 +109,13 @@ test("Export downloads one .zip with every file, in imperial, and the design re-
 test("Export in metric writes the CSV, PDF and README in mm and kg", async ({ page }) => {
   await openApp(page);
   await setUnits(page, "metric");
-  const { outside } = await crate(page);
+  const { outside, quantity } = await crate(page);
   const { files } = await exportZip(page);
   expect(text(files["cut-list.csv"])).toContain("# Units: mm and kg");
   expect(text(files["cut-list.csv"])).toContain("cut_mm");
-  expect(expectPdf(files["crate-PART-001-x4.pdf"], 4)).toContain(`${mmText(outside!)} mm`);
+  expect(expectPdf(files[`crate-PART-001-x${quantity}.pdf`], 4)).toContain(`${mmText(outside!)} mm`);
   expect(text(files["README.txt"])).toMatch(/Units: +millimetres and kilograms/);
-  expectGlb(files["crate-PART-001-x4.glb"]);
+  expectGlb(files[`crate-PART-001-x${quantity}.glb`]);
 });
 
 test("a split batch packs a GLB per crate type and the shipment cut list", async ({ page }) => {
@@ -175,18 +177,20 @@ test("a loaded (custom) part exports, and its design reopens with the GLB", asyn
 
 test("exporting from the exploded view still packs the assembled crate", async ({ page }) => {
   await openApp(page);
+  const { quantity } = await crate(page);
   await explode(page);
   const { files } = await exportZip(page);
-  const names = glbNodeNames(files["crate-PART-001-x4.glb"]);
-  for (const n of ["Crate", "Base", "Side walls", "End walls", "Lid", "Side rail 1", "Parts", "Part 1", "Part 4"]) {
+  const names = glbNodeNames(files[`crate-PART-001-x${quantity}.glb`]);
+  for (const n of ["Crate", "Base", "Side walls", "End walls", "Lid", "Side rail 1", "Parts", "Part 1", `Part ${quantity}`]) {
     expect(names).toContain(n);
   }
-  expect(names).not.toContain("Part 5");
+  expect(names).not.toContain(`Part ${quantity + 1}`);
 });
 
 test("the busy state holds for at least 1.5 s with motion on", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await openApp(page);
+  const { quantity } = await crate(page);
   const downloaded = page.waitForEvent("download");
   const t0 = Date.now();
   await pill(page).click();
@@ -195,7 +199,7 @@ test("the busy state holds for at least 1.5 s with motion on", async ({ page }) 
   await shot(page, "export-zip-busy");
   await downloaded;
   expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
-  await expect(note(page)).toHaveText("Downloaded crate-PART-001-x4.zip");
+  await expect(note(page)).toHaveText(`Downloaded crate-PART-001-x${quantity}.zip`);
   await expect(pill(page)).toHaveText("Export specs");
 });
 

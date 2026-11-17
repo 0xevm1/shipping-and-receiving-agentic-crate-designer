@@ -196,12 +196,16 @@ tab at a time.
      material field suggests common alloys and takes any text; aluminum draws lighter than
      steel. A 10 kg stand-in mass is used, with a warning, until you enter one. Mass is never
      guessed from the mesh.
-   - A newly loaded part opens at the **recommended quantity per crate** and its crate, without
-     you choosing one ("Set to the recommended 34 per crate"); a saved design, a design file, a
-     share link or your last crate keeps its own.
+   - A newly loaded part, and the sample part on a first visit, opens at the **recommended
+     quantity per crate** and its crate, without you choosing one ("Set to the recommended 34
+     per crate"); a saved design, a design file, a share link or your last crate keeps its own.
 2. **Set the quantity and packing rules** in the **Rules** tab: quantity, keep upright, most
    layers, gap between parts, clearance to walls, and plywood thickness (or Auto). Under the
    quantity, **Best: N per crate** says why that quantity wins, with **Use** to go back to it.
+   **Why this crate?** explains it in plain words: what was compared, how it is scored (crate
+   cost per part, broken into wood, screws and labour; freight not priced without rates), why
+   this quantity beat the next best (with a cost-per-part curve), what stopped a larger crate,
+   and what it assumes. The spec and comparison PDFs print the same explanation.
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one

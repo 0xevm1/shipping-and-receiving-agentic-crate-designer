@@ -154,6 +154,18 @@ export const pickedLayout = (page: Page) => panel(page).getByRole("group", { nam
 /** A layout card that isn't on screen. */
 export const otherLayout = (page: Page) => panel(page).getByRole("group", { name: "Layouts", exact: true }).getByRole("button", { pressed: false });
 
+/**
+ * Opens Layouts and picks the layout ranked first ("recommended") when another is picked. The app
+ * opens at the quantity sweep's crate, whose layout is the cheapest per part (spec §7.16), which
+ * need not be the layout the Layouts ranking recommends. Leaves the Layouts tab open.
+ */
+export async function useRecommendedLayout(page: Page) {
+  await openTab(page, "Layouts");
+  const use = panel(page).getByRole("button", { name: "Use the recommended layout" });
+  if (await use.isVisible()) await use.click();
+  await expect(pickedLayout(page)).toContainText("recommended");
+}
+
 /** Every check on the Checks tab, or only those of one level. */
 export const checks = (page: Page, level?: "ok" | "caution" | "info") =>
   level

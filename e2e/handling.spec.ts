@@ -47,7 +47,10 @@ async function interiorMm(page: Page) {
 test.describe("bounding-box blocking", () => {
   test.beforeEach(async ({ page }) => {
     await disableShapeAnalysis(page);
-    await openApp(page);
+    await openApp(page, { measured: false });
+    // The bracket × 4 crate (the app opens at the recommendation, a heavier crate).
+    await setQuantity(page, 4);
+    await openTab(page, "Overview");
   });
 
   test("Checks lists the centre of gravity and the forklift and pallet-jack checks", async ({ page }) => {
@@ -128,6 +131,8 @@ test.describe("bounding-box blocking", () => {
 test.describe("with shaped blocking", () => {
   test.beforeEach(async ({ page }) => {
     await openApp(page);
+    await setQuantity(page, 4);
+    await openTab(page, "Overview");
   });
 
   test("shaped blocking moves the CoG toward the bracket's blocked side, and Checks says so", async ({ page }) => {

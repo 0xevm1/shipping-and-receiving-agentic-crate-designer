@@ -30,6 +30,8 @@ import {
 test.beforeEach(async ({ page, context }) => {
   await stubPrint(context);
   await openApp(page);
+  // The light batch: the app opens at the recommendation, which is already heavy.
+  await setQuantity(page, 4);
 });
 
 /** The base-rating check: its payload and rated load, as numbers, in the units on screen. */

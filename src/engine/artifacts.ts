@@ -1,3 +1,4 @@
+import { CONSTRAINT_TEXT } from "@/domain/explainRecommendation";
 import type { ShipmentPlan } from "@/domain/shipment";
 import { costsArePlaceholder } from "@/domain/standards";
 import { sweepQuantities, type QuantitySweep } from "@/domain/sweep";
@@ -115,6 +116,7 @@ export async function buildArtifact(kind: ArtifactKind, req: ArtifactRequest, re
     generatedAt: req.generatedAt ?? new Date().toISOString(),
     timeZone: req.timeZone,
     sweep: req.sweep === undefined ? sweepFor(design) : req.sweep,
+    settings,
     stamp: st,
   });
   return done(kind, printableToPdf(doc), `${stem}.pdf`, st);
@@ -229,7 +231,7 @@ export async function buildMultiBundleZip(configs: DesignRequest[], read: PartMo
     return s;
   };
 
-  const [{ zipSync }, { isRecommended, CONSTRAINT_TEXT }, { buildComparison }, { comparisonToPdf }, { renderMessage }] = await Promise.all([
+  const [{ zipSync }, { isRecommended }, { buildComparison }, { comparisonToPdf }, { renderMessage }] = await Promise.all([
     import("fflate"),
     import("@/lib/printable"),
     import("@/lib/comparison"),
@@ -283,7 +285,7 @@ export async function buildMultiBundleZip(configs: DesignRequest[], read: PartMo
       problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,
       files,
     });
-    comparisonConfigs.push({ label: folder, part: req.part, plan, standards: req.standards, sweep });
+    comparisonConfigs.push({ label: folder, part: req.part, plan, standards: req.standards, settings: req.settings, sweep });
   }
 
   const bundleHash = sha256Text(rows.map((r) => r.inputHash).join("\n"));

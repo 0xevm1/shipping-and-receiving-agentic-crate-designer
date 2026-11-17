@@ -448,6 +448,10 @@ export function sameStandards(a: ShopStandards, b: ShopStandards): boolean {
   return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 }
 
+/** Said wherever a crate cost is shown while the cost inputs are the shipped placeholders (`costsArePlaceholder`). */
+export const PLACEHOLDER_COST_NOTE =
+  "Costs use the shipped placeholder wood and screw prices and shop times (shop standards): good for comparing designs, not for a quote.";
+
 /** The cost inputs that ship as placeholders (spec §7.12): wood and screw prices, shop times and rate. */
 const costInputs = (s: ShopStandards) => ({ wood: s.rates.costUsdPerM3, screws: s.rates.screwCostUsdPer100, labour: s.labour });
 

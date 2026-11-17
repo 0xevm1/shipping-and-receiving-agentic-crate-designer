@@ -22,8 +22,8 @@ import {
  * result reaches the design, the Checks, the cut list and the 3D view.
  */
 
-async function loadHousing(page: Page) {
-  await openApp(page);
+async function loadHousing(page: Page, { measured = true } = {}) {
+  await openApp(page, { measured });
   await setUnits(page, "metric");
   await fileInput(page).setInputFiles(sampleFile(HOUSING));
   await pollCrate(page, (s) => s.partId).toBe("PART-003");
@@ -79,7 +79,7 @@ test.describe("without the analysis", () => {
 
   test("PART-003 × 8 keeps bounding-box blocking", async ({ page }) => {
     test.slow();
-    await loadHousing(page);
+    await loadHousing(page, { measured: false });
     await openTab(page, /Checks/);
     await expect(panel(page)).toContainText(/\d+ blocking posts hold the parts on all four sides\. The smallest gap is \d+ mm, between parts\./);
     await expect(panel(page)).not.toContainText("shaped to the part");

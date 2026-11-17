@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   burger,
+  crate,
   closeDrawerButton,
   fileInput,
   header,
@@ -63,7 +64,8 @@ for (const { width, height } of SIZES) {
       await openTab(page, "Cut list");
       const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download design (.json)" }).click()]);
       await fileInput(page).setInputFiles(jsonFile(await readDownloadText(download)));
-      await expect(page.getByRole("status").filter({ hasText: "Design loaded: 4 × Machined steel bracket." })).toBeVisible();
+      const { quantity } = await crate(page);
+      await expect(page.getByRole("status").filter({ hasText: `Design loaded: ${quantity} × Machined steel bracket.` })).toBeVisible();
       if (narrow(width)) await closeDrawerButton(page).click();
       await expectToastPlaced(page);
       await shot(page, `load-messages-note-${width}x${height}`);

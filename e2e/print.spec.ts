@@ -50,12 +50,14 @@ async function pdfPages(p: Page, name: string, options: { printBackground?: bool
 
 test("Print / save PDF gives the crate spec, build sheet and label for the default design, in imperial", async ({ page }) => {
   await openApp(page);
-  const { outside } = await crate(page);
+  // The light bracket × 4 crate on its recommended layout (the app opens at the sweep's heavier crate).
+  await setQuantity(page, 4);
+  const { outside, quantity } = await crate(page);
   const p = await openPrint(page, "imperial");
-  await expect(p).toHaveTitle("Crate for 4 × Machined steel bracket · Crate Designer");
+  await expect(p).toHaveTitle(`Crate for ${quantity} × Machined steel bracket · Crate Designer`);
 
   const spec = sheet(p, "Crate spec");
-  await expect(spec).toContainText("Crate for 4 × Machined steel bracket");
+  await expect(spec).toContainText(`Crate for ${quantity} × Machined steel bracket`);
   await expect(spec).toContainText("PART-001");
   await expect(spec).toContainText(/[\d.]+ lb/);
   await expect(spec).toContainText(`${inText(outside!)} in`);
@@ -86,7 +88,7 @@ test("Print / save PDF gives the crate spec, build sheet and label for the defau
 
   const label = sheet(p, "Shipping label");
   await expect(label).toContainText("PART-001");
-  await expect(label).toContainText("4 PCS");
+  await expect(label).toContainText(`${quantity} PCS`);
   await expect(label).toContainText(/\d+ LB/);
   await expect(label).toContainText("THIS SIDE UP");
   await expect(label).toContainText("FORKS");
@@ -180,6 +182,8 @@ function pageTexts(pdf: Buffer): string[] | null {
 
 test("print media: the label is one page, and the assembly order stays together", async ({ page }) => {
   await openApp(page);
+  // The bracket × 4 document: five pages (a larger batch's cut list runs longer).
+  await setQuantity(page, 4);
   const text = await designText(page);
   await page.goto(`/print${hash(text, "imperial")}`);
   await page.emulateMedia({ media: "print" });

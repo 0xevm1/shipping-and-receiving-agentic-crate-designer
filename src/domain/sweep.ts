@@ -63,11 +63,26 @@ export function freightCostUsd(grossLb: number, freightClass: number, rates: Fre
   return Math.max(rates.minimumUsd ?? 0, (grossLb / 100) * row.usd);
 }
 
+/** One crate's cost by part (spec §7.12): the three add up to `SweepCrate.crateCostUsd`. */
+export interface SweepCrateCost {
+  /** Plywood and lumber. */
+  woodUsd: number;
+  /** Screws, at the shop's price per 100. */
+  fastenersUsd: number;
+  screws: number;
+  /** Build time × the shop's labour rate. */
+  labourUsd: number;
+  /** Build time in minutes. */
+  buildMin: number;
+}
+
 /** The crate the sweep picked for one quantity, and its score. */
 export interface SweepCrate {
   layoutKey: string;
   /** Wood, screws and labour for one crate (`cost.totalUsd`). */
   crateCostUsd: number;
+  /** What `crateCostUsd` is made of (spec §7.12), for explaining the score (§7.16). */
+  cost: SweepCrateCost;
   /** One crate's freight charge, or null without freight rates. */
   freightUsd: number | null;
   /** (crate cost + freight) ÷ parts; crate cost ÷ parts without rates. */
@@ -90,6 +105,10 @@ export interface SweepPoint {
   reason: Message | null;
   /** Set exactly when `ok` is true. */
   crate: SweepCrate | null;
+  /** Layouts designed in full for this quantity: 0 when a monotonic limit failed it first. */
+  layoutsDesigned: number;
+  /** How many of those passed every hard check. */
+  layoutsPassed: number;
 }
 
 export interface SweepRecommendation {
@@ -102,6 +121,11 @@ export interface SweepRecommendation {
   stoppedBy: { quantity: number; binding: SweepConstraint; reason: Message } | null;
   /** True when a larger quantity passes every check but costs more per part. */
   costLimited: boolean;
+  /**
+   * Set when the runner-up scores the same to the cent per part and the order between them was
+   * decided by the tie-break: `fewer-crates` (the larger quantity), else `denser-freight`.
+   */
+  tieBreak: "fewer-crates" | "denser-freight" | null;
   /** One or two sentences for the UI and the PDF. Dollars are plain text. */
   rationale: Message;
 }
@@ -177,12 +201,12 @@ export function sweepQuantities(
   for (let q = 1; q <= maxQuantity; q++) {
     // Monotonic limits: once the parts alone are over the gross limit, every larger crate is too.
     if (maxParts > 0 && q > maxParts) {
-      curve.push({ quantity: q, ok: false, binding: "max-parts", reason: maxPartsReason(maxParts), crate: null });
+      curve.push({ quantity: q, ok: false, binding: "max-parts", reason: maxPartsReason(maxParts), crate: null, layoutsDesigned: 0, layoutsPassed: 0 });
       continue;
     }
     if (part.mass_kg * q > maxGrossKg) {
       const reason = msg`${q} parts weigh ${kg(part.mass_kg * q)} before the crate, over the ${kg(maxGrossKg)} per-crate limit.`;
-      curve.push({ quantity: q, ok: false, binding: "max-gross", reason, crate: null });
+      curve.push({ quantity: q, ok: false, binding: "max-gross", reason, crate: null, layoutsDesigned: 0, layoutsPassed: 0 });
       continue;
     }
     const s = { ...settings, quantity: q };
@@ -190,6 +214,7 @@ export function sweepQuantities(
     const candidates = [...ranked.filter(cheapOk), ...ranked.filter((l) => !cheapOk(l))].slice(0, perQuantity);
     let best: SweepPoint | null = null;
     let firstFailure: ReturnType<typeof hardFailure> = null;
+    let passed = 0;
     for (const layout of candidates) {
       const d = designCrate(part, s, layout, standards);
       const failure = hardFailure(d, q, standards);
@@ -197,6 +222,7 @@ export function sweepQuantities(
         firstFailure ??= failure;
         continue;
       }
+      passed++;
       const freightUsd = rates ? freightCostUsd(d.freight.grossLb, d.freight.freightClass, rates) : null;
       const point: SweepPoint = {
         quantity: q,
@@ -206,6 +232,7 @@ export function sweepQuantities(
         crate: {
           layoutKey: layout.key,
           crateCostUsd: d.cost.totalUsd,
+          cost: { woodUsd: d.cost.woodUsd, fastenersUsd: d.cost.fastenersUsd, screws: d.screws, labourUsd: d.cost.labourUsd, buildMin: d.labour.totalMin },
           freightUsd,
           scoreUsdPerPart: (d.cost.totalUsd + (freightUsd ?? 0)) / q,
           grossKg: d.grossKg,
@@ -215,10 +242,24 @@ export function sweepQuantities(
           freightClass: d.freight.freightClass,
           externalVolumeM3: layout.externalVolumeM3,
         },
+        layoutsDesigned: candidates.length,
+        layoutsPassed: 0,
       };
       if (!best || compareSweepPoints(point, best) < 0) best = point;
     }
-    curve.push(best ?? { quantity: q, ok: false, binding: firstFailure!.binding, reason: firstFailure!.reason, crate: null });
+    curve.push(
+      best
+        ? { ...best, layoutsPassed: passed }
+        : {
+            quantity: q,
+            ok: false,
+            binding: firstFailure!.binding,
+            reason: firstFailure!.reason,
+            crate: null,
+            layoutsDesigned: candidates.length,
+            layoutsPassed: 0,
+          },
+    );
   }
 
   const shortlist = curve
@@ -226,12 +267,19 @@ export function sweepQuantities(
     .sort(compareSweepPoints)
     .slice(0, SWEEP_SHORTLIST_SIZE);
   const top = shortlist[0];
-  return { basis, maxQuantity, curve, shortlist, recommendation: top ? recommend(top, curve, basis) : null, problem: null };
+  return { basis, maxQuantity, curve, shortlist, recommendation: top ? recommend(shortlist, curve, basis) : null, problem: null };
 }
 
 const usd = (v: number) => `$${v.toFixed(2)}`;
 
-function recommend(top: SweepPoint, curve: SweepPoint[], basis: ScoreBasis): SweepRecommendation {
+/** How the tie-break ordered `a` (the better) before `b`, or null when the score alone did. */
+export function tieBreakBetween(a: SweepPoint, b: SweepPoint | undefined): SweepRecommendation["tieBreak"] {
+  if (!b?.crate || cents(a.crate!.scoreUsdPerPart) !== cents(b.crate.scoreUsdPerPart)) return null;
+  return a.quantity !== b.quantity ? "fewer-crates" : "denser-freight";
+}
+
+function recommend(shortlist: SweepPoint[], curve: SweepPoint[], basis: ScoreBasis): SweepRecommendation {
+  const top = shortlist[0];
   const crate = top.crate!;
   const above = curve.slice(top.quantity);
   const fail = above.find((p) => !p.ok);
@@ -246,7 +294,7 @@ function recommend(top: SweepPoint, curve: SweepPoint[], basis: ScoreBasis): Swe
     : costLimited
       ? parts(" Larger crates cost more per part.")
       : parts(" Every quantity up to the sweep's maximum passes the checks.");
-  return { quantity: top.quantity, crate, stoppedBy, costLimited, rationale: parts(head, limit) };
+  return { quantity: top.quantity, crate, stoppedBy, costLimited, tieBreak: tieBreakBetween(top, shortlist[1]), rationale: parts(head, limit) };
 }
 
 /** One kind of crate in a total-quantity plan. */

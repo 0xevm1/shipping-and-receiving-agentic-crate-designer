@@ -5,7 +5,7 @@
  * same header, footer, fonts and engine stamp. Loaded only with `import()`.
  */
 import type { Comparison, ComparisonRow } from "./comparison";
-import { CW, GREY, M, twoCols, Writer } from "./exportPdf";
+import { CW, explanationPdf, GREY, M, twoCols, Writer } from "./exportPdf";
 
 const COLUMNS: { title: string; w: number; cell: (r: ComparisonRow) => string }[] = [
   { title: "Configuration", w: 92, cell: (r) => r.label },
@@ -57,6 +57,7 @@ export function comparisonToPdf(doc: Comparison): Uint8Array {
     w.para(doc.recommendation.heading, { style: "bold" }, 2);
     w.para(doc.recommendation.rationale);
     if (doc.recommendation.stoppedBy) w.para(`Constraint that stopped a larger crate: ${doc.recommendation.stoppedBy}`);
+    if (doc.recommendation.why) explanationPdf(w, doc.recommendation.why);
   }
   w.y += 4;
   for (const n of doc.notes) w.para(n, { size: 8, gray: GREY });

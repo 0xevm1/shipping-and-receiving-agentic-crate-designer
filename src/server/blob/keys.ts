@@ -12,7 +12,7 @@
  * hash (spec §5.1: design fields only), so its key also names the model: two parts with equal
  * design fields and different meshes get two GLBs, never each other's.
  *
- * The engine version's `+` ("0.1.0+engine.3") is written as `_` in keys: S3 lists `+` among the
+ * The engine version's `+` ("0.1.0+engine.4") is written as `_` in keys: S3 lists `+` among the
  * characters that need special handling (some stacks read it as a space).
  */
 import { orgContext, type OrgContext, requireOrg } from "../db/org";
@@ -50,7 +50,7 @@ export function modelKey(ctx: OrgContext, sha256: string): BlobKey {
   return `${orgPrefix(ctx)}models/${sha256}.glb` as BlobKey;
 }
 
-/** An engine version as a key segment: "0.1.0+engine.3" → "0.1.0_engine.3". */
+/** An engine version as a key segment: "0.1.0+engine.4" → "0.1.0_engine.4". */
 export const versionSegment = (engineVersion: string): string => segment("engine version", engineVersion.replace(/\+/g, "_"));
 
 /**

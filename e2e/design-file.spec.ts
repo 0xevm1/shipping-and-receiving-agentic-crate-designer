@@ -23,6 +23,7 @@ import {
   setUnits,
   SHAFT,
   shot,
+  useRecommendedLayout,
   waitForRecommended,
 } from "./helpers";
 
@@ -53,20 +54,20 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("the Cut list tab downloads the design as JSON with a summary", async ({ page }) => {
-  const { outside } = await crate(page);
+  const { outside, quantity } = await crate(page);
   const { name, json } = await downloadDesign(page);
-  expect(name).toBe("crate-design-PART-001-x4.json");
+  expect(name).toBe(`crate-design-PART-001-x${quantity}.json`);
   expect(json).toMatchObject({
     kind: "crate-design",
     schemaVersion: expect.any(Number),
     app: { name: "crate-designer" },
     ranking: "volume",
     part: { source: "catalog", id: "PART-001", model: BRACKET, material: "4140 steel", mass_kg: expect.any(Number) },
-    settings: { quantity: 4, keepUpright: true, maxLayers: expect.any(Number), panelThickness: "auto" },
-    summary: { quantity: 4, outsideMm: roundedMm(outside!) },
+    settings: { quantity, keepUpright: true, maxLayers: expect.any(Number), panelThickness: "auto" },
+    summary: { quantity, outsideMm: roundedMm(outside!) },
   });
   expect(typeof json.layoutKey).toBe("string");
-  expect(json.summary.grossKg).toBeGreaterThan(4 * json.part.mass_kg);
+  expect(json.summary.grossKg).toBeGreaterThan(quantity * json.part.mass_kg);
   await expect(panel(page).getByRole("status")).toHaveText("Design downloaded.");
   await shot(page, "design-file-download");
 });
@@ -108,6 +109,8 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
 });
 
 test("a design whose layout no longer exists falls back to the recommended one", async ({ page }) => {
+  // The app opens at the sweep's layout; the fallback is the Layouts ranking's recommended one.
+  await useRecommendedLayout(page);
   const { outside } = await crate(page);
   const saved = await downloadDesign(page);
   const stale = { ...saved.json, layoutKey: "u:1x1x1:999" };

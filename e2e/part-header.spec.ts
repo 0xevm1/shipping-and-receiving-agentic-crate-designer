@@ -37,7 +37,7 @@ test.beforeEach(async ({ page }) => {
 
 test("a catalog part reads as the same sentence, with no fields", async ({ page }) => {
   await expect(header(page)).toContainText("PART-001 · Machined steel bracket");
-  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross \d+ kg/);
+  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross [\d,]+ kg/);
   await expect(header(page).locator("input")).toHaveCount(0);
   await shot(header(page), "part-header-catalog");
 });

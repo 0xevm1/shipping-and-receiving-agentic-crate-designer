@@ -8,13 +8,15 @@
  * part, and the summary says so. When the cost inputs are the shipped placeholders it says that
  * too.
  */
-import type { DesignPart } from "@/domain/schema";
+import { CONSTRAINT_TEXT } from "@/domain/explainRecommendation";
+import type { CrateSettings, DesignPart } from "@/domain/schema";
 import { describeShipment, type ShipmentPlan } from "@/domain/shipment";
-import { costsArePlaceholder, type ShopStandards } from "@/domain/standards";
+import { costsArePlaceholder, PLACEHOLDER_COST_NOTE, type ShopStandards } from "@/domain/standards";
 import type { QuantitySweep } from "@/domain/sweep";
+import type { ExplanationText } from "./explanation";
 import { documentDate, usdCents } from "./format";
 import { renderMessage } from "./message";
-import { CONSTRAINT_TEXT, isRecommended, PLACEHOLDER_COST_NOTE, type PrintableStamp, type Row } from "./printable";
+import { isRecommended, recommendationWhy, type PrintableStamp, type Row } from "./printable";
 import { dims, lengthUnit, weight, type Units } from "./units";
 
 export interface ComparisonConfig {
@@ -23,6 +25,8 @@ export interface ComparisonConfig {
   part: DesignPart;
   plan: ShipmentPlan;
   standards: ShopStandards;
+  /** The configuration's settings: the sweep's packing rules, for explaining the recommendation. */
+  settings?: CrateSettings;
   /** The part's sweep under this configuration's rules, or null when none was run. */
   sweep: QuantitySweep | null;
 }
@@ -50,7 +54,7 @@ export interface Comparison {
   part: Row[];
   rows: ComparisonRow[];
   /** The sweep's recommendation, its rationale and the constraint that stopped a larger crate. */
-  recommendation: { heading: string; rationale: string; stoppedBy: string | null } | null;
+  recommendation: { heading: string; rationale: string; stoppedBy: string | null; why: ExplanationText | null } | null;
   /** Cost basis and placeholder notes, always including that freight is not priced. */
   notes: string[];
   stamp?: PrintableStamp;
@@ -108,7 +112,8 @@ function row(c: ComparisonConfig, u: Units): ComparisonRow {
 /** The comparison of `configs` (one part), in the selected units. Pure. */
 export function buildComparison({ configs, units: u, generatedAt, timeZone, stamp }: ComparisonInput): Comparison {
   const part = configs[0]?.part;
-  const sweep = configs.find((c) => c.sweep?.recommendation)?.sweep ?? null;
+  const from = configs.find((c) => c.sweep?.recommendation);
+  const sweep = from?.sweep ?? null;
   const rec = sweep?.recommendation ?? null;
   const notes = [FREIGHT_NOT_PRICED];
   if (configs.some((c) => costsArePlaceholder(c.standards))) notes.push(PLACEHOLDER_COST_NOTE);
@@ -132,6 +137,7 @@ export function buildComparison({ configs, units: u, generatedAt, timeZone, stam
           stoppedBy: rec.stoppedBy
             ? `${rec.stoppedBy.quantity} per crate fails the ${CONSTRAINT_TEXT[rec.stoppedBy.binding]}: ${renderMessage(rec.stoppedBy.reason, u)}`
             : null,
+          why: recommendationWhy(sweep, from!.standards, from!.settings, !!from!.part.profile, u),
         }
       : null,
     notes,

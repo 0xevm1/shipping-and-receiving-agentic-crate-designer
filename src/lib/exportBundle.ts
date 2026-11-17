@@ -120,7 +120,7 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
     ]);
   }
 
-  const doc = buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone, sweep, stamp });
+  const doc = buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone, sweep, settings, stamp });
   files.push({ name: `${stem}.pdf`, data: await make.pdf(doc) });
   notes.push([
     `${stem}.pdf`,
