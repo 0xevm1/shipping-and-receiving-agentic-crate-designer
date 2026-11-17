@@ -127,8 +127,8 @@ tab at a time.
    remembered in this browser. **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
    sold as (1/2″, 5/8″, 3/4″) and cuts by fractional inches to the nearest 1/16″.
-7. **Download the crate as a 3D model**, inside the Export .zip (the pill, or View → "Export
-   (.zip)", which does the same): the assembled crate in metres, Z up, every board a named mesh
+7. **Download the crate as a 3D model**, inside the .zip from **Export specs** (the pill, or
+   View → "Export specs", which does the same): the assembled crate in metres, Z up, every board a named mesh
    grouped by assembly, with the parts in their slots.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
@@ -158,7 +158,7 @@ tab at a time.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
-12. **Export everything in one click** (#51): the green **Export** pill under the part lines
+12. **Export everything in one click** (#51): the green **Export specs** pill (also View → "Export specs") under the part lines
     downloads `crate-PART-001-x4.zip`, made in the browser (nothing is uploaded):
     - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
       split batch: `…-crate-A.glb`, `…-crate-B.glb`);

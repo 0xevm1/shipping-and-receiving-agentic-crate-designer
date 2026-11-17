@@ -32,7 +32,7 @@ export function ExportPill() {
         onClick={run}
       >
         {busy ? <span className="exportspin" aria-hidden="true" /> : <DownloadIcon />}
-        <span>{busy ? "Exporting…" : "Export"}</span>
+        <span>{busy ? "Exporting…" : "Export specs"}</span>
       </button>
       <span className={`exportnote${state.kind === "error" ? " bad" : ""}`} role="status">
         {note}
