@@ -1,7 +1,7 @@
 import type { Check, HandlingCheckId } from "./check";
 import { memberKg } from "./materials";
 import { memberBounds, type Member } from "./members";
-import { joinMessages, mm, msg, parts, shopMm, type Message } from "./message";
+import { joinMessages, kg, mm, msg, parts, shopMm, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -53,6 +53,8 @@ export interface Handling {
   offsetMm: [number, number];
   /** Outside length and width the offset is judged against. */
   footprintMm: [number, number];
+  /** Gross weight of the crate and its parts, kg (boards plus parts: the design's `grossKg`). */
+  grossKg: number;
   /** CoG height above the ground (the bottom of the skids). */
   heightMm: number;
   /** Static tip angle in degrees: tilt about the nearest base edge at which the CoG passes over it. */
@@ -168,7 +170,9 @@ export function analyseHandling(
   partKg: number,
   standards: ShopStandards = DEFAULT_STANDARDS,
 ): Handling {
-  const cogMm = centreOfGravity([...memberMasses(members, standards), ...partMasses(layout, partKg)]);
+  const masses = [...memberMasses(members, standards), ...partMasses(layout, partKg)];
+  const cogMm = centreOfGravity(masses);
+  const grossKg = masses.reduce((sum, p) => sum + p.kg, 0);
   const { min: lo, max: hi } = memberBounds(members);
   const footprintMm: [number, number] = [hi[0] - lo[0], hi[1] - lo[1]];
   const offsetMm: [number, number] = [cogMm[0] - (lo[0] + hi[0]) / 2, cogMm[1] - (lo[1] + hi[1]) / 2];
@@ -191,6 +195,7 @@ export function analyseHandling(
     cogMm,
     offsetMm,
     footprintMm,
+    grossKg,
     heightMm,
     tipAngleDeg,
     tipToward: toSide <= toEnd ? "side" : "end",
@@ -213,7 +218,7 @@ const DEVICE_NAME: Record<Device, string> = { forklift: "Forklift", "pallet-jack
 
 /**
  * The CoG and handling checks (spec §7.7, §7.14), in this order: `cog-offset`, `cog-tip`,
- * `forklift`, `pallet-jack`. Thresholds are the shop standards' `handling` group.
+ * then `hand-carry` (a light crate) or `forklift` and `pallet-jack`. Thresholds are the shop standards' `handling` group.
  */
 export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_STANDARDS): Check<HandlingCheckId>[] {
   const s = standards.handling;
@@ -258,6 +263,17 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
           detail: msg`The centre of gravity is ${mm(h.heightMm)} up; the crate tips ${toward} only past ${angle}. The limit is ${s.minTipAngleDeg}°.`,
         },
   );
+
+  // One person can lift it, so no device is needed: one passing row stands in for the two.
+  if (s.handCarryMaxKg > 0 && h.grossKg <= s.handCarryMaxKg) {
+    checks.push({
+      id: "hand-carry",
+      level: "ok",
+      title: "Light enough to carry by hand",
+      detail: msg`Gross ${kg(h.grossKg)}, at or under the ${kg(s.handCarryMaxKg)} hand-carry limit, so it needs no forklift or pallet jack.`,
+    });
+    return checks;
+  }
 
   const widest = h.openings.length ? Math.max(...h.openings.map((o) => o.width)) : 0;
   const forkliftFits = h.devices.some((d) => d.device === "forklift" && d.fits);
