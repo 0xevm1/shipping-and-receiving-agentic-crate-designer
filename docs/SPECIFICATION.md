@@ -2527,6 +2527,39 @@ reported, not thrown. `docs/API.md` "Offline" has the details.
 
 The ranking option (#17) is saved only as part of the last-opened crate; the time-to-design clock is in memory only.
 
+### 9.1 Capacity of saves and live events (#46)
+
+Measured with `bun run load` (`docs/LOAD_TEST.md`, which has the method, the full tables and the
+machine: one `next start` process on an M1 Max laptop, Postgres 18 in Docker Desktop, the load
+generator on the same machine). One org, so load is varied by jobs: a save is delivered to every
+stream open on its job, so the work is *saves/s × streams per job*. Limits are the highest stage
+with p95 save → other tabs under 1 s and no errors.
+
+| Limit, one process | `DB_POOL_MAX` 10 (default) | `DB_POOL_MAX` 30 |
+|---|---|---|
+| Saves per second (few streams) | ~60 (p95 389 ms; 70/s: 2 s) | ~100 (p95 528 ms) |
+| Events delivered per second, all streams | ~1000–1200 (500 streams × 50/s: p95 745 ms) | ~2500 (1000 streams × 50/s: p95 328 ms) |
+| Open SSE streams | 4000 tested at 411 deliveries/s: p95 133 ms; streams cost little until events flow | — |
+| Postgres connections | pool + 1 listener, independent of the number of streams | same |
+| Tab A → tab B (save to the event on the other tab) | idle p95 67 ms (target < 1 s); its snapshot re-read p95 129 ms | — |
+
+- **Nothing was lost at any load.** Every expected delivery arrived in every stage, saturated
+  ones included; `pg_notification_queue_usage()` stayed at ~0.
+- **The limit is the Node event loop and the pool**, not Postgres: the engine recompute (~15 ms)
+  runs on the request thread inside the save's transaction, and each delivery is one
+  `listForStream` query per stream. Moving the recompute to a worker thread, coalescing the reads
+  per job, and a larger pool raise both ceilings; then add instances.
+- **The event-ordering lock** (`EVENT_ORDER_LOCK`) caps event-writing commits at ~220–330/s per
+  database (vs 400–1000/s without it, `bun run load:lock`), about 4× the per-process save ceiling.
+  Under overload it amplifies queueing, because loop lag delays the COMMIT that releases it.
+- **Move to a dedicated broker** (swap the `EventBus` implementation) when, sustained and after
+  those fixes, event-writing transactions exceed ~200/s across all instances, advisory-lock
+  waiters average more than 1 while the app isn't CPU-bound, the NOTIFY queue stays above 1 %, or
+  the deployment needs more than ~20 instances or several regions. A broker doesn't raise the
+  per-process limits above.
+- `GET /api/v1/health` reports the process's event-loop lag and utilisation (`eventLoop`) for
+  watching this in production.
+
 ## 10. Invariants and tests
 
 `bun run test` runs vitest over `src/**/*.test.ts`, in Node; a file can ask for jsdom with a
@@ -3094,6 +3127,7 @@ copies chosen shots there on request.
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |
+| The load test is a Node script with its own SSE reader, not k6 or Bun (#46, `docs/LOAD_TEST.md`) | k6 needs a custom build for SSE and can't run the engine that makes valid saves; Bun's `fetch` dropped a few percent of 1000 concurrent streams that Node opened cleanly, which would read as server errors | Two runtimes in one script: Bun only makes the save bodies |
 | One crate engine (`src/engine`) for page, worker and Node; the page runs it in a Web Worker (#46) | The browser and a server can't disagree, and a sweep stays off the render thread. `src/engine` sits above `src/lib` because the builders are made of lib's formatting and print model | An edit's design lands a few ms after the edit, so the store holds `designedFrom` to say which inputs the design on screen belongs to |
 | Settings are clamped at the store, bad values rejected per field | A slider or typed value just past a limit should still do something useful; NaN or a wrong type has no sensible nearest value, so the last good one stays | A typed quantity that is clamped or rejected gets a short note by the field (#36); nothing else is typed |
 | `computeDesign` returns a `problem` instead of throwing | The UI can always explain an empty screen, in domain wording | One more field to check alongside `design` |

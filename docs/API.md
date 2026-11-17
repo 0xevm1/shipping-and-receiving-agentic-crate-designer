@@ -69,7 +69,7 @@ saves on the device and sends them later, without showing an error (`src/state/j
 | `PATCH` | `/jobs/:id` | Change the selection (recommendation), status, notes or total quantity, at a `version` |
 | `POST` | `/designs` | Stateless headless calculation: a GLB and the part's facts in, the ranked configurations, recommendation, 1–200 curve and (with `total`) the even split out. Nothing saved; needs an API key from scripts. Runs on the engine's worker threads ([QUEUE.md](QUEUE.md#post-apiv1designs)) |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
-| `GET` | `/health` | Database and event-listener liveness |
+| `GET` | `/health` | Database and event-listener liveness, NOTIFY queue usage, event-loop lag |
 
 | `GET` | `/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}` | One file of a saved configuration, built by the server on the first request and kept in blob storage; a presigned URL (`?redirect=1`: a 302 to it) ([Artifacts](#artifacts)) |
 | `GET` | `/jobs/:id/bundle.zip?configs=…` | The job's configurations in one ZIP: a folder each, `manifest.json`, `comparison.pdf` (spec §7.17); 200 with a presigned URL, or 202 while the queue builds a large one ([Artifacts](#artifacts)) |

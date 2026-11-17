@@ -465,6 +465,8 @@ docs/              SPECIFICATION.md, API.md, POSTGRES.md, BLOB_STORAGE.md, QUEUE
 - [`docs/QUEUE.md`](docs/QUEUE.md): the Postgres job queue (SKIP LOCKED, NOTIFY, leases,
   retries, dead letter), the engine's worker threads, `POST /api/v1/designs`, API keys and the
   `bun run crate` command line.
+- [`docs/LOAD_TEST.md`](docs/LOAD_TEST.md): the saves-and-live-events load test (`bun run load`),
+  its measured limits, and when to move off LISTEN/NOTIFY.
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 
