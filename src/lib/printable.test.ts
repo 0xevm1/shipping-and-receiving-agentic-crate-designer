@@ -193,15 +193,23 @@ describe("the print link", () => {
 
   it("round-trips the design file and the units through the hash, URL-safe", () => {
     const hash = printHash(text, "metric", true);
-    expect(hash).toMatch(/^#d=[A-Za-z0-9_-]+&u=metric&print=1$/);
+    expect(hash).toMatch(/^#design=[A-Za-z0-9_-]+&u=metric&print=1$/);
     expect(readPrintHash(hash)).toEqual({ ok: true, text, units: "metric", print: true });
     expect(readPrintHash(printHash(text, "imperial"))).toMatchObject({ units: "imperial", print: false });
   });
 
   it("refuses a missing or broken hash, and reads unknown units as none", () => {
     expect(readPrintHash("")).toMatchObject({ ok: false });
+    expect(readPrintHash("#design=%%%")).toMatchObject({ ok: false });
+    expect(readPrintHash(printHash(text, "imperial").replace("&u=imperial", "&u=furlongs"))).toMatchObject({ ok: true, units: null });
+  });
+
+  it("uses the share link's `design` parameter, and still opens old `d` links (#62)", () => {
+    const data = printHash(text, "imperial").slice("#design=".length).split("&")[0];
+    expect(printHash(text, "imperial").startsWith("#design=")).toBe(true);
+    expect(readPrintHash(`#design=${data}&u=imperial`)).toEqual({ ok: true, text, units: "imperial", print: false });
+    expect(readPrintHash(`#d=${data}&u=metric&print=1`)).toEqual({ ok: true, text, units: "metric", print: true });
     expect(readPrintHash("#d=%%%")).toMatchObject({ ok: false });
-    expect(readPrintHash("#d=" + printHash(text, "imperial").slice(3).replace("&u=imperial", "") + "&u=furlongs")).toMatchObject({ ok: true, units: null });
   });
 
   it("rebuilds the same document from the design file", () => {

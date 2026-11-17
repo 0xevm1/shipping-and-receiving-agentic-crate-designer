@@ -13,7 +13,7 @@ test("a catalog GLB fills in its mass and material", async ({ page }) => {
 
   const header = page.getByRole("banner");
   await expect(header).toContainText("PART-002 · Long steel shaft");
-  await expect(header).toContainText(/4140 steel · 27 kg each · crate gross \d+ kg/);
+  await expect(header).toContainText(/4140 steel · 27 kg each · crate gross \d+(\.\d)? kg/);
   // Catalog parts are read-only: the same sentence, with no fields.
   await expect(header.locator("input")).toHaveCount(0);
   await expect(header).toContainText("model matches catalog");

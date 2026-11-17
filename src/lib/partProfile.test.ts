@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { metricText as metric } from "@/lib/message";
 import { Group, type Object3D } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -114,7 +115,7 @@ describe("restraint for PART-003 × 8 (#16)", () => {
     expect(s.shaped.freeMm).toEqual([0, 0]);
     expect(s.blocks).toBe(44);
     expect(d.members.filter((m) => m.label === SHAPED_BLOCK)).toHaveLength(44);
-    expect(d.checks.find((c) => c.id === "blocking")!.detail).toBe(
+    expect(metric(d.checks.find((c) => c.id === "blocking")!.detail)).toBe(
       "24 blocking posts hold the parts on all four sides. They are shaped to the part with 44 shaped blocks in its recesses: " +
         "63% of the blocking face touches it (bounding box: 10%), and the most a part can shift is 0 mm (bounding box: 65 mm). " +
         "The smallest gap is 50 mm, between parts.",

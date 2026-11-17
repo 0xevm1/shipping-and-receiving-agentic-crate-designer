@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { cradleProfile, cradleSolidAt, cradleStations, isSlender, notchFor, usesCradles, CRADLE_LABEL, END_STOP_LABEL, STACKING_CRADLE_LABEL } from "./cradles";
 import { screwSchedule, type Member } from "./crate";
@@ -284,7 +285,7 @@ describe("cradles in the cut list, screws and labour", () => {
   it("say so in the blocking check", () => {
     const check = shaft({ quantity: 1 }).checks.find((c) => c.id === "blocking")!;
     expect(check.level).toBe("ok");
-    expect(check.detail).toMatch(/4 notched cradles .* 2 end stops/);
+    expect(metric(check.detail)).toMatch(/4 notched cradles .* 2 end stops/);
   });
 });
 

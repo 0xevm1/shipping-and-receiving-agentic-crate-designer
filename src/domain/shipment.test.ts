@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { metricText as metric } from "@/lib/message";
 import { catalog, getPart } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
 import { shipmentToCsv } from "./export";
@@ -180,7 +181,7 @@ describe("planShipment: splitting a batch", () => {
     for (const c of plan.crates) {
       const check = c.result.design!.checks.find((x) => x.id === "crate-limit");
       expect(check?.level).toBe("ok");
-      expect(check?.detail).toMatch(/1,000 kg/);
+      expect(metric(check!.detail)).toMatch(/1,000 kg/);
     }
     // A single crate doesn't get one: the experience is unchanged.
     const one = planShipment(getPart("PART-001"), settings({ quantity: 4 }));
@@ -192,7 +193,7 @@ describe("planShipment: splitting a batch", () => {
     const plan = planShipment(heavy, settings({ quantity: 3 }));
     expect(plan.crates).toHaveLength(1);
     expect(plan.crates[0]).toMatchObject({ count: 3, quantity: 1 });
-    expect(plan.unmet).toMatch(/one part/i);
+    expect(metric(plan.unmet!)).toMatch(/one part/i);
     expect(plan.crates[0].result.design!.checks.find((x) => x.id === "crate-limit")?.level).toBe("caution");
     // A single heavy part stays as today: one crate, with the base-rating caution.
     const single = planShipment(heavy, settings({ quantity: 1 }));

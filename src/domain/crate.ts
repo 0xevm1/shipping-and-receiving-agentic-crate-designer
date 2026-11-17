@@ -1,6 +1,7 @@
 import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTerms, type LabourEstimate } from "./cost";
 import { addCradleDunnage, SCREWS_PER_CRADLE, STACKING_CRADLE_LABEL, usesCradles, type CradleProfile } from "./cradles";
 import { analyseHandling, handlingChecks, type Handling } from "./handling";
+import { dimsMessage, joinMessages, kg, mm, msg, parts, shopMm, type Message } from "./message";
 import type { Layout } from "./packing";
 import { planShapedBlocking, restraint, slotPlans, usableProfile, type BlockBox, type PartProfile, type Restraint } from "./profile";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
@@ -124,7 +125,8 @@ export interface Check {
   /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
   level: "ok" | "caution" | "info";
   title: string;
-  detail: string;
+  /** The sentence with its lengths and masses as data; render it with `renderMessage` (src/lib/message.ts). */
+  detail: Message;
 }
 
 export interface CrateDesign {
@@ -585,9 +587,9 @@ export const CARDBOARD_LIMITS = DEFAULT_STANDARDS.limits.cardboard;
 const NOMINAL_IN: Record<number, number> = { 19: 1, 38: 2, 64: 3, 89: 4, 140: 6, 184: 8, 235: 10, 286: 12 };
 
 /** "4×6" for standard US lumber, otherwise the actual size in mm. */
-function sectionName(a: number, b: number): string {
+function sectionName(a: number, b: number): Message {
   const [na, nb] = [NOMINAL_IN[a], NOMINAL_IN[b]];
-  return na && nb ? `${na}×${nb}` : `${a} × ${b} mm`;
+  return na && nb ? parts(`${na}×${nb}`) : msg`${shopMm(a)} × ${shopMm(b)}`;
 }
 
 /**
@@ -610,20 +612,19 @@ function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where
  * The shaped-blocking sentence for the `blocking` check (#16): the restraint metric for this
  * crate against bounding-box blocking, or "" when blocking follows the bounding box.
  */
-function shapedText(d: CrateDesign): string {
+function shapedText(d: CrateDesign): Message {
   const s = d.shapedBlocking;
-  if (!s) return "";
+  if (!s) return [];
   const pct = (r: Restraint) => `${Math.round(r.contact * 100)}%`;
   // Infinite only if nothing on some side touches the part: say so rather than print "Infinity".
   const shift = (r: Restraint) => {
     const most = Math.max(...r.freeMm);
-    return Number.isFinite(most) ? `${Math.round(most)} mm` : "unlimited";
+    return Number.isFinite(most) ? msg`${shopMm(most)}` : parts("unlimited");
   };
   const blocks = s.blocks ? ` with ${s.blocks} shaped block${s.blocks === 1 ? "" : "s"} in its recesses` : "";
-  return ` They are shaped to the part${blocks}: ${pct(s.shaped)} of the blocking face touches it (bounding box: ${pct(s.boundingBox)}), and the most a part can shift is ${shift(s.shaped)} (bounding box: ${shift(s.boundingBox)}).`;
+  return msg` They are shaped to the part${blocks}: ${pct(s.shaped)} of the blocking face touches it (bounding box: ${pct(s.boundingBox)}), and the most a part can shift is ${shift(s.shaped)} (bounding box: ${shift(s.boundingBox)}).`;
 }
 
-const kgText = (v: number) => `${Math.round(v).toLocaleString("en-US")} kg`;
 
 /**
  * The computed base rating (#7, spec §7.15): "Base rated 1,240 kg; this crate's payload is 820 kg
@@ -633,22 +634,22 @@ function baseRatingCheck(d: CrateDesign, standards: ShopStandards): Check {
   const c = d.construction;
   const { ratedPayloadKg: rated, base } = d.structure;
   const pct = rated > 0 ? `${Math.round((d.payloadKg / rated) * 100)}%` : "over";
-  const head = `Base rated ${kgText(Math.floor(rated))}; this crate's payload is ${kgText(d.payloadKg)} (${pct}).`;
-  const joists = c.joist ? `, ${c.joist.count} ${sectionName(c.joist.wide, c.joist.tall)} floor joists` : "";
-  const built = `${c.skidCount} × ${sectionName(c.skid.wide, c.skid.tall)} skids${joists} and a ${c.floorMm} mm floor`;
+  const head = msg`Base rated ${kg(Math.floor(rated))}; this crate's payload is ${kg(d.payloadKg)} (${pct}).`;
+  const joists = c.joist ? msg`, ${c.joist.count} ${sectionName(c.joist.wide, c.joist.tall)} floor joists` : [];
+  const built = msg`${c.skidCount} × ${sectionName(c.skid.wide, c.skid.tall)} skids${joists} and a ${shopMm(c.floorMm)} floor`;
   const governs = `${base.governing.label} governs`;
   return base.ok && d.payloadKg <= rated
     ? {
         id: "base-rating",
         level: "ok",
         title: "Within the base rating",
-        detail: `${head} ${built}, sized for ${standards.structure.loadFactor}× the load (${governs}).`,
+        detail: msg`${head} ${built}, sized for ${standards.structure.loadFactor}× the load (${governs}).`,
       }
     : {
         id: "base-rating",
         level: "caution",
         title: "Over the base rating",
-        detail: `${head} Even ${built} can't carry it (${governs}). Split the batch, or add heavier skid or joist stock.`,
+        detail: msg`${head} Even ${built} can't carry it (${governs}). Split the batch, or add heavier skid or joist stock.`,
       };
 }
 
@@ -657,11 +658,11 @@ function lidRatingCheck(d: CrateDesign): Check | null {
   const lid = d.structure.lid;
   if (lid.stackKg <= 0 || lid.capacityKg === null) return null;
   const c = d.construction.lid;
-  const frame = `${c.count} ${c.joists ? sectionName(c.wide, c.tall) : sectionName(c.tall, c.wide)} ${c.joists ? "joists on edge" : "cross cleats"}`;
-  const head = `Sized for ${kgText(lid.stackKg)} stacked on top; rated ${kgText(lid.capacityKg)}`;
+  const frame = msg`${c.count} ${c.joists ? sectionName(c.wide, c.tall) : sectionName(c.tall, c.wide)} ${c.joists ? "joists on edge" : "cross cleats"}`;
+  const head = msg`Sized for ${kg(lid.stackKg)} stacked on top; rated ${kg(lid.capacityKg)}`;
   return lid.ok
-    ? { id: "lid", level: "ok", title: "Lid carries the stacking load", detail: `${head}, with ${frame}.` }
-    : { id: "lid", level: "caution", title: "Lid can't take the stacking load", detail: `${head} even with ${frame}. Don't stack on this crate, or add heavier joist stock.` };
+    ? { id: "lid", level: "ok", title: "Lid carries the stacking load", detail: msg`${head}, with ${frame}.` }
+    : { id: "lid", level: "caution", title: "Lid can't take the stacking load", detail: msg`${head} even with ${frame}. Don't stack on this crate, or add heavier joist stock.` };
 }
 
 /** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
@@ -673,45 +674,44 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
   const nz = d.layout.counts[2];
 
   const van = lim.trailerMm;
-  const mm = (v: number) => `${v.toLocaleString("en-US")} mm`;
   const tooBig = [
-    eL > van.interiorLength && `Length is over the ${mm(van.interiorLength)} trailer floor.`,
-    eW > van.doorWidth && `Width is over the ${mm(van.doorWidth)} door opening.`,
-    eH > van.doorHeight && `Height is over the ${mm(van.doorHeight)} door opening.`,
-  ].filter((s): s is string => !!s);
+    eL > van.interiorLength && msg`Length is over the ${mm(van.interiorLength)} trailer floor.`,
+    eW > van.doorWidth && msg`Width is over the ${mm(van.doorWidth)} door opening.`,
+    eH > van.doorHeight && msg`Height is over the ${mm(van.doorHeight)} door opening.`,
+  ].filter((m): m is Message => !!m);
   checks.push(
     tooBig.length
-      ? { id: "door", level: "caution", title: "Too big for a 53' dry van", detail: `${tooBig.join(" ")} Confirm open-deck or oversize transport with the carrier.` }
-      : { id: "door", level: "ok", title: "Fits a 53' dry van", detail: `Within the ${mm(van.doorWidth)} × ${mm(van.doorHeight)} door and the ${mm(van.interiorLength)} floor.` },
+      ? { id: "door", level: "caution", title: "Too big for a 53' dry van", detail: msg`${joinMessages(tooBig, " ")} Confirm open-deck or oversize transport with the carrier.` }
+      : { id: "door", level: "ok", title: "Fits a 53' dry van", detail: msg`Within the ${mm(van.doorWidth)} × ${mm(van.doorHeight)} door and the ${mm(van.interiorLength)} floor.` },
   );
 
   const ratio = eH / Math.min(eL, eW);
   checks.push(
     d.layout.stable
-      ? { id: "stable", level: "ok", title: "Stable footprint", detail: `Height is ${ratio.toFixed(2)}× the short side. The limit is ${lim.stableHeightRatio}×.` }
-      : { id: "stable", level: "caution", title: "Tip-over risk", detail: `Height is ${ratio.toFixed(2)}× the short side, over the ${lim.stableHeightRatio}× limit. Strap it down or pick a lower layout.` },
+      ? { id: "stable", level: "ok", title: "Stable footprint", detail: msg`Height is ${ratio.toFixed(2)}× the short side. The limit is ${lim.stableHeightRatio}×.` }
+      : { id: "stable", level: "caution", title: "Tip-over risk", detail: msg`Height is ${ratio.toFixed(2)}× the short side, over the ${lim.stableHeightRatio}× limit. Strap it down or pick a lower layout.` },
   );
 
   const posts = d.members.filter((m) => m.kind === "blocking" && m.label !== SHAPED_BLOCK).length;
   const cradles = d.members.filter((m) => m.kind === "cradle").length;
   const held = cradles
-    ? `${cradles} notched cradles hold the parts across their length, and ${posts} end stops hold them along it.`
-    : `${posts} blocking posts hold the parts on all four sides.${shapedText(d)}`;
+    ? msg`${cradles} notched cradles hold the parts across their length, and ${posts} end stops hold them along it.`
+    : msg`${posts} blocking posts hold the parts on all four sides.${shapedText(d)}`;
   const tightest = smallestSideGap(d.layout, settings.partGapMm);
   const betweenParts = tightest.where === "between parts";
-  const gapText = `${Math.round(tightest.mm)} mm ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
+  const gapText = msg`${shopMm(tightest.mm)} ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
   checks.push(
     tightest.mm < minBlockingGap
-      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `The ${gapText} is under the ${minBlockingGap} mm that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.` }
-      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${held} The smallest gap is ${Math.round(tightest.mm)} mm, ${tightest.where}.` },
+      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: msg`The ${gapText} is under the ${shopMm(minBlockingGap)} that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.` }
+      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: msg`${held} The smallest gap is ${shopMm(tightest.mm)}, ${tightest.where}.` },
   );
 
   if (nz > 1) {
     const stackedKg = part.mass_kg * (nz - 1);
     checks.push(
       stackedKg > lim.stackKg
-        ? { id: "stack", level: "caution", title: "Heavy stack on the bottom layer", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. Consider fewer layers.` }
-        : { id: "stack", level: "ok", title: "Stack load is light", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. The limit is ${lim.stackKg} kg.` },
+        ? { id: "stack", level: "caution", title: "Heavy stack on the bottom layer", detail: msg`Each bottom position carries ${kg(stackedKg)} from above. Consider fewer layers.` }
+        : { id: "stack", level: "ok", title: "Stack load is light", detail: msg`Each bottom position carries ${kg(stackedKg)} from above. The limit is ${kg(lim.stackKg)}.` },
     );
   }
 
@@ -723,10 +723,10 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
 
   if (eL > lim.ltlExcessiveLengthMm) {
     const ft = Math.round((lim.ltlExcessiveLengthMm / 304.8) * 10) / 10;
-    checks.push({ id: "oversize", level: "info", title: "LTL length surcharge likely", detail: `Length is over ${mm(lim.ltlExcessiveLengthMm)} (${ft} ft). Most LTL carriers add an excessive-length charge.` });
+    checks.push({ id: "oversize", level: "info", title: "LTL length surcharge likely", detail: msg`Length is over ${mm(lim.ltlExcessiveLengthMm)} (${ft} ft). Most LTL carriers add an excessive-length charge.` });
   }
   if (d.layout.utilization < lim.lowUtilization) {
-    checks.push({ id: "utilization", level: "info", title: "Mostly empty space", detail: "Parts are packed by their bounding box, so irregular shapes leave air. A nested layout could be smaller." });
+    checks.push({ id: "utilization", level: "info", title: "Mostly empty space", detail: parts("Parts are packed by their bounding box, so irregular shapes leave air. A nested layout could be smaller.") });
   }
   const [iL, iW, iH] = d.layout.interior;
   const box = lim.cardboard;
@@ -735,7 +735,7 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
       id: "cardboard",
       level: "info",
       title: "A cardboard box may be enough",
-      detail: `${Math.round(d.payloadKg * 10) / 10} kg in a ${[iL, iW, iH].map(Math.round).join(" × ")} mm space is within what a 32 ECT single-wall carton is rated for (29.5 kg gross, ${mm(box.boxDimSumMm)} L + W + H). The crate design is still here if you want one.`,
+      detail: msg`${kg(d.payloadKg)} in a ${dimsMessage([iL, iW, iH])} space is within what a 32 ECT single-wall carton is rated for (${kg(29.5)} gross, ${mm(box.boxDimSumMm)} L + W + H). The crate design is still here if you want one.`,
     });
   }
   return checks;

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { crate, openApp, openTab, panel, pollCrate, shot } from "./helpers";
+import { crate, openApp, openTab, panel, pollCrate, setUnits, shot } from "./helpers";
 
 /**
  * Structural sizing (#7, spec §7.15): a heavy batch gets skids, floor joists and a base rating
@@ -30,6 +30,8 @@ test("the default batch keeps the nominal base and shows its rating", async ({ p
   await expect(panel(page).getByRole("cell", { name: "Floor joist", exact: true })).toHaveCount(0);
   await openTab(page, "Checks");
   await expect(panel(page)).toContainText("Within the base rating");
+  await expect(panel(page)).toContainText(/Base rated \d[\d,]* lb; this crate's payload is 190 lb \(\d+%\)\./);
+  await setUnits(page, "metric");
   await expect(panel(page)).toContainText(/Base rated \d[\d,]* kg; this crate's payload is 86 kg \(\d+%\)\./);
 });
 
@@ -50,9 +52,13 @@ test("a heavy batch gets 4x6 skids and floor joists, in the cut list, checks, 3D
 
   await openTab(page, "Checks");
   const rating = panel(page).locator(".check", { hasText: "Within the base rating" });
+  await expect(rating).toContainText("Base rated 1,894 lb; this crate's payload is 1,422 lb (75%).");
+  await expect(rating).toContainText("3 × 4×6 skids, 7 2×4 floor joists and a 3/4″ floor, sized for 1.5× the load (skid bending governs).");
+  await setUnits(page, "metric");
   await expect(rating).toContainText("Base rated 859 kg; this crate's payload is 645 kg (75%).");
   await expect(rating).toContainText("3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).");
   await shot(page, "24-structure-checks");
+  await setUnits(page, "imperial");
 
   await openTab(page, "Overview");
   await expect(panel(page)).toContainText(/7 2x4 joists and a/);

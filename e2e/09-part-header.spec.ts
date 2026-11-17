@@ -103,7 +103,7 @@ test("each field is edited by keyboard: Tab order, Enter commits, the stand-in c
   await expect(mass).toHaveValue("13.81");
 
   await openTab(page, "Overview");
-  await expect(panel(page)).toContainText("13.81 kg, 6061-T6 aluminum");
+  await expect(panel(page)).toContainText("13.8 kg, 6061-T6 aluminum");
   await nameField(page).blur();
   await shotHeader(page, "09-header-default");
 });
@@ -142,20 +142,20 @@ test("a mass edit updates the header gross, notes the change and flashes the Ove
   // Motion on for this test, so the highlight animates for the screenshot.
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await loadTiny(page);
-  await expect(header(page)).toContainText("kg each stand-in · crate gross 16 kg");
+  await expect(header(page)).toContainText("kg each stand-in · crate gross 15.6 kg");
   await expect(massField(page)).toHaveValue("10");
 
   await massField(page).fill("14.71");
   await massField(page).press("Enter");
-  await expect(header(page)).toContainText("kg each · crate gross 20 kg");
-  await expect(note(page)).toHaveText(/^Crate heavier: 20 kg/);
+  await expect(header(page)).toContainText("kg each · crate gross 20.3 kg");
+  await expect(note(page)).toHaveText(/^Crate heavier: 20.3 kg/);
   // The full before → after is on hover (title) and in screen-reader text (#62).
   await expect(note(page).locator("span").first()).toHaveAttribute("title", "Gross 16 → 20 kg, parts 10 → 15 kg");
   await expect(note(page).locator(".sr-only")).toHaveText(". Details: Gross 16 → 20 kg, parts 10 → 15 kg");
   // The changed values carry the highlight: the header gross and the Overview gross and parts.
-  await expect(header(page).locator(".flash")).toHaveText("20 kg");
+  await expect(header(page).locator(".flash")).toHaveText("20.3 kg");
   await expect(panel(page).locator(".flash").first()).toBeVisible();
-  await expect(panel(page).locator(".chain .flash")).toHaveText(["15 kg", "20 kg"]);
+  await expect(panel(page).locator(".chain .flash")).toHaveText(["14.7 kg", "20.3 kg"]);
   await shot(page, "09-change-flash");
   await shotHeader(page, "09-header-change-note");
 });
@@ -163,12 +163,12 @@ test("a mass edit updates the header gross, notes the change and flashes the Ove
 test("an edit that doesn't move the crate says so", async ({ page }) => {
   await loadTiny(page);
 
-  // +0.1 kg on a 1 mm part: the gross still rounds to 16 kg.
+  // +0.1 kg on a 1 mm part: the gross still reads 15.7 kg in the header and the note says nothing moved.
   await massField(page).focus();
   await page.keyboard.press("ArrowUp");
   await expect(massField(page)).toHaveValue("10.1");
   await expect(note(page)).toHaveText("No change to the crate");
-  await expect(header(page)).toContainText("crate gross 16 kg");
+  await expect(header(page)).toContainText("crate gross 15.7 kg");
   await expect(panel(page).locator(".flash")).toHaveCount(0);
 
   // A material doesn't change the crate either.

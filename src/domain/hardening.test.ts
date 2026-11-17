@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { metricText as metric } from "@/lib/message";
 import { parts } from "./catalog";
 import { MIN_INTERIOR_MM, type CrateDesign } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, MAX_PART_MM, type DesignPart } from "./design";
@@ -108,14 +109,14 @@ describe("part size extremes", () => {
     expect(r.design).toBeNull();
     expect(r.layouts).toEqual([]);
     expect(r.problem?.id).toBe("part-size");
-    expect(r.problem?.detail).toMatch(/\w/);
+    expect(r.problem!.detail).toMatch(/\w/);
   });
 
   it("rejects a part longer than the limit, hinting at units", () => {
     const r = run(part([MAX_PART_MM + 1, 100, 100]));
     expect(r.design).toBeNull();
     expect(r.problem?.id).toBe("part-too-large");
-    expect(r.problem?.detail).toMatch(/units/);
+    expect(r.problem!.detail).toMatch(/units/);
     expect(run(part([MAX_PART_MM, 100, 100]), { quantity: 1 }).problem).toBeNull();
   });
 
@@ -170,20 +171,20 @@ describe("blocking check uses the gaps in the drawn crate (#36)", () => {
   it("names a 10 mm gap between parts as the problem", () => {
     const d = run(parts[0], { quantity: 4, partGapMm: 10 }).design!;
     expect(blocking(d).level).toBe("caution");
-    expect(blocking(d).detail).toMatch(/10 mm gap between parts/);
+    expect(metric(blocking(d).detail)).toMatch(/10 mm gap between parts/);
   });
 
   it("names a thin wall clearance as the problem", () => {
     const d = run(parts[0], { quantity: 4, wallClearanceMm: 5 }).design!;
     expect(blocking(d).level).toBe("caution");
-    expect(blocking(d).detail).toMatch(/5 mm clearance to the/);
+    expect(metric(blocking(d).detail)).toMatch(/5 mm clearance to the/);
   });
 
   it("ignores the part gap when there is one part per layer", () => {
     const d = run(parts[0], { quantity: 1, partGapMm: 0, wallClearanceMm: 50 }).design!;
     expect(d.layout.counts.slice(0, 2)).toEqual([1, 1]);
     expect(blocking(d).level).toBe("ok");
-    expect(blocking(d).detail).toMatch(/smallest gap is 50 mm/);
+    expect(metric(blocking(d).detail)).toMatch(/smallest gap is 50 mm/);
   });
 });
 

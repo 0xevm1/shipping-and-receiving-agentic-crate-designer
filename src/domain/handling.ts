@@ -1,4 +1,5 @@
 import type { Check, Member } from "./crate";
+import { joinMessages, mm, msg, parts, shopMm, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -200,15 +201,14 @@ export function analyseHandling(
   };
 }
 
-const mm = (v: number) => `${Math.round(v).toLocaleString("en-US")} mm`;
 
 /** "120 mm toward the left end and 40 mm toward the back", or null when it is under 1 mm both ways. */
-export function offsetText([dx, dy]: [number, number]): string | null {
-  const parts = [
-    Math.round(Math.abs(dx)) >= 1 && `${mm(Math.abs(dx))} toward the ${dx < 0 ? "left" : "right"} end`,
-    Math.round(Math.abs(dy)) >= 1 && `${mm(Math.abs(dy))} toward the ${dy < 0 ? "front" : "back"}`,
-  ].filter((s): s is string => !!s);
-  return parts.length ? parts.join(" and ") : null;
+export function offsetText([dx, dy]: [number, number]): Message | null {
+  const found = [
+    Math.round(Math.abs(dx)) >= 1 && msg`${shopMm(Math.abs(dx))} toward the ${dx < 0 ? "left" : "right"} end`,
+    Math.round(Math.abs(dy)) >= 1 && msg`${shopMm(Math.abs(dy))} toward the ${dy < 0 ? "front" : "back"}`,
+  ].filter((m): m is Message => !!m);
+  return found.length ? joinMessages(found, " and ") : null;
 }
 
 const DEVICE_NAME: Record<Device, string> = { forklift: "Forklift", "pallet-jack": "Pallet jack" };
@@ -233,13 +233,13 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
           id: "cog-offset",
           level: "caution",
           title: "Off-centre centre of gravity",
-          detail: `Centre of gravity is ${where}; mark it on the crate. The limit is ${pct} of the length (${mm(limX)}) and width (${mm(limY)}).`,
+          detail: msg`Centre of gravity is ${where ?? []}; mark it on the crate. The limit is ${pct} of the length (${mm(limX)}) and width (${mm(limY)}).`,
         }
       : {
           id: "cog-offset",
           level: "ok",
           title: "Centre of gravity near the middle",
-          detail: `${where ? `It is ${where}` : "It is on both centre lines"}, within ${pct} of the length (${mm(limX)}) and width (${mm(limY)}). ${mm(h.heightMm)} above the ground.`,
+          detail: msg`${where ? msg`It is ${where}` : "It is on both centre lines"}, within ${pct} of the length (${mm(limX)}) and width (${mm(limY)}). ${mm(h.heightMm)} above the ground.`,
         },
   );
 
@@ -251,13 +251,13 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
           id: "cog-tip",
           level: "caution",
           title: "Top-heavy",
-          detail: `The centre of gravity is ${mm(h.heightMm)} up, so the crate tips ${toward} at ${angle}, under the ${s.minTipAngleDeg}° limit. Strap it down, mark the centre of gravity, or pick a lower layout.`,
+          detail: msg`The centre of gravity is ${mm(h.heightMm)} up, so the crate tips ${toward} at ${angle}, under the ${s.minTipAngleDeg}° limit. Strap it down, mark the centre of gravity, or pick a lower layout.`,
         }
       : {
           id: "cog-tip",
           level: "ok",
           title: "Low centre of gravity",
-          detail: `The centre of gravity is ${mm(h.heightMm)} up; the crate tips ${toward} only past ${angle}. The limit is ${s.minTipAngleDeg}°.`,
+          detail: msg`The centre of gravity is ${mm(h.heightMm)} up; the crate tips ${toward} only past ${angle}. The limit is ${s.minTipAngleDeg}°.`,
         },
   );
 
@@ -267,22 +267,22 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
     const std = d.device === "forklift" ? s.forklift : s.palletJack;
     const name = DEVICE_NAME[d.device];
     const tines = d.device === "forklift" ? "tines" : "forks";
-    const clear = `${mm(d.clearMm)} clear under the floor`;
-    const spread = `${mm(std.tineWidthMm)} ${tines} at a ${mm(std.spreadMm.min)}–${mm(std.spreadMm.max)} spread`;
-    const room = h.openings.length ? `the widest opening between the skids is ${mm(widest)}` : "there is no opening between the skids";
+    const clear = msg`${shopMm(d.clearMm)} clear under the floor`;
+    const spread = msg`${shopMm(std.tineWidthMm)} ${tines} at a ${shopMm(std.spreadMm.min)}–${shopMm(std.spreadMm.max)} spread`;
+    const room = h.openings.length ? msg`the widest opening between the skids is ${shopMm(widest)}` : parts("there is no opening between the skids");
     if (d.fits) {
       checks.push({
         id: d.device,
         level: "ok",
         title: `${name} fits from the ends`,
-        detail: `${name}: fits from the ends, ${clear}, needs ${mm(d.needClearMm)}. Room between the skids for ${spread}, either side of the centre of gravity.`,
+        detail: msg`${name}: fits from the ends, ${clear}, needs ${shopMm(d.needClearMm)}. Room between the skids for ${spread}, either side of the centre of gravity.`,
       });
     } else if (d.problem === "height") {
       checks.push({
         id: d.device,
         level: "caution",
         title: `${name} may not fit`,
-        detail: `${name}: enters from the ends, ${clear}, needs ${mm(d.needClearMm)}. Use taller skids${d.device === "pallet-jack" && forkliftFits ? " or a forklift" : ""}.`,
+        detail: msg`${name}: enters from the ends, ${clear}, needs ${shopMm(d.needClearMm)}. Use taller skids${d.device === "pallet-jack" && forkliftFits ? " or a forklift" : ""}.`,
       });
     } else if (d.device === "pallet-jack" && forkliftFits) {
       // Too narrow for a jack is a fact of a small crate, not a defect, while a forklift can lift it.
@@ -290,14 +290,14 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
         id: d.device,
         level: "info",
         title: "Forklift only: too narrow for a pallet jack",
-        detail: `${name}: ${room}; it needs room for ${spread}, either side of the centre of gravity. Use a forklift.`,
+        detail: msg`${name}: ${room}; it needs room for ${spread}, either side of the centre of gravity. Use a forklift.`,
       });
     } else {
       checks.push({
         id: d.device,
         level: "caution",
         title: `${name} may not fit`,
-        detail: `${name}: ${room}; it needs room for ${spread}, either side of the centre of gravity. Lift it another way, or space the skids wider.`,
+        detail: msg`${name}: ${room}; it needs room for ${spread}, either side of the centre of gravity. Lift it another way, or space the skids wider.`,
       });
     }
   }

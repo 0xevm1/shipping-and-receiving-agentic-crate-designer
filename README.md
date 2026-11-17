@@ -128,7 +128,7 @@ tab at a time.
      rating** is computed from the skids, floor and joists (#7): "Base rated 859 kg; this
      crate's payload is 645 kg (75%)"
 6. **Switch units** between in / lb (the default, for a US shop floor) and mm / kg; the choice is
-   remembered in this browser. **Download or copy the cut list** as CSV, in the selected units. In
+   remembered in this browser. Everything follows it: the Checks tab, the print spec and the PDF say "98.0 in" and "lb" in imperial, never "mm" or "kg". A mass shows one decimal under 100 and whole numbers from 100 ("47.4 lb", "297 lb"). **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
    sold as (1/2″, 5/8″, 3/4″) and cuts by fractional inches to the nearest 1/16″.
 7. **Download the crate as a 3D model**, inside the .zip from the **Export specs** pill: the assembled crate in metres, Z up, every board a named mesh
@@ -164,7 +164,7 @@ tab at a time.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
-12. **Export everything in one click** (#51): the green **Export specs** pill under the part lines
+11. **Export everything in one click** (#51): the green **Export specs** pill under the part lines
     downloads `crate-PART-001-x4.zip`, made in the browser (nothing is uploaded):
     - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
       split batch: `…-crate-A.glb`, `…-crate-B.glb`);
@@ -177,7 +177,7 @@ tab at a time.
 
     The pill shows "Exporting…" for at least 1.5 s (no hold or spinner with reduced motion),
     then "Downloaded crate-PART-001-x4.zip". The separate downloads above stay. Spec §7.13.
-11. **Split a big batch across crates** (#25). When one crate would be over the per-crate
+12. **Split a big batch across crates** (#25). When one crate would be over the per-crate
     limits (1,000 kg gross by default, the trailer door and floor, and an optional most parts
     per crate, all in Shop standards → Limits), the batch ships as N identical crates plus at
     most one smaller remainder crate. The plan uses the fewest crates, then the least outside
@@ -185,7 +185,7 @@ tab at a time.
     crate B (20)" with the shipment's gross and volume, and **Crate A / Crate B** switches the
     crate shown in 3D, Layouts, Cut list and Checks. The Cut list can show **This crate** or
     the **Whole shipment**. Batches that fit one crate look exactly as before. Spec §7.10.
-11. **Keep a design library and share designs** (#14). At the bottom of the **Overview**,
+13. **Keep a design library and share designs** (#14). At the bottom of the **Overview**,
     **Save design** stores the crate on screen with a name and optional notes. When that part is
     loaded again (the catalog part, or a custom GLB with the same file name and size), its
     saved designs are listed with quantity, outside size, gross and date, and **Use** brings one
@@ -195,7 +195,7 @@ tab at a time.
     (`#design=…`, never sent to a server). Opening the link restores a catalog part fully; for a
     custom part it names the `.glb` to load. A damaged link keeps the default crate and says
     why. Spec §9.
-12. **Pick up where you left off** (#71). A refresh, or reopening the tab, brings back the crate
+14. **Pick up where you left off** (#71). A refresh, or reopening the tab, brings back the crate
     that was last on screen: the part, every rule, the picked layout, the crate type of a split,
     the ranking and the open tab (the units and shop standards are remembered as before). It is
     saved in this browser a moment after each change. A loaded `.glb` is kept too (in

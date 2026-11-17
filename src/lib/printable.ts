@@ -24,10 +24,10 @@ import type { Layout } from "@/domain/packing";
 import type { DesignPart, Vec3 } from "@/domain/schema";
 import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
+import { renderMessage } from "./message";
 import { allChecks } from "@/state/checks";
 import { crateDrawings, type Drawing } from "./drawings";
 import { cutText, describeLayout, stockText } from "./format";
-import { formatMass } from "./partFields";
 import { area, cut, dims, dimsOther, LB_PER_KG, lengthUnit, run, volume, weight, type Units } from "./units";
 
 /** A labelled value, with an optional second line (the other units, or how it was worked out). */
@@ -145,7 +145,7 @@ export interface PrintableInput {
 
 const other = (u: Units): Units => (u === "imperial" ? "metric" : "imperial");
 const withUnit = (mm: readonly number[], u: Units) => `${dims(mm, u)} ${lengthUnit(u)}`;
-const massEach = (kg: number, u: Units) => (u === "imperial" ? `${formatMass(kg, u)} lb` : `${+kg.toFixed(2)} kg`);
+const massEach = (kg: number, u: Units) => weight(kg, u);
 /** A spacing or other shop size with its unit: 11 13/16″ or 300 mm. */
 const shopSize = (mm: number, u: Units) => (u === "imperial" ? cut(mm, u) : `${Math.round(mm)} mm`);
 
@@ -357,7 +357,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
         why: whyText(explainLayout(layouts, layout, standards)),
         runnerUp: runnerUp(layouts, layout, u),
       },
-      checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: k.detail })),
+      checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: renderMessage(k.detail, u) })),
     },
     build: {
       drawings: crateDrawings(design, u),
@@ -408,7 +408,7 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
             { label: "Volume, all crates", value: volume(totals.volumeM3, u), note: volume(totals.volumeM3, other(u)) },
           ]
         : [],
-      unmet: plan.unmet,
+      unmet: plan.unmet && renderMessage(plan.unmet, u),
     },
     crates,
     problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,

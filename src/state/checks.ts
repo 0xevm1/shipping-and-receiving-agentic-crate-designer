@@ -1,4 +1,5 @@
 import type { Check } from "@/domain/crate";
+import { dimsMessage, msg, parts } from "@/domain/message";
 import type { Vec3 } from "@/domain/schema";
 import type { LoadedPart } from "./store";
 
@@ -25,23 +26,23 @@ export function allChecks(
 ): CheckItem[] {
   const items: CheckItem[] = [...domain];
   if (measured) {
-    const size = measured.map((v) => Math.round(v)).join(" × ");
+    const size = dimsMessage(measured.map((v) => Math.round(v)));
     const match = modelMatchesCatalog(part, measured);
     if (match === null) {
       items.push({
         id: "model",
         level: "info",
         title: "Size comes from the model file",
-        detail: `Measured ${size} mm${part.readAsMm ? ", reading the file as millimetres" : ""}. The model is assumed to have Z pointing up.`,
+        detail: msg`Measured ${size}${part.readAsMm ? ", reading the file as millimetres" : ""}. The model is assumed to have Z pointing up.`,
       });
     } else if (match) {
-      items.push({ id: "model", level: "ok", title: "3D model matches the catalog size", detail: `Measured ${size} mm from the model file.` });
+      items.push({ id: "model", level: "ok", title: "3D model matches the catalog size", detail: msg`Measured ${size} from the model file.` });
     } else {
       items.push({
         id: "model",
         level: "caution",
         title: "3D model does not match the catalog",
-        detail: `The model measures ${size} mm. The catalog says ${part.catalogDims!.join(" × ")} mm.`,
+        detail: msg`The model measures ${size}. The catalog says ${dimsMessage(part.catalogDims!)}.`,
       });
     }
   }
@@ -50,7 +51,7 @@ export function allChecks(
       id: "mass",
       level: "caution",
       title: "Part mass is a stand-in",
-      detail: "Enter the real mass under the title. Weights and plywood thickness depend on it.",
+      detail: parts("Enter the real mass under the title. Weights and plywood thickness depend on it."),
     });
   }
   return items.sort((a, b) => RANK[a.level] - RANK[b.level]);
