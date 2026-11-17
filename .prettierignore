@@ -1,0 +1,23 @@
+# Generated, vendored or binary.
+node_modules
+.next
+.claude
+bun.lock
+next-env.d.ts
+public
+docs/design-handoff
+src/data
+docs/screenshots
+playwright-report
+test-results
+e2e/screenshots
+
+# Prose keeps its hand-set tables and wrapping.
+*.md
+
+# Not formatted yet: the layer-boundary refactor is still moving files in these folders, and a
+# repo-wide format would conflict with it. Remove these three lines and run `bun run format`
+# once that work has merged.
+src/domain
+src/lib
+src/state

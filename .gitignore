@@ -46,3 +46,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Session exports saved into the repo root (root-anchored, so no project file is hidden)
+/SESSION *.txt
+/2026-*.txt
