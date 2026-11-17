@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { downloadBytes, exportCrateGlb, glbFileName, loadPartScene } from "@/lib/exportGlb";
 import { autoplay } from "@/state/motion";
 import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
 
@@ -153,11 +154,53 @@ function ViewPopover() {
               onKeyUp={() => requestFit()}
             />
           </div>
+          <GlbDownload />
           <span className="lab">
             Drag to turn, scroll to zoom, right-drag to move. Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** "Download 3D model (.glb)": the assembled crate, whatever the view shows (#27). */
+function GlbDownload() {
+  const hasDesign = useDesigner((s) => !!s.result.design);
+  const [includeParts, setIncludeParts] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const download = async () => {
+    const { result, part, settings } = useDesigner.getState();
+    if (!result.design) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      const model = includeParts
+        ? { scene: await loadPartScene(part.modelUrl), mmPerUnit: part.mmPerUnit, material: part.material }
+        : null;
+      downloadBytes(glbFileName(part.id, settings.quantity), await exportCrateGlb(result.design, model));
+      setStatus("3D model downloaded.");
+    } catch {
+      setStatus("The 3D model could not be made here.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255, 255, 255, 0.12)" }}>
+      <label>
+        Include parts
+        <input type="checkbox" className="switch" checked={includeParts} onChange={(e) => setIncludeParts(e.target.checked)} />
+      </label>
+      <button type="button" className="btn" disabled={!hasDesign || busy} onClick={download}>
+        {busy ? "Preparing…" : "Download 3D model (.glb)"}
+      </button>
+      <span className="lab" role="status">
+        {status}
+      </span>
     </div>
   );
 }

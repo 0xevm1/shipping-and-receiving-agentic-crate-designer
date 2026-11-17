@@ -117,7 +117,10 @@ tab at a time.
      tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
      cardboard box may be enough)
 6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
-7. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
+7. **Download the crate as a 3D model** (View → "Download 3D model (.glb)"): the assembled crate
+   in metres, Z up, every board a named mesh grouped by assembly, with the parts in their slots
+   unless "Include parts" is off.
+8. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
    through **Load a part** or a drop. It restores the part, rules and layout; for a custom
    part, add its `.glb` in the same pick or drop. The format is in spec §6.4.
 
