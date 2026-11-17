@@ -1210,6 +1210,10 @@ open question for the user (see #20).
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
   it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
   - **Units and frame:** metres, Z up, like the input GLBs (§4).
+  - **Origin (#81):** the `Crate` node is offset so the assembled crate's bounding-box centre is
+    the file's origin (`crateCentreMm`). Viewers orbit about the origin, so the crate turns about
+    its own middle; before, the origin was the inside corner of the floor and the crate swung
+    around an empty point. The parts move with it, because they are children of `Crate`.
   - **Node tree:** `Crate` → `Base`, `Side walls`, `End walls`, `Lid`, `Inside the crate`
     (empty assemblies are left out), each holding one box mesh per board named
     `{label} {n}`, numbered per label across the crate (e.g. `Side rail 3`); then, with parts,
