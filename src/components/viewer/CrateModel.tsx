@@ -70,6 +70,7 @@ export function CrateModel({ design }: { design: CrateDesign }) {
 
   useFrame(() => {
     const s = useDesigner.getState();
+    const { view } = useView.getState();
     const focus = hasFocus(s);
     const place = anim.explode !== placedAt.current;
     placedAt.current = anim.explode;
@@ -78,7 +79,7 @@ export function CrateModel({ design }: { design: CrateDesign }) {
       if (!g) return;
       const lit = isLit(s, m);
       const ghost = focus && !lit;
-      let alpha = memberAlpha(m, s.view);
+      let alpha = memberAlpha(m, view);
       if (lit && focus) alpha = 1;
       alphas.current[i] = ghost ? 0 : alpha;
 
@@ -128,7 +129,7 @@ export function CrateModel({ design }: { design: CrateDesign }) {
     const s = useDesigner.getState();
     const next = s.pin === m.bomKey ? null : m.bomKey;
     s.setPin(next);
-    if (next) s.setTab("cut");
+    if (next) useView.getState().setTab("cut");
   };
 
   return (

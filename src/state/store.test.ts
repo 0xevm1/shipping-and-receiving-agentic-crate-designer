@@ -30,12 +30,12 @@ describe("setPartDetails", () => {
   it("sets the name and material without touching the layout", () => {
     const keys = s().result.layouts.map((l) => l.key);
     s().setLayoutKey(keys[keys.length - 1]);
-    const fit = s().fit.nonce;
+    const fit = useView.getState().fit.nonce;
 
     expect(s().setPartDetails({ name: "Gear housing", material: "6061-T6 aluminum" })).toBeNull();
     expect(s().part).toMatchObject({ name: "Gear housing", material: "6061-T6 aluminum", mass_kg: 10, massAssumed: true });
     expect(s().layoutKey).toBe(keys[keys.length - 1]);
-    expect(s().fit.nonce).toBe(fit);
+    expect(useView.getState().fit.nonce).toBe(fit);
   });
 
   it("clears the material when it is blanked", () => {
@@ -165,14 +165,14 @@ describe("setPartProfile", () => {
   it("shapes the blocking and keeps the layout pick and the camera", () => {
     const keys = s().result.layouts.map((l) => l.key);
     s().setLayoutKey(keys[keys.length - 1]);
-    const fit = s().fit.nonce;
+    const fit = useView.getState().fit.nonce;
     expect(s().result.design!.shapedBlocking).toBeUndefined();
 
     s().setPartProfile("blob:widget", profile());
     expect(s().part.profile).toBeDefined();
     expect(s().result.design!.shapedBlocking).toBeDefined();
     expect(s().layoutKey).toBe(keys[keys.length - 1]);
-    expect(s().fit.nonce).toBe(fit);
+    expect(useView.getState().fit.nonce).toBe(fit);
   });
 
   it("ignores a profile for a model that is no longer loaded, or a failed analysis", () => {

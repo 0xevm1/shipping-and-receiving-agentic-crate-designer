@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useView } from "./viewStore";
+import { currentMode, useView } from "./viewStore";
 import { DEFAULT_UNITS, loadUnits, saveUnits, UNITS_STORAGE_KEY } from "./unitsStorage";
 
 /** An in-memory Storage, standing in for the browser's localStorage. */
@@ -121,5 +121,56 @@ describe("view store leaf state", () => {
     s().setRestoring(true);
     expect(seen).toHaveBeenCalledTimes(2);
     off();
+  });
+});
+
+describe("view store: the 3D view", () => {
+  beforeEach(() => useView.setState(initial, true));
+
+  it("starts on the Overview tab, closed, with every toggle on and the iso camera", () => {
+    expect(s().tab).toBe("overview");
+    expect(s().view).toEqual({ lid: true, front: true, explode: 0, blocking: true, parts: true, dims: true, camera: "iso" });
+    expect(currentMode(s().view)).toBe("closed");
+  });
+
+  it("setMode sets the lid, the front and the explode amount together, and asks for a re-frame", () => {
+    const nonce = s().fit.nonce;
+    s().setMode("open");
+    expect(s().view).toMatchObject({ lid: false, front: false, explode: 0 });
+    expect(currentMode(s().view)).toBe("open");
+    s().setMode("exploded");
+    expect(s().view).toMatchObject({ lid: true, front: true, explode: 1 });
+    expect(currentMode(s().view)).toBe("exploded");
+    expect(s().fit).toEqual({ nonce: nonce + 2, instant: false });
+  });
+
+  it("has no named mode for a half-exploded or mixed view", () => {
+    s().setView({ explode: 0.4 });
+    expect(currentMode(s().view)).toBeNull();
+    s().setView({ explode: 0, lid: false });
+    expect(currentMode(s().view)).toBeNull();
+  });
+
+  it("setView merges a patch without a re-frame", () => {
+    const nonce = s().fit.nonce;
+    s().setView({ camera: null, dims: false });
+    expect(s().view).toMatchObject({ camera: null, dims: false, blocking: true });
+    expect(s().fit.nonce).toBe(nonce);
+  });
+
+  it("setInsets re-frames instantly, and only when an inset moved", () => {
+    const nonce = s().fit.nonce;
+    s().setInsets({ left: 0, top: 0, right: 0, bottom: 0 });
+    expect(s().fit.nonce).toBe(nonce);
+    s().setInsets({ left: 10, top: 0, right: 300, bottom: 0 });
+    expect(s().fit).toEqual({ nonce: nonce + 1, instant: true });
+  });
+
+  it("requestFit bumps the nonce, instantly only when asked", () => {
+    const nonce = s().fit.nonce;
+    s().requestFit();
+    expect(s().fit).toEqual({ nonce: nonce + 1, instant: false });
+    s().requestFit(true);
+    expect(s().fit).toEqual({ nonce: nonce + 2, instant: true });
   });
 });

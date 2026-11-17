@@ -19,8 +19,8 @@ import type { Vec3 } from "@/domain/schema";
 import { lastProfileMs } from "@/lib/partProfile";
 import type { Units } from "@/lib/units";
 import { anim, autoplay, isIdle } from "@/state/motion";
-import { currentMode, useDesigner, type Tab, type ViewState } from "@/state/store";
-import { useView } from "@/state/viewStore";
+import { useDesigner } from "@/state/store";
+import { currentMode, useView, type Tab, type ViewState } from "@/state/viewStore";
 import { probeStats } from "./probeStats";
 import { domainToWorld, sceneOrigin } from "./scene";
 
@@ -135,8 +135,8 @@ function snapshot(): CrateSnapshot {
   const external = s.result.design?.layout.external;
   const { handling } = probeStats;
   return {
-    mode: currentMode(s.view),
-    view: { ...s.view },
+    mode: currentMode(v.view),
+    view: { ...v.view },
     cameraDistance,
     cameraAngles,
     cameraTarget: target ? [target.x, target.y, target.z] : null,
@@ -148,7 +148,7 @@ function snapshot(): CrateSnapshot {
     idle: isIdle(),
     outside: external ? [external[0], external[1], external[2]] : null,
     problem: s.result.problem?.id ?? null,
-    tab: s.tab,
+    tab: v.tab,
     units: v.units,
     panelsHidden: v.panelsHidden,
     drawerOpen: v.drawerOpen,

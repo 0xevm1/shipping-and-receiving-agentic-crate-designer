@@ -6,7 +6,7 @@
 import { MathUtils, Spherical, Vector3, type PerspectiveCamera } from "three";
 import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
-import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/store";
+import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/viewStore";
 import { crateLabelAnchors, labelOffsetMm } from "./sizeLines";
 import { arrowReachMm } from "./forkArrows";
 import { domainToWorld, EXPLODE_LID_MM, EXPLODE_WALL_MM, FOV_DEG, MM_TO_M, sceneOrigin } from "./scene";

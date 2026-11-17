@@ -124,7 +124,7 @@ export function DesignerShell() {
     const mq = window.matchMedia(NARROW);
     const measure = () => {
       const island = islandRef.current;
-      const s = useDesigner.getState();
+      const s = useView.getState();
       if (mq.matches) {
         // Narrow: the full width, between the header and the summary and view bar at the foot.
         const header = shellRef.current?.querySelector("header")?.getBoundingClientRect();
@@ -138,7 +138,7 @@ export function DesignerShell() {
         });
       } else if (!island) {
         s.setInsets({ left: 0, top: 0, right: 0, bottom: 0 });
-      } else if (useView.getState().panelsHidden) {
+      } else if (s.panelsHidden) {
         // Only the credit remains, bottom left; keep the crate above it.
         s.setInsets({ left: 0, top: 0, right: 0, bottom: FREE_BOTTOM });
       } else {
@@ -222,7 +222,7 @@ export function DesignerShell() {
       <div className={styles.foot} ref={footRef}>
         <Summary
           onOpen={() => {
-            useDesigner.getState().setTab("overview");
+            useView.getState().setTab("overview");
             openDrawer();
           }}
         />

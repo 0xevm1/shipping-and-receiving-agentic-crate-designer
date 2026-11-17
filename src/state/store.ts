@@ -9,23 +9,8 @@ import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import { catalogPart, type LoadedPart } from "@/lib/part";
+import { emitDesignEdit, type ChangeSource } from "./designEvents";
 import { loadStandards, saveStandards } from "./standardsStorage";
-
-export type Tab = "overview" | "layouts" | "cut" | "rules" | "checks";
-export type Mode = "closed" | "open" | "exploded";
-export type CameraPreset = "iso" | "top" | "front" | "end";
-
-export interface ViewState {
-  /** Targets; the scene eases toward them (see motion.ts). */
-  lid: boolean;
-  front: boolean;
-  explode: number;
-  blocking: boolean;
-  parts: boolean;
-  dims: boolean;
-  /** Last camera preset chosen, or null once the user orbits. */
-  camera: CameraPreset | null;
-}
 
 /** A cut-list line or assembly that is lit up. `list` hovers also fade everything else. */
 interface Hover {
@@ -33,17 +18,6 @@ interface Hover {
   assembly?: Assembly;
   source: "list" | "3d";
 }
-
-/** Screen space the overlays cover, in px; the crate is centred in what is left. */
-interface Insets {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}
-
-/** Which input an edit came from, so the change note can sit by it. */
-export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
 
 /** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
 interface LastChange {
@@ -76,13 +50,8 @@ export interface DesignerState {
   /** The shop's house rules every design is built to. Saved in localStorage. */
   standards: ShopStandards;
 
-  tab: Tab;
-  view: ViewState;
   hover: Hover | null;
   pin: string | null;
-  insets: Insets;
-  /** Bumped whenever the camera should re-frame the crate. */
-  fit: { nonce: number; instant: boolean };
   /** The last edit's effect on the design. Units changes and loading a part don't set it. */
   lastChange: LastChange | null;
   /** How the recommended layout is chosen: `volume` (the default), `cost` or `density`. Kept across edits. */
@@ -96,12 +65,12 @@ export interface DesignerState {
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
   loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex?: number) => void;
   /**
-   * Reopens the last-opened crate after a reload: like `loadDesign`, plus its tab and ranking.
+   * Reopens the last-opened crate after a reload: like `loadDesign`, plus its ranking (the tab is view state: the loader sets it).
    * Not the same thing as `restoreDesign` in `@/domain/designFile`, which rebuilds a part's
    * settings from a design file; the loader runs that first and hands its result to this action.
    * The time-to-design clock stays stopped (no "Designed in" note) until a new part loads.
    */
-  restoreDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex: number, ui: { tab: Tab; ranking: Ranking }) => void;
+  restoreDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex: number, ranking: Ranking) => void;
   /** Shows another crate type of a split batch. Out-of-range indexes are ignored. */
   setCrateIndex: (index: number) => void;
   setMeasured: (size: Vec3) => void;
@@ -131,13 +100,8 @@ export interface DesignerState {
   /** Reads the standards saved in this browser. Called once after the app mounts. */
   loadSavedStandards: () => void;
   addCatalogParts: (parts: Part[]) => void;
-  setTab: (t: Tab) => void;
-  setMode: (m: Mode) => void;
-  setView: (patch: Partial<ViewState>) => void;
   setHover: (h: Hover | null) => void;
   setPin: (key: string | null) => void;
-  setInsets: (i: Insets) => void;
-  requestFit: (instant?: boolean) => void;
   /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
   setRanking: (ranking: Ranking) => void;
   /** Starts the time-to-design clock if it isn't running (called once after mount). */
@@ -152,13 +116,6 @@ export interface DesignerState {
 const DEFAULT_PART_ID = "PART-001";
 
 const initialPart = catalogPart(catalog.parts.find((p) => p.id === DEFAULT_PART_ID)!);
-
-export function currentMode(v: Pick<ViewState, "lid" | "front" | "explode">): Mode | null {
-  if (v.explode === 0 && v.lid && v.front) return "closed";
-  if (v.explode === 0 && !v.lid && !v.front) return "open";
-  if (v.explode === 1 && v.lid && v.front) return "exploded";
-  return null;
-}
 
 /** The preloaded part's plan: one crate at the default quantity. */
 function initialPlan(): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
@@ -208,12 +165,12 @@ export const useDesigner = create<DesignerState>()((set, get) => {
    * Recompute the design after any input change, dropping a pin whose cut-list line is gone.
    * With a `source`, records what moved in `lastChange`; without one (a new part) clears it.
    */
-  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
+  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource, opened?: "loaded" | "restored") => {
     const next = { ...get(), ...patch };
     const { plan, crateIndex, result } = replan(next);
     // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
     const staleClock = get().designedInMs !== null && !("designedInMs" in patch);
-    const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
+    const prev = get().result;
     set({
       ...patch,
       plan,
@@ -223,8 +180,13 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       ...(staleClock ? { designedInMs: null } : {}),
       hover: null,
       ...dropStaleLines({ pin: next.pin, hover: null }, result),
-      ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
     });
+    // The view re-frames the camera when the size or the part changed (`viewStore.ts`).
+    emitDesignEdit(
+      opened
+        ? { type: "opened", restored: opened === "restored", prev, next: result }
+        : { type: "edited", source: source ?? null, partReplaced: Boolean(patch.part), prev, next: result },
+    );
   };
 
   /** Switches to new standards: carries changed defaults into the rules, re-designs and saves. */
@@ -249,45 +211,53 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     extraParts: [],
     standards: DEFAULT_STANDARDS,
 
-    tab: "overview",
-    view: { lid: true, front: true, explode: 0, blocking: true, parts: true, dims: true, camera: "iso" },
     hover: null,
     pin: null,
-    insets: { left: 0, top: 0, right: 0, bottom: 0 },
-    fit: { nonce: 0, instant: true },
     lastChange: null,
     ranking: "volume",
     designStartedAt: null,
     designedInMs: null,
 
     setPart: (part) =>
-      recompute({
-        ...newDesignClock(),
-        part,
-        measured: null,
-        pin: null,
-        layoutKey: null,
-        settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
-      }),
+      recompute(
+        {
+          ...newDesignClock(),
+          part,
+          measured: null,
+          pin: null,
+          layoutKey: null,
+          settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
+        },
+        undefined,
+        "loaded",
+      ),
     loadDesign: (part, settings, layoutKey, crateIndex = 0) =>
-      recompute({ ...newDesignClock(), part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
-    restoreDesign: (part, settings, layoutKey, crateIndex, { tab, ranking }) =>
-      recompute({
-        designStartedAt: null,
-        designedInMs: null,
-        part,
-        measured: null,
-        pin: null,
-        layoutKey,
-        crateIndex,
-        tab,
-        ranking,
-        settings: normalizeSettings(settings, DEFAULT_SETTINGS),
-      }),
+      recompute(
+        { ...newDesignClock(), part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) },
+        undefined,
+        "loaded",
+      ),
+    restoreDesign: (part, settings, layoutKey, crateIndex, ranking) =>
+      recompute(
+        {
+          designStartedAt: null,
+          designedInMs: null,
+          part,
+          measured: null,
+          pin: null,
+          layoutKey,
+          crateIndex,
+          ranking,
+          settings: normalizeSettings(settings, DEFAULT_SETTINGS),
+        },
+        undefined,
+        "restored",
+      ),
     setCrateIndex: (index) => {
-      const { plan, crateIndex, fit } = get();
+      const { plan, crateIndex } = get();
       if (index === crateIndex || !Number.isInteger(index) || index < 0 || index >= plan.crates.length) return;
-      set({ crateIndex: index, result: plan.crates[index].result, pin: null, hover: null, fit: { nonce: fit.nonce + 1, instant: false } });
+      set({ crateIndex: index, result: plan.crates[index].result, pin: null, hover: null });
+      emitDesignEdit({ type: "crate-switched" });
     },
     setMeasured: (measured) => set({ measured }),
     setPartProfile: (modelUrl, profile) => {
@@ -341,25 +311,12 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       for (const p of parts) byModel.set(p.model, p);
       set({ extraParts: [...byModel.values()] });
     },
-    setTab: (tab) => set({ tab }),
-    setMode: (mode) => {
-      const view = { ...get().view, lid: mode !== "open", front: mode !== "open", explode: mode === "exploded" ? 1 : 0 };
-      set({ view, fit: { nonce: get().fit.nonce + 1, instant: false } });
-    },
-    setView: (patch) => set({ view: { ...get().view, ...patch } }),
     setHover: (hover) => {
       const a = get().hover;
       const same = (!a && !hover) || (a && hover && a.key === hover.key && a.assembly === hover.assembly && a.source === hover.source);
       if (!same) set({ hover });
     },
     setPin: (pin) => set({ pin }),
-    setInsets: (insets) => {
-      const a = get().insets;
-      if (a.left !== insets.left || a.top !== insets.top || a.right !== insets.right || a.bottom !== insets.bottom) {
-        set({ insets, fit: { nonce: get().fit.nonce + 1, instant: true } });
-      }
-    },
-    requestFit: (instant = false) => set({ fit: { nonce: get().fit.nonce + 1, instant } }),
     setRanking: (ranking) => {
       if (ranking !== get().ranking) recompute({ ranking, layoutKey: null }, "layout");
     },

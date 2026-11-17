@@ -23,7 +23,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const auto = useDesigner((s) => s.settings.panelThickness === "auto");
   const setHover = useDesigner((s) => s.setHover);
-  const setTab = useDesigner((s) => s.setTab);
+  const setTab = useView((s) => s.setTab);
   const { layout, construction: c } = design;
   // Parts in the crate on screen: the whole batch, or one crate type's share of a split.
   const quantity = layout.slots.length;

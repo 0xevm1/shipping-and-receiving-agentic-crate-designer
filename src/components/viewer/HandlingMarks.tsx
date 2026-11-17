@@ -6,7 +6,7 @@ import { Box2, CircleGeometry, DoubleSide, MathUtils, MeshBasicMaterial, Shape, 
 import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
 import { anim } from "@/state/motion";
-import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { approach, LABEL_HALF_PX } from "./framing";
 import {
   arrowFreeRect,
@@ -185,7 +185,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
         root.current!.localToWorld(spot).project(camera);
         return [((spot.x + 1) / 2) * size.width, ((1 - spot.y) / 2) * size.height] as const;
       };
-      const free = arrowFreeRect(useDesigner.getState().insets, size.width, size.height);
+      const free = arrowFreeRect(useView.getState().insets, size.width, size.height);
       const label = { at: [widthLabel[0] + out, widthLabel[1], widthLabel[2]] as Vec3, halfPx: LABEL_HALF_PX };
       placed = layoutArrows(design, out, project, free, label, dropped.current);
     }

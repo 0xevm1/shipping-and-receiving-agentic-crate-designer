@@ -41,7 +41,7 @@ export default function CrateViewer() {
   const design = useDesigner((s) => s.result.design);
   const part = useDesigner((s) => s.part);
   const units = useView((s) => s.units);
-  const view = useDesigner((s) => s.view);
+  const view = useView((s) => s.view);
   const problem = useDesigner((s) => s.result.problem);
   // The last-opened crate is being reopened: show nothing rather than flash the default one.
   const restoring = useView((s) => s.restoring);

@@ -1,7 +1,8 @@
 import { Color, type Material, type Vector3 } from "three";
 import type { CrateDesign, Member } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
-import type { DesignerState, ViewState } from "@/state/store";
+import type { DesignerState } from "@/state/store";
+import type { ViewState } from "@/state/viewStore";
 import { anim } from "@/state/motion";
 
 /**

@@ -38,7 +38,7 @@ describe("reopening the last crate", () => {
     expect(await restoreLastDesign(saved, new IDBFactory())).toBe(true);
     expect(s().settings).toMatchObject({ quantity: 8, maxLayers: 2 });
     expect(s().result.design?.layout.key).toBe(saved.design.layoutKey);
-    expect(s().tab).toBe("rules");
+    expect(v().tab).toBe("rules");
     expect(s().ranking).toBe("cost");
     expect(v().loadMessage).toBe("");
     // Not newly loaded: no clock, so an export records no "Designed in" time.
@@ -57,7 +57,7 @@ describe("reopening the last crate", () => {
     beginLoad();
     expect(await reopening).toBe(false);
     expect(s().settings).toEqual(initial.settings);
-    expect(s().tab).toBe(initial.tab);
+    expect(v().tab).toBe(viewInitial.tab);
   });
 
   it("without the custom part's GLB, keeps the default part, names the file and waits for it", async () => {

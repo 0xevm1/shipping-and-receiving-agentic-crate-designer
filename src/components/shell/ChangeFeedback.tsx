@@ -2,7 +2,8 @@
 
 import type { DesignField } from "@/domain/diff";
 import { changeNote, changeSummary, visibleChanges } from "@/lib/changes";
-import { useDesigner, type ChangeSource } from "@/state/store";
+import type { ChangeSource } from "@/state/designEvents";
+import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
 import styles from "./ChangeFeedback.module.css";
 

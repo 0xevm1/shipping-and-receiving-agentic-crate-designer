@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 import { autoplay } from "@/state/motion";
-import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
+import { useDesigner } from "@/state/store";
+import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/viewStore";
 import { useView } from "@/state/viewStore";
 import { usePopover } from "./usePopover";
 import styles from "./ViewBar.module.css";
@@ -25,11 +26,10 @@ const SWITCHES: { key: keyof ViewState; label: string }[] = [
 
 /** Bottom right: how the crate is shown. */
 export function ViewBar() {
-  const view = useDesigner((s) => s.view);
+  const view = useView((s) => s.view);
   const units = useView((s) => s.units);
   const panelsHidden = useView((s) => s.panelsHidden);
-  const { setMode, requestFit } = useDesigner.getState();
-  const { setUnits, togglePanels } = useView.getState();
+  const { setMode, requestFit, setUnits, togglePanels } = useView.getState();
   const mode = currentMode(view);
   const next = MODES[(MODES.indexOf(mode ?? "exploded") + 1) % MODES.length];
   const title = `${mode ? `${MODE_NAME[mode]} view` : "Custom view"}. Click for ${MODE_NAME[next].toLowerCase()}.`;
@@ -90,10 +90,10 @@ function PinBar() {
 }
 
 function ViewPopover() {
-  const view = useDesigner((s) => s.view);
+  const view = useView((s) => s.view);
   const units = useView((s) => s.units);
   const { open, toggle, wrapProps, triggerRef } = usePopover();
-  const { setView, requestFit } = useDesigner.getState();
+  const { setView, requestFit } = useView.getState();
 
   return (
     <div className={`${styles.viewWrap} ${styles.hideable}`} {...wrapProps}>
