@@ -67,15 +67,18 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
+      # `prepare` installs the local pre-commit hook (#31); CI doesn't commit, so skip it.
       - name: Install
         run: bun install --frozen-lockfile
+        env:
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: "1"
 
       - name: Lint
         run: bun run lint
 
-      # Next generates the route types (LayoutProps, etc.) that tsc needs.
+      # `next typegen` (route types such as LayoutProps), then `tsc --noEmit`.
       - name: Typecheck
-        run: bunx next typegen && bunx tsc --noEmit
+        run: bun run typecheck
 
       - name: Test
         run: bun run test
