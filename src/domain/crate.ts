@@ -387,6 +387,22 @@ function sectionName(a: number, b: number): string {
   return na && nb ? `${na}×${nb}` : `${a} × ${b} mm`;
 }
 
+/**
+ * The narrowest gap beside a part in the drawn crate, where blocking posts go: the
+ * per-axis wall clearance (larger than the setting when a tiny crate was padded), and
+ * the part gap only on an axis with more than one part.
+ */
+function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where: string } {
+  const [nx, ny] = layout.counts;
+  const [clearX, clearY] = layout.clearance;
+  const gaps = [
+    ...(nx > 1 || ny > 1 ? [{ mm: partGapMm, where: "between parts" }] : []),
+    clearX === clearY ? { mm: clearX, where: "to the walls" } : { mm: clearX, where: "to the end walls" },
+    ...(clearX === clearY ? [] : [{ mm: clearY, where: "to the side walls" }]),
+  ];
+  return gaps.reduce((a, b) => (b.mm < a.mm ? b : a));
+}
+
 /** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
 function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings, standards: ShopStandards): Check[] {
   const checks: Check[] = [];
@@ -416,10 +432,13 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
   );
 
   const posts = d.members.filter((m) => m.kind === "blocking").length;
+  const tightest = smallestSideGap(d.layout, settings.partGapMm);
+  const betweenParts = tightest.where === "between parts";
+  const gapText = `${Math.round(tightest.mm)} mm ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
   checks.push(
-    Math.min(settings.partGapMm, settings.wallClearanceMm) < minBlockingGap
-      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `Gaps under ${minBlockingGap} mm leave no room for blocking. Widen the gap or the wall clearance.` }
-      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides.` },
+    tightest.mm < minBlockingGap
+      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `The ${gapText} is under the ${minBlockingGap} mm that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.` }
+      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides. The smallest gap is ${Math.round(tightest.mm)} mm, ${tightest.where}.` },
   );
 
   if (nz > 1) {
