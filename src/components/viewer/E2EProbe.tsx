@@ -18,6 +18,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Vec3 } from "@/domain/schema";
 import { lastProfileMs } from "@/lib/partProfile";
 import type { Units } from "@/lib/units";
+import { useSweep } from "@/state/bestQuantity";
 import { anim, autoplay, isIdle } from "@/state/motion";
 import { currentMode, useDesigner, type Tab, type ViewState } from "@/state/store";
 import { probeStats } from "./probeStats";
@@ -71,6 +72,14 @@ export interface CrateSnapshot {
   /** Milliseconds the last part analysis took in this page; null before any. */
   profileMs: number | null;
   /**
+   * A newly loaded part opening at the sweep's recommendation (spec §7.16): `waiting` for the
+   * first result, `measuring` once it is applied (until the measured outline's result), null when
+   * settled or stopped by an edit. Wait for null before reading numbers after loading a part.
+   */
+  autoRecommend: "waiting" | "measuring" | null;
+  /** The current sweep's recommended quantity per crate; null while it is being swept or none passes. */
+  recommended: number | null;
+  /**
    * Centre of gravity: the design's, crate-interior mm, and what the 3D view draws (`marker` is
    * the CoG mark's position, null while hidden; `arrows` the fork-entry arrows mounted and
    * `arrowsShown` those the crate isn't hiding).
@@ -115,6 +124,12 @@ function projectCrate(three: RootState | undefined): CrateSnapshot["crateScreen"
         box.expandByPoint(new Vector2(((corner.x + 1) / 2) * three.size.width, ((1 - corner.y) / 2) * three.size.height));
       }
   return { left: box.min.x, top: box.min.y, right: box.max.x, bottom: box.max.y };
+}
+
+/** The sweep's recommendation for the inputs on screen, or null while they wait to be swept. */
+function recommendedNow(): number | null {
+  const { inputs, done } = useSweep.getState();
+  return done && done.inputs === inputs ? (done.sweep.recommendation?.quantity ?? null) : null;
 }
 
 function snapshot(): CrateSnapshot {
@@ -164,6 +179,8 @@ function snapshot(): CrateSnapshot {
     photonsActive: probeStats.photonsActive,
     shapedBlocking: !!s.result.design?.shapedBlocking,
     profileMs: lastProfileMs(),
+    autoRecommend: s.autoRecommend ? (s.autoRecommend.applied ? "measuring" : "waiting") : null,
+    recommended: recommendedNow(),
     cog: s.result.design
       ? {
           mm: [...s.result.design.handling.cogMm],

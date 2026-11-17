@@ -16,6 +16,7 @@ import {
   shot,
   visibleLabels,
   waitForFrames,
+  waitForRecommended,
 } from "./helpers";
 
 // The fit leaves room for the size lines, so their labels stay in the free area and never sit under
@@ -35,6 +36,8 @@ for (const c of cases) {
     if (c.model) {
       await fileInput(page).setInputFiles(sampleFile(c.model));
       await pollCrate(page, (s) => s.partId).toBe(c.part);
+      // A new part opens at its recommended quantity; the case's own is set below.
+      await waitForRecommended(page);
     }
     if ((await crate(page)).quantity !== c.quantity) {
       await openTab(page, "Rules");

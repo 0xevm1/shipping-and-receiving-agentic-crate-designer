@@ -31,6 +31,19 @@ export async function waitForFrames(page: Page, n = 2) {
   await pollCrate(page, (s) => s.frames, { timeout: 30_000 }).toBeGreaterThanOrEqual(start + n);
 }
 
+/**
+ * After loading a new part (a GLB, catalog or not): waits until it has opened at the quantity
+ * sweep's recommended quantity and layout and settled (spec §7.16: applied, then once more for the
+ * measured outline), so the numbers read next stay put. An edit settles it too. Not for pages that
+ * stop the outline analysis (`disableShapeAnalysis`), which never measure. Returns the snapshot.
+ */
+export async function waitForRecommended(page: Page): Promise<CrateSnapshot> {
+  await pollCrate(page, (s) => s.autoRecommend, { timeout: 30_000 }).toBeNull();
+  // The settled recommendation's design has landed (the probe reads the design's own inputs).
+  await pollCrate(page, (s) => s.recommended === null || s.quantity === s.recommended).toBe(true);
+  return crate(page);
+}
+
 /** The scene is drawing and the preloaded part's model has loaded (the header shows the model check). */
 async function waitForReady(page: Page) {
   await waitForScene(page);

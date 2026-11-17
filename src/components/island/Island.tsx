@@ -27,7 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "checks", label: "Checks" },
 ];
 
-const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout"];
+const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout", "recommended"];
 
 /** The island's id, for the hamburger's `aria-controls` on narrow screens. */
 export const ISLAND_ID = "island";

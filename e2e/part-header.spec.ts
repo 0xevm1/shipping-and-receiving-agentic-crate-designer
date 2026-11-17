@@ -14,6 +14,7 @@ import {
   setUnits,
   SHAFT,
   shot,
+  waitForRecommended,
 } from "./helpers";
 
 /**
@@ -25,6 +26,8 @@ import {
 async function loadUnknown(page: Page) {
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "gearbox-cover.glb"));
   await expect(nameField(page)).toHaveValue("Gearbox cover");
+  // It opens at its recommended quantity; edit once that has settled.
+  await waitForRecommended(page);
 }
 
 test.beforeEach(async ({ page }) => {
