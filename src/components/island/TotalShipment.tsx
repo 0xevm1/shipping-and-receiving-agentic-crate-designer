@@ -1,6 +1,7 @@
 "use client";
 
 import { describeShipment } from "@/domain/shipment";
+import { groupThousands } from "@/lib/format";
 import { renderMessage } from "@/lib/message";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
@@ -21,19 +22,19 @@ export function TotalShipmentSummary({ plan }: { plan: PlanView }) {
   return (
     <section className={styles.ship} aria-label="Shipment" data-testid="total-shipment">
       <div className={`eyebrow-label ${styles.eyebrow}`}>
-        Shipment · {plan.total} parts{crates ? ` · ${crates} ${crates === 1 ? "crate" : "crates"}` : ""}
+        Shipment · {plan.total.toLocaleString("en-US")} parts{crates ? ` · ${crates.toLocaleString("en-US")} ${crates === 1 ? "crate" : "crates"}` : ""}
       </div>
       <p className={styles.plan}>
         {crates ? (
           <>
-            Ships as <b>{describeShipment(plan)}</b>
+            Ships as <b>{groupThousands(describeShipment(plan))}</b>
           </>
         ) : (
           <b>No plan passes every check</b>
         )}
       </p>
       {plan.scoreUsdPerPart !== null && <div className="line">{`$${plan.scoreUsdPerPart.toFixed(2)} per part in crate cost`}</div>}
-      <p className={styles.note}>{renderMessage(plan.rationale, units)}</p>
+      <p className={styles.note}>{groupThousands(renderMessage(plan.rationale, units))}</p>
       <p className={styles.note}>
         From the job&apos;s total (Parts to ship, under Shared job).
         {screen.split ? ` The ${screen.totals.parts} parts on screen are over one crate's limits, so they show as ${describeShipment(screen)}.` : ""}
