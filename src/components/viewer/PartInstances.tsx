@@ -5,8 +5,7 @@ import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { Box3, Vector3 } from "three";
 import type { Layout } from "@/domain/packing";
-import type { Vec3 } from "@/domain/schema";
-import { framedScene } from "@/lib/partFrame";
+import { framedScene, roundSizeMm } from "@/lib/partFrame";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -28,7 +27,7 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
   const { center, sizeMm } = useMemo(() => {
     const box = new Box3().setFromObject(scene);
     const size = box.getSize(new Vector3()).multiplyScalar(part.mmPerUnit);
-    return { center: box.getCenter(new Vector3()), sizeMm: [size.x, size.y, size.z] as Vec3 };
+    return { center: box.getCenter(new Vector3()), sizeMm: roundSizeMm([size.x, size.y, size.z]) };
   }, [scene, part.mmPerUnit]);
   useEffect(() => {
     setMeasured(sizeMm);

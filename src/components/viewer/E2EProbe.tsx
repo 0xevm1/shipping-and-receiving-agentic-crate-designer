@@ -56,6 +56,12 @@ export interface CrateSnapshot {
   /** Parts in the crate on screen. */
   crateParts: number | null;
   partId: string;
+  /**
+   * How the part is read: the file's units and up axis, the size the plan uses (`sizeMm`, from the
+   * file's own measurements) and the size the viewer measured on the model it draws, turned to Z up
+   * (`drawnMm`; null before the model has rendered). Z is the part's height in the crate.
+   */
+  partFrame: { units: string; up: string; sizeMm: Vec3; drawnMm: Vec3 | null };
   massAssumed: boolean;
   /** The crate's outside box projected onto the canvas, CSS px; null with no design or camera. */
   crateScreen: { left: number; top: number; right: number; bottom: number } | null;
@@ -155,6 +161,7 @@ function snapshot(): CrateSnapshot {
     crateIndex: s.crateIndex,
     crateParts: s.result.design?.layout.slots.length ?? null,
     partId: s.part.id,
+    partFrame: { units: s.part.modelUnits, up: s.part.upAxis, sizeMm: [...s.part.dimensions_mm], drawnMm: s.measured ? [...s.measured] : null },
     massAssumed: s.part.massAssumed,
     crateScreen: projectCrate(three),
     frames,

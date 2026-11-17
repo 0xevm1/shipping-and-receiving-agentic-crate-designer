@@ -41,11 +41,17 @@ export function guessUnits(longestSide: number): ModelUnits {
   return longestSide > METRES_FILE_MAX ? "in" : "m";
 }
 
+/**
+ * A measured size to 0.01 mm. A file keeps float32 digits (a model in inches, or one far from its
+ * origin, measures a few thousandths of a mm off), and that noise must not reach the crate.
+ */
+export const roundSizeMm = (size: Vec3): Vec3 => size.map((v) => Math.round(v * 100) / 100) as Vec3;
+
 /** The size of a model in mm, Z up, from its size as the file has it (file units, file axes). */
 export function framedSizeMm(raw: Vec3, { units, up }: PartFrame): Vec3 {
   const k = MM_PER_UNIT[units];
   // A Y-up model turned to stand on Z swaps its two other sides.
-  return up === "y" ? [raw[0] * k, raw[2] * k, raw[1] * k] : [raw[0] * k, raw[1] * k, raw[2] * k];
+  return roundSizeMm(up === "y" ? [raw[0] * k, raw[2] * k, raw[1] * k] : [raw[0] * k, raw[1] * k, raw[2] * k]);
 }
 
 /**

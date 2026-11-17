@@ -235,12 +235,11 @@ describe("setPartFrame (#105)", () => {
     expect(s().part.dimensions_mm).toEqual([300, 100, 200]);
   });
 
-  it("drops the part's measured outline, which was taken the old way, and settles a guess only by choosing units", () => {
+  it("drops the part's measured outline, which was taken the old way, and settles the guess", () => {
     useDesigner.setState({ part: { ...s().part, profile: { version: 1 } as never } });
+    expect(s().part.unitsGuessed).toBe(true);
     s().setPartFrame({ up: "y" });
     expect(s().part.profile).toBeUndefined();
-    expect(s().part.unitsGuessed).toBe(true);
-    s().setPartFrame({ units: "in" });
     expect(s().part.unitsGuessed).toBe(false);
   });
 

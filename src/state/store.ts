@@ -376,8 +376,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (!canSetFrame(current)) return "Catalog parts can't be edited.";
       const frame: PartFrame = { units: patch.units ?? current.modelUnits, up: patch.up ?? current.upAxis };
       if (frame.units === current.modelUnits && frame.up === current.upAxis) return null;
-      // Choosing units settles the guess; the up axis alone leaves it as it was.
-      const part = framePart(current, frame, patch.units ? false : current.unitsGuessed);
+      // The person has looked at how the file is read, so the units are no longer just a guess.
+      const part = framePart(current, frame);
       recompute({ part, measured: part.dimensions_mm, layoutKey: null }, "frame");
       return null;
     },

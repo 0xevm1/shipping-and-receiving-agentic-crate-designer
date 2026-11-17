@@ -7,7 +7,7 @@ import { planShipment } from "@/domain/shipment";
 import { parts } from "@/domain/catalog";
 import { buildCrateScene, PARTS_NODE } from "./exportGlb";
 import { loadPartFiles } from "./loadPart";
-import { framePart, type LoadedPart } from "./part";
+import { catalogPart, framePart, type LoadedPart } from "./part";
 import { FRAME_MATCH_MM, fitFrame, frameWords, framedScene, framedSizeMm, guessUnits, INCHES_FILE_MAX, METRES_FILE_MAX, MM_PER_UNIT } from "./partFrame";
 import { buildPartProfile } from "./partProfile";
 
@@ -203,5 +203,23 @@ describe("a part far from the origin loads centred and measures correctly", () =
     // The parts stay inside the crate's own outline: nowhere near the 50 m offset.
     const half = a.design.layout.external.map((v) => v / 2000);
     expect(Math.abs(a.box.max.x)).toBeLessThan(half[0] + 0.01);
+  });
+});
+
+describe("a part 60 in long, which the size guess reads as 60 mm, is put right by picking inches", () => {
+  it("gives the catalog shaft's size and crate", async () => {
+    const shaft = parts.find((p) => p.id === "PART-002")!;
+    const loaded = (await loadPartFiles([fileOf(fixture("shaft-inches.glb"), "shaft-inches.glb")], [])).part!;
+    // The wrong guess: 60 units across is over the 20-unit limit.
+    expect(loaded).toMatchObject({ modelUnits: "mm", unitsGuessed: true });
+    expect(Math.max(...loaded.dimensions_mm)).toBeCloseTo(60.24, 1);
+
+    const part = { ...framePart(loaded, { units: "in", up: "z" }), mass_kg: shaft.mass_kg };
+    part.dimensions_mm.forEach((v, i) => expect(v).toBeCloseTo(shaft.dimensions_mm[i], 1));
+    const a = crateOf(part);
+    const b = crateOf({ ...catalogPart(shaft), profile: undefined });
+    expect(a.layoutKey).toBe(b.layoutKey);
+    expect(a.design.layout.external.map(Math.round)).toEqual(b.design.layout.external.map(Math.round));
+    expect(a.design.grossKg).toBeCloseTo(b.design.grossKg, 1);
   });
 });

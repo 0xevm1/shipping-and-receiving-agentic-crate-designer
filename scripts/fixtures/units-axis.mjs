@@ -1,6 +1,7 @@
 // Writes the part files for the units and up-axis scenarios (issue #105) into fixtures/units-axis/:
-// PART-001 (the machined steel bracket) as a user might hand it over in another frame. Each file
-// is the bracket's own geometry, with every vertex position rewritten and nothing else changed.
+// PART-001 (the machined steel bracket) as a user might hand it over in another frame, and the
+// long steel shaft in inches (60 in across: the size guess reads that as 60 mm, which is wrong).
+// Each file is the part's own geometry, with every vertex position rewritten and nothing else changed.
 //
 //   bun scripts/fixtures/units-axis.mjs
 //
@@ -12,7 +13,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SOURCE = join(root, "public", "parts", "PART-001-machined-steel-bracket.glb");
+const PARTS = join(root, "public", "parts");
+const BRACKET = "PART-001-machined-steel-bracket.glb";
+const SHAFT = "PART-002-long-steel-shaft.glb";
 const OUT = join(root, "fixtures", "units-axis");
 
 const GLB_MAGIC = 0x46546c67;
@@ -96,17 +99,17 @@ const OFF_ORIGIN_M = [52.4, -31.7, 14.2];
 const shifted = (by) => (p) => p.map((v, k) => v + by[k]);
 
 const files = {
-  "bracket-metres.glb": (g) => transformed(g, scaled(1)),
-  "bracket-millimetres.glb": (g) => transformed(g, scaled(1000)),
-  "bracket-inches.glb": (g) => transformed(g, scaled(1000 / 25.4)),
-  "bracket-y-up.glb": (g) => transformed(g, yUp),
-  "bracket-off-origin.glb": (g) => transformed(g, shifted(OFF_ORIGIN_M)),
+  "bracket-metres.glb": [BRACKET, scaled(1)],
+  "bracket-millimetres.glb": [BRACKET, scaled(1000)],
+  "bracket-inches.glb": [BRACKET, scaled(1000 / 25.4)],
+  "bracket-y-up.glb": [BRACKET, yUp],
+  "bracket-off-origin.glb": [BRACKET, shifted(OFF_ORIGIN_M)],
+  "shaft-inches.glb": [SHAFT, scaled(1000 / 25.4)],
 };
 
-const source = new Uint8Array(readFileSync(SOURCE));
 mkdirSync(OUT, { recursive: true });
-for (const [name, make] of Object.entries(files)) {
-  const bytes = make(source);
+for (const [name, [model, move]] of Object.entries(files)) {
+  const bytes = transformed(new Uint8Array(readFileSync(join(PARTS, model))), move);
   writeFileSync(join(OUT, name), bytes);
   console.log(`${name}  ${bytes.length} bytes`);
 }
