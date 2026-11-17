@@ -79,3 +79,6 @@ function markInput() {
 export function isIdle(now = performance.now()) {
   return now - lastInput > IDLE_MS;
 }
+
+/** The visitor prefers reduced motion (and there is a browser to ask). */
+export const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;

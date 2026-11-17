@@ -4,8 +4,9 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Spherical, Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { anim, autoplay, EASE_FAST, EASE_SLOW, IDLE_LEAD, IDLE_SEQUENCE, IDLE_TURN_RATE, isIdle, pointer } from "@/state/motion";
-import { currentMode, reducedMotion, useDesigner } from "@/state/store";
+import { anim, autoplay, EASE_FAST, EASE_SLOW, IDLE_LEAD, IDLE_SEQUENCE, IDLE_TURN_RATE, isIdle, pointer, reducedMotion } from "@/state/motion";
+import { currentMode, useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { approach, fitGoal, homeTarget, keepCrateInFreeArea, shortestAngle, viewOffset, type Goal } from "./framing";
 import { CAMERA_FAR_M } from "./scene";
 
@@ -107,11 +108,12 @@ export function Director({ active }: { active: boolean }) {
 
   useEffect(() => {
     const s = useDesigner.getState();
+    const v = useView.getState();
     if (!active || !s.result.design) return;
     const g = fitGoal({
       design: s.result.design,
       view: s.view,
-      panelsHidden: s.panelsHidden,
+      panelsHidden: v.panelsHidden,
       insets: s.insets,
       width: size.width,
       height: size.height,
@@ -140,7 +142,7 @@ export function Director({ active }: { active: boolean }) {
     const s = useDesigner.getState();
     const reduce = reducedMotion();
 
-    if (s.result.design && !reduce && !dragging.current && !s.pin && !s.drawerOpen && (autoplay.on || isIdle())) {
+    if (s.result.design && !reduce && !dragging.current && !s.pin && !useView.getState().drawerOpen && (autoplay.on || isIdle())) {
       if (!autoplay.on || autoplay.step < 0) {
         autoplay.on = true;
         autoplay.turned = 0;

@@ -8,6 +8,7 @@ import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
 import { browserStorage, type KeyValueStore } from "./standardsStorage";
 import { useDesigner, type DesignerState } from "./store";
+import { useView } from "./viewStore";
 import type { LoadedPart } from "@/lib/part";
 
 /** The design on screen as a last-design entry, or null when there is no crate to keep. */
@@ -35,13 +36,13 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
       if (!ticket.current()) return false;
       if (!kept || kept.name !== file.part.model) {
         useLibrary.getState().setPendingShare(file);
-        useDesigner.getState().setLoadMessage(`Load ${file.part.model} to reopen your last crate (${file.settings.quantity} × ${file.part.name}).`, "error");
+        useView.getState().setLoadMessage(`Load ${file.part.model} to reopen your last crate (${file.settings.quantity} × ${file.part.name}).`, "error");
         return false;
       }
       glbs = [new File([kept.bytes], kept.name, { type: "model/gltf-binary" })];
     }
     const s = useDesigner.getState();
-    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, s.units);
+    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, useView.getState().units);
     if (!ticket.current()) {
       if (outcome.part?.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
       return false;
@@ -62,7 +63,7 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
     // Only what came out differently is worth a line; the crate itself shows it reopened.
     const lead = `Design loaded: ${file.settings.quantity} × ${outcome.part.name}.`;
     const notes = outcome.message.startsWith(lead) ? outcome.message.slice(lead.length).trim() : "";
-    if (notes) useDesigner.getState().setLoadMessage(`Reopened. ${notes}`);
+    if (notes) useView.getState().setLoadMessage(`Reopened. ${notes}`);
     return true;
   } catch (e) {
     console.warn("Last-opened crate not reopened, opening the default part.", e);

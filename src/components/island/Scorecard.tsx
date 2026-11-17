@@ -4,6 +4,7 @@ import type { CrateDesign } from "@/domain/crate";
 import { densityText, elapsedText, hoursText, usd } from "@/lib/format";
 import { weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./Scorecard.module.css";
 
 /**
@@ -12,7 +13,7 @@ import styles from "./Scorecard.module.css";
  * (`design.cost`, `design.labour`, `design.freight`); this only formats them.
  */
 export function Scorecard({ design }: { design: CrateDesign }) {
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const rate = useDesigner((s) => s.standards.labour.rateUsdPerHour);
   const plan = useDesigner((s) => (s.plan.split ? s.plan : null));
   const designedInMs = useDesigner((s) => s.designedInMs);

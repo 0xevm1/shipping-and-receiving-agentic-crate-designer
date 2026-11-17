@@ -6,9 +6,12 @@ import { restoreLastDesign } from "./lastDesignLoader";
 import { useLibrary } from "./libraryStore";
 import { beginLoad } from "./loadSequence";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 const initial = useDesigner.getState();
+const viewInitial = useView.getState();
 const s = () => useDesigner.getState();
+const v = () => useView.getState();
 
 /** The default crate at quantity 8, two layers, on the Rules tab, ranked by cost. */
 function savedCatalogCrate() {
@@ -20,7 +23,10 @@ function savedCatalogCrate() {
 }
 
 describe("reopening the last crate", () => {
-  beforeEach(() => useDesigner.setState(initial, true));
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    useView.setState(viewInitial, true);
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     useLibrary.getState().setPendingShare(null);
@@ -34,7 +40,7 @@ describe("reopening the last crate", () => {
     expect(s().result.design?.layout.key).toBe(saved.design.layoutKey);
     expect(s().tab).toBe("rules");
     expect(s().ranking).toBe("cost");
-    expect(s().loadMessage).toBe("");
+    expect(v().loadMessage).toBe("");
     // Not newly loaded: no clock, so an export records no "Designed in" time.
     expect(s().designStartedAt).toBeNull();
     s().markExported(5000);
@@ -65,7 +71,7 @@ describe("reopening the last crate", () => {
     expect(await restoreLastDesign(custom, idb)).toBe(false);
     expect(s().part.id).toBe(initial.part.id);
     expect(s().settings).toEqual(initial.settings);
-    expect(s().loadMessage).toContain("Load widget_v2.glb to reopen your last crate");
+    expect(v().loadMessage).toContain("Load widget_v2.glb to reopen your last crate");
     expect(useLibrary.getState().pendingShare).toEqual(custom.design);
   });
 

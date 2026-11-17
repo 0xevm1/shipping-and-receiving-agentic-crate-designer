@@ -6,6 +6,7 @@ import { BoxGeometry, Color, EdgesGeometry, LineBasicMaterial, MeshStandardMater
 import type { CrateDesign, Member } from "@/domain/crate";
 import { anim } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { cradleGeometry } from "./cradleGeometry";
 import { CLICK_SLOP_PX, EDGE, explodeOffset, GHOST_BOARD, GHOST_EDGE, hasFocus, ICE, ICE_EDGE, isLit, memberAlpha, setOpacity, WOOD } from "./scene";
 import { boardTooltipDetail } from "@/lib/format";
@@ -104,11 +105,12 @@ export function CrateModel({ design }: { design: CrateDesign }) {
     const line = s.result.design?.bom.find((l) => l.key === m.bomKey);
     if (!line) return;
     s.setHover({ key: line.key, source: "3d" });
-    s.setTooltip({
+    const view = useView.getState();
+    view.setTooltip({
       x: e.nativeEvent.clientX,
       y: e.nativeEvent.clientY,
       title: line.label,
-      detail: boardTooltipDetail(line, s.units),
+      detail: boardTooltipDetail(line, view.units),
     });
   };
 
@@ -116,7 +118,7 @@ export function CrateModel({ design }: { design: CrateDesign }) {
     const s = useDesigner.getState();
     if (s.hover?.source === "3d" && s.hover.key === m.bomKey) {
       s.setHover(null);
-      s.setTooltip(null);
+      useView.getState().setTooltip(null);
     }
   };
 

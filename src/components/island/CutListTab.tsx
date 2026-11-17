@@ -12,6 +12,7 @@ import { cutText, stockText } from "@/lib/format";
 import { PRINT_PATH, printHash } from "@/lib/printLink";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { CrateTypePicker, CutScopeToggle } from "./CrateTypePicker";
 import styles from "./CutListTab.module.css";
 
@@ -22,7 +23,7 @@ import styles from "./CutListTab.module.css";
  */
 export function CutListTab({ design }: { design: CrateDesign }) {
   const part = useDesigner((s) => s.part);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const quantity = useDesigner((s) => s.settings.quantity);
   const plan = useDesigner((s) => s.plan);
   const crateIndex = useDesigner((s) => s.crateIndex);

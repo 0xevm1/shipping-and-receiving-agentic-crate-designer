@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./LoadToast.module.css";
 
 /** A note goes by itself after this long; an error stays until dismissed or the next load. */
@@ -15,13 +15,13 @@ const NOTE_DISMISS_MS = 9000;
  * to nothing rather than removed.
  */
 export function LoadToast() {
-  const message = useDesigner((s) => s.loadMessage);
-  const kind = useDesigner((s) => s.loadMessageKind);
-  const dismiss = () => useDesigner.getState().setLoadMessage("");
+  const message = useView((s) => s.loadMessage);
+  const kind = useView((s) => s.loadMessageKind);
+  const dismiss = () => useView.getState().setLoadMessage("");
 
   useEffect(() => {
     if (!message || kind !== "note") return;
-    const t = setTimeout(() => useDesigner.getState().setLoadMessage(""), NOTE_DISMISS_MS);
+    const t = setTimeout(() => useView.getState().setLoadMessage(""), NOTE_DISMISS_MS);
     return () => clearTimeout(t);
   }, [message, kind]);
 

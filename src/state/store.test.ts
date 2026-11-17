@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import type { PartProfile } from "@/domain/profile";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 import { catalogPart, type LoadedPart } from "@/lib/part";
 
 /** An unknown part as `loadPartFiles` builds it: stand-in mass, no material. */
@@ -103,7 +104,7 @@ describe("lastChange", () => {
     expect(s().lastChange?.source).toBe("rules");
     expect(s().lastChange?.changes.map((x) => x.field)).toContain("grid");
     const before = s().lastChange;
-    s().setUnits("metric", null);
+    useView.getState().setUnits("metric", null);
     expect(s().lastChange).toBe(before);
     s().setLayoutKey(s().result.layouts[s().result.layouts.length - 1].key);
     expect(s().lastChange?.source).toBe("layout");

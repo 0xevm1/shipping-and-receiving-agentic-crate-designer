@@ -4,6 +4,7 @@ import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
 import { openShareLink } from "./shareLink";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 export type StartupSource = ReturnType<typeof startupSource>;
 
@@ -32,25 +33,25 @@ export function createStartup(deps: StartupDeps): () => Promise<StartupSource> {
 }
 
 async function run(deps: StartupDeps): Promise<StartupSource> {
-  const s = useDesigner.getState();
-  s.loadSavedUnits();
-  s.loadSavedStandards();
+  const view = useView.getState();
+  view.loadSavedUnits();
+  useDesigner.getState().loadSavedStandards();
   useLibrary.getState().load();
 
   const saved = deps.savedDesign();
   const source = startupSource(deps.hash(), saved);
   if (source === "last" && saved) {
-    s.setRestoring(true);
+    view.setRestoring(true);
     const ticket = beginLoad();
     try {
       const reopened = await deps.restore(saved, ticket);
       // A load the person started meanwhile has its own clock.
       if (!reopened && ticket.current()) useDesigner.getState().startDesignClock();
     } finally {
-      useDesigner.getState().setRestoring(false);
+      useView.getState().setRestoring(false);
     }
   } else {
-    s.startDesignClock();
+    useDesigner.getState().startDesignClock();
     await deps.openShare();
   }
   return source;

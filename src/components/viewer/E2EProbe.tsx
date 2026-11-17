@@ -20,6 +20,7 @@ import { lastProfileMs } from "@/lib/partProfile";
 import type { Units } from "@/lib/units";
 import { anim, autoplay, isIdle } from "@/state/motion";
 import { currentMode, useDesigner, type Tab, type ViewState } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { probeStats } from "./probeStats";
 import { domainToWorld, sceneOrigin } from "./scene";
 
@@ -120,6 +121,7 @@ function projectCrate(three: RootState | undefined): CrateSnapshot["crateScreen"
 
 function snapshot(): CrateSnapshot {
   const s = useDesigner.getState();
+  const v = useView.getState();
   const three = getThree?.();
   const camera = three?.camera;
   const target = (three?.controls as OrbitControlsImpl | null)?.target;
@@ -147,9 +149,9 @@ function snapshot(): CrateSnapshot {
     outside: external ? [external[0], external[1], external[2]] : null,
     problem: s.result.problem?.id ?? null,
     tab: s.tab,
-    units: s.units,
-    panelsHidden: s.panelsHidden,
-    drawerOpen: s.drawerOpen,
+    units: v.units,
+    panelsHidden: v.panelsHidden,
+    drawerOpen: v.drawerOpen,
     quantity: s.settings.quantity,
     crateTypes: s.plan.crates.map(({ label, count, quantity }) => ({ label, count, quantity })),
     crateIndex: s.crateIndex,

@@ -3,6 +3,7 @@
 import type { DesignField } from "@/domain/diff";
 import { changeNote, changeSummary, visibleChanges } from "@/lib/changes";
 import { useDesigner, type ChangeSource } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./ChangeFeedback.module.css";
 
 /**
@@ -32,7 +33,7 @@ export function ChangeNote({
 }) {
   const classes = [styles.note, variant && styles[variant], className].filter(Boolean).join(" ");
   const last = useDesigner((s) => s.lastChange);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   if (note !== undefined) {
     return (
       <div className={classes} role="status">
@@ -64,7 +65,7 @@ export function ChangeNote({
  */
 export function Flash({ on, className, children }: { on: readonly DesignField[]; className?: string; children: React.ReactNode }) {
   const last = useDesigner((s) => s.lastChange);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const hit = last !== null && visibleChanges(last.changes, units).some((c) => on.includes(c.field));
   if (!hit) return <span className={className}>{children}</span>;
   return (

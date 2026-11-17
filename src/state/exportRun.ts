@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { downloadBytes } from "@/lib/exportGlb";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 /** The busy state shows at least this long, so a fast export still registers (not with reduced motion). */
 const MIN_BUSY_MS = 1500;
@@ -32,6 +33,7 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
     state: { kind: "idle" },
     run: async () => {
       const s = useDesigner.getState();
+      const { units } = useView.getState();
       if (get().state.kind === "busy" || !s.result.design || s.plan.problem) return;
       clearTimeout(noteTimer);
       set({ state: { kind: "busy" } });
@@ -47,7 +49,7 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
             plan: s.plan,
             crateIndex: s.crateIndex,
             standards: s.standards,
-            units: s.units,
+            units,
             ranking: s.ranking,
             generatedAt: at.toISOString(),
           };

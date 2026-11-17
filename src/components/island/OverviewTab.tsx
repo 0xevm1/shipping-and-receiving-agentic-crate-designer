@@ -9,6 +9,7 @@ import { plywoodLabel, sectionLabel } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import type { CheckItem } from "@/lib/checks";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";
 import { Scorecard } from "./Scorecard";
@@ -18,7 +19,7 @@ import { ShipmentSummary } from "./Shipment";
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
 export function OverviewTab({ design, checks }: { design: CrateDesign; checks: readonly CheckItem[] }) {
   const part = useDesigner((s) => s.part);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const auto = useDesigner((s) => s.settings.panelThickness === "auto");
   const setHover = useDesigner((s) => s.setHover);

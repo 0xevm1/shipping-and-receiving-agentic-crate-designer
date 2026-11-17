@@ -9,9 +9,7 @@ import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import { catalogPart, type LoadedPart } from "@/lib/part";
-import type { Units } from "@/lib/units";
-import { loadStandards, saveStandards, type KeyValueStore } from "./standardsStorage";
-import { DEFAULT_UNITS, loadUnits, saveUnits } from "./unitsStorage";
+import { loadStandards, saveStandards } from "./standardsStorage";
 
 export type Tab = "overview" | "layouts" | "cut" | "rules" | "checks";
 export type Mode = "closed" | "open" | "exploded";
@@ -36,13 +34,6 @@ interface Hover {
   source: "list" | "3d";
 }
 
-interface Tooltip {
-  x: number;
-  y: number;
-  title: string;
-  detail: string;
-}
-
 /** Screen space the overlays cover, in px; the crate is centred in what is left. */
 interface Insets {
   left: number;
@@ -52,9 +43,6 @@ interface Insets {
 }
 
 /** Which input an edit came from, so the change note can sit by it. */
-/** How the load row shows its message: a note goes by itself, an error waits to be dismissed. */
-type LoadMessageKind = "note" | "error";
-
 export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
 
 /** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
@@ -88,31 +76,21 @@ export interface DesignerState {
   /** The shop's house rules every design is built to. Saved in localStorage. */
   standards: ShopStandards;
 
-  units: Units;
   tab: Tab;
   view: ViewState;
   hover: Hover | null;
   pin: string | null;
-  tooltip: Tooltip | null;
-  panelsHidden: boolean;
   insets: Insets;
-  loadMessage: string;
-  /** An error stays until dismissed or the next load; a note goes by itself. */
-  loadMessageKind: LoadMessageKind;
   /** Bumped whenever the camera should re-frame the crate. */
   fit: { nonce: number; instant: boolean };
   /** The last edit's effect on the design. Units changes and loading a part don't set it. */
   lastChange: LastChange | null;
-  /** Narrow screens: the island is a right-side drawer; true while it is open. Separate from `panelsHidden`. */
-  drawerOpen: boolean;
   /** How the recommended layout is chosen: `volume` (the default), `cost` or `density`. Kept across edits. */
   ranking: Ranking;
   /** Time to design: `Date.now()` when the current part was loaded, or null before the app mounts. */
   designStartedAt: number | null;
   /** Milliseconds from loading the part to its first export (CSV, design JSON or GLB); null until then. */
   designedInMs: number | null;
-  /** True while the last-opened crate is being reopened after mount; the scene waits for it. */
-  restoring: boolean;
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
@@ -124,7 +102,6 @@ export interface DesignerState {
    * The time-to-design clock stays stopped (no "Designed in" note) until a new part loads.
    */
   restoreDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex: number, ui: { tab: Tab; ranking: Ranking }) => void;
-  setRestoring: (restoring: boolean) => void;
   /** Shows another crate type of a split batch. Out-of-range indexes are ignored. */
   setCrateIndex: (index: number) => void;
   setMeasured: (size: Vec3) => void;
@@ -154,21 +131,13 @@ export interface DesignerState {
   /** Reads the standards saved in this browser. Called once after the app mounts. */
   loadSavedStandards: () => void;
   addCatalogParts: (parts: Part[]) => void;
-  /** Shows these units and remembers them in this browser (`storage` is for tests). */
-  setUnits: (u: Units, storage?: KeyValueStore | null) => void;
-  /** Applies the units saved in this browser, if any. Called once after the app mounts. */
-  loadSavedUnits: (storage?: KeyValueStore | null) => void;
   setTab: (t: Tab) => void;
   setMode: (m: Mode) => void;
   setView: (patch: Partial<ViewState>) => void;
   setHover: (h: Hover | null) => void;
   setPin: (key: string | null) => void;
-  setTooltip: (t: Tooltip | null) => void;
-  togglePanels: () => void;
   setInsets: (i: Insets) => void;
-  setLoadMessage: (m: string, kind?: LoadMessageKind) => void;
   requestFit: (instant?: boolean) => void;
-  setDrawerOpen: (open: boolean) => void;
   /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
   setRanking: (ranking: Ranking) => void;
   /** Starts the time-to-design clock if it isn't running (called once after mount). */
@@ -220,8 +189,6 @@ function dropStaleLines(s: Pick<DesignerState, "pin" | "hover">, result: DesignR
     ...(s.hover?.key && !has(s.hover.key) ? { hover: null } : {}),
   };
 }
-
-export const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export const useDesigner = create<DesignerState>()((set, get) => {
   let changeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -282,23 +249,16 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     extraParts: [],
     standards: DEFAULT_STANDARDS,
 
-    units: DEFAULT_UNITS,
     tab: "overview",
     view: { lid: true, front: true, explode: 0, blocking: true, parts: true, dims: true, camera: "iso" },
     hover: null,
     pin: null,
-    tooltip: null,
-    panelsHidden: false,
     insets: { left: 0, top: 0, right: 0, bottom: 0 },
-    loadMessage: "",
-    loadMessageKind: "note",
     fit: { nonce: 0, instant: true },
     lastChange: null,
-    drawerOpen: false,
     ranking: "volume",
     designStartedAt: null,
     designedInMs: null,
-    restoring: false,
 
     setPart: (part) =>
       recompute({
@@ -324,9 +284,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         ranking,
         settings: normalizeSettings(settings, DEFAULT_SETTINGS),
       }),
-    setRestoring: (restoring) => {
-      if (get().restoring !== restoring) set({ restoring });
-    },
     setCrateIndex: (index) => {
       const { plan, crateIndex, fit } = get();
       if (index === crateIndex || !Number.isInteger(index) || index < 0 || index >= plan.crates.length) return;
@@ -384,14 +341,6 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       for (const p of parts) byModel.set(p.model, p);
       set({ extraParts: [...byModel.values()] });
     },
-    setUnits: (units, storage) => {
-      set({ units });
-      saveUnits(units, storage);
-    },
-    loadSavedUnits: (storage) => {
-      const units = loadUnits(storage);
-      if (units && units !== get().units) set({ units });
-    },
     setTab: (tab) => set({ tab }),
     setMode: (mode) => {
       const view = { ...get().view, lid: mode !== "open", front: mode !== "open", explode: mode === "exploded" ? 1 : 0 };
@@ -404,19 +353,13 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (!same) set({ hover });
     },
     setPin: (pin) => set({ pin }),
-    setTooltip: (tooltip) => set({ tooltip }),
-    togglePanels: () => set({ panelsHidden: !get().panelsHidden }),
     setInsets: (insets) => {
       const a = get().insets;
       if (a.left !== insets.left || a.top !== insets.top || a.right !== insets.right || a.bottom !== insets.bottom) {
         set({ insets, fit: { nonce: get().fit.nonce + 1, instant: true } });
       }
     },
-    setLoadMessage: (loadMessage, loadMessageKind = "note") => set({ loadMessage, loadMessageKind }),
     requestFit: (instant = false) => set({ fit: { nonce: get().fit.nonce + 1, instant } }),
-    setDrawerOpen: (drawerOpen) => {
-      if (get().drawerOpen !== drawerOpen) set({ drawerOpen });
-    },
     setRanking: (ranking) => {
       if (ranking !== get().ranking) recompute({ ranking, layoutKey: null }, "layout");
     },

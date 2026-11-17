@@ -3,6 +3,7 @@ import { catalog } from "@/domain/catalog";
 import { useLibrary } from "./libraryStore";
 import { loadPickedFiles } from "./partLoader";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 import { catalogPart } from "@/lib/part";
 
 const loadPartFiles = vi.fn();
@@ -13,6 +14,7 @@ vi.mock("@/lib/loadPart", () => ({
 }));
 
 const initial = useDesigner.getState();
+const viewInitial = useView.getState();
 const file = (name: string) => ({ name }) as File;
 const deferred = <T>() => {
   let resolve!: (v: T) => void;
@@ -28,6 +30,7 @@ const outcomeFor = (id: string, modelUrl = "/x.glb") => ({
 describe("load ordering", () => {
   beforeEach(() => {
     useDesigner.setState(initial, true);
+    useView.setState(viewInitial, true);
     loadPartFiles.mockReset();
     loadDesign.mockReset();
   });
@@ -44,7 +47,7 @@ describe("load ordering", () => {
     slow.resolve(outcomeFor("slow", "blob:slow"));
     await first;
     expect(useDesigner.getState().part.id).toBe("quick");
-    expect(useDesigner.getState().loadMessage).toBe("quick");
+    expect(useView.getState().loadMessage).toBe("quick");
     expect(revoke).toHaveBeenCalledWith("blob:slow");
     vi.unstubAllGlobals();
   });
@@ -57,7 +60,7 @@ describe("load ordering", () => {
     await loadPickedFiles([file("quick.glb")]);
     fail(new Error("slow.glb is broken"));
     await first;
-    expect(useDesigner.getState().loadMessage).toBe("quick");
+    expect(useView.getState().loadMessage).toBe("quick");
   });
 
   it("keeps a waiting shared design until its model has opened it", async () => {

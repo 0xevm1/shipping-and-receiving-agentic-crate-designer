@@ -9,6 +9,7 @@ import type { Vec3 } from "@/domain/schema";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { cloneWithMaterial, GHOST_PART, hasFocus, partMaterial, setOpacity } from "./scene";
 import { type LoadedPart } from "@/lib/part";
 
@@ -63,14 +64,14 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
     e.stopPropagation();
     const s = useDesigner.getState();
     s.setHover(null);
-    s.setTooltip({
+    useView.getState().setTooltip({
       x: e.nativeEvent.clientX,
       y: e.nativeEvent.clientY,
       title: part.name,
-      detail: `Part ${i + 1} of ${count}. ${part.material ?? "Material not given"}, ${partWeight(part.mass_kg, s.units)}`,
+      detail: `Part ${i + 1} of ${count}. ${part.material ?? "Material not given"}, ${partWeight(part.mass_kg, useView.getState().units)}`,
     });
   };
-  const onOut = () => useDesigner.getState().setTooltip(null);
+  const onOut = () => useView.getState().setTooltip(null);
 
   const [a, b, c] = layout.cellSize;
   return (

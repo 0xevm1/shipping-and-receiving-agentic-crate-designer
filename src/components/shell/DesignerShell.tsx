@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { dims, lengthUnit, weight } from "@/lib/units";
 import { INPUT_EVENTS, onInputEvent } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { Island, ISLAND_ID } from "../island/Island";
 import { SizeLabels } from "../viewer/SizeLabels";
 import { StageMessage } from "../viewer/StageMessage";
@@ -59,8 +60,8 @@ function useNarrow() {
  * credit moves to the foot of the drawer.
  */
 export function DesignerShell() {
-  const panelsHidden = useDesigner((s) => s.panelsHidden);
-  const drawerOpen = useDesigner((s) => s.drawerOpen);
+  const panelsHidden = useView((s) => s.panelsHidden);
+  const drawerOpen = useView((s) => s.drawerOpen);
   const narrow = useNarrow();
   const islandRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -71,13 +72,13 @@ export function DesignerShell() {
   const drawer = narrow && drawerOpen;
 
   const openDrawer = useCallback(() => {
-    const s = useDesigner.getState();
+    const view = useView.getState();
     // A board tapped on a touch screen leaves its tooltip and hover behind.
-    s.setTooltip(null);
-    s.setHover(null);
-    s.setDrawerOpen(true);
+    view.setTooltip(null);
+    useDesigner.getState().setHover(null);
+    view.setDrawerOpen(true);
   }, []);
-  const closeDrawer = useCallback(() => useDesigner.getState().setDrawerOpen(false), []);
+  const closeDrawer = useCallback(() => useView.getState().setDrawerOpen(false), []);
 
   // Deliberate input anywhere (click or tap, drag, wheel, key) stops idle auto-play; hovering
   // doesn't. Escape closes the drawer, or else clears a pinned row.
@@ -86,9 +87,9 @@ export function DesignerShell() {
     INPUT_EVENTS.forEach((e) => window.addEventListener(e, onInputEvent, opts));
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const s = useDesigner.getState();
-      if (s.drawerOpen) s.setDrawerOpen(false);
-      else if (s.pin) s.setPin(null);
+      const view = useView.getState();
+      if (view.drawerOpen) view.setDrawerOpen(false);
+      else if (useDesigner.getState().pin) useDesigner.getState().setPin(null);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -100,9 +101,9 @@ export function DesignerShell() {
   // Crossing the breakpoint: the drawer never stays open on desktop, and Hide panels (desktop
   // only, with no "Show panels" pill on narrow screens) never stays on in the drawer layout.
   useEffect(() => {
-    const s = useDesigner.getState();
-    if (!narrow) s.setDrawerOpen(false);
-    else if (s.panelsHidden) s.togglePanels();
+    const view = useView.getState();
+    if (!narrow) view.setDrawerOpen(false);
+    else if (view.panelsHidden) view.togglePanels();
   }, [narrow]);
 
   // Narrow screens: tapping a board pins its row (CrateModel switches to Cut list); open the
@@ -110,7 +111,7 @@ export function DesignerShell() {
   useEffect(() => {
     if (!narrow) return;
     return useDesigner.subscribe((s, prev) => {
-      if (s.pin && s.pin !== prev.pin && !s.drawerOpen) openDrawer();
+      if (s.pin && s.pin !== prev.pin && !useView.getState().drawerOpen) openDrawer();
     });
   }, [narrow, openDrawer]);
 
@@ -137,7 +138,7 @@ export function DesignerShell() {
         });
       } else if (!island) {
         s.setInsets({ left: 0, top: 0, right: 0, bottom: 0 });
-      } else if (s.panelsHidden) {
+      } else if (useView.getState().panelsHidden) {
         // Only the credit remains, bottom left; keep the crate above it.
         s.setInsets({ left: 0, top: 0, right: 0, bottom: FREE_BOTTOM });
       } else {
@@ -247,7 +248,7 @@ export function DesignerShell() {
 function Summary({ onOpen }: { onOpen: () => void }) {
   const design = useDesigner((s) => s.result.design);
   const problem = useDesigner((s) => s.result.problem);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const totals = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   return (

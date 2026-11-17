@@ -6,6 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import type { DesignProblem } from "@/domain/design";
 import { pointer } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { CrateModel } from "./CrateModel";
 import styles from "./CrateViewer.module.css";
 import { StageMessage } from "./StageMessage";
@@ -39,11 +40,11 @@ const E2EProbe = process.env.NEXT_PUBLIC_E2E === "1" ? lazy(() => import("./E2EP
 export default function CrateViewer() {
   const design = useDesigner((s) => s.result.design);
   const part = useDesigner((s) => s.part);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const view = useDesigner((s) => s.view);
   const problem = useDesigner((s) => s.result.problem);
   // The last-opened crate is being reopened: show nothing rather than flash the default one.
-  const restoring = useDesigner((s) => s.restoring);
+  const restoring = useView((s) => s.restoring);
   const down = useRef<[number, number] | null>(null);
   const [lost, setLost] = useState(false);
   /** Bumped to throw the canvas away and build a fresh one (a new WebGL context). */
@@ -70,7 +71,7 @@ export default function CrateViewer() {
   const clearHover = () => {
     const s = useDesigner.getState();
     if (s.hover?.source === "3d") s.setHover(null);
-    s.setTooltip(null);
+    useView.getState().setTooltip(null);
   };
 
   return (

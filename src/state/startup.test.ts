@@ -3,8 +3,10 @@ import { currentDesignFile } from "@/lib/currentDesign";
 import { beginLoad } from "./loadSequence";
 import { createStartup, type StartupDeps } from "./startup";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 const initial = useDesigner.getState();
+const viewInitial = useView.getState();
 const s = () => useDesigner.getState();
 
 function savedCrate() {
@@ -23,7 +25,10 @@ function deps(over: Partial<StartupDeps> = {}): StartupDeps {
 }
 
 describe("startup source", () => {
-  beforeEach(() => useDesigner.setState(initial, true));
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    useView.setState(viewInitial, true);
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it("runs once however many times it is called (StrictMode mounts twice)", async () => {
@@ -60,10 +65,10 @@ describe("startup source", () => {
     let finish!: (v: boolean) => void;
     const d = deps({ savedDesign: savedCrate, restore: () => new Promise<boolean>((r) => (finish = r)) });
     const done = createStartup(d)();
-    expect(s().restoring).toBe(true);
+    expect(useView.getState().restoring).toBe(true);
     finish(true);
     await done;
-    expect(s().restoring).toBe(false);
+    expect(useView.getState().restoring).toBe(false);
     expect(s().designStartedAt).toBeNull();
   });
 

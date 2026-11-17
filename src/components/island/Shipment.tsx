@@ -5,13 +5,14 @@ import { hoursText, usd } from "@/lib/format";
 import { renderMessage } from "@/lib/message";
 import { volume, weight, weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { CrateTypePicker } from "./CrateTypePicker";
 import styles from "./Shipment.module.css";
 
 /** "Ships as 3 × crate A (64 each) + 1 × crate B (8)", with the shipment's gross and volume. */
 export function ShipmentSummary() {
   const plan = useDesigner((s) => s.plan);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   if (!plan.split) return null;
   const { totals } = plan;
   return (

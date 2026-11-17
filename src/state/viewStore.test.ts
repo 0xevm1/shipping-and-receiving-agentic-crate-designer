@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 import { DEFAULT_UNITS, loadUnits, saveUnits, UNITS_STORAGE_KEY } from "./unitsStorage";
 
 /** An in-memory Storage, standing in for the browser's localStorage. */
@@ -13,8 +13,8 @@ function memoryStorage() {
   };
 }
 
-const initial = useDesigner.getState();
-const s = () => useDesigner.getState();
+const initial = useView.getState();
+const s = () => useView.getState();
 
 describe("units persistence", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -67,8 +67,8 @@ describe("units persistence", () => {
   });
 });
 
-describe("store units", () => {
-  beforeEach(() => useDesigner.setState(initial, true));
+describe("view store units", () => {
+  beforeEach(() => useView.setState(initial, true));
 
   it("setUnits saves the choice and loadSavedUnits applies it", () => {
     const store = memoryStorage();
@@ -76,7 +76,7 @@ describe("store units", () => {
     expect(s().units).toBe("metric");
     expect(loadUnits(store)).toBe("metric");
 
-    useDesigner.setState(initial, true);
+    useView.setState(initial, true);
     expect(s().units).toBe("imperial");
     s().loadSavedUnits(store);
     expect(s().units).toBe("metric");
@@ -85,5 +85,41 @@ describe("store units", () => {
   it("loadSavedUnits keeps the default when nothing is saved", () => {
     s().loadSavedUnits(memoryStorage());
     expect(s().units).toBe("imperial");
+  });
+});
+
+describe("view store leaf state", () => {
+  beforeEach(() => useView.setState(initial, true));
+
+  it("starts with the panels shown, the drawer closed and no message or tooltip", () => {
+    expect(s()).toMatchObject({ panelsHidden: false, drawerOpen: false, restoring: false, loadMessage: "", loadMessageKind: "note", tooltip: null });
+  });
+
+  it("toggles the panels", () => {
+    s().togglePanels();
+    expect(s().panelsHidden).toBe(true);
+    s().togglePanels();
+    expect(s().panelsHidden).toBe(false);
+  });
+
+  it("a load message is a note unless it says it is an error", () => {
+    s().setLoadMessage("Loaded.");
+    expect(s()).toMatchObject({ loadMessage: "Loaded.", loadMessageKind: "note" });
+    s().setLoadMessage("Broken.", "error");
+    expect(s()).toMatchObject({ loadMessage: "Broken.", loadMessageKind: "error" });
+    s().setLoadMessage("");
+    expect(s().loadMessage).toBe("");
+  });
+
+  it("does not notify when the drawer or the restoring flag is set to what it already is", () => {
+    const seen = vi.fn();
+    const off = useView.subscribe(seen);
+    s().setDrawerOpen(false);
+    s().setRestoring(false);
+    expect(seen).not.toHaveBeenCalled();
+    s().setDrawerOpen(true);
+    s().setRestoring(true);
+    expect(seen).toHaveBeenCalledTimes(2);
+    off();
   });
 });
