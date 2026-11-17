@@ -45,7 +45,7 @@ export type PartsCatalog = z.infer<typeof PartsCatalogSchema>;
  */
 export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm"> & {
   material?: string;
-  /** The measured outline (#16, spec §7.5a). Absent until the model is analysed: blocking then follows the bounding box. */
+  /** The measured outline (#16, spec §7.5b). Absent until the model is analysed: blocking then follows the bounding box. */
   profile?: PartProfile;
 };
 

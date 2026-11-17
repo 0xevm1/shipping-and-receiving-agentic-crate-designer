@@ -1,13 +1,13 @@
 import { Euler, Matrix4 } from "three";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
+import { isSlender, usesCradles } from "./cradles";
 import { designCrate, SHAPED_BLOCK, type Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
 import { ORIENTATIONS } from "./orientations";
 import {
   FACE_AXES,
   FACE_IDS,
-  isSlenderForBlocking,
   MAX_SHAPED_BLOCK_DEPTH_MM,
   rotationMatrix,
   sideGrid,
@@ -16,6 +16,7 @@ import {
   type PartProfile,
 } from "./profile";
 import type { Vec3 } from "./schema";
+import { DEFAULT_STANDARDS } from "./standards";
 
 /**
  * A synthetic profile on a `cell`-mm grid. Every face is flat (depth 0) unless `shape` gives a
@@ -66,7 +67,7 @@ describe("shaped blocking (#16)", () => {
   const size: Vec3 = [400, 300, 200];
 
   it("a box-shaped profile reproduces the bounding-box blocking exactly", () => {
-    for (const p of parts.filter((p) => !isSlenderForBlocking(p.dimensions_mm))) {
+    for (const p of parts.filter((p) => !isSlender(p.dimensions_mm, DEFAULT_STANDARDS))) {
       for (const quantity of p.suggested_quantities) {
         const settings = { ...DEFAULT_SETTINGS, quantity };
         const plain = computeDesign(p, settings).design!;
@@ -138,7 +139,7 @@ describe("shaped blocking (#16)", () => {
 
   it("falls back to bounding-box blocking without a usable profile", () => {
     const plain = computeDesign(custom(size), one).design!;
-    // Measured on a different size (another model), or a slender part: ignored.
+    // Measured on a different size (another model): ignored.
     const wrong = profileOf([410, 300, 200], { "-x": () => 30 });
     expect(usableProfile(custom(size, wrong))).toBeNull();
     const d = computeDesign(custom(size, wrong), one).design!;
@@ -146,12 +147,22 @@ describe("shaped blocking (#16)", () => {
     expect(d.shapedBlocking).toBeUndefined();
     expect(d.checks).toEqual(plain.checks);
 
+  });
+
+  it("leaves a cradled slender part to cradles (#6), but shapes its blocking stood on end", () => {
     const shaft = parts.find((p) => p.id === "PART-002")!;
-    expect(isSlenderForBlocking(shaft.dimensions_mm)).toBe(true);
-    const shaftProfile = profileOf(shaft.dimensions_mm, { "-y": () => 20 }, 10);
-    expect(computeDesign({ ...shaft, profile: shaftProfile }, DEFAULT_SETTINGS).design!.members).toEqual(
-      computeDesign(shaft, DEFAULT_SETTINGS).design!.members,
-    );
+    const profile = profileOf(shaft.dimensions_mm, { "-y": (_x, z) => (z > 86 ? 20 : 0), "+y": (_x, z) => (z > 86 ? 20 : 0) }, 10);
+    // Lying flat: cradles, so the profile changes nothing.
+    const flat = computeDesign(shaft, DEFAULT_SETTINGS).design!;
+    expect(usesCradles(shaft.dimensions_mm, flat.layout, DEFAULT_STANDARDS)).toBe(true);
+    const flatShaped = computeDesign({ ...shaft, profile }, DEFAULT_SETTINGS).design!;
+    expect(flatShaped.members).toEqual(flat.members);
+    expect(flatShaped.shapedBlocking).toBeUndefined();
+    // Stood on end (a layout the user can pick): general blocking, shaped to the part.
+    const settings = { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: false };
+    const onEnd = computeDesign(shaft, settings).layouts.find((l) => l.cellSize[2] > Math.max(l.cellSize[0], l.cellSize[1]))!;
+    expect(usesCradles(shaft.dimensions_mm, onEnd, DEFAULT_STANDARDS)).toBe(false);
+    expect(designCrate({ ...shaft, profile }, settings, onEnd).shapedBlocking).toBeDefined();
   });
 
   it("does not change the design without a profile", () => {

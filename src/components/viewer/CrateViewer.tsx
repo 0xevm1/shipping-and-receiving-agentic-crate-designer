@@ -9,6 +9,7 @@ import { CrateModel } from "./CrateModel";
 import { DimensionLines } from "./DimensionLines";
 import { Director, FOV_DEG } from "./Director";
 import { Floor } from "./Floor";
+import { HandlingMarks } from "./HandlingMarks";
 import { PartInstances } from "./PartInstances";
 import { sceneOrigin } from "./scene";
 
@@ -84,6 +85,8 @@ export default function CrateViewer() {
               </Suspense>
             )}
             {view.dims && <DimensionLines design={design} units={units} showParts={view.parts} />}
+            {/* Centre of gravity and fork entry (#8) go with the size labels. */}
+            {view.dims && <HandlingMarks design={design} />}
           </group>
         </group>
 

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { crate, fileInput, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot } from "./helpers";
 
 /**
- * Shaped blocking (#16, spec §7.5a): once the part's model has been analysed, blocking posts sit
+ * Shaped blocking (#16, spec §7.5b): once the part's model has been analysed, blocking posts sit
  * where the part is solid and shaped blocks reach into its recesses. Without the analysis (here,
  * the browser never goes idle), the crate keeps its bounding-box blocking.
  */

@@ -7,6 +7,7 @@ import type { CrateDesign, Member } from "@/domain/crate";
 import { cutText, stockText } from "@/lib/format";
 import { lengthUnit } from "@/lib/units";
 import { anim } from "@/state/motion";
+import { cradleGeometry } from "./cradleGeometry";
 import { useDesigner } from "@/state/store";
 import { EDGE, explodeOffset, GHOST_BOARD, GHOST_EDGE, highlightOf, ICE, ICE_EDGE, memberAlpha, setOpacity, WOOD } from "./scene";
 
@@ -43,6 +44,24 @@ export function CrateModel({ design }: { design: CrateDesign }) {
         m.edge.dispose();
       }),
     [materials],
+  );
+  // Notched cradles (#6) get their own solid; every other board is the shared unit box, scaled.
+  const shapes = useMemo(
+    () =>
+      members.map((m) => {
+        if (!m.cradle) return null;
+        const solid = cradleGeometry(m);
+        return { solid, edges: new EdgesGeometry(solid, 20) };
+      }),
+    [members],
+  );
+  useEffect(
+    () => () =>
+      shapes.forEach((s) => {
+        s?.solid.dispose();
+        s?.edges.dispose();
+      }),
+    [shapes],
   );
 
   useFrame(() => {
@@ -108,14 +127,14 @@ export function CrateModel({ design }: { design: CrateDesign }) {
       {members.map((m, i) => (
         <group key={i} ref={(g) => void (groups.current[i] = g)}>
           <mesh
-            geometry={UNIT_BOX}
+            geometry={shapes[i]?.solid ?? UNIT_BOX}
             material={materials[i].face}
-            scale={m.size}
+            scale={shapes[i] ? 1 : m.size}
             onPointerMove={onMove(m, i)}
             onPointerOut={onOut(m)}
             onClick={onClick(m, i)}
           />
-          <lineSegments geometry={UNIT_EDGES} material={materials[i].edge} scale={m.size} />
+          <lineSegments geometry={shapes[i]?.edges ?? UNIT_EDGES} material={materials[i].edge} scale={shapes[i] ? 1 : m.size} />
         </group>
       ))}
     </group>

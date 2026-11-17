@@ -3,7 +3,7 @@ import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 
 /**
- * Shaped blocking (#16, spec §7.5a): blocking that touches the part's real surfaces instead of
+ * Shaped blocking (#16, spec §7.5b): blocking that touches the part's real surfaces instead of
  * its bounding box.
  *
  * The browser measures a **part profile** once per model (`src/lib/partProfile.ts`): for each of
@@ -62,20 +62,13 @@ export const MIN_SHAPED_BLOCK_HEIGHT_MM = 19;
 export const PROFILE_SIZE_TOLERANCE_MM = 1;
 
 /**
- * Long, slender parts (longest ÷ middle side ≥ 3, e.g. the PART-002 shaft) are left to cradles.
- * TODO(#6): replace with `isSlender()` from `src/domain/cradles.ts` once #6 lands.
+ * The profile to shape blocking with, or null: none measured, or measured on another size.
+ * Layouts that use cradles (`usesCradles`, #6) have no blocking posts, so `designCrate` doesn't ask.
  */
-export function isSlenderForBlocking(size: Vec3): boolean {
-  const [longest, middle] = [...size].sort((a, b) => b - a);
-  return longest / middle >= 3;
-}
-
-/** The profile to shape blocking with, or null: none measured, measured on another size, or a slender part. */
 export function usableProfile(part: { dimensions_mm: Vec3; profile?: PartProfile | null }): PartProfile | null {
   const p = part.profile;
   if (!p || p.version !== 1) return null;
   if (!p.sizeMm.every((v, i) => Math.abs(v - part.dimensions_mm[i]) <= PROFILE_SIZE_TOLERANCE_MM)) return null;
-  if (isSlenderForBlocking(part.dimensions_mm)) return null;
   return p;
 }
 
@@ -396,7 +389,7 @@ export interface BlockBox {
 }
 
 /**
- * How well a set of blocking holds the parts, measured against the part profile (spec §7.5a).
+ * How well a set of blocking holds the parts, measured against the part profile (spec §7.5b).
  * - `contact`: the share of the blocking face beside the parts (over the parts' height) that is
  *   within `CONTACT_TOLERANCE_MM` of a part surface. Blocking over an opening or a recess counts
  *   against it.

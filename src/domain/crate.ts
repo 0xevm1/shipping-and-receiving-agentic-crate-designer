@@ -1,4 +1,6 @@
 import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTerms, type LabourEstimate } from "./cost";
+import { addCradleDunnage, SCREWS_PER_CRADLE, STACKING_CRADLE_LABEL, usesCradles, type CradleProfile } from "./cradles";
+import { analyseHandling, handlingChecks, type Handling } from "./handling";
 import type { Layout } from "./packing";
 import { planShapedBlocking, restraint, slotPlans, usableProfile, type BlockBox, type PartProfile, type Restraint } from "./profile";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
@@ -32,7 +34,8 @@ export type MemberKind =
   | "lid-cleat"
   | "separator"
   | "bearer"
-  | "blocking";
+  | "blocking"
+  | "cradle";
 
 export type WoodMaterial = "plywood" | "lumber";
 
@@ -57,6 +60,8 @@ export interface Member {
   bomKey: string;
   min: Vec3;
   size: Vec3;
+  /** Cradles only (#6): the notches cut into the board's bounding box. */
+  cradle?: CradleProfile;
 }
 
 export interface Construction {
@@ -84,10 +89,25 @@ export interface BomLine {
   /** Cut in mm: [length] for lumber, [length, width] for plywood. */
   cutMm: number[];
   qty: number;
+  /** Cradles only (#6): notches cut in each piece, each an extra saw cut. */
+  notches?: number;
 }
 
 export interface Check {
-  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "cardboard" | "crate-limit";
+  id:
+    | "door"
+    | "oversize"
+    | "blocking"
+    | "stack"
+    | "stable"
+    | "base-rating"
+    | "cog-offset"
+    | "cog-tip"
+    | "forklift"
+    | "pallet-jack"
+    | "utilization"
+    | "cardboard"
+    | "crate-limit";
   /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
   level: "ok" | "caution" | "info";
   title: string;
@@ -121,10 +141,17 @@ export interface CrateDesign {
   densityLbFt3: number;
   /** `freight.dimWeightLb`. */
   dimWeightLb: number;
+  /**
+   * Combined centre of gravity of the crate and the parts (#8, spec §7.14), in the crate-interior
+   * frame of `members` (origin at the interior min corner, on top of the floor; Z up).
+   */
+  centerOfGravityMm: Vec3;
+  /** Centre of gravity, tip angle and fork openings (#8, `handling.ts`). */
+  handling: Handling;
   /** Every rule, passed or not, in a fixed order. */
   checks: Check[];
   /**
-   * Set when blocking was shaped to a measured part profile (#16, spec §7.5a): how well it holds
+   * Set when blocking was shaped to a measured part profile (#16, spec §7.5b): how well it holds
    * the parts, and how well bounding-box blocking would have, measured the same way.
    */
   shapedBlocking?: { shaped: Restraint; boundingBox: Restraint; blocks: number };
@@ -174,8 +201,8 @@ export function designCrate(
   const construction: Construction = { ...base, skidCount };
 
   const members: Member[] = [];
-  const add: AddMember = (kind, material, tag, min, size) => {
-    if (size.every((s) => s > 0.5)) members.push({ kind, material, ...tag, bomKey: "", min, size });
+  const add: AddMember = (kind, material, tag, min, size, cradle) => {
+    if (size.every((s) => s > 0.5)) members.push({ kind, material, ...tag, bomKey: "", min, size, ...(cradle && { cradle }) });
   };
 
   // Base: floor sheet over the full footprint, skids underneath.
@@ -225,8 +252,12 @@ export function designCrate(
     add("lid-cleat", "lumber", lidTag("Lid cross cleat"), [x, -t + cw, H + t], [cw, W + 2 * t - 2 * cw, ct]),
   );
 
-  const profile = usableProfile(part);
-  const pieces = addDunnage(layout, settings, t, standards, add, profile);
+  // Slender parts lying flat sit in notched cradles (#6, cradles.ts); everything else is blocked,
+  // shaped to the part when it has a measured profile (#16, profile.ts).
+  const cradled = usesCradles(part.dimensions_mm, layout, standards);
+  const profile = cradled ? null : usableProfile(part);
+  if (cradled) addCradleDunnage(layout, settings, standards, add);
+  const pieces = cradled ? [] : addDunnage(layout, settings, t, standards, add, profile);
 
   const bom = buildBom(members);
   const density = standards.rates.densityKgM3;
@@ -249,6 +280,8 @@ export function designCrate(
   const grossKg = payloadKg + tareKg;
   const labour = estimateLabour(bom, screws, layout.counts[2], standards);
   const freight = freightTerms(grossKg, layout.external, standards);
+  // Read-only over the finished members and part placements (#8).
+  const handling = analyseHandling(members, layout, part.mass_kg, standards);
 
   const design: CrateDesign = {
     layout,
@@ -269,6 +302,8 @@ export function designCrate(
     freightClass: freight.freightClass,
     densityLbFt3: freight.densityLbFt3,
     dimWeightLb: freight.dimWeightLb,
+    centerOfGravityMm: handling.cogMm,
+    handling,
     checks: [],
   };
   if (profile) {
@@ -290,7 +325,7 @@ export function designCrate(
  * - blocking posts in every gap around each part, running floor-to-separator
  *   so they also carry the layer above.
  * - with a part `profile` (#16), posts sit where the part is solid and shaped blocks reach into
- *   its recesses (spec §7.5a).
+ *   its recesses (spec §7.5b).
  * Returns the blocking pieces and the axis each one blocks along, for measuring restraint.
  */
 function addDunnage(
@@ -377,11 +412,11 @@ function addDunnage(
   return pieces;
 }
 
-/** Cut-list name of a block shaped to the part (#16, spec §7.5a). */
+/** Cut-list name of a block shaped to the part (#16, spec §7.5b). */
 export const SHAPED_BLOCK = "Shaped block";
 
-type Tag = Pick<Member, "assembly" | "face" | "label">;
-type AddMember = (kind: MemberKind, material: WoodMaterial, tag: Tag, min: Vec3, size: Vec3) => void;
+export type Tag = Pick<Member, "assembly" | "face" | "label">;
+export type AddMember = (kind: MemberKind, material: WoodMaterial, tag: Tag, min: Vec3, size: Vec3, cradle?: CradleProfile) => void;
 
 function insideTag(label: string): Tag {
   return { assembly: "inside", face: "inside", label };
@@ -404,13 +439,15 @@ function buildBom(members: Member[]): BomLine[] {
     const cutMm = plywood ? [s[0], s[1]] : [s[0]];
     const stock = plywood ? `${s[2]} mm` : `${s[2]} × ${s[1]}`;
     const cut = cutMm.join(" × ");
-    const key = `${m.assembly}|${m.label}|${stock}|${cut}`;
+    // Cradles with a different number of notches are different pieces.
+    const notches = m.cradle?.notches.length;
+    const key = `${m.assembly}|${m.label}|${stock}|${cut}${notches ? `|${notches} notches` : ""}`;
     m.bomKey = key;
     const line = lines.get(key);
     if (line) line.qty++;
     else {
       const { assembly, label, kind, material } = m;
-      lines.set(key, { key, assembly, label, kind, material, stock, cut, stockMm, cutMm, qty: 1 });
+      lines.set(key, { key, assembly, label, kind, material, stock, cut, stockMm, cutMm, qty: 1, ...(notches && { notches }) });
     }
   }
   return [...lines.values()];
@@ -418,7 +455,18 @@ function buildBom(members: Member[]): BomLine[] {
 
 /** One line of the fastener schedule (#26): where the screws go, how they are spaced, how many. */
 export interface ScrewLine {
-  id: "skids" | "side-cleats" | "end-cleats" | "walls-to-floor" | "corners" | "bearers" | "blocking" | "lid-cleats" | "lid-to-walls";
+  id:
+    | "skids"
+    | "side-cleats"
+    | "end-cleats"
+    | "walls-to-floor"
+    | "corners"
+    | "bearers"
+    | "cradles"
+    | "stacking-cradles"
+    | "blocking"
+    | "lid-cleats"
+    | "lid-to-walls";
   /** The sub-assembly the screws are driven in, for the build order. */
   assembly: Assembly;
   /** "Floor to skids". */
@@ -433,7 +481,7 @@ export interface ScrewLine {
 /**
  * The screw estimate line by line (spec §7.6), at the standard spacings (`rates.screwSpacingMm`;
  * defaults: cleats every 150 mm, panel joints every 200 mm, skids every 300 mm), plus 2 per
- * block or bearer. `CrateDesign.screws` is the sum. Lines with no screws are left out.
+ * block or bearer and 4 per cradle (#6). `CrateDesign.screws` is the sum. Lines with no screws are left out.
  */
 export function screwSchedule(members: Member[], interior: Vec3, standards: ShopStandards = DEFAULT_STANDARDS): ScrewLine[] {
   const [L, W, H] = interior;
@@ -441,6 +489,7 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
   const along = (match: (m: Member) => boolean, spacing: number) =>
     members.filter(match).reduce((n, m) => n + Math.ceil(Math.max(...m.size) / spacing) + 1, 0);
   const count = (kind: MemberKind) => members.filter((m) => m.kind === kind).length;
+  const cradles = (stacking: boolean) => members.filter((m) => m.kind === "cradle" && (m.label === STACKING_CRADLE_LABEL) === stacking).length;
   const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
   const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a;
   const lines: ScrewLine[] = [
@@ -450,7 +499,16 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
     { id: "walls-to-floor", assembly: "sides", title: "Walls to floor", everyMm: every.panelJoint, rule: "around the base", qty: joint },
     { id: "corners", assembly: "sides", title: "Wall corners", everyMm: every.panelJoint, rule: "up each of the 4 corners", qty: Math.ceil(H / every.panelJoint) * 4 },
     { id: "bearers", assembly: "inside", title: "Bearers to floor", everyMm: null, rule: "2 per bearer", qty: count("bearer") * 2 },
-    { id: "blocking", assembly: "inside", title: "Blocking posts", everyMm: null, rule: "2 per post", qty: count("blocking") * 2 },
+    { id: "cradles", assembly: "inside", title: "Cradles to floor", everyMm: null, rule: "2 at each end of each cradle", qty: cradles(false) * SCREWS_PER_CRADLE },
+    {
+      id: "stacking-cradles",
+      assembly: "inside",
+      title: "Stacking cradles through the side walls",
+      everyMm: null,
+      rule: "2 at each end of each cradle",
+      qty: cradles(true) * SCREWS_PER_CRADLE,
+    },
+    { id: "blocking", assembly: "inside", title: cradles(false) ? "End stops" : "Blocking posts", everyMm: null, rule: "2 per post", qty: count("blocking") * 2 },
     { id: "lid-cleats", assembly: "lid", title: "Lid cleats to lid panel", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("lid"), every.cleat) },
     { id: "lid-to-walls", assembly: "lid", title: "Lid to walls", everyMm: every.panelJoint, rule: "around the top", qty: joint },
   ];
@@ -542,13 +600,17 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
   );
 
   const posts = d.members.filter((m) => m.kind === "blocking" && m.label !== SHAPED_BLOCK).length;
+  const cradles = d.members.filter((m) => m.kind === "cradle").length;
+  const held = cradles
+    ? `${cradles} notched cradles hold the parts across their length, and ${posts} end stops hold them along it.`
+    : `${posts} blocking posts hold the parts on all four sides.${shapedText(d)}`;
   const tightest = smallestSideGap(d.layout, settings.partGapMm);
   const betweenParts = tightest.where === "between parts";
   const gapText = `${Math.round(tightest.mm)} mm ${betweenParts ? "gap" : "clearance"} ${tightest.where}`;
   checks.push(
     tightest.mm < minBlockingGap
       ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `The ${gapText} is under the ${minBlockingGap} mm that blocking needs. Widen ${betweenParts ? "the gap between parts" : "the clearance to walls"}.` }
-      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides.${shapedText(d)} The smallest gap is ${Math.round(tightest.mm)} mm, ${tightest.where}.` },
+      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${held} The smallest gap is ${Math.round(tightest.mm)} mm, ${tightest.where}.` },
   );
 
   if (nz > 1) {
@@ -567,6 +629,8 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
       ? { id: "base-rating", level: "caution", title: `Over ${rating} gross`, detail: "Needs heavier skids and floor joists than this design includes." }
       : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under ${rating}, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
   );
+
+  checks.push(...handlingChecks(d.handling, standards));
 
   if (eL > lim.ltlExcessiveLengthMm) {
     const ft = Math.round((lim.ltlExcessiveLengthMm / 304.8) * 10) / 10;

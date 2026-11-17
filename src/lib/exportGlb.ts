@@ -1,6 +1,7 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Scene, Vector3, type Object3D } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { cradleGeometry } from "@/components/viewer/cradleGeometry";
 import { cloneWithMaterial, partMaterial, WOOD } from "@/components/viewer/scene";
 import { ASSEMBLIES, type CrateDesign, type MemberKind } from "@/domain/crate";
 import { ASSEMBLY_NAMES } from "@/domain/export";
@@ -12,7 +13,9 @@ import { partFinish } from "@/domain/partDetails";
  * Built fresh from the design data, never from the live viewer scene, so exploded offsets,
  * fades, ghosting and highlights can't leak into the file. The file follows the input GLB
  * convention (spec §4): metres, Z up. The only conversion is mm → m (× 0.001), baked into
- * positions and board sizes; there is no Y-up rotation.
+ * positions and board sizes; there is no Y-up rotation. The root `Crate` node is offset so the
+ * assembled crate's bounding-box centre is the file's origin (#81): 3D viewers orbit about the
+ * origin, so the crate turns about its own middle instead of a corner of the floor.
  *
  * Node tree:
  *   Crate
@@ -42,11 +45,26 @@ function woodMaterials(): Record<MemberKind, MeshStandardMaterial> {
   return Object.fromEntries(entries) as Record<MemberKind, MeshStandardMaterial>;
 }
 
-/** The export scene: assembled crate in metres, Z up, optionally with the parts in their slots. */
+/** The centre of the assembled crate's boards, in the design's crate-interior mm. */
+export function crateCentreMm(design: CrateDesign): [number, number, number] {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const m of design.members) {
+    for (let i = 0; i < 3; i++) {
+      lo[i] = Math.min(lo[i], m.min[i]);
+      hi[i] = Math.max(hi[i], m.min[i] + m.size[i]);
+    }
+  }
+  return [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2) as [number, number, number];
+}
+
+/** The export scene: assembled crate in metres, Z up, centred on the origin, optionally with the parts in their slots. */
 export function buildCrateScene(design: CrateDesign, part?: PartModel | null): Scene {
   const scene = new Scene();
   const crate = new Group();
   crate.name = CRATE_NODE;
+  const [cx, cy, cz] = crateCentreMm(design);
+  crate.position.set(-cx * M_PER_MM, -cy * M_PER_MM, -cz * M_PER_MM);
   scene.add(crate);
 
   const materials = woodMaterials();
@@ -61,7 +79,9 @@ export function buildCrateScene(design: CrateDesign, part?: PartModel | null): S
       const n = (counts.get(m.label) ?? 0) + 1;
       counts.set(m.label, n);
       const [sx, sy, sz] = m.size;
-      const mesh = new Mesh(new BoxGeometry(sx * M_PER_MM, sy * M_PER_MM, sz * M_PER_MM), materials[m.kind]);
+      // Cradles keep their notches (#6): the viewer's solid, scaled to metres.
+      const geometry = m.cradle ? cradleGeometry(m).scale(M_PER_MM, M_PER_MM, M_PER_MM) : new BoxGeometry(sx * M_PER_MM, sy * M_PER_MM, sz * M_PER_MM);
+      const mesh = new Mesh(geometry, materials[m.kind]);
       mesh.name = `${m.label} ${n}`;
       mesh.position.set((m.min[0] + sx / 2) * M_PER_MM, (m.min[1] + sy / 2) * M_PER_MM, (m.min[2] + sz / 2) * M_PER_MM);
       group.add(mesh);

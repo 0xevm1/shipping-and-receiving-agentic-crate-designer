@@ -7,7 +7,7 @@ import { ASSEMBLIES } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { ASSEMBLY_NAMES } from "@/domain/export";
 import { glbProblem } from "./loadPart";
-import { buildCrateScene, CRATE_NODE, exportCrateGlb, glbFileName, PARTS_NODE, type PartModel } from "./exportGlb";
+import { buildCrateScene, crateCentreMm, CRATE_NODE, exportCrateGlb, glbFileName, PARTS_NODE, type PartModel } from "./exportGlb";
 
 /**
  * GLTFExporter's binary path reads its Blobs with FileReader, which node lacks. A minimal
@@ -106,6 +106,10 @@ describe("GLB export (#27)", () => {
       // Named wood materials.
       expect(boards.every((m) => /^Wood /.test((m.material as { name: string }).name))).toBe(true);
 
+      // The crate's centre is the file's origin (#81), so viewers turn it about its own middle.
+      const centre = crateBounds(back).getCenter(new Vector3());
+      expect(centre.length()).toBeLessThan(0.0005);
+
       // Parts: one per slot, "Part 1…N", each inside the crate's outside box.
       const parts = back.getObjectByName(PARTS_NODE)!;
       expect(parts.children.map(fileName)).toEqual(Array.from({ length: qty }, (_, i) => `Part ${i + 1}`));
@@ -124,18 +128,25 @@ describe("GLB export (#27)", () => {
     expect(back.getObjectByName(PARTS_NODE)).toBeUndefined();
   });
 
-  it("places each part where the packer put it", async () => {
+  it("places each part where the packer put it, relative to the centred crate", async () => {
     const d = design("PART-002", 8);
     const scene = buildCrateScene(d, { scene: await sampleModel("PART-002-long-steel-shaft.glb"), mmPerUnit: 1000 });
     scene.updateMatrixWorld(true);
     const parts = scene.getObjectByName(PARTS_NODE)!;
+    const [ox, oy, oz] = crateCentreMm(d);
     d.layout.slots.forEach((slot, i) => {
       const c = new Box3().setFromObject(parts.children[i]).getCenter(new Vector3());
       const [a, b, cz] = d.layout.cellSize;
-      expect(c.x).toBeCloseTo((slot.min[0] + a / 2) / 1000, 4);
-      expect(c.y).toBeCloseTo((slot.min[1] + b / 2) / 1000, 4);
-      expect(c.z).toBeCloseTo((slot.min[2] + cz / 2) / 1000, 4);
+      expect(c.x).toBeCloseTo((slot.min[0] + a / 2 - ox) / 1000, 4);
+      expect(c.y).toBeCloseTo((slot.min[1] + b / 2 - oy) / 1000, 4);
+      expect(c.z).toBeCloseTo((slot.min[2] + cz / 2 - oz) / 1000, 4);
     });
+  });
+
+  it("centres the crate on the origin, also without parts (#81)", () => {
+    const scene = buildCrateScene(design("PART-001", 4));
+    scene.updateMatrixWorld(true);
+    expect(new Box3().setFromObject(scene).getCenter(new Vector3()).length()).toBeLessThan(0.0005);
   });
 
   it("names the file like the cut list", () => {

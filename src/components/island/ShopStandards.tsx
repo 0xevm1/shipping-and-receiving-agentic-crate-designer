@@ -79,6 +79,23 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    title: "Cradles",
+    fields: [
+      {
+        path: ["cradle", "slenderRatio"],
+        label: "Slender at length ÷ width",
+        unit: "×",
+        step: 0.1,
+        hint: "A part whose longest side is at least this many times its middle side sits in notched cradles.",
+      },
+      { path: ["cradle", "maxSpacingMm"], label: "Cradle spacing", unit: "mm" },
+      { path: ["cradle", "endOffsetMm"], label: "End cradles in from the ends", unit: "mm" },
+      { path: ["cradle", "notchDepth"], label: "Notch depth", unit: "%", scale: 100, hint: "Of the part's height." },
+      { path: ["cradle", "roundTolerance"], label: "Round within", unit: "%", scale: 100, hint: "Sections this close to square get a round seat." },
+      { path: ["cradle", "thickMm"], label: "Cradle thickness", unit: "mm" },
+    ],
+  },
+  {
     title: "Limits",
     fields: [
       { path: ["limits", "trailerMm", "interiorLength"], label: "Trailer floor length", unit: "mm" },
@@ -147,6 +164,37 @@ const GROUPS: Group[] = [
         unit: "in³/lb",
         hint: "Outside L × W × H in inches ÷ this is the dimensional weight.",
       },
+    ],
+  },
+  {
+    title: "Handling",
+    fields: [
+      {
+        path: ["handling", "forklift", "minClearMm"],
+        label: "Forklift: clear under the floor",
+        unit: "mm",
+        hint: "Forks enter between the skids from the ends.",
+      },
+      { path: ["handling", "forklift", "tineWidthMm"], label: "Forklift: tine width", unit: "mm" },
+      { path: ["handling", "forklift", "spreadMm", "min"], label: "Forklift: narrowest spread", unit: "mm", hint: "Outside to outside of the two tines." },
+      { path: ["handling", "forklift", "spreadMm", "max"], label: "Forklift: widest spread", unit: "mm" },
+      { path: ["handling", "palletJack", "minClearMm"], label: "Pallet jack: clear under the floor", unit: "mm" },
+      { path: ["handling", "palletJack", "tineWidthMm"], label: "Pallet jack: fork width", unit: "mm" },
+      {
+        path: ["handling", "palletJack", "spreadMm", "min"],
+        label: "Pallet jack: narrowest spread",
+        unit: "mm",
+        hint: "A narrow jack. Each jack's spread is fixed; any in this range will do.",
+      },
+      { path: ["handling", "palletJack", "spreadMm", "max"], label: "Pallet jack: widest spread", unit: "mm" },
+      {
+        path: ["handling", "cogOffsetRatio"],
+        label: "Off-centre CoG over",
+        unit: "%",
+        scale: 100,
+        hint: "Of the length or width, from the middle. Mark the centre of gravity past it.",
+      },
+      { path: ["handling", "minTipAngleDeg"], label: "Top-heavy below tip angle", unit: "°", hint: "Tilt at which the centre of gravity passes the nearest skid edge." },
     ],
   },
 ];

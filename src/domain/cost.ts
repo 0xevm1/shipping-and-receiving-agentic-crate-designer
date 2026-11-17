@@ -43,7 +43,7 @@ export interface LabourEstimate {
 
 /** Build time and labour cost for one crate. */
 export function estimateLabour(
-  bom: readonly Pick<BomLine, "material" | "stock" | "cut" | "qty">[],
+  bom: readonly (Pick<BomLine, "material" | "stock" | "cut" | "qty"> & Partial<Pick<BomLine, "notches">>)[],
   screws: number,
   layers: number,
   standards: ShopStandards = DEFAULT_STANDARDS,
@@ -54,7 +54,7 @@ export function estimateLabour(
   const sizes = new Set<string>();
   for (const line of bom) {
     if (line.material === "plywood") plywoodCuts += line.qty;
-    else lumberCuts += line.qty;
+    else lumberCuts += line.qty * (1 + (line.notches ?? 0)); // each cradle notch is one more cut (#6)
     sizes.add(`${line.material}|${line.stock}|${line.cut}`);
   }
   const steps = FIXED_ASSEMBLY_STEPS + layers;

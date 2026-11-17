@@ -14,6 +14,7 @@
  * Text follows the selected units (#15): imperial by default, with fractional inches, nominal
  * lumber names and lb; metric when chosen. Formatted with the same helpers as the UI and CSV.
  */
+import { CRADLE_LABEL, longAxis } from "@/domain/cradles";
 import { ASSEMBLY_NAMES } from "@/domain/export";
 import type { Assembly, BomLine, Check, CrateDesign, ScrewLine } from "@/domain/crate";
 import { screwSchedule } from "@/domain/crate";
@@ -87,9 +88,11 @@ export interface PrintableLabel {
   heightMm: number;
   skidTallMm: number;
   skids: { y: number; w: number }[];
-  /** The centre of gravity, once the design has one (#8); null until then. */
+  /** The fork openings between the skids (#8, `design.handling.openings`), where the entry arrows go. */
+  openings: { y: number; w: number }[];
+  /** The design's centre of gravity (#8), crate-interior mm; null for a design without one. */
   cogMm: Vec3 | null;
-  /** The centre of gravity on the end view, from the bottom-left corner; null until #8. */
+  /** The centre of gravity on the end view, from the bottom-left corner; null without one. */
   cogEnd: { y: number; z: number } | null;
 }
 
@@ -178,9 +181,9 @@ function runnerUp(layouts: Layout[], shown: Layout, u: Units): string | null {
   return `${layoutText(next, u)}, ${volume(next.externalVolumeM3, u)}, ${vol}${next.stable ? "" : ", may tip"}.`;
 }
 
-/** Centre of gravity, when the design carries one (#8 adds it). */
+/** The design's centre of gravity (#8), when it is a usable point. */
 function cogOf(design: CrateDesign): Vec3 | null {
-  const cog = (design as CrateDesign & { centerOfGravityMm?: unknown }).centerOfGravityMm;
+  const cog: unknown = design.centerOfGravityMm;
   return Array.isArray(cog) && cog.length === 3 && cog.every((v) => typeof v === "number" && Number.isFinite(v)) ? (cog as Vec3) : null;
 }
 
@@ -224,7 +227,8 @@ function stepOf(assembly: Assembly, what: string): number {
   if (assembly === "base") return 0;
   if (assembly === "sides" || assembly === "ends") return 1;
   if (assembly === "lid") return 4;
-  return what === "Bearer" || what === "bearers" ? 2 : 3;
+  // Bearers and floor cradles (#6) go down before the parts; the rest is blocking.
+  return what === "Bearer" || what === "bearers" || what === CRADLE_LABEL || what === "cradles" ? 2 : 3;
 }
 
 /** The part gap in the layout, from the slot spacing; null with one part per row and column. */
@@ -260,12 +264,31 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
     "Screw the rails and uprights to the outside of each side and end panel. Stand the side walls on the floor, fit the end walls " +
     "between them, then screw the walls to the floor and at the four corners.";
   const grid = nz > 1 ? `${nx} × ${ny} per layer, ${nz} layers` : `${nx} × ${ny}`;
+  const cradles = members.filter((m) => m.label === CRADLE_LABEL).length;
+  const notch = members.find((m) => m.cradle?.notches.length)?.cradle?.notches[0];
+  const notchText = !notch
+    ? ""
+    : notch.shape === "round"
+      ? `Cut each notch as a round seat of ${shopSize(notch.radius, u)} radius, ${shopSize(notch.depth, u)} deep and ${shopSize(notch.width, u)} across, centred on each part. `
+      : `Cut each notch as a flat pocket ${shopSize(notch.width, u)} wide and ${shopSize(notch.depth, u)} deep, centred on each part. `;
   out[2].text =
     (has("bearer") ? "Screw the bearers to the floor under each part position. " : "") +
+    (cradles
+      ? `Screw the ${cradles} notched cradles to the floor across the part positions, notches up, ` +
+        `${cradles / layout.counts[longAxis(layout.cellSize)]} along each part. ${notchText}`
+      : "") +
     `Set the ${layout.slots.length} parts ${layout.orientation.label.toLowerCase()} in a ${grid} grid` +
     `${gap !== null ? `, ${shopSize(gap, u)} apart` : ""}, ${shopSize(Math.min(layout.clearance[0], layout.clearance[1]), u)} or more from the walls` +
     `${nz > 1 ? ", starting with the bottom layer" : ""}.`;
-  out[3].text = !has("blocking")
+  const stopsText = has("blocking")
+    ? "Screw an end stop into the gap at each end of every part, from the floor to the top of the parts, so they can't slide along their length."
+    : "No end stops: the gaps at the part ends are too small (see the blocking check).";
+  out[3].text = cradles
+    ? nz > 1
+      ? "Set a stacking cradle over each floor cradle, notches down onto the layer below, load the next layer into its top notches, " +
+        `and screw each stacking cradle through the side walls. ${stopsText}`
+      : stopsText
+    : !has("blocking")
     ? "No blocking posts: the gaps are too small to block (see the blocking check)."
     : nz > 1
       ? `Screw a blocking post into the gap on each side of every part. Lay a ${separator ? stockText(separator, u) : "plywood"} separator over each ` +
@@ -293,6 +316,7 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
     heightMm: layout.external[2],
     skidTallMm: c.skid.tall,
     skids: members.filter((m) => m.kind === "skid").map((m) => ({ y: m.min[1] - y0, w: m.size[1] })),
+    openings: (design.handling?.openings ?? []).map((o) => ({ y: o.y - y0, w: o.width })),
     cogMm: cog,
     cogEnd: cog ? { y: cog[1] - y0, z: cog[2] - z0 } : null,
   };

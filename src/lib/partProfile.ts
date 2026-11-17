@@ -3,7 +3,7 @@ import { FACE_AXES, type FaceDepth, type FaceId, type PartProfile } from "@/doma
 import type { Vec3 } from "@/domain/schema";
 
 /**
- * Measures a part profile (#16, spec §7.5a) from its mesh: for each of the 6 faces of the
+ * Measures a part profile (#16, spec §7.5b) from its mesh: for each of the 6 faces of the
  * bounding box, the depth from that face inward to the first surface, on a grid.
  *
  * Instead of casting one ray per cell, every triangle is rasterised onto the 3 axis planes at
