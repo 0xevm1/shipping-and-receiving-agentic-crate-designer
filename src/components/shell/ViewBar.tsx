@@ -107,7 +107,7 @@ function ViewPopover() {
         View
       </button>
       {open && (
-        <div className="glass pop" id="view-pop">
+        <div className="glass pop" id="view-pop" data-testid="view-popover">
           <div className="seg" role="group" aria-label="Camera">
             {CAMERAS.map((c) => (
               <button

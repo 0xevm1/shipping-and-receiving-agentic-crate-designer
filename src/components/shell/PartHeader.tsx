@@ -32,7 +32,7 @@ export function PartHeader() {
   const match = modelMatchesCatalog(part, measured);
 
   return (
-    <header className="tl">
+    <header className="tl" data-testid="part-header">
       <div className="brandrow">
         <h1 className="brand">Crate Designer</h1>
         <span className="tagline">Shipping and receiving</span>

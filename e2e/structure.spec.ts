@@ -1,97 +1,115 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
-import { crate, openApp, openTab, panel, pollCrate, setUnits, shot } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
+import {
+  checks,
+  crate,
+  cutQty,
+  cutRow,
+  explode,
+  openApp,
+  openPrintTab,
+  openTab,
+  openViewPopover,
+  panel,
+  pinnedRow,
+  pollCrate,
+  setQuantity,
+  setUnits,
+  sheet,
+  shot,
+  stubPrint,
+  viewButton,
+} from "./helpers";
 
 /**
- * Structural sizing (#7, spec §7.15): a heavy batch gets skids, floor joists and a base rating
- * computed from its spans. 30 brackets is 645 kg of payload, one crate under the 1,000 kg limit,
- * over the 450 kg joist threshold: 3 × 4x6 skids and 7 2x4 floor joists.
+ * Structural sizing (spec §7.15): a heavy batch gets 4x6 skids, floor joists and a base rating computed from
+ * its spans. 30 brackets is one crate under the 1,000 kg limit and over the 450 kg joist threshold. The
+ * formulas, the counts and the rating are unit-tested (`structure.test.ts`); this checks that the cut list, the
+ * checks, the 3D view and the build sheet all show the same structure.
  */
 
-const modeButton = (page: Page) => page.getByRole("button", { name: /view\. Click for/ });
-const viewButton = (page: Page) => page.getByRole("button", { name: "View", exact: true });
-
-async function setQuantity(page: Page, quantity: number) {
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill(String(quantity));
-  await pollCrate(page, (s) => s.quantity).toBe(quantity);
-}
-
-/** The cut-list row for a piece. */
-const row = (page: Page, piece: string): Locator =>
-  panel(page).locator("table.cut tbody tr", { has: page.getByRole("cell", { name: piece, exact: true }) }).first();
-
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context }) => {
+  await stubPrint(context);
   await openApp(page);
 });
 
+/** The base-rating check: its payload and rated load, as numbers, in the units on screen. */
+async function rating(page: Page) {
+  const text = (await checks(page).filter({ hasText: "Base rated" }).textContent()) ?? "";
+  const m = /Base rated ([\d,]+) \w+; this crate's payload is ([\d,]+) \w+ \((\d+)%\)/.exec(text)!;
+  return { rated: Number(m[1].replace(/,/g, "")), payload: Number(m[2].replace(/,/g, "")), pct: Number(m[3]) };
+}
+
 test("the default batch keeps the nominal base and shows its rating", async ({ page }) => {
   await openTab(page, "Cut list");
-  await expect(row(page, "Skid")).toContainText("4x4");
+  await expect(cutRow(page, "Skid")).toContainText(/\dx\d/);
   await expect(panel(page).getByRole("cell", { name: "Floor joist", exact: true })).toHaveCount(0);
   await openTab(page, "Checks");
   await expect(panel(page)).toContainText("Within the base rating");
-  await expect(panel(page)).toContainText(/Base rated \d[\d,]* lb; this crate's payload is 190 lb \(\d+%\)\./);
+  const lb = await rating(page);
+  expect(lb.payload).toBeLessThan(lb.rated);
+  expect(lb.pct).toBe(Math.round((lb.payload / lb.rated) * 100));
   await setUnits(page, "metric");
-  await expect(panel(page)).toContainText(/Base rated \d[\d,]* kg; this crate's payload is 86 kg \(\d+%\)\./);
+  const kg = await rating(page);
+  // The same rating in the other unit: pounds are 2.2 times kilograms.
+  expect(kg.rated * 2.20462).toBeCloseTo(lb.rated, -2);
+  expect(kg.pct).toBe(lb.pct);
 });
 
-test("a heavy batch gets 4x6 skids and floor joists, in the cut list, checks, 3D and build sheet", async ({ page }) => {
+test("a heavy batch gets bigger skids and floor joists, in the cut list, checks, 3D and build sheet", async ({ page }) => {
+  await openTab(page, "Cut list");
+  const defaultSkid = /\dx\d/.exec((await cutRow(page, "Skid").textContent()) ?? "")![0];
   await setQuantity(page, 30);
-  const s = await crate(page);
-  expect(s.crateTypes).toEqual([{ label: "A", count: 1, quantity: 30 }]);
+  expect((await crate(page)).crateTypes).toEqual([{ label: "A", count: 1, quantity: 30 }]);
 
   await openTab(page, "Cut list");
-  await expect(row(page, "Floor joist")).toContainText("2x4");
-  await expect(row(page, "Floor joist").locator("td").last()).toHaveText("7");
-  await expect(row(page, "Skid")).toContainText("4x6");
-  await expect(row(page, "Skid").locator("td").last()).toHaveText("3");
+  await expect(cutRow(page, "Floor joist")).toBeVisible();
+  const joists = Number(await cutQty(cutRow(page, "Floor joist")).textContent());
+  const skids = Number(await cutQty(cutRow(page, "Skid")).textContent());
+  expect(joists).toBeGreaterThan(0);
+  // The skids grew from the default batch's section.
+  const skid = /\dx\d/.exec((await cutRow(page, "Skid").textContent()) ?? "")![0];
+  expect(skid).not.toBe(defaultSkid);
   // Pin the joists, so the 3D view lights them up.
-  await row(page, "Floor joist").click();
-  await expect(row(page, "Floor joist").getByRole("button")).toHaveAttribute("aria-pressed", "true");
-  await shot(page, "24-structure-cutlist");
+  await cutRow(page, "Floor joist").click();
+  await expect(cutRow(page, "Floor joist").getByRole("button")).toHaveAttribute("aria-pressed", "true");
+  await expect(pinnedRow(page)).toHaveCount(1);
+  await shot(page, "structure-cut-list");
 
+  // The check names what the cut list has: its skids, joists and the load factor.
   await openTab(page, "Checks");
-  const rating = panel(page).locator(".check", { hasText: "Within the base rating" });
-  await expect(rating).toContainText("Base rated 1,894 lb; this crate's payload is 1,422 lb (75%).");
-  await expect(rating).toContainText("3 × 4x6 skids, 7 2x4 floor joists and a 3/4″ floor, sized for 1.5× the load (skid bending governs).");
+  const check = checks(page).filter({ hasText: "Within the base rating" });
+  await expect(check).toContainText(new RegExp(`${skids} × ${skid} skids, ${joists} \\dx\\d floor joists and a .* floor, sized for 1\\.5× the load`));
+  expect((await rating(page)).pct).toBeLessThanOrEqual(100);
   await setUnits(page, "metric");
-  await expect(rating).toContainText("Base rated 859 kg; this crate's payload is 645 kg (75%).");
-  await expect(rating).toContainText("3 × 4x6 skids, 7 2x4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).");
-  await shot(page, "24-structure-checks");
+  await expect(check).toContainText(/Base rated [\d,]+ kg; this crate's payload is [\d,]+ kg/);
+  await shot(page, "structure-checks");
   await setUnits(page, "imperial");
 
   await openTab(page, "Overview");
-  await expect(panel(page)).toContainText(/7 2x4 joists and a/);
-  await expect(panel(page)).toContainText(/Rated \d[\d,.]* lb of parts/);
+  await expect(panel(page)).toContainText(new RegExp(`${joists} \\dx\\d joists and a`));
+  await expect(panel(page)).toContainText(/Rated [\d,.]+ lb of parts/);
 
   // Exploded, from the end: the joists lie across the skids under the floor.
-  await modeButton(page).click();
-  await modeButton(page).click();
-  await pollCrate(page, (x) => x.mode).toBe("exploded");
-  await pollCrate(page, (x) => x.anim.explode).toBe(1);
-  await shot(page, "24-structure-exploded");
-  await viewButton(page).click();
-  await page.getByRole("button", { name: "End", exact: true }).click();
+  await explode(page);
+  await shot(page, "structure-exploded");
+  const pop = await openViewPopover(page);
+  await pop.getByRole("button", { name: "End", exact: true }).click();
   await pollCrate(page, (x) => x.view.camera).toBe("end");
   await viewButton(page).click();
   await expect(viewButton(page)).toHaveAttribute("aria-expanded", "false");
-  await shot(page, "24-structure-end");
+  await shot(page, "structure-end");
 });
 
-test("the build sheet lays the joists across the skids and states the rating", async ({ page, context }) => {
-  await context.addInitScript(() => {
-    window.print = () => {};
-  });
+test("the build sheet lays the joists across the skids and states the rating", async ({ page }) => {
   await setQuantity(page, 30);
-  await openTab(page, "Cut list");
-  const [popup] = await Promise.all([page.waitForEvent("popup"), panel(page).getByRole("button", { name: "Print / save PDF" }).click()]);
-  const build = popup.getByRole("region", { name: "Cut list and assembly", exact: true });
+  const print = await openPrintTab(page);
+  const build = sheet(print, "Cut list and assembly");
   await expect(build).toBeVisible();
   await expect(build).toContainText("Floor joist");
   await expect(build).toContainText("Floor joists to skids");
   await expect(build).toContainText("Floor to joists");
-  await expect(build).toContainText(/screw 7 2x4 floor joists on edge across them/);
+  await expect(build).toContainText(/screw \d+ \dx\d floor joists on edge across them/);
   await expect(build).toContainText(/The base is rated for [\d,.]+ lb of parts\./);
-  await expect(popup.getByRole("region", { name: "Crate spec" })).toContainText("Within the base rating");
-  await build.screenshot({ path: "e2e/screenshots/24-structure-build-sheet.png" });
+  await expect(sheet(print, "Crate spec")).toContainText("Within the base rating");
+  await shot(build, "structure-build-sheet");
 });

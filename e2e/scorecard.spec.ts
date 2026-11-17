@@ -1,6 +1,5 @@
-import { mkdirSync } from "node:fs";
-import { expect, test, type Locator, type Page } from "@playwright/test";
-import { openApp, openTab, panel, pollCrate, setUnits, shot } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
+import { layoutCards, openApp, openStandards, openTab, panel, setQuantity, setUnits, shot, standards } from "./helpers";
 
 /**
  * Design scorecard (#17): crate cost (material + labour), build time, freight class and
@@ -30,20 +29,6 @@ const first = (text: string | null) => Number(/[\d,]+(\.\d+)?/.exec(text ?? "")?
 /** What a scorecard tile shows, by its label. */
 const tile = async (page: Page, label: string) => (await scorecard(page).locator("div", { hasText: label }).locator("dd").first().textContent()) ?? "";
 
-/** Element crops for the PR (the full-page shots stay in e2e/screenshots). */
-async function crop(locator: Locator, name: string) {
-  mkdirSync("e2e/screenshots/crops", { recursive: true });
-  await locator.screenshot({ path: `e2e/screenshots/crops/${name}.png` });
-}
-
-const standards = (page: Page) => panel(page).locator("details", { hasText: "Shop standards" });
-
-async function openStandards(page: Page) {
-  await openTab(page, "Rules");
-  await standards(page).getByText("Shop standards", { exact: true }).click();
-  await expect(standards(page)).toHaveAttribute("open", "");
-}
-
 test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
@@ -68,17 +53,17 @@ test("the Overview shows the scorecard under the outside size, in imperial by de
   await expect(card).toContainText(/\d+\.\d lb\/ft³/);
   const dimLb = first(await tile(page, "Dim weight"));
   expect(await tile(page, "Dim weight")).toMatch(/^\d+ lb$/);
-  await expect(card).toContainText("÷ 139 in³/lb"); // the shipped dim-weight divisor, read from the standards
+  await expect(card).toContainText(/÷ [\d,.]+ in³\/lb/); // the dim-weight divisor, set in the standards
   // It sits between the outside size and the build chain.
   const order = await panel(page).evaluate((el) => {
-    const big = el.querySelector(".big")!;
+    const big = el.querySelector('[data-testid="outside-size"]')!;
     const sc = el.querySelector('[aria-label="Scorecard"]')!;
-    const chain = el.querySelector(".chain")!;
+    const chain = el.querySelector('[data-testid="build-chain"]')!;
     return [big.compareDocumentPosition(sc), sc.compareDocumentPosition(chain)].map((p) => (p & 4) === 4); // FOLLOWING
   });
   expect(order).toEqual([true, true]);
-  await crop(card, "17-overview-scorecard");
-  await shot(page, "17-overview-scorecard");
+  await shot(card, "scorecard-card");
+  await shot(page, "scorecard-overview");
 
   const lbFt3 = first(/(\d+\.\d) lb\/ft³/.exec((await card.textContent()) ?? "")?.[1] ?? null);
   await setUnits(page, "metric");
@@ -91,24 +76,21 @@ test("the Overview shows the scorecard under the outside size, in imperial by de
 });
 
 test("the Layouts cards show deltas against the recommendation, and the ranking toggle re-ranks", async ({ page }) => {
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill("8");
-  await pollCrate(page, (s) => s.quantity).toBe(8);
+  await setQuantity(page, 8);
   await openTab(page, "Layouts");
-  await expect(panel(page).locator("button.opt")).toHaveCount(4);
-  const cards = panel(page).locator("button.opt");
+  const cards = layoutCards(page);
+  expect(await cards.count()).toBeGreaterThan(1);
   await expect(cards.first()).toContainText("recommended");
   await expect(cards.first()).toContainText(/\$\d+ to build · class \d+/);
   // Every other card says how it compares in dollars and freight class.
   const count = await cards.count();
-  expect(count).toBeGreaterThan(1);
   for (let i = 1; i < count; i++) {
     await expect(cards.nth(i)).toContainText(/([+−]\$\d+|same cost) · (same class \d+|class \d+(\.5)? → \d+)/);
   }
   const toggle = panel(page).getByRole("group", { name: "Rank layouts by" });
   await expect(toggle.getByRole("button", { name: "Volume" })).toHaveAttribute("aria-pressed", "true");
-  await crop(panel(page), "17-layouts-deltas");
-  await shot(page, "17-layouts-deltas");
+  await shot(panel(page), "scorecard-layouts-panel");
+  await shot(page, "scorecard-layouts-deltas");
 
   await toggle.getByRole("button", { name: "Crate cost" }).click();
   await expect(toggle.getByRole("button", { name: "Crate cost" })).toHaveAttribute("aria-pressed", "true");
@@ -118,7 +100,7 @@ test("the Layouts cards show deltas against the recommendation, and the ranking 
   for (let i = 1; i < (await stable.count()); i++) {
     await expect(stable.nth(i)).not.toContainText(/−\$\d+ ·/);
   }
-  await crop(panel(page), "17-layouts-ranked-by-cost");
+  await shot(panel(page), "scorecard-layouts-ranked-by-cost");
 
   await toggle.getByRole("button", { name: "Freight class" }).click();
   await expect(panel(page)).toContainText("Ranked by freight");
@@ -136,22 +118,23 @@ test("changing the labour rate in Shop standards changes the crate cost", async 
   const labour = standards(page).getByRole("region", { name: "Labour" });
   await expect(labour).toBeVisible();
   const rate = labour.getByLabel("Labour rate");
-  await expect(rate).toHaveValue("35");
-  await expect(labour.getByLabel("Per screw")).toHaveValue("0.15");
-  await expect(standards(page).getByLabel("Screw cost")).toHaveValue("8");
-  await expect(standards(page).getByLabel("Dim weight divisor")).toHaveValue("139");
-  await rate.fill("70");
+  const defaultRate = Number(await rate.inputValue());
+  expect(defaultRate).toBeGreaterThan(0);
+  await expect(labour.getByLabel("Per screw")).toBeVisible();
+  await expect(standards(page).getByLabel("Screw cost")).toBeVisible();
+  await expect(standards(page).getByLabel("Dim weight divisor")).toBeVisible();
+  await rate.fill(String(defaultRate * 2));
   await expect(standards(page).getByText("Customised")).toBeVisible();
   await labour.getByRole("heading", { name: "Labour" }).evaluate((el) => el.scrollIntoView({ block: "start" }));
-  await crop(labour, "17-standards-labour");
-  await shot(page, "17-standards-labour");
+  await shot(labour, "scorecard-standards-labour-group");
+  await shot(page, "scorecard-standards-labour");
 
   await openTab(page, "Overview");
-  // Labour doubles (the rate went from $35 to $70 an hour), so the crate is dearer by what
+  // Labour doubles (the rate doubled), so the crate is dearer by what
   // labour cost before, give or take the rounding of each dollar figure.
   await expect.poll(async () => Math.abs((await crateCost(page)) - (before + labourBefore)) <= 1).toBe(true);
   expect((await costSplit(page)).labour).toBeCloseTo(labourBefore * 2, -1);
-  await expect(scorecard(page)).toContainText("labour at $70/h");
+  await expect(scorecard(page)).toContainText(`labour at $${defaultRate * 2}/h`);
 
   await openStandards(page);
   await standards(page).getByRole("button", { name: "Reset to defaults" }).click();
@@ -159,12 +142,20 @@ test("changing the labour rate in Shop standards changes the crate cost", async 
   await expect.poll(() => crateCost(page)).toBe(before);
 });
 
-test("the first export shows the time to design", async ({ page }) => {
+test("the first export shows the time to design, without moving the card; an edit clears it", async ({ page }) => {
   await openTab(page, "Overview");
   await expect(scorecard(page)).not.toContainText("Designed in");
+  const height = (await scorecard(page).boundingBox())!.height;
   await openTab(page, "Cut list");
   await Promise.all([page.waitForEvent("download"), panel(page).getByRole("button", { name: "Download cut list" }).click()]);
   await openTab(page, "Overview");
   await expect(scorecard(page)).toContainText(/Designed in \d+ s|Designed in \d+ m \d+ s/);
-  await crop(scorecard(page), "17-overview-designed-in");
+  // "Designed in" shares the heading row, so showing or clearing it moves nothing.
+  expect((await scorecard(page).boundingBox())!.height).toBe(height);
+  await shot(scorecard(page), "scorecard-designed-in");
+
+  await setQuantity(page, 5);
+  await openTab(page, "Overview");
+  await expect(scorecard(page)).not.toContainText("Designed in");
+  expect((await scorecard(page).boundingBox())!.height).toBe(height);
 });

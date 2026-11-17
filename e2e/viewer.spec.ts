@@ -1,4 +1,4 @@
 import { defineViewerTests } from "./viewer-tests";
 
-/** Viewer design-review fixes at desktop size (#62 D4, D11). */
+/** Viewer checks at desktop size: size labels per camera, the part pill, fork arrows, a lost WebGL context. */
 defineViewerTests();

@@ -1,8 +1,27 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot, tab, triangleGlb } from "./helpers";
+import {
+  crate,
+  fileInput,
+  island,
+  loadMessage,
+  massField,
+  openApp,
+  openFresh,
+  openTab,
+  otherLayout,
+  panel,
+  pollCrate,
+  reloadApp,
+  sampleFile,
+  setQuantity,
+  setUnits,
+  SHAFT,
+  shot,
+  tab,
+  triangleGlb,
+  waitForScene,
+} from "./helpers";
 
 /**
  * The last-opened crate (#71, spec §9): a reload reopens the crate on screen (rules, layout,
@@ -10,14 +29,7 @@ import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFil
  * and bad saved data opens the default part.
  */
 
-const SHAFT = "PART-002-long-steel-shaft.glb";
 const KEY = "crate-designer.last-design.v1";
-const loadMessage = (page: Page) => page.locator(".loadrow .loadmsg:not(:empty)");
-
-/** Waits for the scene after a load that may not be the default part (`openApp` expects it). */
-async function waitForScene(page: Page) {
-  await page.waitForFunction(() => (window.__crate?.getState().frames ?? 0) > 3, undefined, { timeout: 30_000 });
-}
 
 /** The saved entry's quantity, once the debounced save has written it. */
 const savedQuantity = (page: Page) =>
@@ -47,24 +59,19 @@ test("a reload reopens the same crate: rules, layout, ranking, tab and units", a
   test.slow(); // a reload and several recomputes
   await openApp(page);
   await setUnits(page, "metric");
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill("8");
-  await pollCrate(page, (s) => s.quantity).toBe(8);
+  await setQuantity(page, 8);
   await panel(page).getByRole("group", { name: "Most layers allowed" }).getByRole("button", { name: "2" }).click();
   await panel(page).getByLabel("Gap between parts").fill("40");
   await openTab(page, "Layouts");
   const ranking = panel(page).getByRole("group", { name: "Rank layouts by" });
   await ranking.getByRole("button", { name: "Crate cost" }).click();
   // A layout card that isn't the recommended one.
-  await panel(page).locator(`button.opt[aria-pressed="false"]`).first().click();
+  await otherLayout(page).first().click();
   const before = await crate(page);
   await expect.poll(() => savedQuantity(page)).toBe(8);
-  await shot(page, "20-before-reload");
-  mkdirSync("docs/screenshots/71-last-design", { recursive: true });
-  await page.screenshot({ path: "docs/screenshots/71-last-design/before-reload.png" });
+  await shot(page, "last-design-before-reload");
 
-  await page.reload();
-  await openApp(page);
+  await reloadApp(page);
   const after = await crate(page);
   expect(after.tab).toBe("layouts");
   expect(after.units).toBe("metric");
@@ -76,8 +83,7 @@ test("a reload reopens the same crate: rules, layout, ranking, tab and units", a
   await expect(ranking.getByRole("button", { name: "Crate cost" })).toHaveAttribute("aria-pressed", "true");
   // Reopened quietly: no load message, and the clock isn't restarted (no "Designed in").
   await expect(loadMessage(page)).toHaveCount(0);
-  await shot(page, "20-after-reload");
-  await page.screenshot({ path: "docs/screenshots/71-last-design/after-reload.png" });
+  await shot(page, "last-design-after-reload");
 
   await openTab(page, "Rules");
   await expect(panel(page).getByLabel("Quantity")).toHaveValue("8");
@@ -93,15 +99,13 @@ test("a custom GLB comes back from IndexedDB; a bad kept model opens the default
   await setUnits(page, "metric");
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
-  await page.getByLabel("Mass of one part in kilograms").fill("12.5");
-  await page.getByLabel("Mass of one part in kilograms").press("Enter");
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill("2");
-  await pollCrate(page, (s) => s.quantity).toBe(2);
+  await massField(page).fill("12.5");
+  await massField(page).press("Enter");
+  await setQuantity(page, 2);
   const before = await crate(page);
   await expect.poll(() => keptGlb(page)).toBe("widget_v2.glb");
   await expect.poll(() => savedQuantity(page)).toBe(2);
-  await page.screenshot({ path: "docs/screenshots/71-last-design/custom-before-reload.png" });
+  await shot(page, "last-design-custom-before-reload");
 
   await page.reload();
   await waitForScene(page);
@@ -109,8 +113,8 @@ test("a custom GLB comes back from IndexedDB; a bad kept model opens the default
   await pollCrate(page, (s) => s.quantity).toBe(2);
   await pollCrate(page, (s) => s.massAssumed).toBe(false);
   await pollCrate(page, (s) => s.outside).toEqual(before.outside);
-  await expect(page.getByLabel("Mass of one part in kilograms")).toHaveValue("12.5");
-  await page.screenshot({ path: "docs/screenshots/71-last-design/custom-after-reload.png" });
+  await expect(massField(page)).toHaveValue("12.5");
+  await shot(page, "last-design-custom-after-reload");
 
   // Damaged bytes in IndexedDB: the default part opens, without an error.
   await page.evaluate(
@@ -126,8 +130,7 @@ test("a custom GLB comes back from IndexedDB; a bad kept model opens the default
   );
   const errors: Error[] = [];
   page.on("pageerror", (e) => errors.push(e));
-  await page.reload();
-  await openApp(page);
+  await reloadApp(page);
   expect((await crate(page)).partId).toBe("PART-001");
   expect(errors).toEqual([]);
 });
@@ -143,9 +146,7 @@ test("a GLB over the 50 MB cap isn't kept: the reload opens the default part and
   const binHeader = 20 + jsonLength;
   big.writeUInt32LE(big.length, 8);
   big.writeUInt32LE(small.readUInt32LE(binHeader) + 51 * 1024 * 1024, binHeader);
-  const dir = join(tmpdir(), `crate-e2e-${process.pid}`);
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, "big_part.glb");
+  const path = test.info().outputPath("big_part.glb");
   writeFileSync(path, big);
   await fileInput(page).setInputFiles(path);
   await expect(island(page).getByRole("heading", { name: "Big part", exact: true })).toBeVisible();
@@ -153,8 +154,7 @@ test("a GLB over the 50 MB cap isn't kept: the reload opens the default part and
   // Give the (refused) IndexedDB write time to settle; nothing is kept.
   await expect.poll(() => keptGlb(page)).toBeNull();
 
-  await page.reload();
-  await openApp(page);
+  await reloadApp(page);
   expect((await crate(page)).partId).toBe("PART-001");
   await expect(loadMessage(page)).toContainText("Load big_part.glb to reopen your last crate");
 });
@@ -166,8 +166,7 @@ test("corrupt saved data opens the default part without an error", async ({ page
   const warnings: string[] = [];
   page.on("pageerror", (e) => errors.push(e));
   page.on("console", (m) => m.type() === "warning" && warnings.push(m.text()));
-  await page.reload();
-  await openApp(page);
+  await reloadApp(page);
   const s = await crate(page);
   expect(s.partId).toBe("PART-001");
   expect(s.quantity).toBe(4);
@@ -180,27 +179,21 @@ test("corrupt saved data opens the default part without an error", async ({ page
 test("a share link wins over the remembered crate", async ({ page }) => {
   test.slow();
   await openApp(page);
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill("2");
-  await pollCrate(page, (s) => s.quantity).toBe(2);
+  await setQuantity(page, 2);
   await openTab(page, "Overview");
   const section = panel(page).getByRole("region", { name: "Saved designs" });
   await section.getByRole("button", { name: "Copy share link" }).click();
   const link = await section.getByLabel("Share link").inputValue();
 
   // Remember a different crate, then open the link on a fresh load.
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill("8");
+  await setQuantity(page, 8);
   await expect.poll(() => savedQuantity(page)).toBe(8);
-  await page.goto("about:blank");
-  await page.goto(link);
-  await waitForScene(page);
+  await openFresh(page, link);
   await expect(loadMessage(page)).toContainText("Design loaded: 2 × Machined steel bracket.");
   await pollCrate(page, (s) => s.quantity).toBe(2);
 
   // The shared crate is now the last-opened one.
   await expect.poll(() => savedQuantity(page)).toBe(2);
-  await page.reload();
-  await openApp(page);
+  await reloadApp(page);
   await pollCrate(page, (s) => s.quantity).toBe(2);
 });

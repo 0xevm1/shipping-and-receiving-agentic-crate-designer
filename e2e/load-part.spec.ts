@@ -1,74 +1,95 @@
-import { expect, test } from "@playwright/test";
-import { fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot, tab, triangleGlb } from "./helpers";
-
-const SHAFT = "PART-002-long-steel-shaft.glb";
+import { expect, test, type Page } from "@playwright/test";
+import {
+  crate,
+  fileInput,
+  header,
+  island,
+  loadMessage,
+  massField,
+  mmText,
+  nameField,
+  materialField,
+  openApp,
+  openTab,
+  panel,
+  pollCrate,
+  sampleFile,
+  setUnits,
+  SHAFT,
+  shot,
+  tab,
+  triangleGlb,
+} from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
   await setUnits(page, "metric");
 });
 
+/** The number on the Checks tab's caution badge (0 without one). */
+async function cautions(page: Page) {
+  const badge = tab(page, "Checks").getByTestId("caution-count");
+  return (await badge.count()) ? Number((await badge.textContent())!.match(/\d+/)![0]) : 0;
+}
+
 test("a catalog GLB fills in its mass and material", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
 
-  const header = page.getByRole("banner");
-  await expect(header).toContainText("PART-002 · Long steel shaft");
-  await expect(header).toContainText(/4140 steel · 27 kg each · crate gross \d+(\.\d)? kg/);
+  await expect(header(page)).toContainText("PART-002 · Long steel shaft");
+  await expect(header(page)).toContainText(/4140 steel · [\d.]+ kg each · crate gross \d+(\.\d)? kg/);
   // Catalog parts are read-only: the same sentence, with no fields.
-  await expect(header.locator("input")).toHaveCount(0);
-  await expect(header).toContainText("model matches catalog");
+  await expect(header(page).locator("input")).toHaveCount(0);
+  await expect(header(page)).toContainText("model matches catalog");
   await expect(island(page).getByRole("heading", { name: "Long steel shaft", exact: true })).toBeVisible();
-  await pollCrate(page, (s) => s.outside).toEqual([1692, 334, 411]);
-  await expect(panel(page)).toContainText("1692 × 334 × 411");
-  await expect(page.getByLabel("Mass of one part in kilograms")).toHaveCount(0);
-  await shot(page, "07-catalog-part");
+  await pollCrate(page, (s) => s.partId).toBe("PART-002");
+  await expect(panel(page)).toContainText(mmText((await crate(page)).outside!));
+  await expect(massField(page)).toHaveCount(0);
+  await shot(page, "load-part-catalog");
 });
 
 test("an unknown GLB uses a stand-in mass until details are entered", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
 
-  const header = page.getByRole("banner");
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
-  await expect(header.getByLabel("Mass of one part in kilograms")).toHaveValue("10");
-  await expect(header).toContainText("kg each stand-in");
-  await expect(header).toContainText("size measured from the file");
-  // The stand-in mass adds one caution; other checks (e.g. #8's fork entry on this narrow crate)
-  // may add their own, so compare counts rather than fixing the badge number.
+  await expect(massField(page)).toHaveValue("10");
+  await expect(header(page)).toContainText("kg each stand-in");
+  await expect(header(page)).toContainText("size measured from the file");
+  // The stand-in mass adds one caution; other checks (fork entry on this narrow crate, say) may add
+  // their own, so compare counts rather than fixing the badge number.
   await pollCrate(page, (s) => s.massAssumed).toBe(true);
-  await expect(tab(page, /Checks/)).toHaveText(/^Checks\d+$/);
-  const cautions = Number((await tab(page, /Checks/).textContent())!.replace("Checks", ""));
+  await expect.poll(() => cautions(page)).toBeGreaterThan(0);
+  const before = await cautions(page);
   await openTab(page, /Checks/);
   await expect(panel(page)).toContainText("Part mass is a stand-in");
-  await shot(page, "07-unknown-part-standin");
+  await shot(page, "load-part-standin");
 
-  // The inline fields commit on Enter (spec §8.5).
-  await page.getByLabel("Part name").fill("Test widget");
-  await page.getByLabel("Part name").press("Enter");
-  await page.getByLabel("Part material").fill("6061-T6 aluminum");
-  await page.getByLabel("Part material").press("Enter");
-  await page.getByLabel("Mass of one part in kilograms").fill("12.5");
-  await page.getByLabel("Mass of one part in kilograms").press("Enter");
+  // The inline fields commit on Enter.
+  await nameField(page).fill("Test widget");
+  await nameField(page).press("Enter");
+  await materialField(page).fill("6061-T6 aluminum");
+  await materialField(page).press("Enter");
+  await massField(page).fill("12.5");
+  await massField(page).press("Enter");
 
   await expect(island(page).getByRole("heading", { name: "Test widget", exact: true })).toBeVisible();
-  await expect(header).not.toContainText("stand-in");
-  await expect(tab(page, /Checks/)).toHaveText(cautions > 1 ? `Checks${cautions - 1}` : "Checks");
+  await expect(header(page)).not.toContainText("stand-in");
+  await expect.poll(() => cautions(page)).toBe(before - 1);
   await expect(panel(page)).not.toContainText("Part mass is a stand-in");
   await pollCrate(page, (s) => s.massAssumed).toBe(false);
   await openTab(page, "Overview");
   await expect(panel(page)).toContainText("12.5 kg, 6061-T6 aluminum");
-  await shot(page, "07-unknown-part-details");
+  await shot(page, "load-part-details");
 });
 
-test("a text .gltf is rejected with a message", async ({ page }) => {
+test("a text .gltf is rejected with a message, and the current part stays", async ({ page }) => {
   await fileInput(page).setInputFiles({
     name: "bracket.gltf",
     mimeType: "model/gltf+json",
     buffer: Buffer.from(JSON.stringify({ asset: { version: "2.0" } })),
   });
-  await expect(page.getByText("Text .gltf files can't be used. Export the part as a single .glb file.")).toBeVisible();
-  // The current part stays.
-  await expect(page.getByRole("banner")).toContainText("PART-001");
-  await shot(page, "07-gltf-rejected");
+  await expect(loadMessage(page, "Text .gltf files can't be used. Export the part as a single .glb file.")).toBeVisible();
+  await expect(header(page)).toContainText("PART-001");
+  await shot(page, "load-part-gltf-rejected");
 });
 
 test("a part over 20 m is refused with a problem message", async ({ page }) => {
@@ -78,5 +99,36 @@ test("a part over 20 m is refused with a problem message", async ({ page }) => {
   await expect(alert).toContainText("The part is over 20 m long");
   await expect(alert).toContainText("Its longest side is 30000 mm");
   await pollCrate(page, (s) => s.problem).toBe("part-too-large");
-  await shot(page, "07-part-too-large");
+  await shot(page, "load-part-too-large");
+});
+
+test("dragging text over the page doesn't raise the drop veil or swallow the drop; a file drag does", async ({ page }) => {
+  const veil = page.getByTestId("drop-veil");
+  // A text drag has no "Files" type.
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "selected text");
+    window.dispatchEvent(new DragEvent("dragenter", { dataTransfer: dt, cancelable: true }));
+  });
+  await expect(veil).toHaveCount(0);
+  const prevented = await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "selected text");
+    const e = new DragEvent("drop", { dataTransfer: dt, cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  expect(prevented).toBe(false);
+
+  // A file drag still shows it, and the drop is read (a .txt is told to choose a .glb).
+  const dt = await page.evaluateHandle(() => {
+    const d = new DataTransfer();
+    d.items.add(new File(["hello"], "note.txt", { type: "text/plain" }));
+    return d;
+  });
+  await page.dispatchEvent("body", "dragenter", { dataTransfer: dt });
+  await expect(veil).toBeVisible();
+  await page.dispatchEvent("body", "drop", { dataTransfer: dt });
+  await expect(veil).toHaveCount(0);
+  await expect(loadMessage(page)).toHaveText("Choose a .glb file or a design .json.");
 });

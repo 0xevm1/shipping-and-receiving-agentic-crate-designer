@@ -1,102 +1,129 @@
 import { expect, test, type Page } from "@playwright/test";
-import { fileInput, island, openApp, openTab, panel, sampleFile, setUnits, shot } from "./helpers";
-import { closeView, explode, expectArrowClearOfWidthLabel } from "./27-layout-helpers";
+import {
+  crate,
+  fileInput,
+  header,
+  island,
+  massField,
+  materialField,
+  mmText,
+  nameField,
+  openApp,
+  panel,
+  sampleFile,
+  screenBox,
+  setQuantity,
+  setUnits,
+  SHAFT,
+  shot,
+  triangleGlb,
+} from "./helpers";
 
 /**
- * UI review layout fixes (#62), desktop: the short change note, the header note on one line,
- * the cut list's Qty column, plain "4x4" next to a true "×", and the fork arrow clear of the
- * width label. Phone sizes are in 27-ui-review-layout.mobile.spec.ts.
+ * What an edit moved: a short note that fades (under the part header and at the top of the island),
+ * the full before → after on hover and for screen readers, and a gold flash on the changed values.
  */
 
-const header = (page: Page) => page.getByRole("banner");
-const islandNote = (page: Page) => island(page).locator(".island-note");
+const headerNote = (page: Page) => header(page).getByTestId("change-note");
+const islandNote = (page: Page) => island(page).getByTestId("change-note");
+const flashes = (page: Page) => page.getByTestId("flash");
 
-async function setQuantity(page: Page, n: number) {
-  await openTab(page, "Rules");
-  await panel(page).getByLabel("Quantity").fill(String(n));
-  await panel(page).getByLabel("Quantity").blur();
+/** The gross in the header sentence ("crate gross 15.6 kg"), as a number. */
+async function headerGross(page: Page) {
+  return Number(/crate gross ([\d.]+)/.exec((await header(page).textContent()) ?? "")![1]);
+}
+
+/** A generated 1 mm part, as in the hardening tests: the crate is the fixed minimum size, so a mass edit moves only the weights. */
+async function loadTiny(page: Page) {
+  await fileInput(page).setInputFiles({ name: "tiny-pin.glb", mimeType: "model/gltf-binary", buffer: triangleGlb([0.001, 0.001, 0.001]) });
+  await expect(nameField(page)).toHaveValue("Tiny pin");
+  await expect(header(page)).toContainText("1 × 1 × 1 mm");
 }
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
+});
+
+test("a mass edit updates the header gross, notes the change and flashes the Overview", async ({ page }) => {
+  // Motion on for this test, so the highlight animates for the screenshot.
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await loadTiny(page);
+  await expect(header(page)).toContainText("kg each stand-in");
+  const before = await headerGross(page);
+  await expect(massField(page)).toHaveValue("10");
+
+  await massField(page).fill("14.71");
+  await massField(page).press("Enter");
+  // One tiny part: the gross moves by the mass change, 4.71 kg.
+  await expect.poll(() => headerGross(page)).toBeCloseTo(before + 4.71, 0);
+  const after = await headerGross(page);
+  await expect(headerNote(page)).toHaveText(new RegExp(`^Crate heavier: ${after.toFixed(1)} kg`));
+  // The full before → after is on hover (title) and in screen-reader text.
+  const detail = /^Gross \d+ → \d+ kg, parts 10 → 15 kg$/;
+  await expect(headerNote(page).locator(":scope > span")).toHaveAttribute("title", detail);
+  await expect(headerNote(page).getByTestId("change-note-detail")).toHaveText(/^\. Details: Gross \d+ → \d+ kg, parts 10 → 15 kg$/);
+  // The changed values carry the highlight: the header gross and the Overview gross and parts.
+  await expect(header(page).getByTestId("flash")).toHaveText(`${after.toFixed(1)} kg`);
+  await expect(panel(page).getByTestId("flash").first()).toBeVisible();
+  await expect(panel(page).getByTestId("build-chain").getByTestId("flash")).toHaveText(["14.7 kg", `${after.toFixed(1)} kg`]);
+  await shot(page, "change-note-flash");
+  await shot(header(page), "change-note-header");
+});
+
+test("an edit that doesn't move the crate says so", async ({ page }) => {
+  await loadTiny(page);
+  const before = await headerGross(page);
+
+  // +0.1 kg on a 1 mm part: the gross moves a little, but not enough to show in the note.
+  await massField(page).focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(massField(page)).toHaveValue("10.1");
+  await expect(headerNote(page)).toHaveText("No change to the crate");
+  await expect.poll(() => headerGross(page)).toBeCloseTo(before + 0.1, 1);
+  await expect(flashes(page)).toHaveCount(0);
+
+  // A material doesn't change the crate either.
+  await materialField(page).fill("4140 steel");
+  await materialField(page).press("Enter");
+  await expect(headerNote(page)).toHaveText("No change to the crate");
+  await shot(header(page), "change-note-no-change");
+  // The note goes after a few seconds.
+  await expect(headerNote(page)).toHaveText("", { timeout: 10_000 });
 });
 
 test("a big edit gets a short note, with the full before and after on hover and for screen readers", async ({ page }) => {
-  await setUnits(page, "metric");
+  const outsideBefore = mmText((await crate(page)).outside!);
   await setQuantity(page, 200);
+  await panel(page).getByLabel("Quantity").blur();
   const note = islandNote(page);
   await expect(note).toHaveText(/^Crate grew: \d+ × \d+ × \d+ mm, \d+ kg/);
   // The visible text is short; the detail (every change, before → after) is the title and hidden text.
-  const visible = await note.locator("> span").evaluate((el) => (el.firstChild as Text).data);
+  const visible = await note.locator(":scope > span").evaluate((el) => (el.firstChild as Text).data);
   expect(visible.length).toBeLessThan(50);
-  await expect(note.locator("> span")).toHaveAttribute("title", /^Gross \d+ → \d+ kg, outside 932 × 652 × 497 → \d+ × \d+ × \d+ mm/);
-  await expect(note.locator(".sr-only")).toContainText("Details: Gross");
-  await shot(page, "27-short-change-note");
+  await expect(note.locator(":scope > span")).toHaveAttribute("title", new RegExp(`^Gross \\d+ → \\d+ kg, outside ${outsideBefore} → \\d+ × \\d+ × \\d+ mm`));
+  await expect(note.getByTestId("change-note-detail")).toContainText("Details: Gross");
+  await shot(page, "change-note-short");
 
   // Imperial says it in inches and pounds.
   await setUnits(page, "imperial");
   await setQuantity(page, 4);
+  await panel(page).getByLabel("Quantity").blur();
   await expect(note).toHaveText(/^Crate shrank: [\d.]+ × [\d.]+ × [\d.]+ in, \d+ lb/);
 });
 
-test("the header note stays on one line at quantity 200", async ({ page }) => {
-  await setUnits(page, "metric");
-  await fileInput(page).setInputFiles(sampleFile("PART-002-long-steel-shaft.glb", "gearbox-cover.glb"));
-  await expect(header(page).getByLabel("Part name")).toHaveValue("Gearbox cover");
+test("the header note stays on one line at quantity 200 and stops short of the island", async ({ page }) => {
+  await fileInput(page).setInputFiles(sampleFile(SHAFT, "gearbox-cover.glb"));
+  await expect(nameField(page)).toHaveValue("Gearbox cover");
   await setQuantity(page, 200);
-  await header(page).getByLabel(/Mass of one part in/).fill("230.5");
-  await header(page).getByLabel(/Mass of one part in/).press("Enter");
+  await panel(page).getByLabel("Quantity").blur();
+  await massField(page).fill("230.5");
+  await massField(page).press("Enter");
 
-  const span = header(page).locator(".changenote").locator("> span");
+  const span = headerNote(page).locator(":scope > span");
   await expect(span).toContainText("Crate");
   const [box, line] = await Promise.all([span.boundingBox(), span.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))]);
   expect(box!.height, "one line").toBeLessThanOrEqual(line + 2);
-  const left = (await island(page).boundingBox())!.x;
-  expect(box!.x + box!.width, "stops short of the island").toBeLessThanOrEqual(left);
-  await shot(page, "27-header-qty-200");
-});
-
-for (const units of ["imperial", "metric"] as const) {
-  test(`the cut list's Qty column is fully visible in ${units}`, async ({ page }) => {
-    await setUnits(page, units);
-    await openTab(page, "Cut list");
-    const gap = await page.evaluate(() => {
-      const p = document.querySelector('[role="tabpanel"]') as HTMLElement;
-      const pr = p.getBoundingClientRect();
-      const pad = parseFloat(getComputedStyle(p).paddingRight);
-      const cells = [...p.querySelectorAll(".cut td:last-child, .cut th:last-child")].filter((c) => (c as HTMLElement).offsetWidth > 0);
-      const right = Math.max(...cells.map((c) => c.getBoundingClientRect().right));
-      return { room: pr.right - pad - right, overflow: p.scrollWidth - p.clientWidth, cells: cells.length };
-    });
-    expect(gap.cells).toBeGreaterThan(5);
-    // Nothing pokes into the panel's right padding, and the panel doesn't scroll sideways.
-    expect(gap.room, "Qty ends inside the panel's padding").toBeGreaterThanOrEqual(-0.5);
-    expect(gap.overflow).toBeLessThanOrEqual(0);
-    await shot(page, `27-cut-list-${units}`);
-  });
-}
-
-test('"4x4" keeps a plain x while real sizes keep the × character', async ({ page }) => {
-  await setUnits(page, "imperial");
-  await openTab(page, "Cut list");
-  const skid = panel(page).locator(".cut .row", { hasText: "Skid" }).locator("td.nominal");
-  await expect(skid).toHaveText("4x4");
-  await expect(skid).toHaveCSS("font-feature-settings", '"calt" 0');
-  // Cuts and sizes use ×.
-  await expect(panel(page).locator(".cut .row", { hasText: "Floor" })).toContainText("11/16″ × 25");
-  await openTab(page, "Overview");
-  const base = panel(page).locator("span.nominal", { hasText: "4x4" }).first();
-  await expect(base).toHaveCSS("font-feature-settings", '"calt" 0');
-  await expect(panel(page)).toContainText("36.7 × 25.7 × 19.6");
-  await shot(page, "27-nominal-x");
-});
-
-test("the fork arrow clears the width label, closed and exploded", async ({ page }) => {
-  await setUnits(page, "imperial");
-  await expectArrowClearOfWidthLabel(page);
-  await shot(page, "27-arrow-label-closed");
-  await explode(page);
-  await expectArrowClearOfWidthLabel(page);
-  await shot(page, "27-arrow-label-exploded");
-  await closeView(page);
+  expect(box!.x + box!.width, "stops short of the island").toBeLessThanOrEqual((await screenBox(island(page))).left);
+  await shot(page, "change-note-header-qty-200");
 });

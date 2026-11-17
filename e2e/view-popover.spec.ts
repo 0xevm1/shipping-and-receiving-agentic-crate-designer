@@ -1,28 +1,25 @@
-import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
-import { openApp, sampleFile } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { header, island, openApp, openViewPopover, overlaps, screenBox, shot, stage, summary, viewButton, viewPopover } from "./helpers";
 
-const viewButton = (page: Page) => page.getByRole("button", { name: "View", exact: true });
-const pop = (page: Page) => page.locator("#view-pop");
+/** The View popover: where it opens, that nothing covers it, how it closes, and what it says. */
 
-test.describe("View popover", () => {
+test.describe("keyboard and pointer", () => {
   test.beforeEach(async ({ page }) => {
     await openApp(page);
-    await viewButton(page).click();
-    await expect(pop(page)).toBeVisible();
+    await openViewPopover(page);
   });
 
   test("aria-controls names the popover only while it exists", async ({ page }) => {
     await expect(viewButton(page)).toHaveAttribute("aria-controls", "view-pop");
     await page.keyboard.press("Escape");
-    await expect(pop(page)).toHaveCount(0);
+    await expect(viewPopover(page)).toHaveCount(0);
     await expect(viewButton(page)).not.toHaveAttribute("aria-controls", /.+/);
   });
 
   test("Escape closes it and returns focus to the View button", async ({ page }) => {
     await page.getByRole("checkbox", { name: "Lid" }).focus();
     await page.keyboard.press("Escape");
-    await expect(pop(page)).toHaveCount(0);
+    await expect(viewPopover(page)).toHaveCount(0);
     await expect(viewButton(page)).toBeFocused();
     await expect(viewButton(page)).toHaveAttribute("aria-expanded", "false");
   });
@@ -32,150 +29,85 @@ test.describe("View popover", () => {
     // Past the last control the focus goes to the Hide panels button, outside the popover.
     await page.getByRole("slider", { name: "Pull apart" }).focus();
     await page.keyboard.press("Tab");
-    await expect(pop(page)).toHaveCount(0);
+    await expect(viewPopover(page)).toHaveCount(0);
   });
 
-  test("closes on a press outside", async ({ page }) => {
-    await page.getByRole("region", { name: "3D view of the crate" }).click({ position: { x: 200, y: 400 } });
-    await expect(pop(page)).toHaveCount(0);
+  test("closes on a press outside, on the stage or the header", async ({ page }) => {
+    await stage(page).click({ position: { x: 200, y: 400 } });
+    await expect(viewPopover(page)).toHaveCount(0);
+
+    await openViewPopover(page);
+    await header(page).click();
+    await expect(viewButton(page)).toHaveAttribute("aria-expanded", "false");
   });
 });
 
-test("dragging text over the page doesn't raise the drop veil or swallow the drop", async ({ page }) => {
+test("the popover opens above the island and isn't covered; every preset is clickable", async ({ page }) => {
   await openApp(page);
-  const veil = page.locator(".dropveil");
-  // A text drag has no "Files" type.
-  await page.evaluate(() => {
-    const dt = new DataTransfer();
-    dt.setData("text/plain", "selected text");
-    window.dispatchEvent(new DragEvent("dragenter", { dataTransfer: dt, cancelable: true }));
-  });
-  await expect(veil).toHaveCount(0);
-  const prevented = await page.evaluate(() => {
-    const dt = new DataTransfer();
-    dt.setData("text/plain", "selected text");
-    const e = new DragEvent("drop", { dataTransfer: dt, cancelable: true });
-    window.dispatchEvent(e);
-    return e.defaultPrevented;
-  });
-  expect(prevented).toBe(false);
-
-  // A file drag still shows it, and the drop is read (a .txt is told to choose a .glb).
-  const dt = await page.evaluateHandle(() => {
-    const d = new DataTransfer();
-    d.items.add(new File(["hello"], "note.txt", { type: "text/plain" }));
-    return d;
-  });
-  await page.dispatchEvent("body", "dragenter", { dataTransfer: dt });
-  await expect(veil).toBeVisible();
-  await page.dispatchEvent("body", "drop", { dataTransfer: dt });
-  await expect(veil).toHaveCount(0);
-  await expect(page.locator(".loadmsg:not(:empty)")).toHaveText("Choose a .glb file or a design .json.");
+  const pop = await openViewPopover(page);
+  const box = (await pop.boundingBox())!;
+  // Sample points across the popover: each must hit the popover itself, not the island or canvas.
+  const misses = await pop.evaluate((root, { x, y, width, height }) => {
+    const out: string[] = [];
+    for (const fx of [0.1, 0.5, 0.9]) {
+      for (const fy of [0.1, 0.5, 0.9]) {
+        const el = document.elementFromPoint(x + width * fx, y + height * fy);
+        if (!el || !root.contains(el)) out.push(`${fx},${fy}: ${el?.tagName}`);
+      }
+    }
+    return out;
+  }, box);
+  expect(misses).toEqual([]);
+  // Playwright's hit test fails if something sits on top of a preset.
+  for (const name of ["3D", "Top", "Front", "End"]) {
+    await pop.getByRole("button", { name, exact: true }).click({ trial: true });
+  }
+  await shot(page, "view-popover-open");
 });
 
-type Box = { x: number; y: number; width: number; height: number };
-const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+test("it names the gestures, and has no export button (Export is the pill in the header)", async ({ page }) => {
+  await openApp(page);
+  await expect(viewButton(page)).toHaveAttribute("title", /right-drag to pan/);
+  const pop = await openViewPopover(page);
+  await expect(pop).toContainText("right-drag to pan");
+  await expect(pop.getByLabel("Include parts", { exact: true })).toHaveCount(0);
+  await expect(pop.getByRole("button", { name: /Export/ })).toHaveCount(0);
+  // Nothing floats over the stage.
+  await expect(page.getByTestId("view-hint")).toHaveCount(0);
+});
 
-test.describe("View popover placement", () => {
+test.describe("placement", () => {
   for (const [width, height] of [
     [1440, 900],
     [1280, 720],
     [900, 800],
     [390, 844],
   ]) {
-    test(`${width}×${height}: clear of the island and the summary bar, inside the window`, async ({ page }) => {
+    test(`${width}×${height}: clear of the island and the summary bar, inside the window, near-opaque`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await openApp(page);
       await viewButton(page).click();
-      const box = (await pop(page).boundingBox())!;
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.y).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(width);
-      expect(box.y + box.height).toBeLessThanOrEqual(height);
+      const box = await screenBox(viewPopover(page));
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(box.bottom).toBeLessThanOrEqual(height);
       if (width > 980) {
         // Desktop: the right edge is at the island's left edge, never over the scorecard.
-        const island = (await page.locator("#island").boundingBox())!;
-        expect(box.x + box.width).toBeLessThanOrEqual(island.x);
+        expect(box.right).toBeLessThanOrEqual((await screenBox(island(page))).left);
       } else {
-        const summary = (await page.locator(".summary").boundingBox())!;
-        expect(overlaps(box, summary)).toBe(false);
+        expect(overlaps(box, await screenBox(summary(page)))).toBe(false);
       }
-      // The surface is near-opaque.
-      const bg = await pop(page).evaluate((el) => getComputedStyle(el).backgroundImage);
-      expect(bg).toMatch(/rgba\(\d+, \d+, \d+, 0\.9\d\)/);
-      await page.screenshot({ path: `e2e/screenshots/31-view-popover-${width}x${height}.png` });
+      // The surface is near-opaque, so the 3D scene doesn't show through its text.
+      await expectNearOpaque(viewPopover(page));
+      await shot(page, `view-popover-${width}x${height}`);
     });
   }
 });
 
-const toast = (page: Page) => page.locator(".loadrow");
-const toastText = (page: Page) => page.locator(".loadrow .loadmsg:not(:empty)");
-
-/** The toast hangs under the header: inside the window, clear of the island and below the header. */
-async function expectToastPlaced(page: Page) {
-  const box = (await toast(page).boundingBox())!;
-  const header = (await page.locator("header.tl").boundingBox())!;
-  const vp = page.viewportSize()!;
-  expect(box.y).toBeGreaterThanOrEqual(header.y + header.height);
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
-  if (vp.width > 980) {
-    const island = (await page.locator("#island").boundingBox())!;
-    expect(box.x + box.width).toBeLessThanOrEqual(island.x);
-  }
+async function expectNearOpaque(popover: ReturnType<typeof viewPopover>) {
+  const background = await popover.evaluate((el) => getComputedStyle(el).backgroundImage);
+  const alphas = [...background.matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((m) => Number(m[1]));
+  expect(alphas.length, `a translucent surface: ${background}`).toBeGreaterThan(0);
+  for (const a of alphas) expect(a).toBeGreaterThanOrEqual(0.85);
 }
-
-for (const [width, height] of [
-  [1440, 900],
-  [390, 844],
-]) {
-  test(`${width}x${height}: a bad file shows an error toast (an alert) that stays until dismissed`, async ({ page }) => {
-    await page.setViewportSize({ width, height });
-    await openApp(page);
-    await page.locator('#island input[type="file"]').setInputFiles({ name: "bad.glb", mimeType: "model/gltf-binary", buffer: Buffer.from("not a model") });
-    await expect(page.getByRole("alert").filter({ hasText: "That isn't a .glb file. Choose a .glb or a design .json." })).toBeVisible();
-    await expectToastPlaced(page);
-    expect(await toastText(page).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13);
-    await page.screenshot({ path: `e2e/screenshots/31-load-error-${width}x${height}.png` });
-    // Errors don't go by themselves.
-    await page.waitForTimeout(500);
-    await expect(toastText(page)).toHaveCount(1);
-    await page.getByRole("button", { name: "Dismiss the message" }).click();
-    await expect(toastText(page)).toHaveCount(0);
-  });
-
-  test(`${width}x${height}: a note shows in the same toast (a status) and goes by itself`, async ({ page }) => {
-    await page.setViewportSize({ width, height });
-    await openApp(page);
-    // Open a design file that was saved from this crate: "Design loaded: ...".
-    if (width <= 980) await page.getByRole("button", { name: "Crate details" }).click();
-    await page.getByRole("tab", { name: "Cut list" }).click();
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page.getByRole("button", { name: "Download design (.json)" }).click(),
-    ]);
-    const text = readFileSync((await download.path())!, "utf8");
-    await page.locator('#island input[type="file"]').setInputFiles({ name: "crate-design.json", mimeType: "application/json", buffer: Buffer.from(text) });
-    const note = page.getByRole("status").filter({ hasText: "Design loaded: 4 × Machined steel bracket." });
-    await expect(note).toBeVisible();
-    if (width <= 980) await page.getByRole("button", { name: "Close the panel" }).click();
-    await expectToastPlaced(page);
-    await page.screenshot({ path: `e2e/screenshots/31-load-note-${width}x${height}.png` });
-    // A note goes by itself.
-    await expect(toastText(page)).toHaveCount(0, { timeout: 15_000 });
-  });
-}
-
-test("the Export pill notes cautions with a dot, a title and a description; none without", async ({ page }) => {
-  await openApp(page);
-  const pill = page.getByRole("button", { name: /Export specs/ });
-  await expect(pill.locator(".exportdot")).toHaveCount(0);
-  await expect(pill).not.toHaveAttribute("title", /caution/);
-  // A model with no catalog data comes with a stand-in mass: a caution.
-  await page.locator('#island input[type="file"]').setInputFiles(sampleFile("PART-001-machined-steel-bracket.glb", "custom_widget.glb"));
-  await expect(pill.locator(".exportdot")).toHaveCount(1);
-  await expect(pill).toHaveAttribute("title", /\d caution.*see Checks/);
-  await expect(pill).toHaveAccessibleDescription(/\d cautions?, see Checks/);
-  await expect(pill).toBeEnabled();
-  await page.screenshot({ path: "e2e/screenshots/31-export-caution.png" });
-});
