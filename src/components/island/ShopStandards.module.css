@@ -80,12 +80,6 @@
   padding: 3px 7px;
   text-align: right;
   font: 400 13px/1.4 var(--mono);
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.field input::-webkit-inner-spin-button,
-.field input::-webkit-outer-spin-button {
-  display: none;
 }
 .changed .field input {
   border-color: rgba(243, 160, 0, 0.6);
@@ -105,10 +99,6 @@
 }
 .actions {
   margin-top: 16px;
-}
-.actions :global(.btn):disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 
 /* Touch: the number fields and the summary are at least 44 px tall. */

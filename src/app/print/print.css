@@ -76,12 +76,12 @@ html:has(.print-doc, .print-loading) body {
 
 /* Type */
 .print-doc h1 {
-  font: 600 20px/1.2 var(--display);
+  font: 600 20px/1.2 var(--sans);
   letter-spacing: -0.02em;
   margin: 2px 0 0;
 }
 .print-doc h2 {
-  font: 600 14px/1.25 var(--display);
+  font: 600 14px/1.25 var(--sans);
   margin: 18px 0 6px;
   padding-top: 8px;
   border-top: 2px solid var(--rule);
@@ -145,7 +145,7 @@ html:has(.print-doc, .print-loading) body {
   color: var(--soft-ink);
 }
 .print-doc .ships {
-  font: 600 13px var(--display);
+  font: 600 13px var(--sans);
 }
 .print-doc .unmet {
   font-weight: 600;
@@ -288,15 +288,15 @@ html:has(.print-doc, .print-loading) body {
   width: 100%;
 }
 .print-doc .part-no {
-  font: 800 54px/1 var(--display);
+  font: 800 54px/1 var(--sans);
   letter-spacing: -0.02em;
 }
 .print-doc .part-name {
-  font: 500 20px var(--display);
+  font: 500 20px var(--sans);
   margin-top: 4px;
 }
 .print-doc .label-crate {
-  font: 800 20px var(--display);
+  font: 800 20px var(--sans);
   padding: 6px 10px;
   background: #000;
   color: #fff;
@@ -316,7 +316,7 @@ html:has(.print-doc, .print-loading) body {
   grid-column: 1 / -1;
 }
 .print-doc .label .l-big {
-  font: 800 40px/1.05 var(--display);
+  font: 800 40px/1.05 var(--sans);
 }
 .print-doc .label .mid {
   font: 700 22px var(--mono);
@@ -325,12 +325,12 @@ html:has(.print-doc, .print-loading) body {
   font: 600 16px var(--mono);
 }
 .print-doc .this-side-up {
-  font: 900 34px var(--display);
+  font: 900 34px var(--sans);
   letter-spacing: 0.06em;
   text-align: center;
 }
 .print-doc .fork-note {
-  font: 800 18px var(--display);
+  font: 800 18px var(--sans);
   text-align: center;
   letter-spacing: 0.04em;
 }
