@@ -12,7 +12,7 @@ export const RESTING_FACES = ["-z", "+z", "-y", "+y", "-x", "+x"] as const;
 export type RestingFace = (typeof RESTING_FACES)[number];
 
 /** Any face may be down (the old "Keep parts upright" off). */
-export const ANY_FACES: readonly RestingFace[] = RESTING_FACES;
+export const ANY_FACES: readonly RestingFace[] = [...RESTING_FACES];
 /** Only the face the model sits on (the old "Keep parts upright" on, and the default). */
 export const AS_MODELLED_FACES: readonly RestingFace[] = ["-z"];
 

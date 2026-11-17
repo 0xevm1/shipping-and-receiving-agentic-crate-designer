@@ -28,7 +28,7 @@ export function LayDownOffer() {
     <div className={styles.offer} role="status" data-testid="lay-down-offer">
       <b>{offer.lyingDown ? "Laying the parts down gives a stable crate" : "Resting the parts on another face gives a stable crate"}</b>
       <span>
-        {offer.orientationLabel}: {renderMessage(dimsMessage(offer.outsideMm.map(Math.round)), units)} outside, clear of the tip-over and top-heavy cautions.
+        The crate would be {renderMessage(dimsMessage(offer.outsideMm.map(Math.round)), units)} outside, clear of the tip-over and top-heavy cautions.
       </span>
       <button type="button" className="btn" onClick={() => useDesigner.getState().setSettings({ restingFaces: offer.restingFaces })}>
         Allow resting on the {names} {offer.added.length === 1 ? "face" : "faces"}
