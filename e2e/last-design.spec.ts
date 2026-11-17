@@ -165,6 +165,10 @@ test("a GLB over the 50 MB cap isn't kept: the reload opens the default part and
 
 test("corrupt saved data opens the default part without an error", async ({ page }) => {
   await openApp(page);
+  // Opening at the recommendation schedules a save; let it land first, or the reload's flush
+  // would write it over the corrupt entry.
+  const opened = await waitForRecommended(page);
+  await expect.poll(() => savedQuantity(page)).toBe(opened.quantity);
   await page.evaluate((key) => localStorage.setItem(key, '{"kind":"crate-designer.last-design","version":1,"design":{oops'), KEY);
   const errors: Error[] = [];
   const warnings: string[] = [];

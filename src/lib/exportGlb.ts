@@ -1,6 +1,5 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Scene, Vector3, type Object3D } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { ASSEMBLIES, type CrateDesign, type MemberKind } from "@/domain/crate";
 import { partFinish } from "@/domain/partDetails";
@@ -126,18 +125,5 @@ export async function exportCrateGlb(design: CrateDesign, part?: PartModel | nul
   return result;
 }
 
-/** Part models kept for the next export; a custom part has a new object URL on every load, so only the last few are kept. */
-const MAX_CACHED_SCENES = 4;
-const partScenes = new Map<string, Promise<Object3D>>();
-
-/** The part's model, loaded once per URL (the viewer has usually fetched it already, so this hits the cache). */
-export function loadPartScene(url: string): Promise<Object3D> {
-  let p = partScenes.get(url);
-  if (!p) {
-    p = new GLTFLoader().loadAsync(url).then((g) => g.scene);
-    p.catch(() => partScenes.delete(url));
-    partScenes.set(url, p);
-    while (partScenes.size > MAX_CACHED_SCENES) partScenes.delete(partScenes.keys().next().value as string);
-  }
-  return p;
-}
+// Kept for importers outside `src/lib`; the download helpers live in `./download`.
+export { downloadBytes } from "./download";

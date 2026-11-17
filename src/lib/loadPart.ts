@@ -12,6 +12,7 @@ import { reportFor, verdict, type FileReport } from "./fileCheckReport";
 import { catalogPart, framePart, type LoadedPart } from "./part";
 import { fitFrame, framedSizeMm, guessedFrame, type PartFrame } from "./partFrame";
 import { renderMessage } from "./message";
+import { models, type ModelHold } from "./modelRegistry";
 import type { Units } from "./units";
 
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
@@ -23,6 +24,8 @@ export { idFromFile, nameFromFile };
 
 interface ReadGlb {
   url: string;
+  /** The loader's hold on the model; see `LoadOutcome.hold`. */
+  hold: ModelHold;
   /** The model's size as the file has it (file units, file axes). */
   raw: Vec3;
 }
@@ -33,11 +36,18 @@ async function readGlb(glb: File): Promise<ReadGlb | string> {
   const check = checkFiles([{ name: glb.name, content: buffer }]);
   const error = check.findings.find((f) => f.severity === "error");
   if (error || !check.opened) return error ? renderMessage(error.message, "metric") : "That .glb file can't be read. Try exporting it again.";
-  return { url: URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" })), raw: check.opened.raw };
+  const { url, hold } = models.adopt(new Blob([buffer], { type: "model/gltf-binary" }));
+  return { url, hold, raw: check.opened.raw };
 }
 
 export interface LoadOutcome {
   part?: LoadedPart;
+  /**
+   * The loader's hold on the part's model (absent for a catalog part, which has nothing to free). Whoever
+   * takes the outcome releases it once the part is on screen (the store holds the model then) or is
+   * discarded: a model nobody holds is freed (`modelRegistry.ts`).
+   */
+  hold?: ModelHold;
   /** Settings and layout to restore with `part`, when a design file was loaded. */
   design?: { settings: CrateSettings; layoutKey: string | null; crateIndex: number; ranking: Ranking };
   /** The parts.json entries that passed the file check: they join the catalog even when no .glb opened. */
@@ -126,14 +136,15 @@ export async function loadPartFiles(
   }
 
   const index = files.findIndex((f) => f.name === opened.name);
-  const url = URL.createObjectURL(new Blob([inputs[index].content as ArrayBuffer], { type: "model/gltf-binary" }));
+  const { url, hold } = models.adopt(new Blob([inputs[index].content as ArrayBuffer], { type: "model/gltf-binary" }));
   const { raw, frame, guessed, entry } = opened;
   const report = reportFor(check, true);
-  if (entry) return { catalogAdditions, message: said, report, part: entryPart(entry, url, raw, frame, guessed) };
+  if (entry) return { catalogAdditions, message: said, report, hold, part: entryPart(entry, url, raw, frame, guessed) };
   return {
     catalogAdditions,
     message: said,
     report,
+    hold,
     part: framePart(
       {
         id: idFromFile(opened.name),
@@ -183,6 +194,7 @@ export async function loadDesign(
   const entry = saved.source === "catalog" ? bundled.find((p) => p.id === saved.id) : undefined;
   const notes: string[] = [];
   let part: LoadedPart;
+  let hold: ModelHold | undefined;
 
   const savedProfile = fileProfile(file);
   if (entry) {
@@ -195,6 +207,7 @@ export async function loadDesign(
     }
     const read = await readGlb(glb);
     if (typeof read === "string") return { message: `${glb.name}: ${read}` };
+    hold = read.hold;
     if (glb.name !== saved.model) notes.push(`Used ${glb.name} in place of ${saved.model}.`);
     // The saved units and axis are applied before measuring. A file from before they were saved
     // is read in the frame that gives its saved size, else guessed as a new file is.
@@ -230,10 +243,17 @@ export async function loadDesign(
   // The saved outline is only for the model it was measured on. When it fits, the part has it
   // from the start, and the viewer's own measurement (which would match) is not needed.
   if (savedProfile && usableProfile({ dimensions_mm: part.dimensions_mm, profile: savedProfile })) part = { ...part, profile: savedProfile };
-  const restored = restoreDesign(file, part, standards);
+  let restored: ReturnType<typeof restoreDesign>;
+  try {
+    restored = restoreDesign(file, part, standards);
+  } catch (e) {
+    hold?.release(); // no part will show this model
+    throw e;
+  }
   const text = (m: Message) => renderMessage(m, units);
   return {
     part,
+    ...(hold ? { hold } : {}),
     design: { settings: restored.settings, layoutKey: restored.layoutKey, crateIndex: restored.crateIndex, ranking: restored.ranking },
     message: [`Design loaded: ${file.settings.quantity} × ${part.name}.`, ...notes, ...restored.notes.map(text)].join(" "),
   };

@@ -1,16 +1,17 @@
 "use client";
 
-import { OrbitControls, useGLTF } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Box3, MathUtils, Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { isIdle, reducedMotion } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { probeStats, PROBE } from "./probeStats";
 import { cloneWithMaterial, FOV_DEG, MM_TO_M, partMaterial } from "./scene";
 import { type LoadedPart } from "@/lib/part";
-import { framedScene } from "@/lib/partFrame";
 import { partViewClass } from "./PartViewSlot";
+import { useModelScene } from "./useModelScene";
 
 /**
  * Turn speed, rad/s: slower than the handoff's 0.45, and reversed, at the user's request.
@@ -30,9 +31,18 @@ const turn = new Spherical();
 export default function PartView() {
   const part = useDesigner((s) => s.part);
   return (
-    <Canvas className={partViewClass} camera={{ fov: FOV_DEG, near: 0.001, far: 50 }} dpr={[1, 2]} gl={{ alpha: true }}>
+    <Canvas
+      className={partViewClass}
+      camera={{ fov: FOV_DEG, near: 0.001, far: 50 }}
+      dpr={[1, 2]}
+      gl={{ alpha: true }}
+      onCreated={({ gl }) => {
+        if (PROBE) probeStats.thumbnail = gl;
+      }}
+    >
       <hemisphereLight args={["#e9edf2", "#2a3f57", 1.4]} />
       <directionalLight position={[3, 5, 4]} intensity={1.6} color="#fff1dc" />
+      <PauseWhenHidden />
       <Suspense fallback={null}>
         <Turntable part={part} key={part.modelUrl} />
       </Suspense>
@@ -40,9 +50,27 @@ export default function PartView() {
   );
 }
 
+/**
+ * Stops the frame loop while the canvas can't be seen: the island folds the thumbnail away (a
+ * clipped, zero-height box), and a closed drawer is off screen. The loop resumes when it shows again.
+ */
+function PauseWhenHidden() {
+  const el = useThree((s) => s.gl.domElement);
+  const setFrameloop = useThree((s) => s.setFrameloop);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const watch = new IntersectionObserver((entries) => {
+      const seen = entries[entries.length - 1].isIntersecting;
+      setFrameloop(seen ? "always" : "never");
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [el, setFrameloop]);
+  return null;
+}
+
 function Turntable({ part }: { part: LoadedPart }) {
-  const { scene: loaded } = useGLTF(part.modelUrl);
-  const scene = useMemo(() => framedScene(loaded, part.upAxis), [loaded, part.upAxis]);
+  const scene = useModelScene(part.modelUrl, part.upAxis);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const controls = useRef<OrbitControlsImpl>(null);

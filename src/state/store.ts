@@ -10,6 +10,7 @@ import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type D
 import { designRequestFor } from "@/engine/request";
 import type { DesignResponse, EngineStamp } from "@/engine/schemas";
 import { canSetFrame, catalogPart, framePart, type LoadedPart } from "@/lib/part";
+import { models } from "@/lib/modelRegistry";
 import type { PartFrame } from "@/lib/partFrame";
 import { emitDesignEdit, type ChangeSource, type DesignEdit } from "./designEvents";
 import { engine } from "./engineClient";
@@ -394,4 +395,20 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (!autoRecommend) set({ autoRecommend: { modelUrl: part.modelUrl, applied: false }, onRecommendation: true });
     },
   };
+});
+
+/**
+ * The part on screen holds its model (`modelRegistry.ts`) for as long as it is the part. Replacing the
+ * part (by any path: a load, a design, a restore) takes the new hold before letting go of the old, so
+ * whatever else still holds the old model (the viewer until it swaps, an export, the saver) keeps it alive.
+ * A frame, profile or detail edit keeps the same model and changes nothing here.
+ */
+let heldUrl = useDesigner.getState().part.modelUrl;
+let partHold = models.acquire(heldUrl);
+useDesigner.subscribe(({ part }) => {
+  if (part.modelUrl === heldUrl) return;
+  const previous = partHold;
+  heldUrl = part.modelUrl;
+  partHold = models.acquire(heldUrl);
+  previous.release();
 });

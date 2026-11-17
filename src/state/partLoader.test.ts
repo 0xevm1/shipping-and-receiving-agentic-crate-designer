@@ -21,9 +21,10 @@ const deferred = <T>() => {
   const promise = new Promise<T>((r) => (resolve = r));
   return { promise, resolve };
 };
-const outcomeFor = (id: string, modelUrl = "/x.glb") => ({
+const outcomeFor = (id: string, modelUrl = "/x.glb", hold?: { release: () => void }) => ({
   catalogAdditions: [],
   message: id,
+  ...(hold ? { hold } : {}),
   part: { ...catalogPart(catalog.parts.find((p) => p.id === id) ?? catalog.parts[0]), id, modelUrl },
 });
 
@@ -37,19 +38,27 @@ describe("load ordering", () => {
   afterEach(() => useLibrary.getState().setPendingShare(null));
 
   it("a slow load that finishes after a later quick one does not overwrite it", async () => {
-    const revoke = vi.fn();
-    vi.stubGlobal("URL", { revokeObjectURL: revoke });
+    const release = vi.fn();
     const slow = deferred<ReturnType<typeof outcomeFor>>();
     loadPartFiles.mockReturnValueOnce(slow.promise).mockResolvedValueOnce(outcomeFor("quick"));
     const first = loadPickedFiles([file("slow.glb")]);
     await loadPickedFiles([file("quick.glb")]);
     expect(useDesigner.getState().part.id).toBe("quick");
-    slow.resolve(outcomeFor("slow", "blob:slow"));
+    slow.resolve(outcomeFor("slow", "blob:slow", { release }));
     await first;
     expect(useDesigner.getState().part.id).toBe("quick");
     expect(useView.getState().loadMessage).toBe("quick");
-    expect(revoke).toHaveBeenCalledWith("blob:slow");
-    vi.unstubAllGlobals();
+    // The superseded load's model is let go (the registry frees it), never shown.
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets go of an applied load's hold once the part is on screen, because the store holds it then", async () => {
+    let shownWhenReleased: string | null = null;
+    const release = vi.fn(() => (shownWhenReleased = useDesigner.getState().part.id));
+    loadPartFiles.mockResolvedValueOnce(outcomeFor("shown", "blob:shown", { release }));
+    await loadPickedFiles([file("shown.glb")]);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(shownWhenReleased).toBe("shown");
   });
 
   it("a failure of a superseded load says nothing", async () => {

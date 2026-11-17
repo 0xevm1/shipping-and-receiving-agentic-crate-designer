@@ -1,3 +1,4 @@
+import type { WebGLRenderer } from "three";
 import type { Vec3 } from "@/domain/schema";
 
 /** True in builds made with `NEXT_PUBLIC_E2E=1`; inlined at build time, so other builds drop every write guarded by it. */
@@ -9,6 +10,8 @@ export const PROBE = process.env.NEXT_PUBLIC_E2E === "1";
  * so they write here behind `if (PROBE)`: in a normal build the writes are removed.
  */
 export const probeStats = {
+  /** The island thumbnail's renderer (its own WebGL context), for the GPU resource counts; null before it is created. */
+  thumbnail: null as WebGLRenderer | null,
   /** Dimension-line photon pulses fired since the page loaded. */
   pulsesFired: 0,
   /** Photons on screen in the last frame. */

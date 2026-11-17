@@ -7,6 +7,7 @@ import { currentDesignFile } from "@/lib/currentDesign";
 import { downloadText } from "@/lib/download";
 import { savedDateText } from "@/lib/format";
 import { designFilePart } from "@/lib/loadPart";
+import { models } from "@/lib/modelRegistry";
 import { dims, lengthUnit, weight } from "@/lib/units";
 import { useLibrary } from "@/state/libraryStore";
 import { openDesignFile } from "@/state/partLoader";
@@ -26,7 +27,7 @@ const renameButtonId = (id: string) => `saved-designs-rename-${id}`;
 async function currentModelFile(part: LoadedPart): Promise<File[]> {
   if (!part.model) return [];
   try {
-    const blob = await (await fetch(part.modelUrl)).blob();
+    const blob = models.blob(part.modelUrl) ?? (await (await fetch(part.modelUrl)).blob());
     return [new File([blob], part.model, { type: "model/gltf-binary" })];
   } catch {
     return [];

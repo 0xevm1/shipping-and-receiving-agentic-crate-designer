@@ -1,8 +1,8 @@
 "use client";
 
-import { OrbitControls, useGLTF, useProgress } from "@react-three/drei";
+import { OrbitControls, useProgress } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import type { DesignProblem } from "@/domain/design";
 import { pointer } from "@/state/motion";
 import { useDesigner } from "@/state/store";
@@ -49,7 +49,6 @@ export default function CrateViewer() {
   const [lost, setLost] = useState(false);
   /** Bumped to throw the canvas away and build a fresh one (a new WebGL context). */
   const [canvasKey, setCanvasKey] = useState(0);
-  useReleaseModels(part.modelUrl);
 
   const watchContext = useCallback((canvas: HTMLCanvasElement) => {
     // Cancelling the loss event lets the browser restore the context by itself.
@@ -158,19 +157,6 @@ const STAGE_HINT: Record<DesignProblem["id"], string> = {
   "no-layout": "Reset the rules in the panel.",
   standards: "Reset the shop standards in the panel.",
 };
-
-/**
- * Drops a part model from drei's GLTF cache once the part changes, so models loaded earlier in
- * the session don't pile up. Only a change releases one: the island's turntable shares the cache
- * and may still be showing the model when the main scene unmounts its copy.
- */
-function useReleaseModels(modelUrl: string) {
-  const previous = useRef(modelUrl);
-  useEffect(() => {
-    if (previous.current !== modelUrl) useGLTF.clear(previous.current);
-    previous.current = modelUrl;
-  }, [modelUrl]);
-}
 
 /** DOM overlay while a GLB downloads. Never use drei <Html> as a Suspense fallback (unmount race). */
 function LoadingOverlay() {

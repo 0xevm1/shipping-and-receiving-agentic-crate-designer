@@ -1,6 +1,7 @@
 import { Box3, Vector3, type BufferGeometry, type Mesh, type Object3D } from "three";
 import { FACE_AXES, type FaceDepth, type FaceId, type PartProfile } from "@/domain/profile";
 import type { Vec3 } from "@/domain/schema";
+import { models } from "./modelRegistry";
 
 /**
  * Measures a part profile (spec §7.5b) from its mesh: for each of the 6 faces of the
@@ -130,9 +131,6 @@ function now(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-/** Profiles by model URL and frame, so a part analysed once is not analysed again in this session. */
-const profiles = new Map<string, PartProfile | null>();
-
 let lastMs: number | null = null;
 
 /** Milliseconds the last analysis took, for the e2e probe; null before any. */
@@ -151,9 +149,10 @@ export function scheduleProfile(
   onDone: (url: string, profile: PartProfile | null) => void,
   frame = "",
 ): () => void {
-  const cacheKey = `${url}|${frame}`;
-  if (profiles.has(cacheKey)) {
-    onDone(url, profiles.get(cacheKey)!);
+  // Kept with the model (`models.memo`), so it goes when the model does.
+  const profiles = models.memo<PartProfile | null>(url);
+  if (profiles.has(frame)) {
+    onDone(url, profiles.get(frame)!);
     return () => {};
   }
   let cancelled = false;
@@ -167,7 +166,7 @@ export function scheduleProfile(
       console.warn("Part analysis failed; blocking follows the bounding box.", e);
     }
     lastMs = now() - started;
-    profiles.set(cacheKey, profile);
+    profiles.set(frame, profile);
     onDone(url, profile);
   };
   const w = globalThis as typeof globalThis & {

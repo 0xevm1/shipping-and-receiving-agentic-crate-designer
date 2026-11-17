@@ -6,6 +6,7 @@ import { type SavedConfig, useJobSync } from "./jobSync";
 import { DONE_NOTE_MS, ERROR_NOTE_MS, MIN_BUSY_MS, type ExportState } from "./exportRun";
 import { useDesigner } from "./store";
 import { useView } from "./viewStore";
+import { models } from "@/lib/modelRegistry";
 
 const ERROR_TEXT = "The bundle could not be made here. Try again, or use Export specs for the design on screen.";
 
@@ -81,6 +82,8 @@ export const useDownloadAll = create<{ state: ExportState; run: (configs?: Desig
       const saved = useJobSync.getState().configs;
       const { units } = useView.getState();
       const at = new Date().toISOString();
+      // The part's model is held for the whole run: the part may be replaced while the files are made.
+      const hold = models.acquire(s.part.modelUrl);
       try {
         const work = (async () => {
           const [{ buildMultiBundleZip, sweepFor }, { urlModelReader }] = await Promise.all([import("@/engine/artifacts"), import("@/engine/glb")]);
@@ -93,6 +96,8 @@ export const useDownloadAll = create<{ state: ExportState; run: (configs?: Desig
       } catch (e) {
         console.error("Download all failed", e);
         show({ kind: "error", message: ERROR_TEXT }, ERROR_NOTE_MS);
+      } finally {
+        hold.release();
       }
     },
   };

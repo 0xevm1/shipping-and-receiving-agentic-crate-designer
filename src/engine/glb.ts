@@ -1,7 +1,8 @@
 import type { Object3D } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { CrateDesign } from "@/domain/crate";
-import { exportCrateGlb, loadPartScene, type PartModel } from "@/lib/exportGlb";
+import { exportCrateGlb, type PartModel } from "@/lib/exportGlb";
+import { models } from "@/lib/modelRegistry";
 import type { DesignPart } from "@/domain/schema";
 import type { LoadedPart } from "@/lib/part";
 import { framedScene } from "@/lib/partFrame";
@@ -25,10 +26,10 @@ import { framedScene } from "@/lib/partFrame";
  */
 export type PartModelReader = (part: DesignPart & Partial<Pick<LoadedPart, "modelUrl" | "mmPerUnit" | "upAxis">>) => Promise<Object3D>;
 
-/** Browser: the model at the part's URL, loaded once and cached (`loadPartScene`). */
+/** Browser: the model at the part's URL, parsed once by the model registry (usually already by the viewer). */
 export const urlModelReader: PartModelReader = (part) => {
   if (!part.modelUrl) return Promise.reject(new Error(`Part ${part.id} has no model URL to read.`));
-  return loadPartScene(part.modelUrl);
+  return models.scene(part.modelUrl);
 };
 
 /** A GLB's bytes as a scene. Works in every runtime (no fetch, no DOM) for GLBs without textures. */
