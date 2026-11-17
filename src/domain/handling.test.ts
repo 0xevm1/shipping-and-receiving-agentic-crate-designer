@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
 import type { Check, Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
@@ -153,14 +154,14 @@ describe("handling checks", () => {
   it("pass for the default crate, with the pallet jack as info (forklift only)", () => {
     const checks = design("PART-001", { quantity: 4 }).checks;
     expect(check(checks, "cog-offset")).toMatchObject({ level: "ok", title: "Centre of gravity near the middle" });
-    expect(check(checks, "cog-offset").detail).toContain("on both centre lines");
+    expect(metric(check(checks, "cog-offset").detail)).toContain("on both centre lines");
     expect(check(checks, "cog-tip").level).toBe("ok");
     expect(check(checks, "forklift")).toMatchObject({ level: "ok", title: "Forklift fits from the ends" });
-    expect(check(checks, "forklift").detail).toBe(
+    expect(metric(check(checks, "forklift").detail)).toBe(
       "Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, either side of the centre of gravity.",
     );
     expect(check(checks, "pallet-jack")).toMatchObject({ level: "info", title: "Forklift only: too narrow for a pallet jack" });
-    expect(check(checks, "pallet-jack").detail).toContain("the widest opening between the skids is 474 mm");
+    expect(metric(check(checks, "pallet-jack").detail)).toContain("the widest opening between the skids is 474 mm");
   });
 
   it("come in a fixed order after the base rating", () => {
@@ -176,8 +177,8 @@ describe("handling checks", () => {
     expect(check(handlingChecks({ ...h, offsetMm: [-(just - 1), 0] }), "cog-offset").level).toBe("ok");
     const off = check(handlingChecks({ ...h, offsetMm: [-120, 0] }), "cog-offset");
     expect(off.level).toBe("caution");
-    expect(off.detail).toMatch(/^Centre of gravity is 120 mm toward the left end; mark it on the crate\./);
-    expect(check(handlingChecks({ ...h, offsetMm: [0, 70] }), "cog-offset").detail).toContain("70 mm toward the back");
+    expect(metric(off.detail)).toMatch(/^Centre of gravity is 120 mm toward the left end; mark it on the crate\./);
+    expect(metric(check(handlingChecks({ ...h, offsetMm: [0, 70] }), "cog-offset").detail)).toContain("70 mm toward the back");
     // A looser standard lets it pass.
     expect(check(handlingChecks({ ...h, offsetMm: [-120, 0] }, custom({ handling: { cogOffsetRatio: 0.2 } })), "cog-offset").level).toBe("ok");
   });
@@ -187,7 +188,7 @@ describe("handling checks", () => {
     expect(check(handlingChecks({ ...h, tipAngleDeg: 30.1 }), "cog-tip").level).toBe("ok");
     const tip = check(handlingChecks({ ...h, tipAngleDeg: 24, tipToward: "side" }), "cog-tip");
     expect(tip).toMatchObject({ level: "caution", title: "Top-heavy" });
-    expect(tip.detail).toContain("tips over a side at 24°, under the 30° limit");
+    expect(metric(tip.detail)).toContain("tips over a side at 24°, under the 30° limit");
   });
 
   it("measure the tip angle to the nearest base edge", () => {
@@ -202,7 +203,7 @@ describe("handling checks", () => {
     const s = custom({ handling: { palletJack: { minClearMm: 90 }, forklift: { minClearMm: 95 } } });
     const d = design("PART-003", { quantity: 8 }, s);
     expect(check(d.checks, "pallet-jack")).toMatchObject({ level: "caution", title: "Pallet jack may not fit" });
-    expect(check(d.checks, "pallet-jack").detail).toBe("Pallet jack: enters from the ends, 89 mm clear under the floor, needs 90 mm. Use taller skids.");
+    expect(metric(check(d.checks, "pallet-jack").detail)).toBe("Pallet jack: enters from the ends, 89 mm clear under the floor, needs 90 mm. Use taller skids.");
     expect(check(d.checks, "forklift").level).toBe("caution");
   });
 
@@ -229,8 +230,8 @@ describe("handling checks", () => {
 
 describe("offsetText", () => {
   it("names the end and side, or nothing when centred", () => {
-    expect(offsetText([-120, 0])).toBe("120 mm toward the left end");
-    expect(offsetText([1300, -40])).toBe("1,300 mm toward the right end and 40 mm toward the front");
+    expect(metric(offsetText([-120, 0])!)).toBe("120 mm toward the left end");
+    expect(metric(offsetText([1300, -40])!)).toBe("1,300 mm toward the right end and 40 mm toward the front");
     expect(offsetText([0.2, -0.4])).toBeNull();
   });
 });

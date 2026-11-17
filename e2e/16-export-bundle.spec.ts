@@ -30,7 +30,7 @@ async function openPrint(page: Page, units: "imperial" | "metric") {
   await openTab(page, "Cut list");
   const [popup] = await Promise.all([page.waitForEvent("popup"), panel(page).getByRole("button", { name: "Print / save PDF" }).click()]);
   await expect(panel(page).getByRole("status")).toHaveText("Print view opened in a new tab.");
-  expect(popup.url()).toMatch(new RegExp(`/print#d=[A-Za-z0-9_-]+&u=${units}&print=1$`));
+  expect(popup.url()).toMatch(new RegExp(`/print#design=[A-Za-z0-9_-]+&u=${units}&print=1$`));
   await expect(popup.getByRole("region", { name: "Crate spec" })).toBeVisible();
   await expect.poll(() => popup.evaluate(() => window.__printCalls)).toBe(1);
   return popup;

@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
+import { getPart } from "@/domain/catalog";
+import { dimsMessage, kg, mm, msg, parts, shopMm } from "@/domain/message";
+import { renderMessage } from "./message";
+
+describe("renderMessage (#62)", () => {
+  const m = msg`A ${mm(2489)} × ${mm(2743)} door, a ${shopMm(19)} floor, ${shopMm(89)} clear, ${kg(1240)} and ${kg(21.5)}.`;
+
+  it("reads as the checks always did in metric", () => {
+    expect(renderMessage(m, "metric")).toBe("A 2,489 mm × 2,743 mm door, a 19 mm floor, 89 mm clear, 1,240 kg and 21.5 kg.");
+  });
+
+  it("converts every length and mass in imperial", () => {
+    expect(renderMessage(m, "imperial")).toBe("A 98.0 in × 108.0 in door, a 3/4″ floor, 3 1/2″ clear, 2,734 lb and 47.4 lb.");
+  });
+
+  it("merges strings, flattens nested messages and joins dimensions", () => {
+    expect(parts("a", 1, parts("b"), "c")).toEqual(["a1bc"]);
+    expect(renderMessage(dimsMessage([25.4, 50.8]), "imperial")).toBe("1.0 in × 2.0 in");
+    expect(renderMessage(msg`${dimsMessage([10, 20])} space`, "metric")).toBe("10 mm × 20 mm space");
+  });
+
+  it("leaves no metric unit in any imperial check message of real designs", () => {
+    for (const id of ["PART-001", "PART-002", "PART-003"]) {
+      const part = getPart(id);
+      if (!part) continue;
+      for (const quantity of [1, 8, 40]) {
+        const r = computeDesign(part, { ...DEFAULT_SETTINGS, quantity });
+        for (const c of r.design?.checks ?? []) {
+          const text = renderMessage(c.detail, "imperial");
+          expect(text, `${id} x${quantity} ${c.id}`).not.toMatch(/\bmm\b|\bkg\b/);
+        }
+      }
+    }
+  });
+});

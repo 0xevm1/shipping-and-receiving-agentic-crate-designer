@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
 import { CARDBOARD_LIMITS, DRY_VAN_53FT_MM, LTL_EXCESSIVE_LENGTH_MM, MIN_INTERIOR_MM } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, settingsFromStandards, type DesignPart } from "./design";
@@ -172,7 +173,7 @@ describe("computeDesign with custom standards", () => {
     const d = design("PART-001", custom({ construction: { heavySkidOverKg: 50 } }));
     expect(d.construction.skid).toEqual({ wide: 89, tall: 140 });
     expect(check(d, "base-rating")!).toMatchObject({ level: "ok" });
-    expect(d.checks.find((c) => c.id === "base-rating")!.detail).toContain("4×6 skids");
+    expect(metric(d.checks.find((c) => c.id === "base-rating")!.detail)).toContain("4×6 skids");
   });
 
   it("a plywood rate change changes the cost and nothing else", () => {
@@ -201,7 +202,7 @@ describe("computeDesign with custom standards", () => {
     const weak = custom({ structure: { lumberBendingMPa: 0.5, lumberShearMPa: 0.1, lumberBearingMPa: 0.5, plywoodBendingMPa: 0.5, loadFactor: 5 } });
     const d = design("PART-001", weak);
     expect(check(d, "base-rating")).toMatchObject({ level: "caution", title: "Over the base rating" });
-    expect(d.checks.find((c) => c.id === "base-rating")!.detail).toMatch(/^Base rated \d+ kg; this crate's payload is 86 kg/);
+    expect(metric(d.checks.find((c) => c.id === "base-rating")!.detail)).toMatch(/^Base rated \d+ kg; this crate's payload is 86 kg/);
   });
 
   it("a lower stack limit turns the stack check into a caution", () => {
@@ -214,7 +215,7 @@ describe("computeDesign with custom standards", () => {
     const d = design("PART-002", custom({ limits: { trailerMm: { interiorLength: 1500 }, ltlExcessiveLengthMm: 1219 } }));
     expect(check(d, "door")!.level).toBe("caution");
     expect(check(d, "oversize")).toMatchObject({ level: "info" });
-    expect(d.checks.find((c) => c.id === "oversize")!.detail).toContain("(4 ft)");
+    expect(metric(d.checks.find((c) => c.id === "oversize")!.detail)).toContain("(4 ft)");
   });
 
   it("wider minimum blocking gap removes the posts and flags it", () => {

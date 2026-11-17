@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cut, dims, dimsOther, fraction, length, volume, weight } from "./units";
+import { cut, dims, dimsOther, fraction, length, partWeight, volume, weight } from "./units";
 
 describe("units", () => {
   it("formats overall sizes", () => {
@@ -41,5 +41,18 @@ describe("units", () => {
     expect(weight(100, "metric")).toBe("100 kg");
     expect(weight(100, "imperial")).toBe("220 lb");
     expect(volume(1, "imperial")).toBe("35.3 ft³");
+  });
+
+  it("shows every mass by one rule: one decimal under 100, whole from 100 (#62)", () => {
+    expect(weight(21.5, "metric")).toBe("21.5 kg");
+    expect(weight(21.5, "imperial")).toBe("47.4 lb");
+    expect(partWeight(21.5, "imperial")).toBe("47.4 lb");
+    expect(weight(20, "metric")).toBe("20 kg"); // no trailing .0
+    expect(weight(99.94, "metric")).toBe("99.9 kg");
+    expect(weight(99.96, "metric")).toBe("100 kg"); // rounds up across the boundary: whole
+    expect(weight(45.36, "imperial")).toBe("100 lb");
+    expect(weight(135.2, "metric")).toBe("135 kg");
+    expect(weight(1240.4, "metric")).toBe("1240 kg");
+    expect(weight(1240.4, "metric", true)).toBe("1,240 kg");
   });
 });

@@ -1,5 +1,6 @@
 import { designCrate, type BomLine, type Check, type CrateDesign } from "./crate";
 import { computeDesign, rankByObjective, rankLayouts, type DesignProblem, type DesignResult, type Ranking } from "./design";
+import { joinMessages, kg, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -50,7 +51,7 @@ export interface ShipmentPlan {
   crates: CrateType[];
   totals: ShipmentTotals;
   /** Why the limits can't all be met (one part alone is over them), or null. */
-  unmet: string | null;
+  unmet: Message | null;
   /** The design problem (§7.9), when there is no crate at all. */
   problem: DesignProblem | null;
 }
@@ -137,7 +138,7 @@ export function planShipment(
   }
 
   if (!candidate(1).fits) {
-    const unmet = `One part alone is over the per-crate limit (${limitText(standards)}), so each part ships in its own crate.`;
+    const unmet = msg`One part alone is over the per-crate limit (${limitText(standards)}), so each part ships in its own crate.`;
     const result = withLayout(ranked(candidate(1).result, 1), part, { ...settings, quantity: 1 }, layoutKey, standards);
     return plan([{ label: "A", count: total, quantity: 1, result }], unmet, standards);
   }
@@ -215,7 +216,7 @@ function withLayout(
   return layout ? { ...result, design: designCrate(part, settings, layout, standards) } : result;
 }
 
-function plan(types: CrateType[], unmet: string | null, standards: ShopStandards): ShipmentPlan {
+function plan(types: CrateType[], unmet: Message | null, standards: ShopStandards): ShipmentPlan {
   const split = types.reduce((n, t) => n + t.count, 0) > 1;
   if (split) {
     const text = describeShipment({ crates: types });
@@ -245,22 +246,20 @@ function plan(types: CrateType[], unmet: string | null, standards: ShopStandards
   };
 }
 
-const kgText = (v: number) => `${Math.round(v).toLocaleString("en-US")} kg`;
-
 /** "1,000 kg gross, 40 parts and the trailer door": the limits in force, for messages. */
-function limitText(standards: ShopStandards): string {
+function limitText(standards: ShopStandards): Message {
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
-  return [`${kgText(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [`${maxParts} parts`] : []), "the trailer door and floor"].join(", ");
+  return joinMessages([msg`${kg(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []), parts("the trailer door and floor")], ", ");
 }
 
-function crateLimitCheck(text: string, unmet: string | null, standards: ShopStandards): Check {
+function crateLimitCheck(text: string, unmet: Message | null, standards: ShopStandards): Check {
   return unmet
     ? { id: "crate-limit", level: "caution", title: "Over the per-crate limit", detail: unmet }
     : {
         id: "crate-limit",
         level: "ok",
         title: "Within the per-crate limits",
-        detail: `The batch ships as ${text}, so no crate is over ${limitText(standards)}.`,
+        detail: msg`The batch ships as ${text}, so no crate is over ${limitText(standards)}.`,
       };
 }
 

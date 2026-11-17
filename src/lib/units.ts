@@ -49,14 +49,26 @@ export function cut(mm: number, u: Units): string {
   return u === "imperial" ? fraction(mm) : String(Math.round(mm));
 }
 
-export function weight(kg: number, u: Units): string {
+/**
+ * The one rule for a mass shown to people (#62): in the displayed unit, one decimal under 100
+ * ("47.4 lb"; a trailing .0 is dropped) and whole numbers from 100 up ("297 lb"). `group` adds
+ * thousands separators ("1,240 kg"), as check messages always had. CSV and JSON keep their own
+ * precision.
+ */
+export function weight(kg: number, u: Units, group = false): string {
+  const v = u === "imperial" ? kg * LB_PER_KG : kg;
+  const tenth = Math.round(v * 10) / 10;
+  const n = Math.abs(tenth) < 100 ? String(tenth) : group ? Math.round(v).toLocaleString("en-US") : String(Math.round(v));
+  return `${n} ${u === "imperial" ? "lb" : "kg"}`;
+}
+
+/** Whole units only ("16 kg"): for change notes, where the point is the size of the move (#62). */
+export function weightWhole(kg: number, u: Units): string {
   return u === "imperial" ? `${Math.round(kg * LB_PER_KG)} lb` : `${Math.round(kg)} kg`;
 }
 
-/** A single part's mass: as given in metric (21.5 kg), rounded in imperial. */
-export function partWeight(kg: number, u: Units): string {
-  return u === "imperial" ? weight(kg, u) : `${kg} kg`;
-}
+/** A single part's mass: the same rule as every other mass. */
+export const partWeight = weight;
 
 export function volume(m3: number, u: Units): string {
   return u === "imperial" ? `${(m3 * FT3_PER_M3).toFixed(1)} ft³` : `${m3.toFixed(2)} m³`;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { ASSEMBLIES, CARDBOARD_LIMITS, DRY_VAN_53FT_MM, LTL_EXCESSIVE_LENGTH_MM } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from "./design";
@@ -206,7 +207,7 @@ describe("checks", () => {
       for (const quantity of p.suggested_quantities) {
         const checks = design(p.id, { quantity }).design!.checks;
         expect(checks.map((c) => c.id)).not.toContain("export");
-        expect(checks.some((c) => /ISPM/.test(c.title + c.detail))).toBe(false);
+        expect(checks.some((c) => /ISPM/.test(c.title + metric(c.detail)))).toBe(false);
       }
     }
   });
@@ -253,7 +254,7 @@ describe("trailer limits", () => {
     expect(check(crateWith(axis, limit), "door")?.level).toBe("ok");
     const over = check(crateWith(axis, limit + 1), "door");
     expect(over?.level).toBe("caution");
-    expect(over?.detail).toContain(limit.toLocaleString("en-US"));
+    expect(metric(over!.detail)).toContain(limit.toLocaleString("en-US"));
   });
 
   it("uses the door opening, not the larger interior, for width and height", () => {

@@ -1,4 +1,5 @@
 import { Euler, Matrix4 } from "three";
+import { metricText as metric } from "@/lib/message";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import { isSlender, usesCradles } from "./cradles";
@@ -95,7 +96,7 @@ describe("shaped blocking (#16)", () => {
     // The bounding-box post still touches the lower half, so it stops the part too, but over less of its face.
     expect(d.shapedBlocking!.boundingBox).toMatchObject({ freeMm: [0, 0] });
     expect(d.shapedBlocking!.boundingBox.contact).toBeCloseTo(0.875, 3); // the notch is 1/8 of the blocking face
-    expect(d.checks.find((c) => c.id === "blocking")!.detail).toContain(
+    expect(metric(d.checks.find((c) => c.id === "blocking")!.detail)).toContain(
       "They are shaped to the part with 1 shaped block in its recesses: 100% of the blocking face touches it (bounding box: 88%), and the most a part can shift is 0 mm (bounding box: 0 mm).",
     );
   });
@@ -170,7 +171,7 @@ describe("shaped blocking (#16)", () => {
     const d = computeDesign(p3, { ...DEFAULT_SETTINGS, quantity: 8 }).design!;
     expect(d.shapedBlocking).toBeUndefined();
     expect(blocking(d.members).every((m) => m.label === "Blocking post")).toBe(true);
-    expect(d.checks.find((c) => c.id === "blocking")!.detail).toBe(
+    expect(metric(d.checks.find((c) => c.id === "blocking")!.detail)).toBe(
       "24 blocking posts hold the parts on all four sides. The smallest gap is 50 mm, between parts.",
     );
   });
