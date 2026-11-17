@@ -6,7 +6,6 @@ import { ASSEMBLIES, type CrateDesign, type MemberKind } from "@/domain/crate";
 import { partFinish } from "@/domain/partDetails";
 import type { Vec3 } from "@/domain/schema";
 import { cradleGeometry } from "./cradleGeometry";
-import { memberBounds } from "./memberBounds";
 import { cloneWithMaterial, partMaterial, WOOD } from "./sceneMaterials";
 
 /**
@@ -15,9 +14,12 @@ import { cloneWithMaterial, partMaterial, WOOD } from "./sceneMaterials";
  * Built fresh from the design data, never from the live viewer scene, so exploded offsets,
  * fades, ghosting and highlights can't leak into the file. The file follows the input GLB
  * convention (spec §4): metres, Z up. The only conversion is mm → m (× 0.001), baked into
- * positions and board sizes; there is no Y-up rotation. The root `Crate` node is offset so the
- * assembled crate's bounding-box centre is the file's origin: 3D viewers orbit about the
- * origin, so the crate turns about its own middle instead of a corner of the floor.
+ * positions and board sizes; there is no Y-up rotation.
+ *
+ * The file's origin is the crate's centre of gravity (boards and parts), and every node above
+ * the meshes has no transform of its own, like the `world` node of the sample part files. So
+ * whatever a 3D tool pivots on (the scene origin, or the origin of `Crate` or of an assembly
+ * when that node is selected), the crate turns about its balance point, never about a corner.
  *
  * Node tree:
  *   Crate
@@ -47,16 +49,16 @@ function woodMaterials(): Record<MemberKind, MeshStandardMaterial> {
   return Object.fromEntries(entries) as Record<MemberKind, MeshStandardMaterial>;
 }
 
-/** The centre of the assembled crate's boards, in the design's crate-interior mm. */
-export const crateCentreMm = (design: CrateDesign): Vec3 => memberBounds(design.members).centre;
+/** The exported file's origin, in the design's crate-interior mm: the loaded crate's centre of gravity. */
+export const cratePivotMm = (design: CrateDesign): Vec3 => design.handling.cogMm;
 
-/** The export scene: assembled crate in metres, Z up, centred on the origin, optionally with the parts in their slots. */
+/** The export scene: assembled crate in metres, Z up, its centre of gravity on the origin, optionally with the parts in their slots. */
 export function buildCrateScene(design: CrateDesign, part?: PartModel | null): Scene {
   const scene = new Scene();
   const crate = new Group();
   crate.name = CRATE_NODE;
-  const [cx, cy, cz] = crateCentreMm(design);
-  crate.position.set(-cx * M_PER_MM, -cy * M_PER_MM, -cz * M_PER_MM);
+  // The pivot is taken off every mesh and part; `Crate` and the assembly groups stay at the origin.
+  const [px, py, pz] = cratePivotMm(design);
   scene.add(crate);
 
   const materials = woodMaterials();
@@ -75,17 +77,17 @@ export function buildCrateScene(design: CrateDesign, part?: PartModel | null): S
       const geometry = m.cradle ? cradleGeometry(m).scale(M_PER_MM, M_PER_MM, M_PER_MM) : new BoxGeometry(sx * M_PER_MM, sy * M_PER_MM, sz * M_PER_MM);
       const mesh = new Mesh(geometry, materials[m.kind]);
       mesh.name = `${m.label} ${n}`;
-      mesh.position.set((m.min[0] + sx / 2) * M_PER_MM, (m.min[1] + sy / 2) * M_PER_MM, (m.min[2] + sz / 2) * M_PER_MM);
+      mesh.position.set((m.min[0] + sx / 2 - px) * M_PER_MM, (m.min[1] + sy / 2 - py) * M_PER_MM, (m.min[2] + sz / 2 - pz) * M_PER_MM);
       group.add(mesh);
     }
   }
 
-  if (part) crate.add(partsGroup(design, part));
+  if (part) crate.add(partsGroup(design, part, [px, py, pz]));
   return scene;
 }
 
-/** A copy of the part per slot, with the same transform as `PartInstances` (in metres). */
-function partsGroup(design: CrateDesign, part: PartModel): Group {
+/** A copy of the part per slot, with the same transform as `PartInstances` (in metres), measured from `pivot`. */
+function partsGroup(design: CrateDesign, part: PartModel, [px, py, pz]: Vec3): Group {
   const { layout } = design;
   const center = new Box3().setFromObject(part.scene).getCenter(new Vector3());
   const material = partMaterial(part.material);
@@ -97,7 +99,7 @@ function partsGroup(design: CrateDesign, part: PartModel): Group {
   layout.slots.forEach((slot, i) => {
     const placed = new Group();
     placed.name = `Part ${i + 1}`;
-    placed.position.set((slot.min[0] + a / 2) * M_PER_MM, (slot.min[1] + b / 2) * M_PER_MM, (slot.min[2] + c / 2) * M_PER_MM);
+    placed.position.set((slot.min[0] + a / 2 - px) * M_PER_MM, (slot.min[1] + b / 2 - py) * M_PER_MM, (slot.min[2] + c / 2 - pz) * M_PER_MM);
     placed.rotation.set(...layout.orientation.euler);
     const scaled = new Group();
     scaled.scale.setScalar(part.mmPerUnit * M_PER_MM);

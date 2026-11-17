@@ -148,7 +148,8 @@ tab at a time.
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
    sold as (1/2″, 5/8″, 3/4″) and cuts by fractional inches to the nearest 1/16″.
 7. **Download the crate as a 3D model**, inside the .zip from the **Export specs** pill: the assembled crate in metres, Z up, every board a named mesh
-   grouped by assembly, with the parts in their slots.
+   grouped by assembly, with the parts in their slots. The file's origin is the crate's centre of
+   gravity, so 3D tools turn it about its balance point.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
