@@ -112,7 +112,7 @@ test("Hide panels hides the island, header and Export pill for real, but keeps t
   // Hidden for real, not just transparent: out of the accessibility tree, so out of the tab order too.
   await expect(page.getByTestId("part-header")).toHaveCSS("visibility", "hidden");
   await expect(page.getByTestId("load-toast")).toHaveCSS("visibility", "hidden");
-  for (const hidden of [island(page), page.getByRole("banner"), page.getByRole("button", { name: /^Export specs/ }), viewButton(page)]) {
+  for (const hidden of [island(page), page.getByRole("banner"), page.getByRole("button", { name: /^Export Packing Specs/ }), viewButton(page)]) {
     await expect(hidden).toHaveCount(0);
   }
   // Tab from the Show panels button never lands in a hidden control.
@@ -124,7 +124,7 @@ test("Hide panels hides the island, header and Export pill for real, but keeps t
       return { inside: !!a?.closest("aside, header"), label: a?.getAttribute("aria-label") ?? a?.textContent ?? "" };
     });
     expect(focused.inside).toBe(false);
-    expect(focused.label).not.toMatch(/^(View|mm kg|in lb|Export specs)|view\. Click for/);
+    expect(focused.label).not.toMatch(/^(View|mm kg|in lb|Export Packing Specs)|view\. Click for/);
   }
   await expect(credit).toBeVisible();
   await expect(credit).toHaveCSS("opacity", "1");
