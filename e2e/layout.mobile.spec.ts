@@ -123,28 +123,26 @@ test("the controls inside the panels are at least 44 px", async ({ page }) => {
   await openApp(page);
   await openDrawer(page);
   await openTab(page, "Rules");
+  // Open the faces a part may rest on, so the six face toggles are measured with the rest.
+  const faces = panel(page).getByTestId("resting-faces");
+  await faces.getByRole("button", { name: "Choose", exact: true }).click();
+  await expect(faces.getByRole("button", { name: /^Bottom/ })).toBeVisible();
   const small = await page.evaluate(() => {
     const p = document.querySelector('[role="tabpanel"]')!;
-    // The switch (a checkbox) is checked below: its hit area is a pseudo-element around it.
-    const sel = 'button, input:not([type="file"]):not([type="checkbox"]), select, summary';
+    // A disabled control (the "In use" state of the best-quantity hint) can't be tapped, so it has no target to size.
+    const sel = 'button:not(:disabled), input:not([type="file"]):not(:disabled), select, summary';
     return [...p.querySelectorAll<HTMLElement>(sel)]
       .map((el) => ({ el, r: el.getBoundingClientRect() }))
       .filter(({ r }) => r.width > 0 && (r.height < 43.5 || r.width < 43.5))
       .map(
         ({ el, r }) =>
-          `${el.tagName.toLowerCase()}${el.getAttribute("aria-label") ? `[${el.getAttribute("aria-label")}]` : ""} ${Math.round(r.width)}×${Math.round(r.height)}`,
+          `${el.tagName.toLowerCase()}${el.getAttribute("aria-label") ? `[${el.getAttribute("aria-label")}]` : ` "${(el.textContent ?? "").trim().slice(0, 24)}"`} ${Math.round(r.width)}×${Math.round(r.height)}`,
       );
   });
   expect(small, "controls under 44 px").toEqual([]);
-  // Taps 21 px above and below the switch's centre still land on it (a 44 px hit area).
-  const sw = (await panel(page).getByLabel("Keep parts upright").boundingBox())!;
-  for (const dy of [-21, 21]) {
-    const hit = await page.evaluate(
-      ([x, y]) => (document.elementFromPoint(x, y) as HTMLElement | null)?.getAttribute("aria-label"),
-      [sw.x + sw.width / 2, sw.y + sw.height / 2 + dy],
-    );
-    expect(hit).toBe("Keep parts upright");
-  }
+  // The presets and the face toggles that can be tapped are among the controls measured.
+  await expect(faces.getByRole("button")).toHaveCount(9);
+  await expect(faces.getByRole("button", { name: /^Bottom/ })).toBeDisabled();
   await shot(page, "layout-rules-touch");
 
   // The other tabs' buttons and inputs too.

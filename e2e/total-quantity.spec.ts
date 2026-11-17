@@ -10,6 +10,7 @@ import {
   SERVER_SKIP_REASON,
   sharedJob,
   shot,
+  tab,
   triangleGlb,
   waitForLiveJob,
   waitForRecommended,
@@ -34,6 +35,30 @@ function freshPart() {
   const x = 0.5 + (Date.now() % 100_000) / 1e7;
   return { name: "total-quantity-widget.glb", mimeType: "model/gltf-binary", buffer: triangleGlb([x, 0.35, 0.25]) };
 }
+
+test("a quantity over 200 in Rules goes to Parts to ship, with the typed number ready", async ({ page }) => {
+  test.slow();
+  await openApp(page);
+  await fileInput(page).setInputFiles(freshPart());
+  await expect(island(page).getByRole("heading", { name: "Total quantity widget", exact: true })).toBeVisible();
+  await waitForRecommended(page);
+  await openTab(page, "Overview");
+  await waitForLiveJob(page);
+
+  await openTab(page, "Rules");
+  await panel(page).getByLabel("Quantity").fill("500");
+  await pollCrate(page, (s) => s.quantity).toBe(200);
+  const note = panel(page).getByTestId("quantity-cap-note");
+  await expect(note).toContainText("One crate holds at most 200. To ship 500, use Parts to ship on the Overview.");
+  await panel(page).getByRole("button", { name: "Go to Parts to ship" }).click();
+
+  // The Overview is open, the field is focused and holds the typed number (committed only on Enter or blur).
+  await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
+  const field = sharedJob(page).getByLabel("Parts to ship");
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("500");
+  await shot(sharedJob(page), "total-quantity-from-rules");
+});
 
 test("Parts to ship plans the total, the Overview agrees, Use shows a crate, and the total is saved", async ({ page }) => {
   test.slow();

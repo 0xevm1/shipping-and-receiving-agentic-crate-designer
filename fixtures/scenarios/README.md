@@ -26,7 +26,7 @@ The app opens in inches and pounds. Switch to **MM KG** (bottom right) to read t
 | Longer than 8 ft | `parts.json` + `longer-than-8ft.glb` | 40 kg | rail, 2,600 × 300 × 300 mm |
 | Tiny, light part | `parts.json` + `tiny-light.glb` | 0.05 kg | 40 × 30 × 20 mm |
 | Lopsided part | `parts.json` + `lopsided.glb` | 120 kg | shaft with a block on one end |
-| Tall part, "this face down" | `parts.json` + `tall-part.glb` (then Rules: Keep parts upright off) | 12 kg | post, 150 × 150 × 1,200 mm |
+| Tall part, "this face down" | `parts.json` + `tall-part.glb` (then Rules: Faces a part may rest on, Any face; or take the lay-down offer in Checks) | 12 kg | post, 150 × 150 × 1,200 mm |
 | Crate bigger than a plywood sheet | `parts.json` + `bigger-than-sheet.glb`, then the Cut list | 300 kg | 2,000 × 1,400 × 800 mm |
 | Part over a pallet footprint | `parts.json` + `pallet-overhang.glb` | 200 kg | 1,300 × 1,100 × 1,000 mm |
 | Model size disagrees with parts.json | `parts-size-mismatch.json` + `size-mismatch.glb` | 20 kg | model is 300 mm tall, catalog says 258 |

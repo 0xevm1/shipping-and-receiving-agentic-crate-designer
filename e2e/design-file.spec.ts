@@ -63,7 +63,7 @@ test("the Cut list tab downloads the design as JSON with a summary", async ({ pa
     app: { name: "crate-designer" },
     ranking: "volume",
     part: { source: "catalog", id: "PART-001", model: BRACKET, material: "4140 steel", mass_kg: expect.any(Number) },
-    settings: { quantity, keepUpright: true, maxLayers: expect.any(Number), panelThickness: "auto" },
+    settings: { quantity, restingFaces: ["-z"], maxLayers: expect.any(Number), panelThickness: "auto" },
     summary: { quantity, outsideMm: roundedMm(outside!) },
   });
   expect(typeof json.layoutKey).toBe("string");

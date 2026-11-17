@@ -195,7 +195,9 @@ tab at a time.
      under the header and in Checks.
    - **Your own `parts.json`:** drop it with the `.glb` it names. Each entry needs only `id`,
      `name`, `model` (the `.glb` file name) and `mass_kg`; `material`, `density_kg_m3`,
-     `dimensions_mm` (the size is measured from the model without it), `suggested_quantities` and
+     `dimensions_mm` (the size is measured from the model without it), `suggested_quantities` (the
+     quantities the best-quantity pick chooses among), `cog_mm` (the part's centre of gravity in
+     mm, in the model's own axes; kept only inside the model's box) and
      `model_units` (`meters`, `millimeters` or `inches`: what the model's numbers are in) are
      optional. A bad entry is skipped and named, and the good ones still load. Spec §6.1.
    - **The file check.** Whatever you drop is checked first. When anything is wrong or assumed,
@@ -209,15 +211,26 @@ tab at a time.
      entry. The rules are a table in spec §6.6. Pick several `.glb` files and the first (or the one
      an entry names) opens; the report says which, and that the others were not used.
    - A newly loaded part, and the sample part on a first visit, opens at the **recommended
-     quantity per crate** and its crate, without you choosing one ("Set to the recommended 34
-     per crate"); a saved design, a design file, a share link or your last crate keeps its own.
-2. **Set the quantity and packing rules** in the **Rules** tab: quantity, keep upright, most
-   layers, gap between parts, clearance to walls, and plywood thickness (or Auto). Under the
-   quantity, **Best: N per crate** says why that quantity wins, with **Use** to go back to it.
-   **Why this crate?** explains it in plain words: what was compared, how it is scored (crate
+     quantity per crate** and its crate, without you choosing one ("Set to the recommended 8
+     per crate" for the bracket); a saved design, a design file, a share link or your last crate keeps its own.
+2. **Set the quantity and packing rules** in the **Rules** tab: quantity, **Faces a part may
+   rest on**, most layers, gap between parts, clearance to walls, and plywood thickness (or
+   Auto). Under the quantity, **Best: N per crate** says why that quantity wins, with **Use** to go
+   back to it. The best quantity is chosen among the part's suggested quantities (the quick-pick
+   buttons: 1, 4 and 8 when the file gives none); any other number is yours to type.
+   One crate holds at most 200. Type more and the note says so and points to **Parts to ship**
+   on the Overview ("Go to Parts to ship").
+   **Why this crate?** explains it in plain words: which suggested quantities were compared, how it is scored (crate
    cost per part, broken into wood, screws and labour; freight not priced without rates), why
-   this quantity beat the next best (with a cost-per-part curve), what stopped a larger crate,
+   this quantity beat the next best (with a cost-per-part curve; the suggested quantities are
+   rings on it), what stopped a larger crate,
    and what it assumes. The spec and comparison PDFs print the same explanation.
+   - **Faces a part may rest on.** **As modelled** (the default) keeps each part the way up the
+     model sits. **Any face** lets the app lay parts on any face. **Choose** shows six toggles,
+     one per face of the part's box (Bottom, Top, Front, Back, Left, Right, each with its size),
+     so you can allow only the faces the part is safe on; at least one stays on. When a crate
+     would tip or be top-heavy and laying the parts down fixes it, the **Checks** tab offers it:
+     "Laying the parts down gives a stable crate", with a button that allows those faces.
    - **Ship a total.** Under **Shared job** on the Overview, **Parts to ship** takes how many
      parts ship in all and splits them evenly over the cheapest number of crates: "40 parts →
      2 crates × 20, $20.51 per part", why that many crates (one fewer fails the 1,000 kg limit,
@@ -226,7 +239,7 @@ tab at a time.
      the same part: the browser sends the job its part with the measured outline, so both
      sweeps give the same numbers ("This browser and the server agree"). The Overview's shipment
      shows the same split.
-3. **Get the best layout automatically.** The app tries every orientation and grid that holds
+3. **Get the best layout automatically.** The app tries every orientation (on the faces you allow) and grid that holds
    the batch, and ranks them stable first, then smallest outside volume, then lowest height.
    **Layouts** shows each option with top and side drawings, and says why the recommended one
    won. Each card also shows what it costs to build and its freight class against the
@@ -259,7 +272,7 @@ tab at a time.
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
      tip-over, blocking, stack load, base rating, centre of gravity, forklift and pallet-jack
-     entry, LTL length surcharge, and a hint when a cardboard box may be enough). The **base
+     entry (or "Light enough to carry by hand" for a crate at or under 23 kg gross), LTL length surcharge, and a hint when a cardboard box may be enough). The **base
      rating** is computed from the skids, floor and joists (#7): "Base rated 859 kg; this
      crate's payload is 645 kg (75%)"
 6. **Switch units** between in / lb (the default, for a US shop floor) and mm / kg; the choice is
@@ -272,12 +285,15 @@ tab at a time.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
-   stack and per-crate limits, the cradle rules for long parts, the **structural rules**
+   stack and per-crate limits (gross weight, parts, and a **maximum crate length, width and
+   height** for a pallet position or a door: a batch that would be bigger splits into more
+   crates), the cradle rules for long parts, the **structural rules**
    (allowable lumber and plywood stresses, load factor, minimum fork opening, floor-joist
    threshold and spacing, a stacking load for the lid), densities, material costs, screw spacing and screw price,
    the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
    crate), the dimensional-weight divisor, and **handling** (forklift and pallet-jack tine width,
-   spread and clearance under the floor, the off-centre limit and the smallest tip angle). A change
+   spread and clearance under the floor, the off-centre limit, the smallest tip angle and **Carried
+   by hand up to**). A change
    re-designs the crate at once (for example, a higher plywood cost raises the Overview's
    "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
    differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
@@ -354,12 +370,18 @@ tab at a time.
 ### The crate it designs
 
 - **Base:** a plywood floor on lumber skids. Forklift entry is from the ends.
-- **Handling (#8):** the combined centre of gravity of the crate and the parts (each part
-  assumed to have its CoG at its bounding-box centre) is checked for being off-centre (over 10%
-  of the length or width: mark it) or top-heavy (static tip angle under 30°), and the openings
-  between the skids are checked for a forklift (75 mm clear, 100 mm tines) and a pallet jack
-  (85 mm clear, 180 mm forks at a 520–690 mm spread), with the load between the tines. All of
-  these are shop standards. Spec §7.14.
+- **Handling (#8):** the combined centre of gravity of the crate and the parts is checked for
+  being off-centre (over 10% of the length or width: mark it) or top-heavy (static tip angle
+  under 30°), and the openings between the skids are checked for a forklift (75 mm clear, 100 mm
+  tines) and a pallet jack (85 mm clear, 180 mm forks at a 520–690 mm spread), with the load
+  between the tines. A crate at or under 23 kg gross is carried by hand, so those two rows give
+  way to one passing row. All of these are shop standards. Spec §7.14.
+- **The part's own centre of gravity (#110):** each part has its own, which moves the crate's.
+  It is **supplied** (`cog_mm` in your `parts.json`, or typed into the Part details line under the
+  header: millimetres from the middle of the part, inches with the units toggle), **estimated**
+  from the model's mesh (uniform density, a closed mesh), or **assumed** at the middle of its box
+  when neither works. The centre-of-gravity check says which, and the centre turns with the part,
+  so a part laid on its side carries its weight with it.
 - **Walls and lid:** plywood panels, each stiffened by a frame of 1×4 cleats.
 - **Inside:** wood holds the parts in place. Bearers lift the bottom layer, a plywood separator
   sits between layers, and blocking posts fill every gap.
@@ -381,7 +403,7 @@ tab at a time.
 
 ## Scope and non-goals
 
-**In scope:** one part type per crate, any quantity from 1 to 200, wood plus basic fasteners only,
+**In scope:** one part type per crate, any quantity from 1 to 200 per crate (more through **Parts to ship**), wood plus basic fasteners only,
 **domestic shipping only** (US truckload or LTL in a 53' dry van).
 
 **Out of scope for v1 (deliberately):**
@@ -456,8 +478,9 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
   their name and material). They are
   never derived from mesh volume.
 - **Per-crate limits:** at most 1,000 kg gross (a handling limit) and within the crate's
-  computed base rating, and the 53' dry van door and floor; no part-count limit. None of the
-  sample parts splits at its suggested quantities.
+  computed base rating, and the 53' dry van door and floor; no part-count limit and no size
+  limit of the shop's own until you set one (Shop standards, Limits). None of the sample parts
+  splits at its suggested quantities.
 - **Structural sizing** (#7, spec §7.15): skids, floor joists and the lid are sized by simple
   allowable-stress formulas for **SPF No. 2** lumber (Fb 875 psi × 1.3, Fv 135 psi, Fc⊥ 425 psi)
   and sheathing plywood (about 870 psi), with a **1.5 load factor**, the skids taken as supported

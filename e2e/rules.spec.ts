@@ -24,15 +24,20 @@ test("quantity 8 resizes the crate", async ({ page }) => {
   await shot(page, "rules-quantity-8");
 });
 
-test("a typed quantity over 200 is clamped to 200, with a note", async ({ page }) => {
+test("a typed quantity over 200 is clamped to 200, and the note points to Parts to ship", async ({ page }) => {
   const qty = panel(page).getByLabel("Quantity");
   await qty.fill("500");
   await pollCrate(page, (s) => s.quantity).toBe(200);
-  // A polite note by the field says what happened.
-  await expect(panel(page).getByRole("status").filter({ hasText: "Quantity is 1–200; set to 200" })).toBeVisible();
+  // One crate holds at most 200: the note says so and where to ship more (#111). It stays until the next edit.
+  const note = panel(page).getByTestId("quantity-cap-note");
+  await expect(note).toContainText("One crate holds at most 200. To ship 500, use Parts to ship on the Overview");
   await shot(page, "rules-clamp-note");
   await qty.blur();
   await expect(qty).toHaveValue("200");
+  await expect(note).toContainText("One crate holds at most 200");
+  // The next edit clears it.
+  await panel(page).getByRole("button", { name: "One fewer" }).click();
+  await expect(note).toBeEmpty();
 });
 
 test("Reset rules restores the defaults but keeps the quantity", async ({ page }) => {

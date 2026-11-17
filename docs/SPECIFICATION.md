@@ -207,7 +207,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
   check the domain's rotations against it. Shared code that two layers need goes in the lower
   one (`LoadedPart` and `modelUrl` are in `lib/part.ts`; `checks.ts` is in `lib`).
 - **The domain layer is pure and synchronous.** It has no React, DOM or I/O, and it is fully
-  unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the
+  unit-tested. `computeDesign` is cheap (up to 12 orientations × at most a few hundred grids), so the
   store re-runs it on every input change, through the engine (§5.1), in a Web Worker.
 - **Two stores, one rule: the design, and how it is shown.**
   - `src/state/store.ts` (`useDesigner`, zustand) is the design: the part (and its measured size and
@@ -256,18 +256,18 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 | `engine.ts` `designShipment(request)` | `planShipment` on a `DesignRequest`; returns `{ plan, summary, engineVersion, inputHash }`. Pure and synchronous; never throws for valid input |
 | `engine.ts` `cutList(request)` | The Cut list tab's CSV and file name (crate type or, for a split batch, the shipment), stamped |
 | `engine.ts` `inputHash(request)`, `summarize(plan)` | The stamp's hash; the headline numbers (outside size, gross, tare, screws, cost per crate type, totals, problem) |
-| `sweep.ts` `runSweep(request)`, `rankConfigurations(request)` | The quantity sweep (§7.16) as an engine call: `SweepRequestSchema` (part, rules = settings without the quantity, standards, optional freight rates, `maxQuantity`, `total`), stamped with `engineVersion` and `sweepInputHash` (canonical `{ v: 1, kind: "sweep", part, rules, standards, freightRates, maxQuantity, total }`). `rankConfigurations` adds every shortlisted quantity designed in full, ranked best first: the headless answer of `POST /api/v1/designs`, the queue's sweep job and the CLI ([QUEUE.md](QUEUE.md)) |
+| `sweep.ts` `runSweep(request)`, `rankConfigurations(request)` | The quantity sweep (§7.16) as an engine call: `SweepRequestSchema` (part, rules = settings without the quantity, standards, optional freight rates, `maxQuantity`, `total`, and optional `candidates`, #133: the whole-number quantities 1–200 the recommendation chooses among, deduplicated and sorted on parse), stamped with `engineVersion` and `sweepInputHash` (canonical `{ v: 1, kind: "sweep", part, rules, standards, freightRates, maxQuantity, total }`, plus `candidates` only when the request has them, so a request without them keeps its old hash). `rankConfigurations` adds every shortlisted quantity designed in full, ranked best first: the headless answer of `POST /api/v1/designs`, the queue's sweep job and the CLI ([QUEUE.md](QUEUE.md)) |
 | `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped (every file in it carries the stamp). Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
 | `artifacts.ts` `buildArtifact(kind, request, reader)` | One artifact (`glb`, `pdf`, `csv`) for one configuration: `{ bytes, contentType, fileName, engineVersion, inputHash, sha256 }` (§7.17) |
 | `artifacts.ts` `buildMultiBundleZip(configs, reader, options)` | Download all: a ZIP with a folder per configuration, `manifest.json` and `comparison.pdf` (§7.17) |
 | `glb.ts` | Runtime adapters for GLBs: `urlModelReader` (browser: the model registry's one parse of the model URL, held by the Export and Download all runs), `bytesModelReader` / `parseGlb` (any runtime, `GLTFLoader.parse` on bytes), `crateGlb` (`GLTFExporter`, adding a minimal `FileReader` where the runtime has none, as Node) |
-| `request.ts` `sweepRequestFor(…)`, `designRequestFor(…)`, `designPartHash(part)` | **The one request builder** (#46 "same inputs"): every engine request is built here, in the browser (the store's designs, the sweeper, a saved configuration) and on the server (the queue's sweep job, `POST /api/v1/designs`, the CLI), so the two sides can't build different requests from the same part. The part is cut to its design fields (`designPartOf`); `designPartHash` is the SHA-256 of their canonical JSON (`{ v: 1, part }`), the version of a part a job's server results are for (§5.2) |
+| `request.ts` `sweepRequestFor(…)`, `designRequestFor(…)`, `designPartHash(part)` | **The one request builder** (#46 "same inputs"): every engine request is built here, in the browser (the store's designs, the sweeper, a saved configuration) and on the server (the queue's sweep job, `POST /api/v1/designs`, the CLI), so the two sides can't build different requests from the same part. `sweepRequestFor` sets `candidates` from the part's `suggested_quantities` (`candidateQuantities`: 1, 4 and 8 when the part has none), so the browser, the queue's sweep job, `POST /api/v1/designs` and the CLI send the same ones. The part is cut to its design fields (`designPartOf`); `designPartHash` is the SHA-256 of their canonical JSON (`{ v: PART_HASH_SCHEMA, part }`, `PART_HASH_SCHEMA` 2 since the part's `cog`, #110), the version of a part a job's server results are for (§5.2) |
 | `schemas.ts` | zod schemas for every call: `DesignRequestSchema` (part, settings, standards, layoutKey, ranking), `DesignResponseSchema`, `DesignSummarySchema`, `EngineStampSchema`, `CutListRequestSchema` / `CutListResponseSchema`, and the worker messages. The browser, server and CLI validate the same types; the page's own calls are typed and skip parsing |
 
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
 
 - **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
-  `ENGINE_REVISION`, as `0.1.0+engine.5`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  `ENGINE_REVISION`, as `0.1.0+engine.11`. **Rule:** bump `ENGINE_REVISION` in the same change as
   anything that gives a different output for the same input (a rule, a constant, an algorithm, a
   default standard, or the text of a generated file). A refactor that leaves every output
   identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
@@ -276,7 +276,8 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
   `{ v: 1, part, settings, standards, layoutKey, ranking }` (`engine.ts`, `canonical.ts`,
   `sha256.ts`):
   - `part` is the design fields only (`id`, `name`, `mass_kg`, `dimensions_mm`, `material`,
-    `profile`): a loaded part's model URL, file name, units and load facts are not inputs, so a
+    `profile`, `suggested_quantities`, `cog`; `designPartOf` keeps the last two, the suggestions
+    normalised): a loaded part's model URL, file name, units and load facts are not inputs, so a
     blob URL never changes the hash. The quantity is `settings.quantity`. `layoutKey` is the
     user's pick (null for the recommended one).
   - Canonical JSON: keys sorted at every depth, `undefined` properties left out, numbers in
@@ -343,7 +344,7 @@ included) with the job: `designPart` on `POST /api/v1/jobs`, and `PUT /api/v1/jo
 whenever it changes (the outline measured after the job opened, a mass entered), debounced and
 once per `designPartHash` (`src/state/jobSync.ts`). The server stores it on the job, validated with
 `DesignPartSchema` (`design_job.design_part`, content-addressed by `design_part_hash`), and every
-server-side engine call for the job builds its request from it through `sweepRequestFor`. Saved
+server-side engine call for the job builds its request from it through `sweepRequestFor`. The part carries its `suggested_quantities` (#133) and its estimated or supplied centre of gravity `cog` (#110): the server does not parse the GLB, so the browser's estimate (§7.14) travels with the part, and a job with no browser part falls back to the part row (the catalog's suggestions, no `cog`). Saved
 configurations carry their whole `DesignRequest`, so the server's files for one (§7.17) are built
 from that request, never from the part row. With the same packing rules and standards, the
 server's stored recommendation, shortlist and total plan are then exactly the browser's:
@@ -406,7 +407,9 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/domain/glb.ts` | The sentences for `readGlb`'s problems (`glbProblemMessage`, the file check's words), `glbProblem`, `glbSizeUnits`, `checkGlbFile` (the API's and CLI's verdict: size, or message and whether it is a 415), `GLB_MESSAGES` (text .gltf, too large), `MAX_GLB_BYTES` (50 MB, API only), `idFromFile` / `nameFromFile` |
 | `src/domain/partFrame.ts` | The file frame's numbers (#105, §4), shared by the browser, the API and the CLI: `MODEL_UNITS`, `UP_AXES`, `MM_PER_UNIT`, `guessUnits`, `guessedFrame`, `framedSizeMm`, `readFrame`, `fitFrame` |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart`. Data only: the `/parts/…` model URL is built in `lib/part.ts` |
-| `src/domain/orientations.ts` | The 6 orientations; `rotationMatrix()` (integer, as three.js's XYZ Euler) and `rotatedSize()` |
+| `src/domain/orientations.ts` | The 12 orientations (#109, §7.1): the original six and their six flips; `restingFace()`, `rotationMatrix()` (integer, as three.js's XYZ Euler), `rotatedSize()` and `rotatedOffset()` (a part-frame offset carried through the orientation, #110) |
+| `src/domain/restingFaces.ts` | The faces a part may rest on (#109, §7.1): presets (`restingPreset`, `presetFaces`, `toggleFace`), the face names and sizes the Rules tab shows (`FACE_NAMES`, `faceSize`, `describeFaces`) and `layDownOffer()`, the stable layout the Checks tab offers (§7.7) |
+| `src/domain/cog.ts` | A part's own centre of gravity (#110, §7.14): `PartCog` (`offsetMm` from the box centre, `source` supplied or estimated), `PartCogSchema`, `cogInsideBox`, `cogOffsetOf`, `cogBasisOf` (supplied, estimated or assumed) and `estimateCog()`, the volume-weighted centroid of a closed triangle mesh (pure arithmetic; it never produces a mass) |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()` |
 | `src/domain/cradles.ts` | Cradles for slender parts (#6, §7.5a): `isSlender`, `usesCradles`, `cradleStations`, `notchFor`, `addCradleDunnage`, and the notch outline (`cradleProfile`, `cradleSolidAt`) |
@@ -426,13 +429,13 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/domain/units.ts` | `MM_PER_IN`, `MM_PER_FT`, `LB_PER_KG`, `IN3_PER_FT3` and the mm to m conversions the domain uses |
 | `src/domain/profile.ts` | Shaped blocking (#16, §7.5b): the `PartProfile` type, `usableProfile`, rotating a profile into the crate (`sideGrid`), post placement and shaped blocks (`planShapedBlocking`, `slotPlans`), and the restraint metric (`restraint`) |
 | `src/domain/message.ts` | `Message`: sentences with lengths and masses as data (`msg`, `mm`, `shopMm`, `kg`), so checks stay unit-free (#62, §7.7) |
-| `src/domain/handling.ts` | Centre of gravity, fork openings, tine placement and the handling checks (`analyseHandling`, `forkOpenings`, `placeTines`, `handlingChecks`; §7.14, #8). Read-only over the members |
+| `src/domain/handling.ts` | Centre of gravity, fork openings, tine placement and the handling checks (`analyseHandling`, `forkOpenings`, `placeTines`, `handlingChecks`; §7.14, #8; the hand-carry row, #113; the part's own CoG, #110). Read-only over the members |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
-| `src/domain/sweep.ts` | Choosing the best quantity (#46, §7.16): `sweepQuantities()` (the curve over 1–200 per crate, hard checks first, cost per part, the recommendation and shortlist), `planTotal()` and `evenSplit()` (total-quantity mode), `FreightRatesSchema` / `freightCostUsd()` (caller-supplied rates) |
+| `src/domain/sweep.ts` | Choosing the best quantity (#46, §7.16): `sweepQuantities()` (the curve over 1–200 per crate, hard checks first, cost per part, and the recommendation and shortlist among the part's suggested quantities, #133; `candidateQuantities`, `normalizeCandidates`), `planTotal()` and `evenSplit()` (total-quantity mode), `FreightRatesSchema` / `freightCostUsd()` (caller-supplied rates) |
 | `src/domain/totalPlan.ts` | `explainTotalPlan()`: why a total ships as so many crates (§7.16), from the curve; `splitOutcome()`, `planText()` |
 | `src/domain/explainRecommendation.ts` | Why the sweep recommends its quantity (§7.16): `explainRecommendation()` (five sections, the cost lines, the shortlist and the curve, from the sweep alone), `CONSTRAINT_TEXT` |
-| `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()`, `crateCostPerPart()` (the score a saved configuration is listed by, browser, server and files alike) |
+| `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit, the shop's size limit included (§7.10: `withinSizeLimit`, `withinOutsideLimits`, `sizeLimitText`); `shipmentBom()`, `describeShipment()`, `crateCostPerPart()` (the score a saved configuration is listed by, browser, server and files alike) |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file, the library, the shop standards file and the last-design entry |
 | `src/domain/profileCodec.ts` | `encodeProfile` / `decodeProfile`: a part profile packed losslessly for the design file (§6.5) |
@@ -452,8 +455,10 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/lib/partFrame.ts` | The file frame (#105, §4): `framedScene` (the three.js turn to Z up), the UI's words (`UNITS_LABEL`, `UP_LABEL`, `frameWords`), and the domain's numbers re-exported |
 | `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass, an implausible mass, and one that points to the File check report), sorted; `cautionCount` |
 | `src/lib/lumber.ts` | US shop names (#15): the nominal-lumber names from `domain/lumber.ts` (`sectionText`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
-| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
+| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `groupThousands` (plan sentences' counts as "10,000", #111), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
 | `src/lib/fileCheck.ts` | The file check (#106, §6.6): `checkFiles` reads the picked files (names and contents, no WebGL or DOM) and returns `Finding`s plus the decisions the loader follows (accepted entries, the model that opens, its frame); the plausibility limits; `massWarning`, `sizeMatches`, `parseModelUnits` |
+| `src/lib/partCog.ts` | The browser's centre-of-gravity estimate (#110, §7.14): `meshTrianglesMm` reads the loaded scene's triangles in mm, `buildCogEstimate` runs `estimateCog`, and `scheduleCog` runs it once per model and frame in browser idle time (`src/lib/idle.ts`, `whenIdle`) after the crate renders |
+| `src/lib/quantityCap.ts` | `quantityCapNote`: the Rules tab's note for a quantity over what one crate holds (#111), pointing to Parts to ship on the Overview |
 | `src/lib/fileCheckReport.ts` | The toast's one line (`verdict`), the report's counts, grouping and plain-text copy (`reportText`), `reportFor` |
 | `src/lib/loadPart.ts` | `loadPartFiles` (decides from `checkFiles`: entries, the model that opens, the frame, the message) and `loadDesign` (opening a design file); `designFilePart` |
 | `src/lib/modelRegistry.ts` | The model registry (#89, §8.4): owns each loaded part file (its Blob, object URL, parsed scene, derived data) and frees it when the last holder releases it: `adopt`, `acquire`, `scene`, `blob`, `memo` |
@@ -538,6 +543,8 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/state/glbCache.ts` | The last custom GLB's bytes in IndexedDB, one record, 50 MB cap (§9) |
 | `src/state/shareLink.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
 | `src/components/island/*.tsx` | The island and its five tabs. `Island.tsx` owns the WAI-ARIA tabs (§8.3a) and computes `allChecks` once for the tab badges, the Overview verdict and the Checks tab |
+| `src/components/island/RestingFaces.tsx` | The Rules tab's "Faces a part may rest on" (#109): three presets and, under Choose, six face toggle buttons (`aria-pressed`), each with its name, size and a small drawing (`RestingFaces.module.css`) |
+| `src/components/island/LayDownOffer.tsx` | The Checks tab's "Laying the parts down gives a stable crate" offer (#109, §7.7) with its one button |
 | `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
 | `src/components/island/Scorecard.tsx` | The Overview's design scorecard (#17): crate cost, build time, freight class and density, dimensional weight, the time to design in the heading row (`Scorecard.module.css`) |
 | `src/components/island/CrateTypePicker.tsx` | `CrateTypePicker` (which crate type of a split batch is on screen; Overview, Layouts, Cut list, Checks) and `CutScopeToggle` (the Cut list's This crate / Whole shipment); one module for both |
@@ -614,7 +621,8 @@ what the crate design needs:
 | `material` | no | Text. Without it the header says "material not given" |
 | `density_kg_m3` | no | A number above 0. Kept for the record; no rule uses it |
 | `dimensions_mm` | no | `[x, y, z]`, each above 0. The model check compares the mesh to it. Without it the size comes from the mesh and there is no catalog size to check |
-| `suggested_quantities` | no | Whole numbers above 0, shown as quick picks. Without it: 1, 4, 8 |
+| `cog_mm` | no | `[x, y, z]`, three finite numbers: the part's own centre of gravity (#110), in mm, in the model's own axes and origin, like `dimensions_mm` (`model_units` says how the file's numbers are read). Kept only if it lies inside the model's box. Without it the centre is estimated from the mesh, or assumed at the middle of the box (§7.14) |
+| `suggested_quantities` | no | Whole numbers above 0, shown as quick picks, and the quantities the best-quantity recommendation chooses among (#133, §7.16). Without it: 1, 4, 8 |
 | `model_units` | no | What the model's numbers are in: `meters`, `millimeters`, `inches`. On an entry or at the top of the file; the entry's wins (§4) |
 
 Top-level `schema_version` (the newest read is `1.0`), `coordinate_system` and `metadata_note` are
@@ -632,11 +640,17 @@ and is never written to `parts.json`, design files or share links.
 | Field | Type / range | Default | Effect |
 |---|---|---|---|
 | `quantity` | int 1–200 | 4 | Number of parts |
-| `keepUpright` | bool | true | Allow only the 2 orientations that keep model Z vertical |
+| `restingFaces` | non-empty list of `-z`, `+z`, `-y`, `+y`, `-x`, `+x`, in that order (#109) | `["-z"]` (as modelled) | The faces of the part's bounding box, in the loaded model's frame, that it may rest on; every layout rests it on one of them (§7.1). `["-z"]` keeps the part as it sits; all six let any face be down. Replaces `keepUpright` |
 | `maxLayers` | int 1–6 (UI offers 1–4) | 2 (`defaults.maxLayers`) | Upper limit on `nz` |
 | `partGapMm` | 0–300 | 50 (`defaults.partGapMm`) | Clear gap between adjacent parts, filled by blocking |
 | `wallClearanceMm` | 0–300 | 50 (`defaults.wallClearanceMm`) | Gap to the walls, floor and lid |
 | `panelThickness` | `"auto"` \| mm (6 to 50) | auto | Plywood for walls, lid and separators. The Rules tab offers the thicknesses in `stock.panelPlywoodMm` (12, 15, 19 by default); a design saved with another one still opens |
+
+**Old shape.** `CrateSettingsSchema` is `z.preprocess(readSettings, …)`, so every place that
+parses settings (design files, share links, the library, the last-crate restore, stored server
+rows, the queue's sweep payloads, `POST /api/v1/designs`) still accepts `keepUpright`: `true` reads
+as `["-z"]`, `false` as all six faces, and neither as `["-z"]`. Faces listed twice or out of order
+are put in the canonical order, so equal rules hash the same.
 
 The part is not a setting. It is passed to `computeDesign` separately. Loading a new part
 resets `quantity` to that part's first suggested quantity, and then opens it at the quantity
@@ -660,10 +674,16 @@ accepts:
 - **Told (#36):** `settingsAdjustments(patch, current)` lists the numeric fields that were
   clamped, rounded or rejected, without changing `normalizeSettings`. When a typed quantity
   isn't taken as given, the Rules tab shows a short polite note under the field
-  (`role="status"`, `clampNote` in `src/lib/clampNote.ts`): "Quantity is 1–200; set to 200",
-  "Quantity is a whole number; set to 4", or "Not a number; kept 4". It fades over 5 s and is
-  then cleared; with reduced motion it appears and goes without animation. Quantity is the only
-  typed rule; the sliders and buttons can't leave their ranges.
+  (`role="status"`, `clampNote` in `src/lib/clampNote.ts`): "Quantity is a whole number; set to
+  4", or "Not a number; kept 4". It fades over 5 s and is then cleared; with reduced motion it
+  appears and goes without animation. A quantity over 200 is told differently (#111,
+  `quantityCapNote` in `src/lib/quantityCap.ts`): "One crate holds at most 200. To ship 500, use
+  Parts to ship on the Overview.", which stays until the next edit, with a "Go to Parts to ship"
+  button that switches to the Overview, focuses that field and, when it is empty, prefills the
+  typed number (not committed until Enter or blur; over 10,000 gets no prefill and the note says
+  Parts to ship takes up to 10,000). With no shared job the field is not there, so the note has
+  no button and says it appears once the shared job is connected. Quantity is the only typed
+  rule; the sliders and buttons can't leave their ranges.
 
 `setPartDetails` (§6.2a) likewise ignores a mass that isn't a finite number above zero. As a
 second line of defence, `computeDesign` re-checks its input and returns a `problem` rather than
@@ -686,6 +706,9 @@ The UI wraps it in a **`LoadedPart`** (`src/lib/part.ts`), which adds:
 - `suggested_quantities`
 - `catalogDims`, the catalog size used for the model check (absent for unknown files)
 - `massAssumed`, true when a 10 kg stand-in is in use (`STAND_IN_MASS_KG`)
+- `cog` (#110), the part's own centre of gravity: `{ offsetMm: [x, y, z], source: "supplied" | "estimated" }`,
+  an offset from the middle of the bounding box in the part's design frame. Absent means assumed
+  at the middle (§7.14)
 
 Mass is never inferred from the mesh.
 
@@ -710,6 +733,18 @@ Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
   limit the scorecard shows no freight class (the density it would use is meaningless) and says
   its weights and cost are not real. It is a warning, not a refusal, because the same value from
   a `parts.json` must be treated the same way and a supplied mass is the user's to state.
+
+**Centre of gravity (#110).** The header's Part details line reads "centre of gravity [x, y, z] mm
+from the middle · source", where the source note says supplied, estimated from the mesh, or
+assumed (and why, when the estimate was refused). The browser estimates it from the loaded mesh in
+idle time (`setPartCog(modelUrl, outcome)`; §7.14) and never overwrites a supplied one. For a
+loaded part the same line is an inline field like name, material and mass: Enter commits, Escape
+reverts, the numbers follow the units toggle (mm or in), a value outside the part's box is refused
+("The centre of gravity has to be inside the part's box."), and a blank clears it (back to the
+estimate or the assumption). `setPartCogOffset(offsetMm | null)` stores it as `supplied` and
+records the change with source `cog`. A catalog part's line is read-only text. A model file's
+frame change keeps the same point of the part. The centre is saved in a design file as `part.cog`
+(§6.5) and travels with the job's part (§5.1).
 
 **The file's frame.** The store action `setPartFrame({ units?, up? })` (#105) re-reads the loaded
 file in another frame: `framePart` gives the new size, the measured outline is dropped (it was
@@ -807,6 +842,7 @@ whatever the display units.
 | `lowUtilization` | 0.25 | `utilization` |
 | `perCrate.maxGrossKg` | 1000 (a handling limit) | Shipment planning (§7.10): a heavier crate is split. The computed base rating (§7.15) also applies |
 | `perCrate.maxParts` | 0 (no limit) | Shipment planning: most parts in one crate |
+| `perCrate.maxOutsideMm {length, width, height}` | 0, 0, 0 (no limit) | Shipment planning and the sweep (#108, §7.10): the most outside size of one crate, for a pallet position, a door or a height. 0 on a side means no limit there; otherwise 200 to 30,000 mm. Length and width may swap (the crate can be turned), height never does. Standards saved before it existed read as no limit |
 | **`rates`** — material properties, prices and fastening (§7.6) | | |
 | `densityKgM3 {plywood, lumber}` | 600, 480 | Tare weight |
 | `costUsdPerM3 {plywood, lumber}` | 1100, 650 | `materialCostUsd` (placeholders) |
@@ -835,6 +871,7 @@ whatever the display units.
 | **`handling`** — centre of gravity and lifting (§7.14, #8) | | |
 | `forklift {minClearMm, tineWidthMm, spreadMm {min, max}}` | 75, 100, 250–1100 | `forklift`: Class II tines about 4″ wide and 1.5–2″ thick, so 3″ clear leaves room for a tine that isn't level; tines slide from about 10″ to 43″ apart, outside to outside |
 | `palletJack {minClearMm, tineWidthMm, spreadMm {min, max}}` | 85, 180, 520–690 | `pallet-jack`: forks about 7″ wide and 2.9–3.2″ high lowered; a narrow (20.5″) to a standard (27″) jack |
+| `handCarryMaxKg` | 23 (the NIOSH one-person limit) | `hand-carry` (#113, §7.14): a crate whose gross weight is at or under this is carried by hand, so the `forklift` and `pallet-jack` rows give way to one passing row. 0 turns it off (0 to 200 kg). Standards saved before it existed read as 23 |
 | `cogOffsetRatio` | 0.1 | `cog-offset`: past 10% of the length or width from the middle, mark the CoG (the ISO 7000-0627 centre-of-gravity mark of ISO 780, MIL-STD-129's centre-of-balance marking) |
 | `minTipAngleDeg` | 30 | `cog-tip`: under 30° the crate tips at under 0.58 g sideways, close to the 0.5 g lateral that US cargo securement (49 CFR 393.102) designs for |
 | **`cradle`** — cradles for slender parts (§7.5a, #6) | | |
@@ -848,7 +885,7 @@ whatever the display units.
 **Validation.** Every number is finite and inside a sane range (for example cleat spacing
 100–5000 mm, so a typo can't make thousands of boards). Across fields: panel plywood must go
 `light ≤ medium ≤ heavy`, `panelLightMaxKg ≤ panelMediumMaxKg`, a device's spread must go
-`min ≤ max` and be at least two tines wide, the trailer door can't be
+`min ≤ max` and be at least two tines wide, each side of `perCrate.maxOutsideMm` is 0 or 200 to 30,000 mm, the trailer door can't be
 bigger than the trailer inside, the end-cradle offset can't be more than the cradle spacing, and blocking can't be wider than the minimum interior (two
 cleats), or a bearer would poke through a wall. The structure group (#7) has ranges too: a load
 factor of 1–5, stresses above zero, joist spacing 100–2000 mm and a stacking load of 0 or more.
@@ -857,7 +894,7 @@ factor of 1–5, stresses above zero, joist spacing 100–2000 mm and a stacking
 
 **What is deliberately not a standard:** geometry that keeps the model consistent rather than a
 shop choice — the 0.5 mm smallest board, bearers at 20% and 80% of the part width, at least two
-skids and two uprights per wall, the six orientations — plus input validation: the settings
+skids and two uprights per wall, the twelve orientations — plus input validation: the settings
 ranges (§6.2), `MAX_PART_MM` (20 m, a units-mistake guard, §7.9) and the manual panel choices
 12 / 15 / 19 mm in the Rules tab (`CrateSettingsSchema`). Auto picks from `panelPlywoodMm`;
 choosing by hand still offers the three standard sheets.
@@ -877,7 +914,7 @@ different `version`, or an invalid value.
 
 **In the UI.** Rules → **Shop standards · house rules for every crate**, a `<details>` section
 collapsed by default. Ten groups (Stock on hand, Defaults, Construction, Cradles, Limits,
-Structure, Rates, Labour, Freight, Handling) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
+Structure, Rates, Labour, Freight, Handling) of number fields with units, laid out like the other `.rule` rows. Limits holds "Max crate length", "Max crate width" and "Max crate height" (empty means no limit, placeholder "no limit") and Handling holds "Carried by hand up to". A field applies as soon as its
 text is a valid standard; invalid text is outlined in gold with the reason and reverts on blur.
 A changed field is tinted and says its default. A **Customised** tag shows when anything
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
@@ -897,7 +934,7 @@ the app has no imperial convention for them: minutes, $/h, $/100 screws, %, ×, 
 in³/lb (already imperial), and MPa (the app shows no stress anywhere else, and the shipped
 values are not the round psi figures the hint quotes, so a psi column would only add a second set
 of numbers to check). A field where 0 is stored for "none" (`zero` in the table: max parts per
-crate, stacked on the lid) shows an empty box with the placeholder "no limit" / "none"; clearing
+crate, the three max crate sizes, stacked on the lid) shows an empty box with the placeholder "no limit" / "none"; clearing
 the box stores 0.
 
 ### 6.5 Design file (`DesignFileSchema`, #28)
@@ -912,10 +949,10 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 ```jsonc
 {
   "kind": "crate-design",          // tells it apart from a parts.json catalog
-  "schemaVersion": 3,              // DESIGN_SCHEMA_VERSION
+  "schemaVersion": 5,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
-  "engine": { "version": "0.1.0+engine.5", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
+  "engine": { "version": "0.1.0+engine.11", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -929,9 +966,11 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     "unitsGuessed": true,          // optional; only written while the units are the size-based guess
     "model": "PART-001-machined-steel-bracket.glb",
     "outline": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 3.5,   // optional: the measured
-                 "grids": [[63, 74], …], "data": "eJz…" }                 // part profile, packed
+                 "grids": [[63, 74], …], "data": "eJz…" },                // part profile, packed
+    "cog": { "offsetMm": [-38.3, 0, -48.6], "source": "estimated" }   // optional (#110): the part's own
+                                   // centre of gravity, an offset from the box centre, mm, Z up
   },
-  "settings": { "quantity": 4, "keepUpright": true, "maxLayers": 2,
+  "settings": { "quantity": 4, "restingFaces": ["-z"], "maxLayers": 2,
                 "partGapMm": 50, "wallClearanceMm": 50, "panelThickness": "auto" },
   "ranking": "volume",             // "volume" | "cost" | "density" (§7.2)
   "layoutKey": "u:870x590x358:221", // Layout.key of the layout on screen
@@ -984,7 +1023,11 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   Z up) and, for a catalog part, `units: "m"`. A custom part's units were a size-based guess that
   older files did not record, so they stay absent, and `loadDesign` takes the units (Z up, then
   metres, millimetres, inches) that give the saved `dimensions_mm` again (`fitFrame`), falling
-  back to the guess when none does. A format 1 file takes both steps. The last-opened crate and
+  back to the guess when none does. Format 4 replaced `settings.keepUpright` with
+  `settings.restingFaces` (#109); the 3 → 4 step reads `keepUpright: true` as `["-z"]` and `false`
+  as all six faces (`readSettings`, §6.2). The optional `part.cog` (#110) joined format 3's
+  shape without a bump: a file without it opens with the estimate or the assumed centre, and a
+  saved centre outside the reopened model's box is dropped. A format 1 file takes every step. The last-opened crate and
   the design library keep their own format 1 and migrate the design inside them on read.
 - **Restoring** (`loadDesign` in `loadPart.ts`, then `restoreDesign`):
   - A `catalog` part is rebuilt from the bundled catalog entry and its `/public/parts` model.
@@ -1079,7 +1122,8 @@ a demo. A saved design names its own model, so nothing is called extra there.
 | `non-positive` | error | `parts[i].mass_kg` | A mass of 0 or less. "SCN-911: mass_kg is -5, but a part must weigh more than 0 kg, so it was skipped. Enter its real mass in kilograms." |
 | `duplicate-id` | error | `parts[i].id` | The second entry with an id; the first counts. "SCN-901 repeats the id of parts[0], so it was skipped. Give every part its own id." |
 | `duplicate-model` | error | `parts[i].model` | The second entry naming one .glb. "SCN-915 names heavy-1500kg.glb, which parts[0] already uses, so it was skipped. Each part needs its own .glb." |
-| `field-ignored` | warning | `parts[i].dimensions_mm` etc. | An optional field of the wrong kind; the entry still loads. "SCN-930: dimensions_mm should be three numbers above 0, [x, y, z] in mm but is a list, so it was ignored, and the size comes from the model." |
+| `cog-outside` | warning | `parts[i].cog_mm` | A `cog_mm` outside the model's box; ignored, and the centre of gravity is estimated from the model. "SCN-950: cog_mm [900, 0, 0] is outside the model's box, so it was ignored and the centre of gravity is estimated from the model. cog_mm is in mm, in the model's own axes and origin (model_units says how the file's numbers are read)." |
+| `field-ignored` | warning | `parts[i].dimensions_mm`, `parts[i].cog_mm` etc. | An optional field of the wrong kind (`cog_mm` must be three finite numbers); the entry still loads. "SCN-930: dimensions_mm should be three numbers above 0, [x, y, z] in mm but is a list, so it was ignored, and the size comes from the model." |
 | `implausible-mass` | warning | `parts[i].mass_kg` | Over `MAX_PLAUSIBLE_MASS_KG` or under `MIN_PLAUSIBLE_MASS_KG`. "SCN-940: a mass_kg of 99999999 is more than 20,000 kg, the most one part is taken to weigh. Check for an extra digit or the wrong unit." |
 | `implausible-density` | warning | `parts[i].density_kg_m3` | Outside `PLAUSIBLE_DENSITY_KG_M3`. "SCN-941: density_kg_m3 is 50000, outside 1 to 25,000. Check it is in kilograms per cubic metre." |
 | `implausible-dimension` | warning | `parts[i].dimensions_mm` | A side outside `PLAUSIBLE_SIDE_MM`. "SCN-941: dimensions_mm has 0.5, outside 1 mm to 20,000 mm. Check it is in millimetres." |
@@ -1114,29 +1158,50 @@ load has no line.
 
 ### 7.1 Orientations
 
-There are six axis-aligned rotations, one per permutation of the bbox axes. Mirror images are
-excluded.
+There are twelve axis-aligned rotations (#109): each of the part's six faces down, with a quarter
+turn about the vertical. Mirror images are excluded. The first six are one per permutation of the
+bbox axes, and they stay first and unchanged, because saved layout keys name them. The second six
+turn each of those over, so the opposite face is down with the same extents. Every face is down in
+exactly two orientations (unturned and turned 90°), so a part that may rest only on its top face
+still has layouts.
 
-| id and label | Euler (XYZ) | upright |
-|---|---|---|
-| `as-modeled` "As modeled" | (0, 0, 0) | ✓ |
-| `turned` "Turned 90°" | (0, 0, π/2) | ✓ |
-| `on-side-x` "On its side" | (π/2, 0, 0) | |
-| `on-side-x-turned` "On its side, turned 90°" | (π/2, 0, π/2) | |
-| `on-end-y` "On end" | (0, π/2, 0) | |
-| `on-end-y-turned` "On end, turned 90°" | (0, π/2, π/2) | |
+| id and label | Euler (XYZ) | face down | upright |
+|---|---|---|---|
+| `as-modeled` "As modeled" | (0, 0, 0) | `-z` | ✓ |
+| `turned` "Turned 90°" | (0, 0, π/2) | `-z` | ✓ |
+| `on-side-x` "On its side" | (π/2, 0, 0) | `-y` | |
+| `on-side-x-turned` "On its side, turned 90°" | (π/2, 0, π/2) | `-x` | |
+| `on-end-y` "On end" | (0, π/2, 0) | `+x` | |
+| `on-end-y-turned` "On end, turned 90°" | (0, π/2, π/2) | `-y` | |
+| `upside-down` "Upside down" | (π, 0, 0) | `+z` | ✓ |
+| `upside-down-turned` "Upside down, turned 90°" | (π, 0, π/2) | `+z` | ✓ |
+| `on-other-side` "On its other side" | (−π/2, 0, 0) | `+y` | |
+| `on-other-side-turned` "On its other side, turned 90°" | (−π/2, 0, π/2) | `+x` | |
+| `on-other-end` "On its other end" | (0, −π/2, 0) | `-x` | |
+| `on-other-end-turned` "On its other end, turned 90°" | (0, −π/2, π/2) | `+y` | |
+
+**Resting faces (`CrateSettings.restingFaces`, §6.2).** The faces are those of the part's
+bounding box in the loaded frame (after the file's units and up axis, `partFrame.ts`): `-z` is the
+base as modelled, `+z` the top, `-y` the front, `+y` the back, `-x` the left end and `+x` the right
+end. `restingFace(o)` reads the face down from the orientation's rotation matrix (the crate's up
+axis in the part's frame), and `orientationsFor(faces)` keeps the orientations that rest the part
+on an allowed face. `orientations.parity.test.ts` checks `restingFace` against three.js. The
+viewer and shaped blocking already follow the orientation's matrix and Euler angles, so they stay
+consistent with the packing. The presets are **As modelled** (`["-z"]`, the default), **Any face**
+(all six) and **Choose**; `src/domain/restingFaces.ts` holds them (`restingPreset`,
+`presetFaces`, `toggleFace`: the last face can't be turned off).
 
 `rotatedSize(size, o)` rotates a centred box with three.js and returns its new AABB size,
 rounded to 0.001 mm.
 
 ### 7.2 Packing (`enumerateLayouts`)
 
-Inputs: `partSize`, `n`, `keepUpright`, `maxLayers`, gap `g`, clearance `c`, separator thickness
+Inputs: `partSize`, `n`, `restingFaces`, `maxLayers`, gap `g`, clearance `c`, separator thickness
 `s` (= panel thickness), `structureAllowance`, and `minInteriorMm` (`minInteriorMm(standards)` =
 2 × `stock.cleatMm.wide` = 178 by default), plus the standards for the stability ratio and
 volume tolerance.
 
-For each allowed orientation, with rotated cell `[a, b, h]`:
+For each orientation that rests the part on an allowed face (§7.1), with rotated cell `[a, b, h]`:
 
 ```
 for nz in 1..min(maxLayers, n):
@@ -1161,10 +1226,13 @@ for nz in 1..min(maxLayers, n):
   the orientation set always contains a cell and its 90° turn (`as-modeled` / `turned`), one of
   which has `a ≥ b` and so `L ≥ W`. The `no-layout` problem (§7.9) is only a safety net.
 - **Speed:** at quantity 200 (the maximum), `computeDesign` takes 1–2 ms for each sample part
-  with `keepUpright` on or off and `maxLayers` 1–4, and about 5 ms for a 20 m part (measured on
+  with the resting faces as modelled or any face and `maxLayers` 1–4, and about 5 ms for a 20 m part (measured on
   an M-series Mac). The hardening tests fail when the median of 5 runs is over 50 ms.
-- **Key format:** `"{u|s}:{L}x{W}x{H}:{nx}{ny}{nz}"`. `u`/`s` means upright or not, and the
-  dimensions are rounded mm. Keys are only used to select a layout in the UI; they aren't stored.
+- **Key format:** `"{u|s|fu|fs}:{L}x{W}x{H}:{nx}{ny}{nz}"`. `u`/`s` means upright or not, and
+  the dimensions are rounded mm. An `f` prefix (`fu:`, `fs:`) marks an orientation from the second
+  six (the flips, §7.1). A flip repeats a shape the first six already give, so with every face
+  allowed the flips never appear, and the keys for the old keep-upright on and off are unchanged.
+  Keys select a layout in the UI and are saved in a design file as `layoutKey` (§6.5).
 
 **Ranking (`compareLayouts`):**
 
@@ -1479,7 +1547,7 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
 | `base-rating` | Within the base rating ("Base rated 859 kg; this crate's payload is 645 kg (75%). 3 × 4x6 skids, 7 2x4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).") | caution: Over the base rating ("… Even 3 × 4x6 skids … can't carry it (skid bending governs). Split the batch, or add heavier skid or joist stock.") | payload ≤ the computed base rating (§7.15, #7; it replaced the fixed 1,000 kg `limits.baseRatingKg`). Sections are named with a plain `x` ("4x4", "4x6", "2x4"; the table is `src/domain/lumber.ts`), or in mm for non-standard stock |
 | `lid` | Lid carries the stacking load | caution: Lid can't take the stacking load | Only when `structure.lidStackKg` > 0 (§7.15): the lid's rated stacking load ≥ `lidStackKg` |
-| `cog-offset`, `cog-tip`, `forklift`, `pallet-jack` | §7.14 | §7.14 | Centre of gravity and handling (#8), in this order after `base-rating` |
+| `cog-offset`, `cog-tip`, then `hand-carry` or `forklift` and `pallet-jack` | §7.14 | §7.14 | Centre of gravity and handling (#8, #110, #113), in this order after `base-rating`; a crate at or under the hand-carry limit gets the one `hand-carry` row in place of the two devices |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% (`limits.lowUtilization`) |
 | `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`). The text states those three limits as configured ("… within the shop's carton limits (parts up to 15 kg, payload up to 25 kg, 1,905 mm L + W + H).") |
@@ -1507,6 +1575,20 @@ cardboard boxes. `cardboard` suggests it, while still producing the crate design
 Of the sample parts at their suggested quantities, only a single PART-003 triggers it (11.8 kg,
 interior 545 × 535 × 354 mm). That is deliberate: one housing fits in a carton, while four or
 more (47 kg and up) and the steel parts justify a crate.
+
+**The lay-down offer (#109, `layDownOffer` in `src/domain/restingFaces.ts`).** When the crate on
+screen has the `stable` (tip-over) or `cog-tip` (top-heavy) caution, and letting the part rest on
+more faces gives a crate with neither, the Checks tab says so and offers it in one click
+(`LayDownOffer.tsx`, `data-testid="lay-down-offer"`): "Laying the parts down gives a stable crate"
+(or "Resting the parts on another face gives a stable crate" when the new crate is upright or
+upside down), the crate's outside size, and a button such as "Allow resting on the front and back
+faces". The offer takes the smallest widening that works: both faces of one axis the rule does not
+cover yet, then every uncovered axis, so a rule such as "never on its end" is not thrown away.
+Taking it sets `restingFaces` and clears the layout pick, so the design it shows is the one the
+offer evaluated. Nothing is offered when nothing is cautioned, when no widening helps, or when
+every face is already allowed. Example: a 150 × 150 × 1,200 mm, 12 kg part (`fixtures/scenarios/tall-part.glb`)
+has a 4.61× tip ratio and a 12° tip angle standing up; laid down it is 1.25× and both cautions are
+gone (the forklift and pallet-jack rows stay).
 
 **Check text and units (#62).** `Check.detail` is a `Message` (`src/domain/message.ts`), not a
 string: plain text interleaved with typed quantities, built with the `msg` tagged template
@@ -1563,7 +1645,7 @@ the first `problem` that applies:
 | `part-mass` | Mass is not a finite number above zero | Enter a mass above zero, in the part header |
 | `settings` | Settings fail `CrateSettingsSchema` (only if the store boundary was bypassed) | Which field, and to reset the rules |
 | `standards` | Custom standards fail `ShopStandardsSchema` (only if `setStandards` was bypassed; the shipped defaults are not re-parsed) | Which field, and to reset the shop standards |
-| `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or turning off upright |
+| `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or letting parts rest on more faces |
 
 The problem is shown once (#62). The island's panel is a `ProblemCard`: the title, the detail in the
 selected units and the way out for the kind of problem: **Load another part** for `part-size`,
@@ -1592,7 +1674,19 @@ needs "this batch ships as N crates", each buildable, handleable and within limi
   nothing extra, and the bisection still terminates;
 - outside L ≤ `trailerMm.interiorLength`, W ≤ `doorWidth`, H ≤ `doorHeight` (the `door` check's
   limits, `withinOutsideLimits`);
+- outside size within the shop's own size limit, `limits.perCrate.maxOutsideMm` (#108: a pallet
+  position, a door or a height; `withinSizeLimit`, which `withinOutsideLimits` includes, so it
+  joins the `door` check's trailer limits). 0 on a side means no limit there. **Length and width
+  may swap**, because a crate can be turned on its pallet position: 1,200 × 1,000 × 1,000 accepts
+  a 1,000 × 1,200 × 900 crate. **Height never swaps** (a crate is not tipped onto its side), so a
+  height-only limit is a plain height limit and a width-only limit turns the crate to fit under it;
 - parts ≤ `limits.perCrate.maxParts`, when it is above 0.
+
+**The size limit and layouts (#108).** A layout over the size limit is not offered (the crate
+type's layouts are filtered, when at least one fits), and a crate over it counts as over the
+limits in the steps below, so a batch splits exactly as it does for weight and part count. For
+example, PART-003 × 8 under a 1,200 × 800 × 1,000 mm limit ships as 2 crates of 4. The sweep
+(§7.16) has a hard check for it, `max-size`. A single part (quantity 1) is never split (step 1 below), so a part that is over the size limit alone gets no `crate-limit` message at quantity 1; from quantity 2 up the message appears.
 
 With the defaults, no sample part splits at its suggested quantities.
 
@@ -1605,7 +1699,7 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
 
 1. **One crate when it fits.** If the crate for the whole batch is within every limit, the plan
    is that crate: `computeDesign`'s own result, value for value (tested on every sample part ×
-   suggested quantity × keep-upright, so the 18-case baseline can't move). A single part is
+   suggested quantity × resting-face rule, so the 18-case baseline can't move). A single part is
    never split (Q = 1 stays as today, with its `door` or `base-rating` cautions). **A layout
    pick counts:** when `layoutKey` is one of the whole batch's layouts and the crate on it is
    within every limit, the batch ships as that one crate even if the recommended layout's crate
@@ -1630,12 +1724,15 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
    6 × crate A (30 each) + 1 × crate B (20), 7 crates; PART-003 × 10 with at most 4 per crate is
    2 × 4 + 1 × 2.
 6. **When even one part is over the limits,** every part ships in its own crate, `unmet` says
-   why, and each crate's `crate-limit` check is a caution.
+   why ("One part alone is over the per-crate limit (…), so each part ships in its own crate.",
+   the limit text naming the size limit, `sizeLimitText`, next to weight and part count), and each
+   crate's `crate-limit` check is a caution.
 7. **Layout picks:** besides keeping a batch whole (step 1), `layoutKey` applies to the first
    crate type that has that layout; a split itself always uses the recommended layouts.
 
 On a split, every crate type gets the `crate-limit` check (§7.7); its text names the limits as
-"1,000 kg gross or the base rating, the trailer door and floor". `shipmentBom(plan)` merges the
+"1,000 kg gross or the base rating, the trailer door and floor", and, when a size limit is set,
+that size limit too (a typed `Message`, so sizes follow the units toggle). `shipmentBom(plan)` merges the
 cut lists for the whole shipment (each type's quantities × its count; equal pieces merged by
 `BomLine.key`, each piece's sizes kept together), with summed plywood, lumber and screws;
 `shipmentToCsv` writes it with a "# Shipment of …" header. `describeShipment` gives
@@ -1922,13 +2019,44 @@ skids, which run the full length.
 
 - every board, at its box centre, with mass = volume × `rates.densityKgM3` of its material (the
   tare model of §7.6, so the boards sum to `tareKg`);
-- every part, at the centre of its packed bounding box (`slot.min + cellSize / 2`), with the
-  part's mass. **Without mesh analysis a part's own CoG is assumed to be its bounding-box
-  centre.** A part whose mass sits off its box centre (a flanged shaft, a bracket with a heavy
-  base) moves the true CoG by up to half its box in that direction.
+- every part, at its packed bounding box's centre (`slot.min + cellSize / 2`) plus the part's own
+  centre of gravity, with the part's mass (`partMasses`; #110).
 
-The total equals `grossKg`. A full, symmetric grid puts the CoG on both centre lines; a part
-missing from the last slot of a partial layer moves it away from that slot.
+**The part's own CoG (#110).** `DesignPart.cog = { offsetMm: [x, y, z], source }` is an offset from
+the box centre, in mm, in the part's design frame (Z up, as modelled; `src/domain/cog.ts`). It
+has one of three sources, and the check text names which (`Handling.cogBasis`):
+
+| Source | Where it comes from | Check text |
+|---|---|---|
+| **supplied** | The `cog_mm` of a `parts.json` entry (§6.6), or typed into Part details (§8.3) | "The part's own centre of gravity is the one supplied." |
+| **estimated** | The browser's estimate from the loaded mesh, assuming uniform density (`estimateCog`; below) | "… estimated from the model's mesh (uniform density)." |
+| **assumed** | No `cog` at all: the middle of the bounding box, because none was supplied and the mesh could not give one | "… assumed at the middle of its bounding box: none was supplied, and the mesh could not give one. Enter it in the part details for a lopsided part." |
+
+A part whose mass sits off its box centre (a flanged shaft, a bracket with a heavy base) moves the
+crate's CoG by up to half its box in that direction, so the off-centre and tip checks, the fork
+positions, the 3D stencil and the shipping label all follow it.
+
+**It follows the orientation.** `partMasses` rotates the offset by the layout's orientation
+matrix (`rotatedOffset` in `orientations.ts`, the matrix the viewer applies), so a part laid on
+its side or turned over carries its weight with it. A half turn puts the crate's CoG on the other
+side. No orientation is a half turn about the vertical, so that case is not an offered layout; a
+unit test checks it with a custom orientation.
+
+**The estimate.** `estimateCog` sums signed tetrahedron volumes over the mesh's triangles into a
+volume-weighted centroid, assuming uniform density. It never produces a mass. It welds vertices
+(a millionth of the box diagonal) and needs every edge matched by an opposite one (a closed body);
+a mesh wound inside out is turned the right way. It falls back to **assumed** when the mesh is
+open, has no volume, has more volume than its bounding box (overlapping bodies count twice) or
+has a centroid outside the box. It runs in the browser, once per model and frame, in idle time
+after the crate renders (`scheduleCog`, `src/lib/partCog.ts`), and takes a few milliseconds on the
+sample parts (PART-001 432 triangles about 2 ms). The server does not parse the GLB: the browser's
+result travels with the job's part (§5.1), so an API-only job designs with the assumed centre until
+a caller sends a part with `cog`. A change of units or up axis keeps the same point of the part
+(`reframeOffset`). A saved or typed centre outside the model's box is refused or dropped.
+
+The total equals `grossKg`. A full, symmetric grid of centred parts puts the CoG on both centre
+lines; a part missing from the last slot of a partial layer, or a part with an off-centre CoG,
+moves it.
 
 **Offset.** `offsetMm = CoG − the middle of the outside footprint` (X, Y), named in the text as
 "toward the left end / right end" (−X / +X, as seen from the front) and "toward the front /
@@ -1950,7 +2078,8 @@ floor (a joist from structural sizing) lowers it.
 the tine centre lines**, so the load can't roll off a tine. The pallet jack's range covers a
 narrow (20.5″) and a standard (27″) jack; any one jack has a fixed spread.
 
-**Checks** (thresholds are the `handling` standards, §6.4):
+**Checks** (thresholds are the `handling` standards, §6.4). The two CoG rows end with the source
+sentence of the table above.
 
 | id | Pass (`ok`) | Problem | Rule |
 |---|---|---|---|
@@ -1959,19 +2088,33 @@ narrow (20.5″) and a standard (27″) jack; any one jack has a fixed spread.
 | `forklift` | Forklift fits from the ends ("Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, …") | caution: Forklift may not fit (too low: "… 70 mm clear under the floor, needs 75 mm. Use taller skids."; too narrow: "the widest opening between the skids is 156 mm; it needs room for …") | `placeTines` with `handling.forklift` |
 | `pallet-jack` | Pallet jack fits from the ends; also **"Pallet jack won't fit: use a forklift"** ("The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.") when only the width rules the jack out and a forklift fits | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either) | `placeTines` with `handling.palletJack` |
 
+**Hand-carry (#113).** When the crate's gross weight (`Handling.grossKg`, boards plus parts, equal
+to `design.grossKg`) is at or under `handling.handCarryMaxKg` (23 kg by default, inclusive; 0 turns
+it off), one person can lift it and needs no device. The `forklift` and `pallet-jack` rows are then
+replaced by one passing row, `hand-carry` "Light enough to carry by hand" ("Gross 6.3 kg, at or
+under the 23 kg hand-carry limit, so it needs no forklift or pallet jack."). The CoG rows are
+unchanged, and just over the limit the two device rows come back. It is a check only: the sweep's
+hard failures do not read it, so a light part's curve, shortlist and recommendation are the same
+with the rule on or off, and the skids stay (they set the floor's bending, the base rating and the
+crate's height).
+
 A crate needs one way to be lifted. A small crate too narrow for a pallet jack is a fact of its
 size rather than a defect, so while a forklift fits it is a pass (an answered question: use a
 forklift, not an open one), and the default PART-001 × 4
 crate (one 474 mm opening, under a jack's 520 mm spread) still has no cautions. Too little height
 under the floor is always a caution.
 
-With the defaults, the sample parts at their suggested quantities: every CoG is on the centre
-lines (full grids) and every tip angle is 36° or more. The forklift fits all but the single
-bracket (204 mm opening) and the single shaft (156 mm): forks can't go in from the ends of a
-crate that narrow, so both devices are cautions there. The pallet jack fits only PART-003 × 8,
-whose 1,102 mm wide crate has a middle skid and two 408 mm openings.
+With the defaults, the sample parts at their suggested quantities, and no part CoG (assumed at
+the box centre): every CoG is on the centre lines (full grids) and every tip angle is 36° or more.
+The forklift fits all but the single bracket (204 mm opening) and the single shaft (156 mm): forks
+can't go in from the ends of a crate that narrow, so both devices are cautions there. None of them
+is within 23 kg gross (the lightest, PART-003 × 1, is 39 kg), so no sample crate gets the
+hand-carry row. In the browser the estimated centres move the crate's CoG a few tens of
+millimetres (PART-001 × 8: 27 mm toward the left end) and the tip angle by one or two degrees, and
+no sample check changes level.
 
-**Where it shows.** The Checks tab and the export document list the four checks (§7.11). The
+**Where it shows.** The Checks tab and the export document list the checks (§7.11): the two CoG rows and either the
+two device rows or the one hand-carry row. The
 3D view marks the CoG and the fork entry (§8.4). The shipping label draws the CoG mark on the
 end view and the fork arrows in `design.handling.openings` (§7.11).
 
@@ -2089,9 +2232,11 @@ conservative end-supported case even when the crate sits flat on a trailer floor
 ### 7.16 Choosing the best quantity (`src/domain/sweep.ts`, #46)
 
 Given a part, the app recommends how many to put in one crate and which crate, without the user
-choosing. `sweepQuantities(part, settings, standards, { maxQuantity?, freightRates? })` ignores
-`settings.quantity` and, for every quantity per crate `q` from 1 to `SWEEP_MAX_QUANTITY` (**200**,
-the quantity setting's maximum):
+choosing. `sweepQuantities(part, settings, standards, { maxQuantity?, freightRates?, candidates? })`
+ignores `settings.quantity` and, for every quantity per crate `q` from 1 to `SWEEP_MAX_QUANTITY`
+(**200**, the quantity setting's maximum), computes a point of the **curve**. The recommendation
+then chooses only among the part's **suggested quantities** (below); the curve itself is always the
+full 1–200, because the chart shows it and Parts to ship needs it. For each `q`:
 
 1. **Monotonic limits, without designing.** `q` over `limits.perCrate.maxParts` (when above 0) fails
    `max-parts`; `q × part mass` over `limits.perCrate.maxGrossKg` fails `max-gross` (the parts alone
@@ -2100,8 +2245,11 @@ the quantity setting's maximum):
    the trailer door and floor, the smallest side gap ≥ `minBlockingGapMm`) moved ahead in their
    usual order. The first `SWEEP_LAYOUTS_PER_QUANTITY` (**3**) are designed.
 3. **Hard checks filter first** (`hardFailure`), in this order: `door`, `stable`, `blocking`,
-   `base-rating` (each a caution from §7.7), then gross over `maxGrossKg` (`max-gross`) and `q` over
-   `maxParts` (`max-parts`). They are never traded for cost.
+   `base-rating` (each a caution from §7.7), then the crate over the shop's size limit
+   (`max-size`, `limits.perCrate.maxOutsideMm`, #108, §7.10), gross over `maxGrossKg`
+   (`max-gross`) and `q` over `maxParts` (`max-parts`). They are never traded for cost. A quantity
+   whose every designed layout is over the size limit is not `ok`, so it is never in the shortlist
+   or the recommendation, and the cheap layout filter in step 2 prefers layouts within it.
 4. **Score = cost per part moved** = (crate cost + freight cost) ÷ `q`, where crate cost is
    `cost.totalUsd` (wood, screws and labour, §7.12). The cheapest passing layout is the point's
    crate. When none passes, the point is not `ok` and records the first designed layout's failing
@@ -2118,17 +2266,47 @@ rates** the sweep's `basis` is `crate-only`: the score is crate cost per part, e
 is null, and the rationale says freight is not priced. The app has no rates (§7.12), so the UI
 always shows the crate-only score.
 
-**Recommendation and ties.** The `ok` points sorted by `compareSweepPoints`: the lower score to the
-cent per part, then **fewer crates** (the larger `q`), then **denser freight** (lb/ft³). The first
-is the recommendation; the first `SWEEP_SHORTLIST_SIZE` (**5**) are the shortlist. When the runner-up
-scores the same to the cent, the recommendation's `tieBreak` says which rule ordered them
-(`fewer-crates` or `denser-freight`; `tieBreakBetween`), else null. Its rationale
-names the score and **what stopped a larger crate**: the first failing quantity above it, with its
-rule and text (`stoppedBy`), and whether larger passing crates cost more per part (`costLimited`).
-With the defaults the sample parts are stopped by the base rating or the 1,000 kg gross limit
-(PART-001 upright: 34 per crate, the base rating stops 35).
+**Candidates: the part's suggested quantities (#133).** The recommendation chooses only among the
+quantities the part is usually shipped in. `SweepRequest.candidates` (whole numbers 1–200) is set
+by `sweepRequestFor` from the part's `suggested_quantities` (`candidateQuantities`; 1, 4 and 8 when
+the part has none; suggestions above 200 are not candidates, and when none is in range the
+defaults apply). `sweepQuantities` reads them as `options.candidates` and returns them as
+`QuantitySweep.candidates` (`null` without, which keeps the old behaviour of choosing among every
+quantity, for stored requests and API callers that send none). `consideredPoints` gives the curve
+points the choice is made over. A quantity that is not a candidate is a manual choice (typed or
+from a stepper): it is on the curve and the user may take it. The sweep extends to the largest
+candidate if `maxQuantity` is lower.
 
-**Total-quantity mode (`planTotal(sweep, N)`).** For crate counts `c` from `⌈N / maxQuantity⌉` to
+**Recommendation and ties.** The `ok` considered points (the candidates', or every point without
+candidates) sorted by `compareSweepPoints`: the lower score to the cent per part, then **fewer
+crates** (the larger `q`), then **denser freight** (lb/ft³). The first is the recommendation; the
+first `SWEEP_SHORTLIST_SIZE` (**5**) are the shortlist. When the runner-up scores the same to the
+cent, the recommendation's `tieBreak` says which rule ordered them (`fewer-crates` or
+`denser-freight`; `tieBreakBetween`), else null. Its rationale names the score and **what stopped a
+larger crate**: the first failing candidate above it, with its rule and text (`stoppedBy`), and
+whether larger passing candidates cost more per part (`costLimited`). The rationale reads "Of 1, 4
+and 8 per crate, 8 costs least per part: $… in crate cost (…)." and, with a stop, "… and 40 fails a
+hard check: …". **When no candidate passes** every hard check, `recommendation` is null and the
+shortlist is empty; the store applies nothing and the part stays at its first suggested quantity.
+The hint then says "None of the part's suggested quantities (4 and 8 per crate) passes every hard
+check with these rules, so none is recommended." and names each failing quantity with its rule
+(`noRecommendationMessage`).
+
+With the defaults, each sample part opens at the cheapest per part of its suggested quantities:
+
+| Part | Suggested | Opens at | Reason |
+|---|---|---|---|
+| PART-001 | 1, 4, 8 | **8** | "Of 1, 4 and 8 per crate, 8 costs least per part …" |
+| PART-002 | 1, 2, 4 | **4** | "Of 1, 2 and 4 per crate, 4 costs least per part …" |
+| PART-003 | 1, 4, 8 | **8** | "Of 1, 4 and 8 per crate, 8 costs least per part …" |
+
+For each, the largest suggested quantity wins, so nothing larger was compared ("8 per crate is the
+largest of the suggested quantities"). Before #133 the sweep chose among 1–200 and opened them at
+34, 16 and 38 per crate (stopped by the base rating or the 1,000 kg gross limit). A GLB with no
+entry chooses among 1, 4 and 8; suggestions of 2 and 6 choose between 2 and 6.
+
+**Total-quantity mode (`planTotal(sweep, N)`).** This reads the full curve, never the candidates
+(how to pack N parts is a different question from which quantity to suggest). For crate counts `c` from `⌈N / maxQuantity⌉` to
 `N`, the even split `evenSplit(N, c)` puts `N mod c` crates of `⌈N / c⌉` and the rest of
 `⌊N / c⌋`: sizes differ by at most one, so crates × quantity covers N and no crate holds less than
 about half the others. A split counts only when every size is `ok` on the curve. The lowest cost
@@ -2165,7 +2343,7 @@ type puts it on screen (its saved configuration, else its quantity and layout).
 recommendation or any shortlist entry) given to `planShipment` as the quantity and `layoutKey`
 plan as one crate of that quantity on that layout, never a split: `planShipment` honours a picked
 layout that is within the limits (§7.10 step 1), and every crate the sweep passes is. Tested for
-every sample part × keep-upright, so the Rules tab's **In use**, the PDF's "Recommended" and the
+every sample part × resting-face rule, so the Rules tab's **In use**, the PDF's "Recommended" and the
 bundle's `-recommended` folder all hold for the applied recommendation.
 
 **Speed:** 30–125 ms per sample part on an M-series Mac (the gross-limit cut-off skips most of
@@ -2187,39 +2365,48 @@ The shipping PM has to be able to see *why* a quantity was picked, so
 sections, built only from the sweep's own data and the standards it used (no invented numbers;
 null when there is no recommendation):
 
-1. **What was compared:** quantities 1 to `maxQuantity`, up to the layouts per quantity designed in
-   full and how many crates that was and how many passed, the quantities ruled out without
-   designing (a monotonic limit), and how many quantities passed and failed, by rule.
+1. **What was compared:** the part's suggested quantities (each failing one named with its rule;
+   any other quantity is a manual choice), or, with no candidates, quantities 1 to `maxQuantity`;
+   up to the layouts per quantity designed in full and how many crates that was and how many
+   passed, the quantities ruled out without designing (a monotonic limit), and how many passed and
+   failed, by rule.
 2. **How it is scored:** cost per part moved = (crate cost + freight) ÷ parts; the recommended
    crate's `costLines` (wood, fasteners with the screw count and price, labour with the build time
    and rate, crate cost, freight, per part). Freight is **"Not priced"** without rates, never a
    dollar figure; with rates it is the crate's charge. `PLACEHOLDER_COST_NOTE` while
    `costsArePlaceholder(standards)`.
-3. **Why this quantity:** its score against the runner-up, the shortlist as `ranking` (score and the
-   difference from the pick), the tie-break when it decided (`tieBreak`), and `curve`: quantities 1
-   to `EXPLANATION_CURVE_TAIL` (**4**) past the last passing (or stopping) quantity, for a chart.
-4. **What stopped a larger crate:** constraint-limited, "The next size up, 35 per crate, fails a
-   hard check: the base rating." and the failing check's own text (with its numbers); cost-limited,
-   the best larger passing quantity and how much more per part, then the first larger quantity to
-   fail a hard check; or nothing up to `maxQuantity`.
+3. **Why this quantity:** "N per crate: the lowest cost per part ($…) of the part's suggested
+   quantities (1, 4 and 8) that pass every hard check", its score against the runner-up, the
+   shortlist as `ranking` (score and the difference from the pick), the tie-break when it decided
+   (`tieBreak`), and `curve`: quantities 1 to `EXPLANATION_CURVE_TAIL` (**4**) past the last passing
+   (or stopping) quantity, for a chart. Each curve point has `candidate`, and the chart marks the
+   candidates as rings.
+4. **What stopped a larger crate:** constraint-limited, "The next suggested quantity up, 40 per
+   crate, fails a hard check: the base rating." and the failing check's own text (with its
+   numbers); cost-limited, the best larger passing candidate and how much more per part, then the
+   first larger candidate to fail a hard check; or, when the pick is the largest candidate, "8 per
+   crate is the largest of the suggested quantities (1, 4 and 8), so no larger crate was compared.
+   Any larger quantity is a manual choice."; with no candidates, nothing up to `maxQuantity`.
 5. **What it takes into account:** the hard checks with the limits used (trailer door and floor,
    stability ratio, blocking gap, base rating load factor, gross limit, part limit, all from the
    shop standards), one part number per crate, wood and basic fasteners only, domestic truck
-   freight, the packing rules (upright or not, layers, gaps), and whether blocking follows the
+   freight, the packing rules (the faces a part may rest on, layers, gaps), and whether blocking follows the
    measured outline or the part's box (the measured outline can change the answer).
 
 Lengths and masses stay `Message` quantities; `explanationText(e, units)` (`src/lib/explanation.ts`)
 renders it once for every reader: the Rules tab's **Why this crate?**, the crate spec PDF's quantity
 section and the comparison PDF's "Why this quantity" (§7.17), and `recommendation.explanation` in the
-`POST /api/v1/designs` answer (metric; docs/QUEUE.md). Tested for every sample part, upright and
-not, with and without freight rates (`explainRecommendation.test.ts`).
+`POST /api/v1/designs` answer (metric; docs/QUEUE.md). Tested for every sample part, with the part kept as modelled and with any face allowed,
+with and without freight rates (`explainRecommendation.test.ts`). The crate spec PDF's
+"Stopped a larger crate" row says "No larger suggested quantity" when nothing larger was compared,
+and the comparison PDF omits that line then.
 
 **Recommended on load.** Loading a part shows the recommended quantity and crate without the user
 choosing one. When a **new part** is loaded (a picked or dropped GLB, catalog or not: `setPart`),
 the store marks it `autoRecommend` and the part opens at its first suggested quantity until the
 sweep answers; the first result for that part (for the inputs still on screen) then sets the
 recommended quantity and layout (`applyRecommendation`), with the island's change note **"Set to
-the recommended 34 per crate"** (source `recommended`; the diff from the first suggested quantity is
+the recommended 8 per crate"** (source `recommended`; the diff from the first suggested quantity is
 the note's detail, §8.5a). The recommendation can move once the model's outline is measured
 (§7.5b), since shaped blocking changes the crate: so the result for the **measured** part is
 applied **once more** (with the same note, only when it differs), and the part is then settled.
@@ -2270,15 +2457,15 @@ boards only).
 |---|---|---|---|
 | `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
 | `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
-| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.5, input …` before the column names |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.11, input …` before the column names |
 
 A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
 
 **Quantity rationale in the PDF (#26 follow-up).** The engine runs the sweep (§7.16, no freight
 rates) for the request's part and rules, and the PDF's **Quantity per crate** section says:
 - whether this crate **is the recommendation** (`isRecommended`: one crate type whose quantity and
-  layout are the recommendation's) — "Recommended: 34 per crate" — or not — "20 per crate; the
-  sweep recommends 34";
+  layout are the recommendation's) — "Recommended: 8 per crate" — or not — "4 per crate; the
+  sweep recommends 8";
 - the sweep's rationale (the score in crate cost per part and what limits it), then **"Why this
   crate?"** as the Rules tab shows it (`explanationText`, §7.16): the five sections, the recommended
   crate's cost and the best quantities;
@@ -2482,7 +2669,7 @@ The canvas fills the window. Four regions float above it:
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "top by volume" (or crate cost / freight class: the list's first card), "recommended" on the quantity sweep's crate (cheapest per part, §7.16) when it is on screen and isn't the list's top, and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
-| **Rules** | Quantity (a − / input / + capsule, the 18 px glyphs being the intended look, and under it the part's suggested quantities as their own labelled group, #62; the one matching the stepper is outlined in gold, not filled), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part, or the preloaded one on a first visit, opens at the recommendation; dimmed while a rule change waits to be swept; and **Why this crate?**, a disclosure (`aria-expanded`) that opens the explanation inline, in the drawer too: what was compared, how it is scored with the recommended crate's cost table (freight "Not priced"), why this quantity with a cost-per-part curve over quantity (log scale; passing quantities as a line, the pick as a gold dot, failing quantities as red ticks; each quantity has a hover title) and the shortlist table, what stopped a larger crate, and what it takes into account), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Rules** | Quantity (a − / input / + capsule, the 18 px glyphs being the intended look, and under it the part's suggested quantities as their own labelled group, #62; the one matching the stepper is outlined in gold, not filled), then the **best quantity** hint (#46, §7.16: "Best: 8 per crate", chosen among the part's suggested quantities (#133), the rationale with the suggested quantity that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part, or the preloaded one on a first visit, opens at the recommendation; dimmed while a rule change waits to be swept; and **Why this crate?**, a disclosure (`aria-expanded`) that opens the explanation inline, in the drawer too: what was compared, how it is scored with the recommended crate's cost table (freight "Not priced"), why this quantity with a cost-per-part curve over quantity (log scale; passing quantities as a line, the pick as a gold dot, failing quantities as red ticks, the part's suggested quantities marked as rings; each quantity has a hover title) and the shortlist table, what stopped a larger crate, and what it takes into account), **Faces a part may rest on** (#109: the presets **As modelled** (the default), **Any face** and **Choose**, and under Choose six toggle buttons, each a real button with `aria-pressed` named by where the face is on the part as modelled (Bottom, Top, Front, Back, Left, Right) with its size ("5.9 x 5.9 in", longer side first, following the units toggle) and a small drawing of the face in proportion; the last face can't be turned off; 44 px targets on coarse pointers and in the phone drawer), most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
@@ -2850,9 +3037,9 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
   wall plywood, floor, skid section and count, and the layout grid. It returns `[]` when either side
   has no design.
 - **`lastChange`** in the view store: `{ id, at, source, changes, note? }`, written when a `DesignEdit` with a source arrives (the design store knows nothing of it), after an input changes the design:
-  `setPartDetails` (source `name`, `material` or `mass`), `setSettings` / `resetRules` (`rules`)
+  `setPartDetails` (source `name`, `material` or `mass`), `setPartCogOffset` (`cog`, #110), `setSettings` / `resetRules` (`rules`)
   and `setLayoutKey` (`layout`), and the recommendation applied to a newly loaded part
-  (`recommended`, §7.16, whose `note` "Set to the recommended 34 per crate" is shown instead of the
+  (`recommended`, §7.16, whose `note` "Set to the recommended 8 per crate" is shown instead of the
   summary below, with the diff as its detail). Loading a part, a units change, or a design that
   became a problem doesn't set one. It clears after `CHANGE_NOTE_MS` (5 s).
 - **The note** (`ChangeNote`, `role="status"`) shows a short summary of the outcome
@@ -3167,7 +3354,9 @@ placeholder note and no freight dollars. **CSV parity:** Node and jsdom both mat
 **`src/domain/domain.test.ts`** checks:
 
 - `parts.json` parses, and its ids are stable.
-- The 6 orientations give 6 distinct permutations, and upright ones keep Z.
+- The first 6 orientations give 6 distinct permutations, and upright ones keep Z. All 12 together
+  rest every face down exactly twice (`restingFace`, checked against three.js by
+  `orientations.parity.test.ts`).
 - For every part × suggested quantity:
   - exactly `quantity` slots are produced
   - every slot lies inside the interior
@@ -3177,7 +3366,8 @@ placeholder note and no freight dollars. **CSV parity:** Node and jsdom both mat
 - The bounding box of all members equals `layout.external`.
 - `maxLayers: 1` produces only single-layer layouts.
 - A part that isn't in the catalog can be designed.
-- **Regression baseline:** 18 part × quantity × keepUpright cases. For each, the external size,
+- **Regression baseline:** 18 part × quantity × resting-face cases (as modelled and any face; the
+  baseline was captured as keepUpright on and off, and the migration maps those to the same rules). For each, the external size,
   gross, screws, member count, layout count and total BOM quantity must equal the values captured
   before the #20 redesign. For example, PART-003 × 8 is 1102 × 1082 × 809 mm with 308 screws.
   The six PART-002 rows were deliberately re-captured by #6 (cradles, §7.5a): same outside size
@@ -3322,6 +3512,37 @@ the floor, needs 90 mm."), both devices passing PART-003 × 8's middle skid, bot
 narrow single shaft, and heavy 4×6 skids giving 140 mm. `offsetText` wording. The standards'
 defaults and the spread validation.
 
+**Part centre of gravity, hand-carry and the size limit** (#110, #113, #108). `src/domain/cog.test.ts`
+checks `estimateCog` on a closed box, an L-shape (a known answer), an open mesh, split-normal
+meshes, inside-out meshes, open meshes and overlapping bodies (the open and overlapping ones fall
+back to assumed).
+`src/domain/handling.cog.test.ts` checks that the part's offset is rotated with the orientation
+(including a custom half turn), that the CoG check text names its source (supplied, estimated,
+assumed) and that a real 30%-of-length offset trips "Off-centre centre of gravity".
+`src/lib/partCog.test.ts`, `partCog.samples.test.ts` (the nine sample crates keep their layout,
+size, gross and boards, and no check changes level), `loadPart.cog.test.ts`, `fileCheck.cog.test.ts`
+(`cog_mm` kept, `field-ignored`, `cog-outside`; the frame conversions of §4), `partFields.cog.test.ts`
+and `src/state/partCog.store.test.ts` cover the browser side. `src/domain/handCarry.test.ts`
+checks the 23 kg limit at, just under and just over (inclusive), off at 0, the gross equal to the
+design's, and old standards parsing (`src/lib/handCarry.test.ts` renders the text in kg and lb); `src/engine/sweepHandCarry.test.ts`
+checks that a light part's curve, shortlist and recommendation are the same with the rule on or
+off. `src/domain/crateSizeLimit.test.ts` checks the rule and the length-width swap, layouts
+filtered, a batch split by size, one part over the limit, the sweep never recommending a crate
+over it (`max-size`), the even split respecting it, and the standard's defaults, old standards,
+validation and file round trip; `src/lib/sizeLimitMessage.test.ts` renders its messages in both
+unit systems.
+
+**Resting faces and suggested quantities** (#109, #133, #111). `src/domain/restingFaces.test.ts`
+checks that every layout rests on an allowed face for each of the six faces, over the catalog
+parts and the tall part, the presets, face naming and sizes, and the lay-down offer (the real
+`tall-part.glb` is offered, and taking it clears both cautions); `restingFacesMigration.test.ts`
+checks each old shape (settings, design file formats 1–3, share links, the library, the last
+design, `DesignRequest` and `SweepRequest`). `src/domain/sweepCandidates.test.ts` checks the
+recommendation among candidates (defaults 1, 4, 8; 2 and 6; no candidate passing; the curve
+still full) and the sample parts opening at 8, 4 and 8; `src/lib/restingFaces.tall.test.ts`
+covers the tall part end to end. `src/lib/quantityCap.test.ts` checks the over-200 note's text
+(with and without Parts to ship to point to, and over 10,000).
+
 **`src/domain/cost.test.ts`** checks cost, labour and freight (#17, §7.12): the labour sum (cuts by
 material, set-ups once per size across assemblies, screws, steps, handling) and the labour
 standards; wood + screws + labour; outside inches rounded up (914.4 mm is exactly 36 in), volume,
@@ -3352,7 +3573,7 @@ crate A, `setCrateIndex` switches `result` (out of range ignored; the view's rea
 - `parseDesignFile` rejects bad JSON, a non-design, a newer or missing version, a bad field
   (named in the message), out-of-range settings, a non-GLB model and an unknown source, and
   drops unknown keys.
-- **Reproduction:** for every catalog part × suggested quantity × keep-upright, with the
+- **Reproduction:** for every catalog part × suggested quantity × resting-face rule, with the
   recommended and the runner-up layout, save → parse → restore gives no notes, the same layout,
   outside size and gross, and a byte-identical CSV cut list. A custom part does the same.
 - A split batch records `summary.shipment` (single-crate files are unchanged), re-opens to the
@@ -3488,7 +3709,7 @@ versioned key round trip, nothing saved, an unknown value, storage that throws, 
 hover de-duplication, the load message and the time-to-design clock.
 
 **`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5b) with synthetic profiles: the
-rotation matrix equals three.js's for all six orientations, and a part lying on its side shows
+rotation matrix equals three.js's for all twelve orientations, and a part lying on its side shows
 its +Z face on the crate's −Y side; a box-shaped profile reproduces the bounding-box blocking
 exactly for every non-slender sample part × suggested quantity (contact 1, free 0); an L-shaped
 side (set back 60 mm above half height) gets one shaped block in the notch, 60 deep, starting
@@ -3583,7 +3804,7 @@ same and says nothing; a guess stays marked as one; a format 2 file's units are 
 saved size; a different file is called out. **`src/domain/designFile.test.ts`** adds format 3: the
 fields round trip byte for byte, bad units or axis are refused, and the 2 → 3 and 1 → 3
 migrations. **`src/state/persist.test.ts`** adds a format 2 and a format 3 last design beside the
-old fixtures. **`src/state/store.test.ts`** checks `setPartFrame` (re-measure, replan, change note,
+old fixtures; the format 3 last design (`last-design.v1.design-v3-lying.json`, a part lying down) opens as format 4 with the same layout. **`src/state/store.test.ts`** checks `setPartFrame` (re-measure, replan, change note,
 outline dropped, no-op, catalog refused).
 
 **`src/lib/printable.test.ts`** checks the export document (§7.11):
@@ -3799,9 +4020,12 @@ copies chosen shots there on request.
 | Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists; the stock fields are actual sizes, which map to nominal names for display | An imperial user converts by hand |
 | Imperial by default, with nominal lumber names and a CSV in the selected units (#15) | The shop floor is domestic US: crews think in inches, pounds, 2x4s and 3/4″ ply, and the cut list is what they saw to | Two CSV formats; a custom stock size not in `NOMINAL_LUMBER` shows as fractional inches |
 | A split is N identical crates plus at most one remainder, chosen fewest crates → least volume (3% tie) → most even (#25) | Identical crates are faster to build from one cut list; a PM thinks in crate counts first, then truck space; an even split balances the crates when volume doesn't care | A mixed plan (e.g. 4 + 3 + 3) is never offered; bisection assumes fit falls as the part count grows |
-| Per-crate limits reuse the trailer door and floor for size; only gross and part count are new standards | The door check already holds the handling size limit; two sources would drift | Forklift and pallet-jack fit is checked separately (§7.14), not as a size limit |
+| Per-crate limits reuse the trailer door and floor for size by default; gross and part count are their own standards, and a tighter size limit (`maxOutsideMm`, 0 = none) is optional (#108) | The door check already holds the handling size limit, so the shop's own limit (a pallet position, a door) is only a second, tighter bound: length and width may swap, height never does | Forklift and pallet-jack fit is checked separately (§7.14), not as a size limit |
+| The recommendation chooses among the part's suggested quantities, not among 1–200 (#133) | Those are the quantities the part is shipped in, so the answer is one a person would pick; "34 per crate" for a bracket was true to the hard checks and useless to a shipper. The full curve is still computed, for the chart and for Parts to ship | Another quantity is a manual choice; a part with no suggestions uses 1, 4 and 8; when none passes, there is no recommendation |
+| A part rests on the faces the person allows, with 12 orientations, instead of a keep-upright switch (#109) | "Upright" only meant the model's own Z. A tall part is stable lying down, and a part with a delicate face has to be able to say which face is up, so the rule names faces; the first six orientations and their layout keys are unchanged, so saved designs open as before | Saved files and settings have a migration (`keepUpright` to `restingFaces`, format 4) |
+| Parts under 23 kg gross are carried by hand and skip the forklift and pallet-jack rows (#113) | The cautions told a shop that a hand-liftable crate needed a forklift. The skids stay: they set the floor and the crate's height | The limit is a shop standard (`handCarryMaxKg`, 0 turns it off); there is no two-person row |
 | Handling is a pure read of the finished members, in its own module, hooked into `designCrate` after the boards are built (#8) | Skid count and spacing, under-floor members and dunnage belong to the construction rules (#6, #7, #16); reading the members means any change there is handled without touching this code | Handling can only report, never fix: a crate too narrow for forks is a caution, not a re-design |
-| A part's CoG is its bounding-box centre | There is no mesh mass analysis, and the catalog gives only mass and box | A part with its mass off-centre in its box moves the true CoG by up to half the box |
+| A part's CoG is supplied, estimated from the mesh or assumed at its bounding-box centre, and says which (#110) | A supplied value is the shop's own word, a uniform-density mesh centroid is a good guess for solid parts, and the box centre is the honest fallback; the check names the source so nobody trusts a guess as data. The offset is rotated with the orientation, so a part laid down carries its weight with it | The estimate assumes uniform density and a closed mesh (else assumed), and runs in the browser: an API-only job designs with the assumed centre until a caller sends `cog` |
 | Devices are two tines with a spread range that must straddle the CoG, not a single opening-width rule | One rule covers two skids (both tines in one opening) and a middle skid (one per opening), and catches a lift with the load hanging off one side | A shop with unusual equipment has to describe it as tines and a spread |
 | A pallet jack that is only too narrow is info while a forklift fits | A crate needs one way to be lifted; small crates are simply too narrow for a jack, and a caution on every small crate would bury the real ones | A dock with only a pallet jack must read the info lines; too little height is always a caution |
 | The CoG and fork marks go with the Size labels switch, not a new switch | They are measurement overlays like the size lines, and one switch keeps the View popover short | They can't be shown without the size labels |
@@ -3841,7 +4065,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #5 | Architecture and decision notes for the on-site walkthrough |
 | #6 | Cradles for long or cylindrical parts (§7.5a): notched saddles at ≤ 600 mm, stacking cradles between layers, end stops |
 | #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds (§7.15) |
-| #8 | Centre of gravity and forklift / pallet-jack handling (§7.14): combined CoG, off-centre and tip checks, fork-entry checks, the 3D marks and the label's CoG mark. A part's own CoG is assumed to be its box centre |
+| #8 | Centre of gravity and forklift / pallet-jack handling (§7.14): combined CoG, off-centre and tip checks, fork-entry checks, the 3D marks and the label's CoG mark. A part's own CoG is supplied, estimated from the mesh or assumed at its box centre (#110, §7.14) |
 | #9 | Printable shop-floor build sheet (superseded by #26) |
 | #26 | Export bundle: the crate spec, build sheet and shipping label as a printable PDF (§7.11). A one-click PDF file is #51 |
 | #51 | Export pill: one-click .zip with the GLB(s), a PDF file, the cut list(s), the design file and a README (§7.13) |
@@ -3862,6 +4086,12 @@ Other known gaps:
   can't be measured, so its file is refused as having no geometry; sparse accessors count by their base bounds; nothing checks textures or animations.
 
 - Batch splitting (#25, §7.10) offers only N identical crates plus one remainder.
+- The part's centre of gravity (§7.14) is estimated in the browser only, assuming uniform density,
+  and the server does not parse the GLB, so an API-only job designs with the assumed centre until
+  a caller sends `cog`. No orientation is a 180° turn about the vertical, so the half turn that
+  would balance a lopsided part is not offered as a layout.
+- The hand-carry rule (§7.14) is one limit, with no two-person row, and the skids stay on a light
+  crate.
 - Structural sizing (#7, §7.15) checks strength only: no deflection, joint, point-load or racking
   checks, and the lid is sized only when a stacking load is entered.
 - The GLB download and the view bar name the file by the batch quantity, not the crate type on
