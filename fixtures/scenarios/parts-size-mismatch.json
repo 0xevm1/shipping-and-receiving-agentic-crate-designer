@@ -10,8 +10,16 @@
       "material": "4140 steel",
       "density_kg_m3": 7850,
       "mass_kg": 20,
-      "dimensions_mm": [360, 220, 258],
-      "suggested_quantities": [1, 4, 8]
+      "dimensions_mm": [
+        360,
+        220,
+        258
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
     }
   ]
 }
