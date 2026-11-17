@@ -277,6 +277,17 @@ export const shopStandard = pgTable(
 );
 
 /**
+ * Engine versions this deployment has run (#46 §3, docs/POSTGRES.md "Engine updates"). Server-wide,
+ * not org data. The first server process to start on a version inserts its row and, in the same
+ * transaction, emits one org-wide `engine.updated` per org; the primary key makes that happen once
+ * per version however many instances start at the same moment (src/server/db/engineRelease.ts).
+ */
+export const engineRelease = pgTable("engine_release", {
+  engineVersion: text("engine_version").primaryKey(),
+  firstStartedAt: timestamp("first_started_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Client-generated ids of changes already applied, so an offline replay (#46 slice 7a) that
  * sends a change twice applies it once. The stored response is returned for the repeat.
  */

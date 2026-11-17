@@ -8,7 +8,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { type OrgContext, requireOrg } from "./org";
 import { createQueueStore } from "./queue";
 import * as schema from "./schema";
-import { artifact, type ConfigurationOrigin, configuration, designJob, event, idempotencyKey, jobConfiguration, part, partModel } from "./schema";
+import { artifact, type ConfigurationOrigin, configuration, designJob, event, idempotencyKey, jobConfiguration, part, partModel, shopStandard } from "./schema";
 
 export type Database = PostgresJsDatabase<typeof schema>;
 export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -28,6 +28,8 @@ export type JobConfiguration = Configuration & { origin: ConfigurationOrigin; ad
 export type Artifact = typeof artifact.$inferSelect;
 export type NewArtifact = Omit<typeof artifact.$inferInsert, "orgId" | "id" | "createdAt">;
 export type IdempotencyRecord = typeof idempotencyKey.$inferSelect;
+/** One version of an org's shop standards. `standards` is unvalidated JSON: parse it (src/server/standards.ts). */
+export type ShopStandardRow = typeof shopStandard.$inferSelect;
 export type CrateEvent = typeof event.$inferSelect;
 export type NewCrateEvent = Pick<typeof event.$inferInsert, "jobId" | "type" | "payload">;
 
@@ -298,6 +300,34 @@ export function createRepository(db: Executor) {
           .where(eq(artifact.orgId, orgId))
           .orderBy(asc(artifact.createdAt), asc(artifact.id));
         return rows.map((r) => r.artifact);
+      },
+    },
+
+    standards: {
+      /** The org's newest shop standards row, or null when it has none (the defaults apply). */
+      async current(ctx: OrgContext): Promise<ShopStandardRow | null> {
+        const orgId = requireOrg(ctx);
+        const [row] = await db.select().from(shopStandard).where(eq(shopStandard.orgId, orgId)).orderBy(desc(shopStandard.version)).limit(1);
+        return row ?? null;
+      },
+      /**
+       * Stores `standards` as the version after `baseVersion` (null: the org has none yet). Rows
+       * are never updated. Returns null when `baseVersion` is no longer the newest: someone saved
+       * in between. Two concurrent saves on one base can't both win: `(org_id, version)` is unique.
+       */
+      async put(ctx: OrgContext, standards: unknown, baseVersion: number | null): Promise<ShopStandardRow | null> {
+        const orgId = requireOrg(ctx);
+        const [latest] = await db
+          .select({ version: max(shopStandard.version) })
+          .from(shopStandard)
+          .where(eq(shopStandard.orgId, orgId));
+        if ((latest?.version ?? null) !== baseVersion) return null;
+        const [row] = await db
+          .insert(shopStandard)
+          .values({ orgId, version: (baseVersion ?? 0) + 1, standards })
+          .onConflictDoNothing()
+          .returning();
+        return row ?? null;
       },
     },
 

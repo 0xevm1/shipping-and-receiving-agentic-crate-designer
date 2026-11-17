@@ -78,6 +78,8 @@ saves on the device and sends them later, without showing an error (`src/state/j
 | `POST` | `/designs` | Stateless headless calculation: a GLB and the part's facts in, the ranked configurations, recommendation, 1–200 curve and (with `total`) the even split out. Nothing saved; needs an API key from scripts. Runs on the engine's worker threads ([QUEUE.md](QUEUE.md#post-apiv1designs)) |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
 | `GET` | `/health` | Database and event-listener liveness, NOTIFY queue usage, event-loop lag |
+| `GET` | `/standards` | The org's shop rates and limits (#19), or the shipped defaults when it has stored none ([Shop standards](#shop-standards)) |
+| `PUT` | `/standards` | Store a new version of the org's standards, at a `baseVersion` ([Shop standards](#shop-standards)) |
 | `GET` | `/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}` | One file of a saved configuration, built by the server on the first request and kept in blob storage; a presigned URL (`?redirect=1`: a 302 to it) ([Artifacts](#artifacts)) |
 | `GET` | `/jobs/:id/bundle.zip?configs=…` | The job's configurations in one ZIP: a folder each, `manifest.json`, `comparison.pdf` (spec §7.17); 200 with a presigned URL, or 202 while the queue builds a large one ([Artifacts](#artifacts)) |
 
@@ -180,6 +182,31 @@ there. The job row is locked, then:
 - otherwise the job is updated, `version` goes up by one, and `200 { job }` comes back. When the
   selection changed, `recommendation.changed` is emitted with the new `configurationId`.
 
+### Shop standards
+
+`GET /api/v1/standards` returns the org's newest stored version, filled from the defaults for any
+field added since, or `DEFAULT_STANDARDS` when the org has none. Shapes: `src/lib/api/standards.ts`.
+
+```json
+{ "standards": { "stock": { … }, "rates": { … }, … }, "version": 2, "source": "org", "updatedAt": "2026-11-17T09:00:00.000Z" }
+```
+
+`version` and `updatedAt` are null and `source` is `"default"` while the org has none.
+
+`PUT /api/v1/standards` with `{ "standards": { … }, "baseVersion": 2 }` (null for the first save)
+stores a complete standards object, validated with `ShopStandardsSchema` (a bad or missing field is
+`400` with `field` such as `standards.stock.cleatMm.wide`), as the next version and returns it. A
+`baseVersion` that is no longer the newest is `409 version_conflict` with the standards as they are
+now in `current`. Versions are never overwritten. It emits no event.
+
+**Who uses the server copy:** the queue's sweep job and `POST /designs` design with the caller's org
+standards. A configuration saved from the browser carries the standards it was designed with in its
+`request` and is recomputed with those, so it is unaffected. **The browser still works from its own
+copy** (the Rules tab's Shop standards, kept in `localStorage`, spec §9) and doesn't read or write
+this endpoint yet, so the two can differ until it does. Left for a later change: load the org's
+standards at startup (keeping the local copy offline), save edits through `PUT`, and tell other tabs
+with an event.
+
 ## Artifacts
 
 Files built **by the server** from saved configurations (#46 slice 6; code in `src/server/artifacts/`,
@@ -272,7 +299,7 @@ Writes emit events in the same transaction, as its last statements (POSTGRES.md 
 | The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash` |
 | The queue, when a sweep is dead-lettered | `job.error` | the job | `message` (generic; the cause is in `queue_job.last_error`) |
 | A server-built file or bundle stored (first request, or the queue's bundle job) | `artifact.ready` | the job | `artifactId`, `configurationId` (a bundle's first), `kind` (`glb`, `pdf`, `csv`, `zip`), plus `file` or `bundleId` |
-| Reserved for a deploy with a new engine; not emitted yet (an old tab learns of a new engine from the `409` on its next save) | `engine.updated` | none (org-wide) | `engineVersion` |
+| The first server to start on a new engine version, once per org ([POSTGRES.md](POSTGRES.md#engine-updates)); an old tab also learns from the `409` on its next save | `engine.updated` | none (org-wide) | `engineVersion` |
 
 The browser re-reads the snapshot when a job event arrives (several at once cause one read), and
 shows the reload prompt on an `engine.updated` naming another engine version.

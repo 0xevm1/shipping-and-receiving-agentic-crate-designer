@@ -202,5 +202,5 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 ## Known gaps
 
 - Fair scheduling, per-org concurrency caps and quotas: deferred until a second org (#60).
-- Jobs use the app's default rules and standards; per-job rules and the `shop_standard` table come
-  with the jobs and standards slices.
+- Sweeps use the app's default rules (settings) and the org's shop standards (`shop_standard`, the
+  defaults when it has none; [API.md](API.md#shop-standards)); per-job rules are not modelled yet.

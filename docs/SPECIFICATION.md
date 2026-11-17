@@ -269,7 +269,8 @@ takes `bytesModelReader(glbBytes)`.
 `docs/API.md`) is not trusted: the server runs `designShipment` on the same request and stores it
 only if its `engineVersion`, `inputHash` and summary (as canonical JSON) are the browser's
 (`src/server/jobs/verify.ts`). Another engine version is `409` and the tab is asked to reload;
-any other difference is `422`. Parity is what makes an honest save always match.
+any other difference is `422`. A server starting on a new engine also emits `engine.updated`
+(§5.2), so open tabs show the reload prompt before their next save. Parity is what makes an honest save always match.
 
 **Parity.** `parity.node.test.ts` (Node) and `parity.jsdom.test.ts` (jsdom) run the three sample
 parts at each suggested quantity and compare against one committed baseline,
@@ -307,6 +308,8 @@ out). It runs the same engine, so the browser and the server can't disagree.
 | Engine work | `src/server/workers/` | Sweeps, files and bundles never run on the thread that serves requests and SSE: a `worker_threads` pool (`bun run engine:build` bundles its entry). A test holds the event-loop lag under 50 ms during full sweeps. The ~2 ms recompute of a save still runs on the request thread for now |
 | Queue | `src/server/queue/`, `bun run worker` | Background sweeps (queued with every new job) and large bundles: `queue_job`, `FOR UPDATE SKIP LOCKED`, woken by `NOTIFY crate_jobs` with polling, leases, retries, dead letter ([QUEUE.md](QUEUE.md)). Without a running worker, jobs wait; nothing in the UI needs one |
 | Files | `src/server/blob/`, `src/server/artifacts/` | GLBs and generated files only in S3-compatible storage, never Postgres or local disk; object first, then the row; content-addressed, org-scoped keys; ~5 min presigned GETs; credentials stay on the server ([BLOB_STORAGE.md](BLOB_STORAGE.md)) |
+| Shop standards | `src/server/standards.ts`, `GET`/`PUT /api/v1/standards` | The org's versioned `shop_standard` rows (the defaults when none) are what server sweeps and `POST /designs` design with. The browser still uses its own copy (§9) until it reads the server's ([API.md](API.md#shop-standards)) |
+| Engine updates | `src/instrumentation.ts`, `src/server/engine/announce.ts` | The first server to start on a new `ENGINE_VERSION` records it in `engine_release` and emits one org-wide `engine.updated` per org, once across instances; tabs on another engine show the reload prompt (§5.1, [POSTGRES.md](POSTGRES.md#engine-updates)) |
 | Offline | `src/state/pendingChanges.ts`, `pendingSync.ts`, `jobCache.ts`, `src/lib/liveness.ts` | Saves are local first and replay with an `Idempotency-Key` once the server is reachable (§9, [API.md](API.md#offline-46-slice-7a)) |
 
 Hosting needs a long-running Node server (SSE and LISTEN hold connections; no serverless or edge
@@ -2409,7 +2412,9 @@ saved standards in an effect after the first render, so the server render and th
 render match; the design then re-computes once. Loading is safe: unreadable JSON, another
 version or an invalid value falls back to the defaults with a `console.warn`, and storage that
 is missing or throws (server, private mode, quota) is treated as empty. The version is in the
-key, so an incompatible future format starts fresh rather than misreading old data.
+key, so an incompatible future format starts fresh rather than misreading old data. The server
+keeps the org's own versioned copy (`shop_standard`, `GET`/`PUT /api/v1/standards`) for its sweeps;
+the browser doesn't read or write it yet, so the two can differ ([API.md](API.md#shop-standards)).
 
 All four saved items (standards, units, library, last design) go through `src/state/persist.ts`
 with one contract: a save never throws and returns `true` only if the value is stored, so a
@@ -2556,7 +2561,8 @@ everything but sharing works as before.
   `inputHash`, never changed once saved; the stored `DesignRequest` is re-validated on read),
   `job_configuration` (which configurations a job holds), `artifact` (a generated file's key,
   hash and `built_by`), `event` (the append-only outbox), `queue_job`, `api_key`,
-  `idempotency_key` and `shop_standard`. Every root table has `org_id`, and the repository
+  `idempotency_key`, `shop_standard` (versioned per org) and the server-wide `engine_release`
+  (engine versions started, for `engine.updated`). Every root table has `org_id`, and the repository
   refuses a query without an `OrgContext`.
 - **Blob storage** (S3 API; SeaweedFS in Docker, any S3-compatible provider in production;
   [BLOB_STORAGE.md](BLOB_STORAGE.md)): part GLBs, server-built GLB / PDF / CSV files and bundle

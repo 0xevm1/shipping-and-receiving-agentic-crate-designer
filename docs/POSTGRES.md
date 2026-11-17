@@ -123,7 +123,8 @@ The schema is `src/server/db/schema.ts`; `db/migrations/` is generated from it.
 | `job_configuration` | Which configurations a job has: `(org_id, job_id, configuration_id)` and how it got there, `origin` (`precomputed` by a sweep, or saved by a `user`). A job's `selected_configuration_id` references this table, so a job can only select one of its own |
 | `artifact` | A generated file for a configuration: kind (`glb`, `pdf`, `csv`, `zip`), sha256, size, object key, built by (`browser` or `server`). One per object key (`(org, object_key)` unique): the key is content-addressed, so a configuration has one row per file and engine version; a bundle (`zip`) row names its first configuration |
 | `event` | Append-only outbox: `bigserial` id (the SSE replay cursor), job, type, small payload |
-| `shop_standard` | Rates and limits (#19) as JSON, versioned per org |
+| `shop_standard` | Rates and limits (#19) as JSON, versioned per org: rows are never updated, a save inserts the next `version` (`(org_id, version)` unique). The org's newest row is what the server designs with; none means `DEFAULT_STANDARDS` ([API.md](API.md#shop-standards)) |
+| `engine_release` | Engine versions this deployment has started (`engine_version` primary key, first start time). Server-wide, not org data; see [Engine updates](#engine-updates) |
 | `idempotency_key` | Client-generated ids of changes already applied, with the request hash and the stored response, so an offline replay (slice 7a) applies a change once |
 
 The `event` table has an `AFTER INSERT` trigger that NOTIFYs `crate_events` (see
@@ -231,9 +232,22 @@ receives every org's notifications and filters them in memory.
 | `recommendation.changed` | yes | `configurationId` (null when cleared) |
 | `artifact.ready` | yes | `artifactId`, `configurationId`, `kind`, plus `file` or `bundleId`: a server-built file is stored (docs/API.md "Artifacts") |
 | `job.error` | yes | `message` (safe to show) |
-| `engine.updated` | no (org-wide) | `engineVersion`: open tabs should reload (reserved for deploys; nothing emits it yet, [API.md](API.md#events)) |
+| `engine.updated` | no (org-wide) | `engineVersion`: a server started on a new engine; open tabs on another one should reload ([Engine updates](#engine-updates)) |
 
 Events with no job (`engine.updated`, a job-less `part.created`) go to every stream of that org.
+
+### Engine updates
+
+When a Next.js server starts, `src/instrumentation.ts` calls `announceEngineOnStart`
+(`src/server/engine/announce.ts`). In one transaction it inserts the running `ENGINE_VERSION` into
+`engine_release` (`on conflict do nothing`) and, only if that inserted a row, emits one org-wide
+`engine.updated { engineVersion }` per org (`src/server/db/engineRelease.ts`). The primary key makes
+it once per version across instances: of several servers starting together, one inserts and the
+rest wait on its row and insert nothing. A restart, or a rollback to a version already recorded,
+announces nothing; those tabs still learn of the mismatch from the `409 engine_version_mismatch` on
+their next save. It doesn't hold up startup (not awaited), opens one short-lived connection of its
+own, and only logs if the database is down; then that start announces nothing. The browser shows
+the reload prompt when the version differs from its own ([API.md](API.md#events)).
 
 ### Listening: `EventBus`
 
@@ -322,7 +336,9 @@ while others keep up, SSE replay after a reconnect with `Last-Event-ID` (small p
 racing the replay) giving every missed event exactly once, `?lastEventId=`, org-wide events,
 the org check, recovery after `pg_terminate_backend`, and recovery after the listener is locked
 out for a while (postgres.js's own retry fails; the probe and backoff bring it back). The hub,
-the event schemas and the browser helper have unit tests.
+the event schemas and the browser helper have unit tests. `src/server/engine/announce.integration.test.ts`:
+`engine.updated` once per org and version with two servers starting at once, nothing on a restart,
+reaching every job's stream, and no throw with the database down.
 
 ## Changing the schema
 
