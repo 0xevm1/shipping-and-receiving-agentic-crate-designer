@@ -83,7 +83,7 @@ export interface BomLine {
 }
 
 export interface Check {
-  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "export";
+  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "cardboard";
   /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
   level: "ok" | "caution" | "info";
   title: string;
@@ -347,8 +347,48 @@ function estimateScrews(members: Member[], interior: Vec3): number {
   return screws;
 }
 
-const DOOR_CLEARANCE_MM = 2440; // 8 ft trailer / container door
-const OVERSIZE_LENGTH_MM = 3000;
+/**
+ * Shipping is domestic only (US truckload or LTL), so the crate must go through
+ * the rear door of a standard 53' dry van. Typical published dimensions for a
+ * 53' × 102" dry van (trailer makers' spec sheets and carrier equipment
+ * guides; values vary a few inches by make and wall type): interior about 52'6" × 101" × 110", rear door
+ * opening about 98–100" wide × 108–110" high. We use the low end of the door
+ * range, since the door, not the interior, is what limits width and height.
+ */
+export const DRY_VAN_53FT_MM = {
+  /** 52'6" (630 in) usable floor length. */
+  interiorLength: 16000,
+  /** 101 in between the side walls (logistic posts eat into it on some vans). */
+  interiorWidth: 2565,
+  /** 110 in floor to roof. */
+  interiorHeight: 2794,
+  /** 98 in rear door opening. */
+  doorWidth: 2489,
+  /** 108 in rear door opening, floor to header. */
+  doorHeight: 2743,
+};
+
+/**
+ * LTL carriers add an "excessive length" accessorial for handling units over
+ * 8 ft (96 in) in many carriers' rules tariffs, stepping up at longer lengths.
+ * Thresholds differ by carrier, so this is an info note, not a caution.
+ */
+export const LTL_EXCESSIVE_LENGTH_MM = 2438;
+
+/**
+ * When a wooden crate is overkill: the brief says smaller aluminum parts might
+ * ship in ordinary cardboard boxes. We suggest it when all of these hold:
+ * - each part is at most 15 kg, light enough not to punch through corrugated
+ *   board or need fixing to a base (the 11.8 kg aluminum housing qualifies; the
+ *   21.5 kg steel bracket and 27 kg steel shaft don't);
+ * - the whole payload is at most 25 kg, leaving room for the box and dunnage
+ *   under the 65 lb (29.5 kg) gross limit of a 32 ECT single-wall box
+ *   (NMFC Item 222 / UFC Rule 41);
+ * - the crate interior's L + W + H is at most 1905 mm (75 in), the same rule's
+ *   size limit for that box.
+ */
+export const CARDBOARD_LIMITS = { partKg: 15, payloadKg: 25, boxDimSumMm: 1905 };
+
 const STACK_LIMIT_KG = 100;
 const BASE_RATING_KG = 1000;
 const LOW_UTILIZATION = 0.25;
@@ -359,10 +399,17 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
   const [eL, eW, eH] = d.layout.external;
   const nz = d.layout.counts[2];
 
+  const van = DRY_VAN_53FT_MM;
+  const mm = (v: number) => `${v.toLocaleString("en-US")} mm`;
+  const tooBig = [
+    eL > van.interiorLength && `Length is over the ${mm(van.interiorLength)} trailer floor.`,
+    eW > van.doorWidth && `Width is over the ${mm(van.doorWidth)} door opening.`,
+    eH > van.doorHeight && `Height is over the ${mm(van.doorHeight)} door opening.`,
+  ].filter((s): s is string => !!s);
   checks.push(
-    eW > DOOR_CLEARANCE_MM || eH > DOOR_CLEARANCE_MM
-      ? { id: "door", level: "caution", title: "Too big for a standard trailer door", detail: `Width or height is over ${DOOR_CLEARANCE_MM} mm. Confirm door clearance with the carrier.` }
-      : { id: "door", level: "ok", title: "Fits a standard trailer door", detail: `Width and height are under ${DOOR_CLEARANCE_MM} mm.` },
+    tooBig.length
+      ? { id: "door", level: "caution", title: "Too big for a 53' dry van", detail: `${tooBig.join(" ")} Confirm open-deck or oversize transport with the carrier.` }
+      : { id: "door", level: "ok", title: "Fits a 53' dry van", detail: `Within the ${mm(van.doorWidth)} × ${mm(van.doorHeight)} door and the ${mm(van.interiorLength)} floor.` },
   );
 
   const ratio = eH / Math.min(eL, eW);
@@ -395,12 +442,21 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
       : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under 1,000 kg, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
   );
 
-  if (eL > OVERSIZE_LENGTH_MM) {
-    checks.push({ id: "oversize", level: "info", title: "Oversize freight", detail: `Length is over ${OVERSIZE_LENGTH_MM} mm. Expect an oversize surcharge.` });
+  if (eL > LTL_EXCESSIVE_LENGTH_MM) {
+    checks.push({ id: "oversize", level: "info", title: "LTL length surcharge likely", detail: `Length is over ${mm(LTL_EXCESSIVE_LENGTH_MM)} (8 ft). Most LTL carriers add an excessive-length charge.` });
   }
   if (d.layout.utilization < LOW_UTILIZATION) {
     checks.push({ id: "utilization", level: "info", title: "Mostly empty space", detail: "Parts are packed by their bounding box, so irregular shapes leave air. A nested layout could be smaller." });
   }
-  checks.push({ id: "export", level: "info", title: "Export shipments", detail: "Use ISPM-15 heat-treated, stamped lumber." });
+  const [iL, iW, iH] = d.layout.interior;
+  const box = CARDBOARD_LIMITS;
+  if (part.mass_kg <= box.partKg && d.payloadKg <= box.payloadKg && iL + iW + iH <= box.boxDimSumMm) {
+    checks.push({
+      id: "cardboard",
+      level: "info",
+      title: "A cardboard box may be enough",
+      detail: `${Math.round(d.payloadKg * 10) / 10} kg in a ${[iL, iW, iH].map(Math.round).join(" × ")} mm space is within what a 32 ECT single-wall carton is rated for (29.5 kg gross, ${mm(box.boxDimSumMm)} L + W + H). The crate design is still here if you want one.`,
+    });
+  }
   return checks;
 }

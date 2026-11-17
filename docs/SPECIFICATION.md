@@ -389,16 +389,39 @@ Each member is tagged where it is created:
 `designCrate` returns every rule, passed or not, in a fixed order. The UI sorts cautions first,
 then passes, then info.
 
+**Shipping is domestic only** (US truckload or LTL in a 53' dry van). Export concerns (ISPM-15
+lumber, ocean containers, air freight) are out of scope, so there is no export check.
+
 | id | Pass (`ok`) | Problem | Rule |
 |---|---|---|---|
-| `door` | Fits a standard trailer door | caution: Too big for a standard trailer door | external W and H ≤ 2440 mm |
+| `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`DRY_VAN_53FT_MM`) |
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side) |
 | `blocking` | Every part is blocked in | caution: Parts are not restrained | min(partGap, wallClearance) ≥ 19 mm |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg; only reported when nz > 1 |
 | `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg |
-| `oversize` | — | info: Oversize freight | external L > 3000 mm |
+| `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `LTL_EXCESSIVE_LENGTH_MM`) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% |
-| `export` | — | info: Export shipments (ISPM-15) | always |
+| `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`CARDBOARD_LIMITS`) |
+
+**Trailer limits.** Typical published dimensions for a 53' × 102" dry van are an interior of
+about 52'6" × 101" × 110" and a rear door opening of about 98–100" × 108–110". The door, not the
+interior, limits width and height, so the check uses the low end of the door range: 98" (2489
+mm) wide and 108" (2743 mm) high, and the 52'6" (16000 mm) floor for length. Separately, most LTL
+carriers add an excessive-length accessorial for handling units over 8 ft, which `oversize`
+notes. Forklift and pallet-jack handling is #8.
+
+**When a crate is overkill.** The brief says smaller aluminum parts might ship in ordinary
+cardboard boxes. `cardboard` suggests it, while still producing the crate design, when:
+
+- each part is ≤ 15 kg, light enough not to punch through corrugated board. The 11.8 kg
+  aluminum housing qualifies; the 21.5 kg steel bracket and 27 kg steel shaft do not.
+- the payload is ≤ 25 kg, which leaves room for the box and dunnage under the 65 lb (29.5 kg)
+  gross limit of a 32 ECT single-wall box (NMFC Item 222 / UFC Rule 41).
+- the crate interior's L + W + H is ≤ 1905 mm (75 in), the same rule's size limit for that box.
+
+Of the sample parts at their suggested quantities, only a single PART-003 triggers it (11.8 kg,
+interior 545 × 535 × 354 mm). That is deliberate: one housing fits in a carton, while four or
+more (47 kg and up) and the steel parts justify a crate.
 
 The UI adds two checks that depend on the loaded file (`src/state/checks.ts`):
 
@@ -598,6 +621,13 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
 - Tare by assembly sums to tare.
 - Checks report passes as well as cautions, and the stack check appears only for stacked
   layouts.
+- No sample part × suggested quantity reports an `export` (ISPM-15) check.
+- **Trailer limits:** a single custom part sized so the crate is exactly at, then 1 mm over, the
+  53' dry van length, door width and door height gives `door` ok, then caution. `oversize`
+  appears only past 2438 mm. Every sample part × suggested quantity passes both.
+- **Cardboard:** a single PART-003 triggers `cardboard` and still gets a crate; no other sample
+  part × suggested quantity does. The per-part and payload limits are inclusive, and a light
+  but long part whose interior L + W + H is over 1905 mm doesn't trigger it.
 - `explainLayout` covers `only`, the recommended layout and a user pick.
 
 **`src/domain/partDetails.test.ts`** checks the entered-details path: names and materials are
