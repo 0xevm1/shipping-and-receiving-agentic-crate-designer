@@ -3,7 +3,7 @@
  * stamps) `org_id` from it, so application code has no way to query across orgs. Code outside
  * this file should not use the drizzle handle directly; add a method here instead.
  */
-import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, max, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { type OrgContext, requireOrg } from "./org";
 import { createQueueStore } from "./queue";
@@ -20,7 +20,7 @@ export type PartModel = typeof partModel.$inferSelect;
 export type NewPartModel = Omit<typeof partModel.$inferInsert, "orgId" | "createdAt">;
 export type DesignJob = typeof designJob.$inferSelect;
 export type NewDesignJob = Pick<typeof designJob.$inferInsert, "partId" | "totalQuantity" | "createdBy" | "notes">;
-export type DesignJobPatch = Partial<Pick<DesignJob, "status" | "selectedConfigurationId" | "notes" | "totalQuantity">>;
+export type DesignJobPatch = Partial<Pick<DesignJob, "status" | "selectedConfigurationId" | "notes" | "totalQuantity" | "totalPlan">>;
 export type Configuration = typeof configuration.$inferSelect;
 export type NewConfiguration = Omit<typeof configuration.$inferInsert, "orgId" | "id" | "createdAt">;
 /** A configuration as a job sees it: the content-addressed row plus how it joined this job. */
@@ -161,6 +161,41 @@ export function createRepository(db: Executor) {
           .where(and(eq(designJob.orgId, orgId), eq(designJob.id, id), eq(designJob.version, expectedVersion)))
           .returning();
         return row;
+      },
+      /**
+       * Stores the total-quantity plan made for `total` (spec §7.16), without bumping the version
+       * (it is derived data, not an edit, so no client's pending change conflicts with it), and
+       * only while the job's total is still `total`: a plan for a total someone has since changed
+       * is dropped. True when it was stored.
+       */
+      async setTotalPlan(ctx: OrgContext, id: string, total: number, plan: unknown): Promise<boolean> {
+        const orgId = requireOrg(ctx);
+        const rows = await db
+          .update(designJob)
+          .set({ totalPlan: plan })
+          .where(and(eq(designJob.orgId, orgId), eq(designJob.id, id), eq(designJob.totalQuantity, total)))
+          .returning({ id: designJob.id });
+        return rows.length > 0;
+      },
+      /**
+       * Jobs (not archived) with a total whose stored plan is missing, for another total, or from
+       * another engine version: what a newly started engine re-plans.
+       */
+      async needingTotalPlan(ctx: OrgContext, engineVersion: string): Promise<DesignJob[]> {
+        const orgId = requireOrg(ctx);
+        return db
+          .select()
+          .from(designJob)
+          .where(
+            and(
+              eq(designJob.orgId, orgId),
+              ne(designJob.status, "archived"),
+              isNotNull(designJob.totalQuantity),
+              sql`(${designJob.totalPlan} is null
+                or ${designJob.totalPlan}->>'engineVersion' is distinct from ${engineVersion}
+                or (${designJob.totalPlan}->>'total')::int is distinct from ${designJob.totalQuantity})`,
+            ),
+          );
       },
       /**
        * The newest job that isn't archived for the same part: the part itself, the same catalog
