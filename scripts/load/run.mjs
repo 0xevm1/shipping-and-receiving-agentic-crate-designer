@@ -135,7 +135,8 @@ function startSamplers(sql) {
       await sleep(1000);
     }
   })();
-  const max = (xs) => (xs.length ? Math.max(...xs) : NaN);
+  // A loop, not Math.max(...xs): spreading 100k+ values overflows the call stack.
+  const max = (xs) => (xs.length ? xs.reduce((a, b) => (b > a ? b : a), -Infinity) : NaN);
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
   return {
     async stop() {
@@ -301,8 +302,9 @@ async function stage(sql, streams, rate, bodies) {
   const deadline = now() + GRACE_MS;
   for (;;) {
     const got = await collectAll();
-    arrivals.push(...got.arrivals);
-    errors.push(...got.errors);
+    // Not push(...got.arrivals): a stage can deliver more than the call stack holds as arguments.
+    for (const a of got.arrivals) arrivals.push(a);
+    for (const e of got.errors) errors.push(e);
     clientLag = Math.max(clientLag, got.lagMaxMs);
     if (arrivals.length >= expected || now() > deadline) break;
     await sleep(500);
