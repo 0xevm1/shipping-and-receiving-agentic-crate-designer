@@ -11,6 +11,7 @@ import type { CheckItem } from "@/lib/checks";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";
+import { SharedJob } from "./SharedJob";
 import { Scorecard } from "./Scorecard";
 import styles from "./OverviewTab.module.css";
 import { ShipmentSummary } from "./Shipment";
@@ -131,6 +132,8 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
 
       {/* The design library: save, list and reuse this part's designs; share links. */}
       <SavedDesigns />
+      {/* The part's job on the server: saves every tab sees (#46). Quiet when the server is away. */}
+      <SharedJob />
     </>
   );
 }

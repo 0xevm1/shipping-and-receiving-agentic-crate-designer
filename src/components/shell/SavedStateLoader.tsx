@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { startJobSync } from "@/state/jobSync";
 import { watchLastDesign } from "@/state/lastDesignLoader";
 import { openShareLink } from "@/state/shareLink";
 import { startSavedState } from "@/state/startup";
@@ -14,13 +15,17 @@ import { startSavedState } from "@/state/startup";
 export function SavedStateLoader() {
   useEffect(() => {
     let stopWatching: (() => void) | null = null;
+    let stopSync: (() => void) | null = null;
     let cancelled = false;
 
     // The startup runs once per page load even when StrictMode mounts this twice; only the
     // watcher belongs to a mount, and starts after the decision so the default crate never
     // overwrites the saved one.
     void startSavedState().then((source) => {
-      if (!cancelled) stopWatching = watchLastDesign({ saveNow: source === "share" });
+      if (cancelled) return;
+      stopWatching = watchLastDesign({ saveNow: source === "share" });
+      // The part's shared job on the server (#46), once the restored crate is the one on screen.
+      stopSync = startJobSync();
     });
 
     const onHash = () => void openShareLink(false);
@@ -28,6 +33,7 @@ export function SavedStateLoader() {
     return () => {
       cancelled = true;
       stopWatching?.();
+      stopSync?.();
       window.removeEventListener("hashchange", onHash);
     };
   }, []);

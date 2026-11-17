@@ -18,9 +18,9 @@ const id = z.uuid();
 const json = z.record(z.string(), z.unknown());
 const datetime = z.iso.datetime({ offset: true });
 
-export const JOB_STATUSES = ["open", "running", "ready", "error", "archived"] as const;
-export const JobStatusSchema = z.enum(JOB_STATUSES);
-export const CONFIGURATION_ORIGINS = ["precomputed", "user"] as const;
+const JOB_STATUSES = ["open", "running", "ready", "error", "archived"] as const;
+const JobStatusSchema = z.enum(JOB_STATUSES);
+const CONFIGURATION_ORIGINS = ["precomputed", "user"] as const;
 
 /** The longest `Idempotency-Key` header accepted. */
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
@@ -84,7 +84,7 @@ export const ConfigurationSchema = z.object({
 });
 export type ConfigurationResponse = z.infer<typeof ConfigurationSchema>;
 
-export const ArtifactSchema = z.object({
+const ArtifactSchema = z.object({
   id,
   configurationId: id,
   kind: z.string(),
