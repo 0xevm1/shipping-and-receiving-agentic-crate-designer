@@ -1,5 +1,5 @@
 import { Color, MeshStandardMaterial, Mesh, type Material, type Object3D } from "three";
-import type { Member, MemberKind } from "@/domain/crate";
+import type { CrateDesign, Member, MemberKind } from "@/domain/crate";
 import { partFinish } from "@/domain/partDetails";
 import type { Vec3 } from "@/domain/schema";
 import type { DesignerState, ViewState } from "@/state/store";
@@ -30,6 +30,16 @@ export const EXPLODE_LID_MM = 420;
 /** Opacity of everything outside the focused group. */
 export const GHOST_BOARD = 0.07;
 export const GHOST_PART = 0.1;
+
+/**
+ * Where the crate-interior frame sits in the scene (domain mm, Z up): the footprint centred on
+ * the origin, with the bottom of the skids on the ground.
+ */
+export function sceneOrigin(design: CrateDesign): Vec3 {
+  const [L, W] = design.layout.interior;
+  const { floorMm, skid } = design.construction;
+  return [-L / 2, -W / 2, floorMm + skid.tall];
+}
 
 export function explodeOffset(face: Member["face"], e: number): Vec3 {
   switch (face) {
