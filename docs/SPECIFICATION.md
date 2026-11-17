@@ -829,6 +829,20 @@ hadrian.co**, read from its live CSS:
   To use real Söhne, license it and point `--font-sans`, `--font-wide` and the mono variable at
   `next/font/local` in `src/app/layout.tsx`.
 - All values are in `src/app/globals.css`.
+- **App icons (#58):** the mark is a white gear with an isometric crate in it: navy `#0C2548`
+  sides and a gold `#D9A938` lid. The supplied artwork is used as is; regenerate it from the
+  master SVG rather than editing the rasters.
+  - `src/app/icon.svg` is the master (64 × 64 viewBox) and has no dark-mode variant. The white
+    gear reads on dark tab bars; on white ones the navy and gold crate carries the mark.
+  - The rasters (`src/app/favicon.ico` at 16/32/48, `icon1.png` at 96, `apple-icon.png` at 180
+    and the manifest's 192 and 512 PNGs) match the SVG. They are transparent and fill the canvas
+    edge to edge by choice (no padding), so iOS shows them on its own background.
+  - Next's metadata file conventions generate the `<link rel="icon">` and
+    `<link rel="apple-touch-icon">` tags; don't add them by hand.
+  - `public/site.webmanifest` ("Crate Designer", short name "Crates", navy theme and
+    background) is linked through `metadata.manifest` in `layout.tsx`. Its icons are
+    `purpose: "any"`, not `maskable`, because the gear's teeth reach the edge and Android's
+    mask (the centre 80% safe zone) would crop them.
 
 ### 8.2 Layout
 
@@ -1442,6 +1456,11 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
+  - `15-app-icons` (#58, HTTP only): `/favicon.ico`, `/icon.svg`, `/icon1.png` and
+    `/apple-icon.png` return 200 with their image types; `/icon.svg` is the crate mark;
+    `/site.webmanifest` has name "Crate Designer", start URL `/`, theme `#002548` and two icon
+    srcs that return PNGs; the HTML head has the title and the manifest, icon and
+    apple-touch-icon links.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 
