@@ -566,7 +566,9 @@ export function checkFiles(files: readonly FileInput[], { known = [] }: CheckOpt
       add(
         "warning",
         "glb-sliver",
-        msg`Its thinnest side is ${mm(sorted[0])} against ${mm(sorted[2])} for the longest, so it is almost flat. If that isn't the part, check the export.`,
+        t(
+          `Its thinnest side is ${Number(((sorted[0] / sorted[2]) * 100).toPrecision(1))}% of its longest, so it is almost flat. If that isn't the part, check the export.`,
+        ),
       );
     }
     const k = chosen.frame.units === "m" ? 1000 : chosen.frame.units === "in" ? 25.4 : 1;
@@ -589,22 +591,27 @@ export function checkFiles(files: readonly FileInput[], { known = [] }: CheckOpt
     });
   }
 
-  // parts.json entries and the files they name.
-  if (!design && glbs.length > 0 && entries.length > 0 && !glbs.some(named)) {
-    for (const c of catalogs) {
-      for (const e of c.entries) {
-        findings.push({
-          file: c.summary.file,
-          where: e.id,
-          severity: "warning",
-          code: "model-missing",
-          message: t(`${e.id} names ${e.model}, which wasn't loaded. Load that .glb with parts.json, or fix the name.`),
-        });
+  // parts.json entries and the files they name. Said only when no .glb that was supplied is named by an entry: with a
+  // catalog beside one model, the entries for the other parts are the catalog doing its job, not a mistake.
+  if (!design && glbs.length > 0 && catalogs.length > 0 && !glbs.some(named)) {
+    const skippedFor = (name: string) => catalogs.flatMap((c) => c.summary.skipped).find((x) => x.model === name);
+    // A skipped entry that names a supplied file is the reason, and already has its own finding.
+    if (!glbs.some((g) => skippedFor(g.name))) {
+      for (const c of catalogs) {
+        for (const e of c.entries) {
+          findings.push({
+            file: c.summary.file,
+            where: e.id,
+            severity: "warning",
+            code: "model-missing",
+            message: t(`${e.id} names ${e.model}, which wasn't loaded. Load that .glb with parts.json, or fix the name.`),
+          });
+        }
       }
     }
     for (const g of readable) {
       if (g !== pick) continue;
-      const skipped = catalogs.flatMap((c) => c.summary.skipped).find((x) => x.model === g.name);
+      const skipped = skippedFor(g.name);
       findings.push({
         file: g.name,
         severity: "note",

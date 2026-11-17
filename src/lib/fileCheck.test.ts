@@ -328,6 +328,19 @@ describe("parts.json and the files it names", () => {
     expect(c.opened?.entry).toBeUndefined();
   });
 
+  it("a skipped entry that names the .glb is the reason it has stand-in details: said once, with no other entry nagged", () => {
+    const c = checkFiles([fixture("parts-missing-field.json"), glb("missing-field.glb")]);
+    expect(c.findings.map((f) => [f.file, f.code])).toEqual([
+      ["parts-missing-field.json", "missing-field"],
+      ["missing-field.glb", "glb-unlisted"],
+    ]);
+    expect(say(c.findings[1])).toBe("Its entry (SCN-900) was skipped, so it was loaded with stand-in details (10 kg).");
+    // Every entry skipped: the .glb still opens, with the note.
+    const only = checkFiles([text("parts.json", JSON.stringify({ parts: [{ ...GOOD, mass_kg: undefined, model: "tall-part.glb" }] })), glb("tall-part.glb")]);
+    expect(only.findings.map((f) => f.code)).toEqual(["missing-field", "glb-unlisted"]);
+    expect(only.opened?.name).toBe("tall-part.glb");
+  });
+
   it("with only some of the files, the rest of the catalog isn't nagged about", () => {
     const c = checkFiles([fixture("parts.json"), glb("tall-part.glb")]);
     expect(c.findings).toEqual([]);
@@ -396,7 +409,7 @@ describe(".glb files", () => {
   it("a slice of a part almost flat is a warning, with the part still opened", () => {
     const c = only("sliver.glb");
     expect(one(c, "glb-sliver").severity).toBe("warning");
-    expect(say(one(c, "glb-sliver"))).toMatch(/thinnest side is 0 mm against 1,000 mm/);
+    expect(say(one(c, "glb-sliver"))).toMatch(/^Its thinnest side is 0\.04% of its longest, so it is almost flat/);
     expect(c.opened?.name).toBe("sliver.glb");
   });
 

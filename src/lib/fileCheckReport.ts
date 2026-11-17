@@ -78,7 +78,7 @@ const SHORT: Record<string, string> = {
   "units-guessed": "units guessed from the size",
   "glb-sliver": "almost flat",
   "glb-off-origin": "far from the origin",
-  "glb-unlisted": "no entry names it",
+  "glb-unlisted": "loaded with stand-in details",
 };
 
 const shorts = (findings: readonly Finding[]): string => [...new Set(findings.map((f) => SHORT[f.code] ?? `1 ${f.severity}`))].join(", ");
