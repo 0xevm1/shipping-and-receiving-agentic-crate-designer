@@ -1,6 +1,7 @@
 import { catalog } from "@/domain/catalog";
 import type { DesignFile } from "@/domain/designFile";
 import { loadDesign, loadPartFiles, type LoadOutcome } from "@/lib/loadPart";
+import type { ModelHold } from "@/lib/modelRegistry";
 import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
 import { useDesigner } from "./store";
@@ -36,21 +37,23 @@ const failed = (err: unknown) =>
 
 /**
  * Applies `work`'s outcome unless a later load started meanwhile. A superseded outcome is
- * dropped, and its object URL released because no part will ever show it. Resolves to the
- * outcome when it was applied, else null.
+ * dropped, and the loader's hold on its model released because no part will ever show it (the
+ * registry frees it). An applied outcome's hold is released too: the store holds the model now.
+ * Resolves to the outcome when it was applied, else null.
  */
 async function applyLatest(ticket: LoadTicket, work: () => Promise<Outcome>): Promise<Outcome | null> {
+  let hold: ModelHold | undefined;
   try {
     const outcome = await work();
-    if (!ticket.current()) {
-      if (outcome.part?.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
-      return null;
-    }
+    hold = outcome.hold;
+    if (!ticket.current()) return null;
     applyOutcome(outcome);
     return outcome;
   } catch (err) {
     if (ticket.current()) failed(err);
     return null;
+  } finally {
+    hold?.release();
   }
 }
 

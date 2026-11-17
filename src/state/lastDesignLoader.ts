@@ -2,6 +2,7 @@ import { catalog } from "@/domain/catalog";
 import { planShipment } from "@/domain/shipment";
 import { currentDesignFile } from "@/lib/currentDesign";
 import { designFilePart, loadDesign } from "@/lib/loadPart";
+import { models, type ModelHold } from "@/lib/modelRegistry";
 import { browserIdb, loadLastGlb, saveLastGlb } from "./glbCache";
 import { createDebouncedSaver, saveLastDesign, type LastDesign } from "./lastDesignStorage";
 import { useLibrary } from "./libraryStore";
@@ -31,6 +32,7 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
   useView.getState().setFileReport(null);
   const file = saved.design;
   const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
+  let hold: ModelHold | undefined;
   try {
     let glbs: File[] = [];
     if (!inCatalog) {
@@ -45,10 +47,9 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
     }
     const s = useDesigner.getState();
     const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, useView.getState().units);
-    if (!ticket.current()) {
-      if (outcome.part?.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
-      return false;
-    }
+    // Released on every way out: a part that was not shown has no other holder, and one that was has the store.
+    hold = outcome.hold;
+    if (!ticket.current()) return false;
     if (!outcome.part || !outcome.design) {
       console.warn(`Last-opened crate not reopened, opening the default part. ${outcome.message}`);
       return false;
@@ -57,8 +58,6 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
     const plan = planShipment(outcome.part, settings, layoutKey, s.standards, ranking);
     if (!plan.crates[crateIndex]?.result.design) {
       console.warn("Last-opened crate no longer makes a crate, opening the default part.");
-      // The part will not be shown, so its object URL would never be released.
-      if (outcome.part.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
       return false;
     }
     useDesigner.getState().restoreDesign(outcome.part, settings, layoutKey, crateIndex, ranking);
@@ -71,6 +70,8 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
   } catch (e) {
     console.warn("Last-opened crate not reopened, opening the default part.", e);
     return false;
+  } finally {
+    hold?.release();
   }
 }
 
@@ -95,12 +96,17 @@ export function watchLastDesign({
   const keepGlb = async (part: LoadedPart) => {
     if (part.modelUrl === keptUrl || !part.model) return;
     keptUrl = part.modelUrl;
+    // Held (taken before the first await) until the bytes are copied out: the part may be replaced meanwhile.
+    const hold = models.acquire(part.modelUrl);
     try {
-      const bytes = await (await fetch(part.modelUrl)).arrayBuffer();
+      const blob = models.blob(part.modelUrl);
+      const bytes = await (blob ? blob.arrayBuffer() : (await fetch(part.modelUrl)).arrayBuffer());
       const r = await saveLastGlb(part.model, bytes, idb);
       if (r === "too-big") console.warn(`${part.model} is over 50 MB, so it isn't kept for the next visit.`);
     } catch (e) {
       console.warn("Couldn't keep the part's model for the next visit.", e);
+    } finally {
+      hold.release();
     }
   };
   const saver = createDebouncedSaver<LastDesign>((d) => saveLastDesign(d, storage));
