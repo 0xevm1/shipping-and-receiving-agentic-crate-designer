@@ -5,32 +5,8 @@ import { hoursText, usd } from "@/lib/format";
 import { renderMessage } from "@/lib/message";
 import { volume, weight, weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { CrateTypePicker } from "./CrateTypePicker";
 import styles from "./Shipment.module.css";
-
-export { styles as shipmentStyles };
-
-/**
- * Which crate type of a split batch is on screen. The 3D view, Layouts, Cut list and
- * Checks all follow it. Renders nothing for a single crate.
- */
-export function CrateTypePicker() {
-  const plan = useDesigner((s) => s.plan);
-  const crateIndex = useDesigner((s) => s.crateIndex);
-  const setCrateIndex = useDesigner((s) => s.setCrateIndex);
-  if (!plan.split || plan.crates.length < 2) return null;
-  return (
-    <div className={`seg ${styles.picker}`} role="group" aria-label="Crate type on screen">
-      {plan.crates.map((c, i) => (
-        <button key={c.label} type="button" aria-pressed={i === crateIndex} onClick={() => setCrateIndex(i)}>
-          Crate {c.label}
-          <small>
-            {c.count} × {c.quantity} {c.quantity === 1 ? "part" : "parts"}
-          </small>
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /** "Ships as 3 × crate A (64 each) + 1 × crate B (8)", with the shipment's gross and volume. */
 export function ShipmentSummary() {
@@ -40,7 +16,7 @@ export function ShipmentSummary() {
   const { totals } = plan;
   return (
     <section className={styles.ship} aria-label="Shipment">
-      <div className={styles.eyebrow}>Shipment · {totals.crates} crates</div>
+      <div className={`eyebrow-label ${styles.eyebrow}`}>Shipment · {totals.crates} crates</div>
       <p className={styles.plan}>
         Ships as <b>{describeShipment(plan)}</b>
       </p>
@@ -57,7 +33,7 @@ export function ShipmentSummary() {
       ) : (
         <p className={styles.note}>One crate would be over the per-crate limits in Shop standards, so the batch is split.</p>
       )}
-      <CrateTypePicker />
+      <CrateTypePicker flush />
     </section>
   );
 }

@@ -1,0 +1,180 @@
+/*
+ * The Cut list tab: the table (grouped by assembly, a row per piece), the totals and the actions.
+ * A panel too narrow for four columns stacks each row (see the container query below).
+ */
+
+.cut {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cut th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 6px 4px;
+}
+.cut th:nth-last-child(-n + 2),
+.cut .row td:nth-last-child(-n + 2) {
+  text-align: right;
+}
+/* The assembly heading rows, on the `eyebrow-label` primitive (stretch, caps, gold): longhands, because `font` would reset the stretch. */
+.cut .grp td {
+  padding: 16px 6px 6px;
+  font-family: var(--wide);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+}
+.cut .row {
+  cursor: pointer;
+}
+/* The row's toggle: a real button that looks like the cell text. */
+.cut .pick {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.cut .pick:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.cut .row td {
+  padding: 6px;
+  border-bottom: 1px solid var(--hair);
+  vertical-align: baseline;
+}
+.cut .row td:nth-last-child(-n + 2) {
+  font: 400 13px/1.3 var(--mono);
+}
+/* Qty never wraps and keeps room on its right; the cut wraps between its dimensions. */
+.cut .row td:last-child {
+  white-space: nowrap;
+  padding-right: 4px;
+  min-width: 2.5ch;
+}
+.cut th:last-child {
+  padding-right: 4px;
+}
+.cut .row td:nth-child(2) {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.cut .row td:first-child .pick {
+  white-space: nowrap;
+}
+.cut .row:hover td,
+.cut .row.hl td {
+  background: rgba(112, 184, 253, 0.12);
+}
+.cut .row.pin td {
+  background: rgba(112, 184, 253, 0.24);
+  color: #fff;
+}
+.totals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 16px 0 14px;
+}
+.totals div {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.totals b {
+  display: block;
+  font: 400 16px/1.3 var(--mono);
+  color: var(--text);
+}
+
+/* The drawer (`max-width: 980px`): the row toggle is a touch target, and the cells are tighter so the Qty column keeps its room. */
+@media (max-width: 980px) {
+  .cut .pick {
+    min-height: var(--touch);
+  }
+  .cut .row td,
+  .cut th {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .cut .row td:last-child,
+  .cut th:last-child {
+    padding-right: 2px;
+  }
+}
+
+/*
+ * A panel too narrow for four columns (a phone's drawer is 342 px; the table wants 414) stacks each
+ * row instead of scrolling sideways: piece and stock on one line, cut and quantity on the next.
+ * The heading row stays for screen readers only; the cut unit and the "×" before the quantity
+ * are drawn by CSS so the stacked cells still read as columns did. Unnamed `@container` queries
+ * find the island's panel, the table's one size container (`Island.module.css`).
+ */
+@container (max-width: 380px) {
+  .cut,
+  .cut tbody {
+    display: block;
+  }
+  .cut thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .cut .grp,
+  .cut .grp td {
+    display: block;
+  }
+  .cut .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--hair);
+  }
+  .cut .row:hover,
+  .cut .row.hl {
+    background: rgba(112, 184, 253, 0.12);
+  }
+  .cut .row.pin {
+    background: rgba(112, 184, 253, 0.24);
+  }
+  .cut .row td,
+  .cut .row:hover td,
+  .cut .row.hl td,
+  .cut .row.pin td {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .cut .row td:nth-child(1) {
+    grid-area: 1 / 1;
+  }
+  .cut .row td:nth-child(2) {
+    grid-area: 1 / 2;
+    align-self: center;
+    text-align: right;
+    white-space: normal;
+  }
+  .cut .row td:nth-child(3) {
+    grid-area: 2 / 1;
+  }
+  .cut .row td:nth-child(4) {
+    grid-area: 2 / 2;
+    text-align: right;
+  }
+  .cut .row td[data-unit]::after {
+    content: " " attr(data-unit);
+    color: var(--muted);
+  }
+  .cut .row td:nth-child(4)::before {
+    content: "× ";
+    color: var(--muted);
+  }
+}

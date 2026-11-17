@@ -4,6 +4,7 @@ import { cautionNote } from "@/lib/format";
 import { allChecks, cautionCount } from "@/lib/checks";
 import { exportNote, useExportRun } from "@/state/exportRun";
 import { useDesigner } from "@/state/store";
+import styles from "./ExportPill.module.css";
 
 const EXPORT_TITLE = "Download a .zip with the 3D model, the PDF (spec, build sheet, label), the cut list and the design file";
 const CAUTION_NOTE_ID = "export-caution";
@@ -31,10 +32,10 @@ export function ExportPill() {
   const caution = canExport ? cautionNote(cautions) : "";
 
   return (
-    <div className="exportrow">
+    <div className={styles.row}>
       <button
         type="button"
-        className={`exportpill${busy ? " busy" : ""}`}
+        className={busy ? `${styles.pill} ${styles.busy}` : styles.pill}
         disabled={!canExport}
         aria-disabled={busy || undefined}
         aria-busy={busy || undefined}
@@ -42,16 +43,16 @@ export function ExportPill() {
         title={canExport ? (caution ? `${EXPORT_TITLE}. ${caution}.` : EXPORT_TITLE) : "There is no crate to export"}
         onClick={run}
       >
-        {busy ? <span className="exportspin" aria-hidden="true" /> : <DownloadIcon />}
+        {busy ? <span className={styles.spin} aria-hidden="true" /> : <DownloadIcon />}
         <span>{busy ? "Exporting…" : "Export specs"}</span>
-        {caution && <span className="exportdot" aria-hidden="true" data-testid="export-caution-dot" />}
+        {caution && <span className={styles.dot} aria-hidden="true" data-testid="export-caution-dot" />}
       </button>
       {caution && (
         <span id={CAUTION_NOTE_ID} className="sr-only">
           {caution}
         </span>
       )}
-      <span className={`exportnote${state.kind === "error" ? " bad" : ""}`} role="status" data-testid="export-note">
+      <span className={state.kind === "error" ? `${styles.note} ${styles.bad}` : styles.note} role="status" data-testid="export-note">
         {note}
       </span>
     </div>

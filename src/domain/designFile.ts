@@ -25,7 +25,7 @@ export const DESIGN_FILE_KIND = "crate-design";
  */
 export const DESIGN_SCHEMA_VERSION = 2;
 
-export const DesignFilePartSchema = z.object({
+const DesignFilePartSchema = z.object({
   /** "catalog": the model ships with the app (/public/parts). "custom": the user supplies the GLB. */
   source: z.enum(["catalog", "custom"]),
   id: z.string().min(1),
@@ -46,7 +46,7 @@ export const DesignFilePartSchema = z.object({
 });
 export type DesignFilePart = z.infer<typeof DesignFilePartSchema>;
 
-export const DesignFileSchema = z.object({
+const DesignFileSchema = z.object({
   kind: z.literal(DESIGN_FILE_KIND),
   schemaVersion: z.literal(DESIGN_SCHEMA_VERSION),
   app: z.object({ name: z.string(), version: z.string() }),

@@ -9,6 +9,7 @@ import { isIdle } from "@/state/motion";
 import { reducedMotion, useDesigner } from "@/state/store";
 import { cloneWithMaterial, FOV_DEG, MM_TO_M, partMaterial } from "./scene";
 import { type LoadedPart } from "@/lib/part";
+import { partViewClass } from "./PartViewSlot";
 
 /**
  * Turn speed, rad/s: slower than the handoff's 0.45, and reversed, at the user's request.
@@ -28,7 +29,7 @@ const turn = new Spherical();
 export default function PartView() {
   const part = useDesigner((s) => s.part);
   return (
-    <Canvas className="partview" camera={{ fov: FOV_DEG, near: 0.001, far: 50 }} dpr={[1, 2]} gl={{ alpha: true }}>
+    <Canvas className={partViewClass} camera={{ fov: FOV_DEG, near: 0.001, far: 50 }} dpr={[1, 2]} gl={{ alpha: true }}>
       <hemisphereLight args={["#e9edf2", "#2a3f57", 1.4]} />
       <directionalLight position={[3, 5, 4]} intensity={1.6} color="#fff1dc" />
       <Suspense fallback={null}>

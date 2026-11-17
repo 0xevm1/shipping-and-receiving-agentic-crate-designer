@@ -1,0 +1,98 @@
+/* The Layouts tab: the ranking toggle and one card per way to pack the batch. */
+
+/* Rank by: volume / crate cost / freight class */
+.rank {
+  display: flex;
+  margin: 0 0 12px;
+  background: var(--glass-weak);
+  border: 1px solid var(--hair);
+}
+.rank button {
+  flex: 1 1 0;
+}
+.opt {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.opt:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.opt[aria-pressed="true"] {
+  border-color: var(--gold);
+  background: var(--gold-wash);
+}
+.opt svg {
+  display: block;
+  margin: 0 auto;
+}
+.optTitle {
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.badge {
+  font: 500 10.5px/1.5 var(--mono);
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--navy-deep);
+}
+.badge.tall {
+  background: none;
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+.optDims {
+  display: block;
+  font: 400 13.5px/1.5 var(--mono);
+}
+.optMeta {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+/* Cost and freight against the recommendation */
+.optDelta {
+  display: block;
+  margin-top: 2px;
+  font: 400 12px/1.45 var(--mono);
+  color: var(--soft);
+}
+.optDelta .worse {
+  color: var(--red);
+}
+.optDelta .better {
+  color: var(--green);
+}
+.volbar {
+  display: block;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin-top: 6px;
+}
+.volbar i {
+  display: block;
+  height: 100%;
+  background: rgba(214, 228, 242, 0.55);
+  border-radius: 2px;
+}
+.opt[aria-pressed="true"] .volbar i {
+  background: var(--gold);
+}
+/* "Show all N layouts", on the `btn` primitive. */
+.more {
+  width: 100%;
+}

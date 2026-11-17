@@ -18,7 +18,7 @@ export function jsonFile(text: string, name = "crate-design.json") {
 }
 
 /** What a download saved: its bytes, read from Playwright's temporary copy. */
-export async function readDownload(download: Download): Promise<Buffer> {
+async function readDownload(download: Download): Promise<Buffer> {
   const path = await download.path();
   return readFileSync(path);
 }

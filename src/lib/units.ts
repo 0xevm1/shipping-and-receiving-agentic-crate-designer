@@ -73,8 +73,8 @@ export function weightWhole(kg: number, u: Units): string {
 /** A number with thousands separators ("30,000"), for a quantity shown beside its unit. */
 export const groupDigits = (n: number): string => n.toLocaleString("en-US");
 
-/** A single part's mass: the same rule as every other mass. */
-export const partWeight = weight;
+/** A single part's mass: the same rule as every other mass (`weight`). */
+export const partWeight = (kg: number, u: Units): string => weight(kg, u);
 
 export function volume(m3: number, u: Units): string {
   return u === "imperial" ? `${(m3 * FT3_PER_M3).toFixed(1)} ft³` : `${m3.toFixed(2)} m³`;

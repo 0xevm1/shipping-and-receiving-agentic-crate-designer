@@ -32,7 +32,7 @@ export async function waitForFrames(page: Page, n = 2) {
 }
 
 /** The scene is drawing and the preloaded part's model has loaded (the header shows the model check). */
-export async function waitForReady(page: Page) {
+async function waitForReady(page: Page) {
   await waitForScene(page);
   await expect(page.getByRole("banner")).toContainText("model matches catalog", { timeout: 30_000 });
 }

@@ -55,7 +55,7 @@ interface Insets {
 
 /** Which input an edit came from, so the change note can sit by it. */
 /** How the load row shows its message: a note goes by itself, an error waits to be dismissed. */
-export type LoadMessageKind = "note" | "error";
+type LoadMessageKind = "note" | "error";
 
 export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
 

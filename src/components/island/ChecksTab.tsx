@@ -3,7 +3,8 @@
 import { renderMessage } from "@/lib/message";
 import type { CheckItem } from "@/lib/checks";
 import { useDesigner } from "@/state/store";
-import { CrateTypePicker } from "./Shipment";
+import styles from "./ChecksTab.module.css";
+import { CrateTypePicker } from "./CrateTypePicker";
 
 /** Every rule of thumb, passed ones included, cautions first. */
 export function ChecksTab({ checks }: { checks: readonly CheckItem[] }) {
@@ -14,7 +15,7 @@ export function ChecksTab({ checks }: { checks: readonly CheckItem[] }) {
       <p className="lede">Rules of thumb for a first pass. Heavy or unusual loads still need an engineering review.</p>
       <CrateTypePicker />
       {checks.map((c) => (
-        <div key={c.id} className={`check ${c.level}`} data-testid="check" data-level={c.level}>
+        <div key={c.id} className={c.level === "ok" ? styles.check : `${styles.check} ${styles[c.level]}`} data-testid="check" data-level={c.level}>
           <i />
           <div>
             <b>{c.title}</b>

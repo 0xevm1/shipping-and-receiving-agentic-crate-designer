@@ -1,7 +1,7 @@
 import { test, type Locator, type Page } from "@playwright/test";
 
 /** Where every spec writes pictures. Git-ignored; CI uploads it as the `e2e-screenshots` artifact. */
-export const SCREENSHOT_DIR = "e2e/screenshots";
+const SCREENSHOT_DIR = "e2e/screenshots";
 
 /**
  * The one screenshot helper. A page is shot full-page, a locator is cropped to its element.

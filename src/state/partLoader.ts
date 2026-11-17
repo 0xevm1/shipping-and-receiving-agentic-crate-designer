@@ -8,7 +8,7 @@ import { useDesigner } from "./store";
 type Outcome = Omit<LoadOutcome, "catalogAdditions"> & { catalogAdditions?: LoadOutcome["catalogAdditions"] };
 
 /** Puts a load's part (and a design's rules and layout) on screen, with its message. */
-export function applyOutcome(outcome: Outcome) {
+function applyOutcome(outcome: Outcome) {
   const s = useDesigner.getState();
   if (outcome.catalogAdditions?.length) s.addCatalogParts(outcome.catalogAdditions);
   if (outcome.part && outcome.design) {

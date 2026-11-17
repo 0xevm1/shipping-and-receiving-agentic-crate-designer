@@ -22,7 +22,7 @@ export function Scorecard({ design }: { design: CrateDesign }) {
   return (
     <section className={styles.card} aria-label="Scorecard">
       <div className={styles.head}>
-        <div className={styles.eyebrow}>Scorecard{plan ? " · each crate" : ""}</div>
+        <div className={`eyebrow-label ${styles.eyebrow}`}>Scorecard{plan ? " · each crate" : ""}</div>
         {/* Always mounted, so a screen reader announces the text when it appears and nothing moves. */}
         <span className={styles.clock} role="status">
           {designedInMs !== null && `Designed in ${elapsedText(designedInMs)}`}

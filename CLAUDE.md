@@ -22,6 +22,8 @@
     `src/domain/orientations.parity.test.ts`). If two layers need a thing, move it to the lower one.
   - The Z-up mm to Y-up metres conversion is defined once, in `viewer/scene.ts` (`MM_TO_M`, `domainToWorld`),
     and applied to the scene graph by `CrateViewer.tsx`'s root group.
+- **Styles:** global CSS is only `src/app/globals.css` (tokens, base rules), `src/app/ui.css` (the shared `@layer ui` primitives) and
+    `src/app/(designer)/designer.css`; every component owns a `Name.module.css` next to it. Details in spec §13.
 - **Keeping docs current:** when you change a rule, update the constant, its test and spec §7 in
   the same change.
 - **CI:** `.github/workflows/ci.yml` runs install, format check, lint, typecheck, test and build (`checks`) on

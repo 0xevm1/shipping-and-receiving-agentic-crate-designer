@@ -1,0 +1,150 @@
+/*
+ * The shell's own pieces: the full-bleed stage, the file-drop veil, and the narrow-screen foot,
+ * hamburger, summary chip and scrim. The overlays (header, island, view bar, credit) own their
+ * styles. They react to Hide panels through the `data-panels-hidden` attribute on the shell root.
+ *
+ * Narrow (`max-width: 980px`, matching `NARROW` in DesignerShell.tsx): the scene stays full-bleed;
+ * the island is a right-side drawer. Header top left, hamburger top right; at the foot the load
+ * message, the summary chip and a compact view bar. `env(safe-area-inset-*)` (`--sa-*`, globals.css)
+ * keeps everything clear of notches (the viewport is `viewport-fit=cover`, src/app/layout.tsx).
+ * Touch targets are at least 44 px.
+ */
+
+.stage {
+  position: fixed;
+  inset: 0;
+}
+.stage canvas {
+  touch-action: none;
+}
+
+.veil {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dropveil);
+  display: grid;
+  place-items: center;
+  background: rgba(0, 18, 36, 0.6);
+  pointer-events: none;
+}
+.veilCard {
+  padding: 26px 38px;
+  font: 400 26px/1.2 var(--sans);
+  letter-spacing: -0.03em;
+  border-color: var(--gold);
+}
+
+/* Narrow-only pieces stay out of the desktop layout. */
+.hamburger,
+.summary,
+.scrim {
+  display: none;
+}
+/* The summary chip and the view bar: a column at the foot on narrow screens, no box on desktop. */
+.foot {
+  display: contents;
+}
+
+@media (max-width: 980px) {
+  .hamburger {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    z-index: var(--z-toast);
+    top: calc(10px + var(--sa-t));
+    right: calc(10px + var(--sa-r));
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border-radius: 50%;
+    color: var(--text);
+  }
+
+  /* Foot: load message, summary chip, then the view bar, as a column. */
+  .foot {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    position: fixed;
+    z-index: var(--z-foot);
+    left: calc(12px + var(--sa-l));
+    right: calc(12px + var(--sa-r));
+    bottom: calc(12px + var(--sa-b));
+    pointer-events: none;
+  }
+  .foot > * {
+    pointer-events: auto;
+  }
+
+  /* The chip is always the width of the foot, so it doesn't change size with the numbers. */
+  .summary {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    align-self: stretch;
+    min-height: var(--touch);
+    padding: 7px 16px 8px;
+    border-radius: 18px;
+    text-align: left;
+  }
+  .summary > span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  /* The size wraps to a second line before it can touch the weight; the two never run together. */
+  .summary > span:first-child {
+    flex: 1 1 auto;
+  }
+  .summary > span:first-child .value {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .summary > span:last-child {
+    flex: none;
+    text-align: right;
+  }
+  /* On the `eyebrow-label` primitive (stretch, caps), in muted: longhands, because `font` would reset the stretch. */
+  .label {
+    font-family: var(--wide);
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .value {
+    font: 400 14px/1.3 var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--gold);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The drawer's scrim: the island, full height at the right edge, sits above it (`Island.module.css`). */
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-scrim);
+    background: rgba(0, 12, 26, 0.5);
+  }
+  .scrim[hidden] {
+    display: none;
+  }
+}
+
+/* Wider narrow screens and phones in landscape: the summary and the view bar share a row. */
+@media (max-width: 980px) and (min-width: 600px) {
+  .foot {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+  .summary {
+    align-self: flex-end;
+  }
+}

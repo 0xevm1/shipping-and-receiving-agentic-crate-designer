@@ -383,6 +383,11 @@ src/components/    may import everything below except src/server/: shell/ (overl
                    (tabs), viewer/ (three.js via react-three-fiber); src/app/ is the same layer
 ```
 
+Styles: each component has its own CSS module (`Name.module.css` next to it). The only global CSS is
+`src/app/globals.css` (design tokens, base rules), `src/app/ui.css` (the few shared primitives, in a
+cascade layer that component styles always beat) and the designer's page in `src/app/(designer)/`;
+the `/print` route loads only the tokens and its own `print.css` (spec §13).
+
 Imports point down only (components and app, then state, then engine, then lib, then domain;
 src/server/ beside state, used only by src/app/). ESLint enforces it (`eslint.config.mjs`,
 `bun run lint`), including for type-only imports and tests. The page designs in a Web Worker,

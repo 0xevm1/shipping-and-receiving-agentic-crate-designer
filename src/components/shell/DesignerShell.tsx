@@ -7,9 +7,12 @@ import { INPUT_EVENTS, onInputEvent } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { Island, ISLAND_ID } from "../island/Island";
 import { SizeLabels } from "../viewer/SizeLabels";
+import { StageMessage } from "../viewer/StageMessage";
 import { Flash } from "./ChangeFeedback";
 import { Credit } from "./Credit";
+import styles from "./DesignerShell.module.css";
 import { PartHeader } from "./PartHeader";
+import { Tooltip } from "./Tooltip";
 import { useFocusTrap } from "./useFocusTrap";
 import { useLoadFiles } from "./useLoadFiles";
 import { ViewBar } from "./ViewBar";
@@ -17,10 +20,10 @@ import { ViewBar } from "./ViewBar";
 // WebGL only exists in the browser, so the viewer is never server-rendered.
 const CrateViewer = dynamic(() => import("../viewer/CrateViewer"), {
   ssr: false,
-  loading: () => <div className="stage-msg">Starting 3D view…</div>,
+  loading: () => <StageMessage>Starting 3D view…</StageMessage>,
 });
 
-/** Below this the island is a drawer. Must match the `max-width: 980px` media queries in globals.css. */
+/** Below this the island is a drawer. Must match the `max-width: 980px` media queries in the CSS modules (see globals.css). */
 const NARROW = "(max-width: 980px)";
 /** Margins around the free area, matching the prototype's freeArea(). */
 const FREE_LEFT = 40;
@@ -193,13 +196,13 @@ export function DesignerShell() {
   }, [loadFiles]);
 
   return (
-    <div className={`shell${panelsHidden ? " hud-off" : ""}${drawer ? " drawer-open" : ""}`} ref={shellRef}>
+    <div data-panels-hidden={panelsHidden || undefined} ref={shellRef}>
       <PartHeader />
       {/* Narrow screens only (hidden by CSS above 980 px). */}
       <button
         ref={burgerRef}
         type="button"
-        className="glass hamburger"
+        className={`glass ${styles.hamburger}`}
         aria-label="Crate details"
         aria-expanded={drawer}
         aria-controls={ISLAND_ID}
@@ -209,13 +212,13 @@ export function DesignerShell() {
           <path d="M4 7h16M4 12h16M4 17h16" />
         </svg>
       </button>
-      <section className="stage" aria-label="3D view of the crate">
+      <section className={styles.stage} aria-label="3D view of the crate">
         <CrateViewer />
         <SizeLabels />
         <Tooltip />
       </section>
       {/* The summary chip (narrow) and the view bar; a column at the foot on narrow screens. */}
-      <div className="foot" ref={footRef}>
+      <div className={styles.foot} ref={footRef}>
         <Summary
           onOpen={() => {
             useDesigner.getState().setTab("overview");
@@ -225,11 +228,11 @@ export function DesignerShell() {
         <ViewBar />
       </div>
       {!narrow && <Credit />}
-      {narrow && <div className="scrim" data-testid="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
-      <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} footer={narrow ? <Credit /> : undefined} />
+      {narrow && <div className={styles.scrim} data-testid="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
+      <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} footer={narrow ? <Credit inline /> : undefined} />
       {dragging && (
-        <div className="dropveil" data-testid="drop-veil">
-          <div className="glass card">Drop a .glb file to load the part</div>
+        <div className={styles.veil} data-testid="drop-veil">
+          <div className={`glass card ${styles.veilCard}`}>Drop a .glb file to load the part</div>
         </div>
       )}
     </div>
@@ -248,40 +251,28 @@ function Summary({ onOpen }: { onOpen: () => void }) {
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const totals = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   return (
-    <button type="button" className="glass summary" data-testid="summary" onClick={onOpen}>
+    <button type="button" className={`glass ${styles.summary}`} data-testid="summary" onClick={onOpen}>
       {design ? (
         <>
           <span>
-            <span className="summary-lab">{crateType ? `Crate ${crateType.label} outside` : "Outside"}</span>
-            <Flash on={["outside"]} className="summary-val">
+            <span className={`eyebrow-label ${styles.label}`}>{crateType ? `Crate ${crateType.label} outside` : "Outside"}</span>
+            <Flash on={["outside"]} className={styles.value}>
               {dims(design.layout.external, units)} {lengthUnit(units)}
             </Flash>
           </span>
           <span>
-            <span className="summary-lab">{totals ? `Gross, ${totals.crates} crates` : "Gross"}</span>
-            <Flash on={["gross"]} className="summary-val">
+            <span className={`eyebrow-label ${styles.label}`}>{totals ? `Gross, ${totals.crates} crates` : "Gross"}</span>
+            <Flash on={["gross"]} className={styles.value}>
               {weight(totals ? totals.grossKg : design.grossKg, units, true)}
             </Flash>
           </span>
         </>
       ) : (
         <span>
-          <span className="summary-lab">No crate</span>
-          <span className="summary-val">{problem?.title ?? "No crate to show"}</span>
+          <span className={`eyebrow-label ${styles.label}`}>No crate</span>
+          <span className={styles.value}>{problem?.title ?? "No crate to show"}</span>
         </span>
       )}
     </button>
-  );
-}
-
-function Tooltip() {
-  const tip = useDesigner((s) => s.tooltip);
-  if (!tip) return null;
-  const left = Math.min(tip.x + 14, window.innerWidth - 260);
-  return (
-    <div className="tip glass" data-testid="hover-tip" style={{ left, top: tip.y + 16 }}>
-      <b>{tip.title}</b>
-      <span className="nominal">{tip.detail}</span>
-    </div>
   );
 }
