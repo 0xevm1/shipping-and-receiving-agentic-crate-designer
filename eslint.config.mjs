@@ -6,6 +6,8 @@ import nextTs from "eslint-config-next/typescript";
  * Layer boundaries (docs/SPECIFICATION.md §5, #89). Arrows point down only:
  *
  *   components/, app/   render; may import everything below (components: all but server/)
+ *   cli/                `bun run crate` (#46): a Node/bun process like a script; may import engine, lib
+ *                       and domain (and Node built-ins). Not server/ (it talks to the API instead) or state/
  *   state/              zustand stores and persistence, the engine's Web Worker and its client;
  *                       may import engine, lib and domain
  *   server/             server-only data access (Postgres, blob storage, #46); may import engine, lib and
@@ -42,6 +44,7 @@ const upState = ban("src/state", ...layer("state"));
 const upComponents = ban("src/components", ...layer("components"));
 const upApp = ban("src/app", ...layer("app"));
 const upServer = ban("src/server", ...layer("server"));
+const upCli = ban("src/cli", ...layer("cli"));
 // Server-only packages: reachable only through src/server. The S3 SDK is here so blob-store
 // credentials (BLOB_*) can never be bundled into browser code (#46 §2a).
 const serverPackages = {
@@ -111,6 +114,8 @@ const eslintConfig = defineConfig([
     // Playwright output (#34); the specs in e2e/ are linted.
     "playwright-report/**",
     "test-results/**",
+    // The server's engine worker-thread bundle (`bun run engine:build`, #46).
+    ".engine-worker/**",
   ]),
   {
     name: "layers/domain",
@@ -118,7 +123,7 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
-        { paths: DOMAIN_PACKAGES, patterns: [upLib, upEngine, upState, upServer, upComponents, upApp, serverPackages, ...DOMAIN_PACKAGE_PATTERNS] },
+        { paths: DOMAIN_PACKAGES, patterns: [upLib, upEngine, upState, upServer, upCli, upComponents, upApp, serverPackages, ...DOMAIN_PACKAGE_PATTERNS] },
       ],
       "no-restricted-globals": ["error", ...BROWSER_GLOBALS],
     },
@@ -138,6 +143,7 @@ const eslintConfig = defineConfig([
             upEngine,
             upState,
             upServer,
+            upCli,
             upComponents,
             upApp,
             serverPackages,
@@ -151,7 +157,7 @@ const eslintConfig = defineConfig([
     name: "layers/lib",
     files: ["src/lib/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upEngine, upState, upServer, upComponents, upApp, serverPackages] }],
+      "no-restricted-imports": ["error", { patterns: [upEngine, upState, upServer, upCli, upComponents, upApp, serverPackages] }],
     },
   },
   {
@@ -159,7 +165,7 @@ const eslintConfig = defineConfig([
     files: ["src/engine/**/*.{ts,tsx}"],
     ignores: ["src/engine/**/*.test.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upState, upServer, upComponents, upApp, serverPackages, BROWSER_ONLY_LIB, NODE_BUILTINS] }],
+      "no-restricted-imports": ["error", { patterns: [upState, upServer, upCli, upComponents, upApp, serverPackages, BROWSER_ONLY_LIB, NODE_BUILTINS] }],
       "no-restricted-globals": ["error", ...browserGlobals("The engine", "src/state (the worker client) or an adapter")],
     },
   },
@@ -168,21 +174,28 @@ const eslintConfig = defineConfig([
     name: "layers/engine-tests",
     files: ["src/engine/**/*.test.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upState, upServer, upComponents, upApp, serverPackages, BROWSER_ONLY_LIB] }],
+      "no-restricted-imports": ["error", { patterns: [upState, upServer, upCli, upComponents, upApp, serverPackages, BROWSER_ONLY_LIB] }],
+    },
+  },
+  {
+    name: "layers/cli",
+    files: ["src/cli/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [upState, upServer, upComponents, upApp, serverPackages] }],
     },
   },
   {
     name: "layers/state",
     files: ["src/state/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upServer, upComponents, upApp, serverPackages] }],
+      "no-restricted-imports": ["error", { patterns: [upServer, upCli, upComponents, upApp, serverPackages] }],
     },
   },
   {
     name: "layers/server",
     files: ["src/server/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upState, upComponents, upApp] }],
+      "no-restricted-imports": ["error", { patterns: [upState, upCli, upComponents, upApp] }],
     },
   },
   {
@@ -190,7 +203,7 @@ const eslintConfig = defineConfig([
     name: "layers/components",
     files: ["src/components/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [upServer, serverPackages] }],
+      "no-restricted-imports": ["error", { patterns: [upServer, upCli, serverPackages] }],
     },
   },
 ]);

@@ -84,7 +84,7 @@ export const ModelUrlResponseSchema = z.object({
 });
 export type ModelUrlResponse = z.infer<typeof ModelUrlResponseSchema>;
 
-const API_ERROR_CODES = ["invalid_request", "unsupported_file", "invalid_glb", "too_large", "not_found", "internal"] as const;
+const API_ERROR_CODES = ["invalid_request", "unsupported_file", "invalid_glb", "too_large", "not_found", "unauthorized", "unavailable", "internal"] as const;
 
 export const ApiErrorSchema = z.object({
   error: z.object({

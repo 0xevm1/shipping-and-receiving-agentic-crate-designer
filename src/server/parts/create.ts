@@ -38,7 +38,7 @@ function partResponse(part: Part): PartResponse {
   };
 }
 
-async function readForm(request: Request): Promise<FormData> {
+export async function readForm(request: Request): Promise<FormData> {
   const type = request.headers.get("content-type") ?? "";
   if (!/^multipart\/form-data/i.test(type)) {
     throw new ApiFailure(415, "invalid_request", "Send the part as multipart/form-data, with the .glb in a field named file.");
@@ -52,8 +52,8 @@ async function readForm(request: Request): Promise<FormData> {
   }
 }
 
-/** The file's bytes, once it has passed every check the browser makes. */
-async function checkedGlb(file: FormDataEntryValue | null): Promise<{ bytes: Uint8Array; fileName: string }> {
+/** The file's bytes, once it has passed every check the browser makes. `POST /designs` reuses it. */
+export async function checkedGlb(file: FormDataEntryValue | null): Promise<{ bytes: Uint8Array; fileName: string }> {
   if (!(file instanceof File)) throw new ApiFailure(400, "invalid_request", "Add the part's .glb file, in a field named file.", "file");
   if (file.size > MAX_GLB_BYTES) throw new ApiFailure(413, "too_large", GLB_MESSAGES.tooLarge, "file");
   const bytes = new Uint8Array(await file.arrayBuffer());
