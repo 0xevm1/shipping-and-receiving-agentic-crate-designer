@@ -14,3 +14,6 @@ e2e/screenshots
 
 # Prose keeps its hand-set tables and wrapping.
 *.md
+
+# drizzle-kit output; `bun run db:generate` writes it and CI diffs it.
+db/migrations

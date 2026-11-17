@@ -142,8 +142,11 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
   included, in code and in tests:
 
   ```
-  src/components/, src/app/   render; may import everything below
+  src/components/, src/app/   render; may import everything below (components: not src/server)
   src/state/                  zustand stores and persistence; may import lib and domain
+  src/server/                 server-only data access (Postgres, #46); may import lib and domain;
+                              only src/app/ imports it, and postgres / drizzle-orm are banned
+                              outside it
   src/lib/                    edge code: formatting, file loading, exports; may import domain
   src/domain/                 pure TypeScript, mm/kg, Z-up; imports nothing above it, and no
                               three, react, zustand or DOM globals
@@ -2236,12 +2239,15 @@ refresh or a reopened tab brings back the crate on screen:
 - **Starting fresh:** there is no "clear" control. Loading another part, design file, library
   design or share link replaces the remembered crate, because whatever is on screen is saved.
 
-**Next: SQLite.** Everything else lives in memory. When designs outgrow `localStorage` (about
-5 MB, one browser, no queries), the plan is SQLite WASM with the `opfs-sahpool` VFS, in a Web
-Worker, behind a typed repository: see `DATA_STORE.md` and `schema.sql`. The library's entries
-map to a designs table (part key, name, notes, saved at, the design JSON), and the library file
-stays the import / export format. Shop standards could move there (one row per shop) when
-accounts exist.
+**Next: Postgres (#46).** Everything else lives in memory. The shared store is Postgres in
+Docker, reached only from the server through `src/server/db/` (drizzle on postgres.js), with GLBs
+and generated files in S3-compatible blob storage. Slice 1 is in: the compose file, migrations
+in `db/migrations/`, the first tables (`org`, `part`, `part_model`, `design_job`,
+`configuration`, `artifact`, `event`, `shop_standard`, `idempotency_key`), each scoped by
+`org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Nothing
+in the UI reads or writes it yet: the browser storage above stays the source until the jobs API
+lands. See `docs/POSTGRES.md`. (The earlier SQLite WASM plan, `DATA_STORE.md`, was dropped
+for this.)
 
 The ranking option (#17) is saved only as part of the last-opened crate; the time-to-design clock is in memory only.
 
@@ -2780,7 +2786,7 @@ copies chosen shots there on request.
 | Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
 | House rules are one zod-validated `ShopStandards` object passed into `computeDesign`, defaulting to `DEFAULT_STANDARDS` (#19) | Makes the PM's tribal knowledge explicit and editable; the domain stays pure (no store or storage access), and every existing call and test works unchanged with the defaults | Every domain function takes one more argument; a few exports remain as views of the defaults for tests |
 | Shop standards persist in `localStorage` under a versioned key, loaded after mount | No backend yet; a PM's house rules should survive reloads. Loading after mount avoids a hydration mismatch, and invalid data falls back to the defaults with a warning | Per browser, not per shop: share them with Download / Load standards until there are accounts (§9) |
-| Saved designs live in `localStorage` as the #28 design file plus name and notes, keyed by part identity; share links put the same file base64url in the URL hash (#14) | One format for files, the library and links, with one validator and its migrations; no backend needed yet; the hash never reaches a server log | Per browser, about 5 MB; a custom part's GLB can't travel in a link, so the receiver loads it; SQLite (`DATA_STORE.md`) when it outgrows this |
+| Saved designs live in `localStorage` as the #28 design file plus name and notes, keyed by part identity; share links put the same file base64url in the URL hash (#14) | One format for files, the library and links, with one validator and its migrations; no backend needed yet; the hash never reaches a server log | Per browser, about 5 MB; a custom part's GLB can't travel in a link, so the receiver loads it; the shared Postgres store (#46, `POSTGRES.md`) replaces it |
 | Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists; the stock fields are actual sizes, which map to nominal names for display | An imperial user converts by hand |
 | Imperial by default, with nominal lumber names and a CSV in the selected units (#15) | The shop floor is domestic US: crews think in inches, pounds, 2x4s and 3/4″ ply, and the cut list is what they saw to | Two CSV formats; a custom stock size not in `NOMINAL_LUMBER` shows as fractional inches |
 | A split is N identical crates plus at most one remainder, chosen fewest crates → least volume (3% tie) → most even (#25) | Identical crates are faster to build from one cut list; a PM thinks in crate counts first, then truck space; an even split balances the crates when volume doesn't care | A mixed plan (e.g. 4 + 3 + 3) is never offered; bisection assumes fit falls as the part count grows |
@@ -2834,7 +2840,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #11 | Explain why a layout was chosen (closed; `explainLayout` landed with #20) |
 | #12 | Flag when a wooden crate is overkill (for example, light aluminum that a carton would do) |
 | #13 | Shipping-mode constraints (LTL, container, air) |
-| #14 | Design library and share links (§9): saved per part in `localStorage`, a library file to move them, designs in the URL hash; SQLite later |
+| #14 | Design library and share links (§9): saved per part in `localStorage`, a library file to move them, designs in the URL hash; Postgres later (#46) |
 | #15 | Imperial units by default with a metric toggle, nominal lumber names, CSV in the selected units |
 | #16 | Geometry-aware blocking for irregular parts: shaped blocking from a measured part profile (§7.5b). Packing still uses bounding boxes, so utilization is unchanged |
 | #17 | Design scorecard (§7.12): crate cost (material + labour), build time, freight class, density and dimensional weight; Layouts deltas and a ranking option; time to design |
