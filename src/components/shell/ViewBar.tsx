@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { downloadBytes, exportCrateGlb, glbFileName, loadPartScene } from "@/lib/exportGlb";
 import { autoplay } from "@/state/motion";
 import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
+import { exportNote, useExportRun } from "./exportRun";
 
 const MODES: Mode[] = ["closed", "open", "exploded"];
 const MODE_NAME: Record<Mode, string> = { closed: "Closed", open: "Open", exploded: "Exploded" };
@@ -154,7 +154,7 @@ function ViewPopover() {
               onKeyUp={() => requestFit()}
             />
           </div>
-          <GlbDownload />
+          <ViewExport />
           <span className="lab">
             <span className="hint-mouse">Drag to turn, scroll to zoom, right-drag to move.</span>
             <span className="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to move.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
@@ -165,43 +165,30 @@ function ViewPopover() {
   );
 }
 
-/** "Download 3D model (.glb)": the assembled crate, whatever the view shows (#27). */
-function GlbDownload() {
-  const hasDesign = useDesigner((s) => !!s.result.design);
-  const [includeParts, setIncludeParts] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("");
-
-  const download = async () => {
-    const { result, part, settings } = useDesigner.getState();
-    if (!result.design) return;
-    setBusy(true);
-    setStatus("");
-    try {
-      const model = includeParts
-        ? { scene: await loadPartScene(part.modelUrl), mmPerUnit: part.mmPerUnit, material: part.material }
-        : null;
-      downloadBytes(glbFileName(part.id, settings.quantity), await exportCrateGlb(result.design, model));
-      setStatus("3D model downloaded.");
-      useDesigner.getState().markExported();
-    } catch {
-      setStatus("The 3D model could not be made here.");
-    } finally {
-      setBusy(false);
-    }
-  };
+/**
+ * Export (.zip): the same export as the Export pill (#51, #77), sharing its run and state. The
+ * zip holds the assembled crate's GLB with the parts, the PDF, the cut list and the design file.
+ */
+function ViewExport() {
+  const canExport = useDesigner((s) => !!s.result.design && !s.plan.problem);
+  const state = useExportRun((s) => s.state);
+  const run = useExportRun((s) => s.run);
+  const busy = state.kind === "busy";
 
   return (
     <div style={{ display: "grid", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255, 255, 255, 0.12)" }}>
-      <label>
-        Include parts
-        <input type="checkbox" className="switch" checked={includeParts} onChange={(e) => setIncludeParts(e.target.checked)} />
-      </label>
-      <button type="button" className="btn" disabled={!hasDesign || busy} onClick={download}>
-        {busy ? "Preparing…" : "Download 3D model (.glb)"}
+      <button
+        type="button"
+        className="btn"
+        disabled={!canExport}
+        aria-busy={busy || undefined}
+        title="Download a .zip with the 3D model, the PDF (spec, build sheet, label), the cut list and the design file"
+        onClick={() => void run()}
+      >
+        {busy ? "Exporting…" : "Export (.zip)"}
       </button>
       <span className="lab" role="status">
-        {status}
+        {exportNote(state)}
       </span>
     </div>
   );
