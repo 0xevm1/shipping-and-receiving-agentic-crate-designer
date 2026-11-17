@@ -6,6 +6,7 @@ import { BoxGeometry, Color, EdgesGeometry, LineBasicMaterial, MeshStandardMater
 import type { CrateDesign, Member } from "@/domain/crate";
 import { anim } from "@/state/motion";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { cradleGeometry } from "./cradleGeometry";
 import { CLICK_SLOP_PX, EDGE, explodeOffset, GHOST_BOARD, GHOST_EDGE, hasFocus, ICE, ICE_EDGE, isLit, memberAlpha, setOpacity, WOOD } from "./scene";
 import { boardTooltipDetail } from "@/lib/format";
@@ -68,16 +69,16 @@ export function CrateModel({ design }: { design: CrateDesign }) {
   }, [members]);
 
   useFrame(() => {
-    const s = useDesigner.getState();
-    const focus = hasFocus(s);
+    const v = useView.getState();
+    const focus = hasFocus(v);
     const place = anim.explode !== placedAt.current;
     placedAt.current = anim.explode;
     members.forEach((m, i) => {
       const g = groups.current[i];
       if (!g) return;
-      const lit = isLit(s, m);
+      const lit = isLit(v, m);
       const ghost = focus && !lit;
-      let alpha = memberAlpha(m, s.view);
+      let alpha = memberAlpha(m, v.view);
       if (lit && focus) alpha = 1;
       alphas.current[i] = ghost ? 0 : alpha;
 
@@ -100,20 +101,20 @@ export function CrateModel({ design }: { design: CrateDesign }) {
   const onMove = (m: Member, i: number) => (e: ThreeEvent<PointerEvent>) => {
     if ((alphas.current[i] ?? 1) < PICKABLE_ALPHA) return;
     e.stopPropagation();
-    const s = useDesigner.getState();
-    const line = s.result.design?.bom.find((l) => l.key === m.bomKey);
+    const line = useDesigner.getState().result.design?.bom.find((l) => l.key === m.bomKey);
     if (!line) return;
-    s.setHover({ key: line.key, source: "3d" });
-    s.setTooltip({
+    const view = useView.getState();
+    view.setHover({ key: line.key, source: "3d" });
+    view.setTooltip({
       x: e.nativeEvent.clientX,
       y: e.nativeEvent.clientY,
       title: line.label,
-      detail: boardTooltipDetail(line, s.units),
+      detail: boardTooltipDetail(line, view.units),
     });
   };
 
   const onOut = (m: Member) => () => {
-    const s = useDesigner.getState();
+    const s = useView.getState();
     if (s.hover?.source === "3d" && s.hover.key === m.bomKey) {
       s.setHover(null);
       s.setTooltip(null);
@@ -123,7 +124,7 @@ export function CrateModel({ design }: { design: CrateDesign }) {
   const onClick = (m: Member, i: number) => (e: ThreeEvent<MouseEvent>) => {
     if (e.delta > CLICK_SLOP_PX || (alphas.current[i] ?? 1) < PICKABLE_ALPHA) return;
     e.stopPropagation();
-    const s = useDesigner.getState();
+    const s = useView.getState();
     const next = s.pin === m.bomKey ? null : m.bomKey;
     s.setPin(next);
     if (next) s.setTab("cut");

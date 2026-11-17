@@ -3,7 +3,9 @@
 import dynamic from "next/dynamic";
 import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref, type UIEvent } from "react";
 import { allChecks, cautionCount } from "@/lib/checks";
-import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
+import type { ChangeSource } from "@/state/designEvents";
+import { useDesigner } from "@/state/store";
+import { useView, type Tab } from "@/state/viewStore";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import { useLoadFiles } from "../shell/useLoadFiles";
 import { PartViewSlot } from "../viewer/PartViewSlot";
@@ -51,11 +53,11 @@ export interface DrawerProps {
  */
 export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?: DrawerProps; footer?: ReactNode }) {
   const part = useDesigner((s) => s.part);
-  const selected = useDesigner((s) => s.tab);
+  const selected = useView((s) => s.tab);
   const design = useDesigner((s) => s.result.design);
   const problem = useDesigner((s) => s.result.problem);
   const measured = useDesigner((s) => s.measured);
-  const setTab = useDesigner((s) => s.setTab);
+  const setTab = useView((s) => s.setTab);
   const loadFiles = useLoadFiles();
   const fileInput = useRef<HTMLInputElement>(null);
   // One pass over the checks, shared by the tab badges, the Overview verdict and the Checks tab.

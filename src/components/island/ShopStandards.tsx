@@ -7,6 +7,7 @@ import { nominalLumber } from "@/domain/lumber";
 import { plywoodText } from "@/lib/lumber";
 import { editUnit, groupDigits, type Units } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { STANDARD_GROUPS, readStandard, standardPatch, type Field } from "./standardsFields";
 import rule from "./rule.module.css";
 import styles from "./ShopStandards.module.css";
@@ -24,7 +25,7 @@ const tidy = (v: number) => Math.round(v * 1e6) / 1e6;
  */
 export function ShopStandards() {
   const standards = useDesigner((s) => s.standards);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const { resetStandards, setStandards } = useDesigner.getState();
   const customised = !sameStandards(standards, DEFAULT_STANDARDS);
   const [open, setOpen] = useState(false);

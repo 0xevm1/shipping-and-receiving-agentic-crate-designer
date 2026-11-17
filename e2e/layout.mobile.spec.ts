@@ -162,7 +162,7 @@ test("the controls inside the panels are at least 44 px", async ({ page }) => {
 
 test("the Export pill stays under the part lines, at touch size", async ({ page }) => {
   await openApp(page);
-  const pill = header(page).getByRole("button", { name: /^Export specs/ });
+  const pill = header(page).getByRole("button", { name: /^Export Packing Specs/ });
   const pillBox = (await pill.boundingBox())!;
   const meta = (await header(page).getByTestId("part-meta").boundingBox())!;
   expect(pillBox.height).toBeGreaterThanOrEqual(44);

@@ -27,7 +27,7 @@ also gives a cut list, weights and handling warnings.
 |---|---|
 | ![200 parts split across seven crates of two types, with a picker for each type](docs/screenshots/readme/shipment-200.png) **A batch too big for one crate** is split into crate types, each with its own size, cost and cut list. | ![Layout options as small top and side drawings, ranked by shipping volume](docs/screenshots/readme/layouts.png) **Layouts** are ranked by volume, crate cost or freight class, with the reason the winner won. |
 | ![A cut-list row pinned, with its two side panels lit in a ghosted crate](docs/screenshots/readme/cut-list-pinned.png) **Cut list**: pin a row to see where those boards go. | ![A crate with no gap between parts: the Overview says one caution and links to Checks](docs/screenshots/readme/caution-overview.png) **Cautions** show under the size and on the Export button, not only in the Checks tab. |
-| ![The printed build sheet: outside views and sections with dimensions in fractional inches](docs/screenshots/readme/print-build-sheet.png) **Build sheet** for the shop, from Export specs or Print / save PDF. | ![The shipping label: part number, quantity, gross weight, This side up, fork entry and centre of gravity](docs/screenshots/readme/print-label.png) **Shipping label** with fork entry and the centre of gravity. |
+| ![The printed build sheet: outside views and sections with dimensions in fractional inches](docs/screenshots/readme/print-build-sheet.png) **Build sheet** for the shop, from Export Packing Specs or Print / save PDF. | ![The shipping label: part number, quantity, gross weight, This side up, fork entry and centre of gravity](docs/screenshots/readme/print-label.png) **Shipping label** with fork entry and the centre of gravity. |
 
 <p align="center"><img alt="The app on a phone: the crate with its size labels, and the outside size and gross weight in a bar at the bottom" src="docs/screenshots/readme/mobile.png" width="320"></p>
 
@@ -157,7 +157,7 @@ tab at a time.
    remembered in this browser. Everything follows it: the Checks tab, the print spec and the PDF say "98.0 in" and "lb" in imperial, never "mm" or "kg". A mass shows one decimal under 100 and whole numbers from 100 ("47.4 lb", "297 lb"). **Download or copy the cut list** as CSV, in the selected units. In
    imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
    sold as (1/2″, 5/8″, 3/4″) and cuts by fractional inches to the nearest 1/16″.
-7. **Download the crate as a 3D model**, inside the .zip from the **Export specs** pill: the assembled crate in metres, Z up, every board a named mesh
+7. **Download the crate as a 3D model**, inside the .zip from the **Export Packing Specs** pill: the assembled crate in metres, Z up, every board a named mesh
    grouped by assembly, with the parts in their slots. The file's origin is the crate's centre of
    gravity, so 3D tools turn it about its balance point.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
@@ -193,7 +193,7 @@ tab at a time.
 
     A split batch gets the plan, then a spec, build sheet and label per crate type. The design
     travels in the link itself, so nothing is uploaded. Spec §7.11.
-11. **Export everything in one click** (#51): the green **Export specs** pill under the part lines
+11. **Export everything in one click** (#51): the green **Export Packing Specs** pill under the part lines
     downloads `crate-PART-001-x4.zip`, made in the browser (nothing is uploaded):
     - `crate-PART-001-x4.glb`, the assembled crate with the parts (one per crate type for a
       split batch: `…-crate-A.glb`, `…-crate-B.glb`);

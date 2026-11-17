@@ -4,6 +4,7 @@ import { loadDesign, loadPartFiles, type LoadOutcome } from "@/lib/loadPart";
 import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 type Outcome = Omit<LoadOutcome, "catalogAdditions"> & { catalogAdditions?: LoadOutcome["catalogAdditions"] };
 
@@ -18,11 +19,11 @@ function applyOutcome(outcome: Outcome) {
     s.loadDesign(outcome.part, settings, layoutKey, crateIndex);
   } else if (outcome.part) s.setPart(outcome.part);
   // Without a part nothing opened: the message says what to do, and stays until dismissed.
-  s.setLoadMessage(outcome.message, outcome.part ? "note" : "error");
+  useView.getState().setLoadMessage(outcome.message, outcome.part ? "note" : "error");
 }
 
 const failed = (err: unknown) =>
-  useDesigner.getState().setLoadMessage(err instanceof Error ? err.message : "That file couldn't be read. Try it again, or choose another.", "error");
+  useView.getState().setLoadMessage(err instanceof Error ? err.message : "That file couldn't be read. Try it again, or choose another.", "error");
 
 /**
  * Applies `work`'s outcome unless a later load started meanwhile. A superseded outcome is
@@ -52,8 +53,8 @@ async function applyLatest(ticket: LoadTicket, work: () => Promise<Outcome>): Pr
 export async function openDesignFile(file: DesignFile, glbs: File[] = []): Promise<boolean> {
   const ticket = beginLoad();
   const s = useDesigner.getState();
-  s.setLoadMessage("");
-  const outcome = await applyLatest(ticket, () => loadDesign(file, glbs, catalog.parts, s.standards, s.units));
+  useView.getState().setLoadMessage("");
+  const outcome = await applyLatest(ticket, () => loadDesign(file, glbs, catalog.parts, s.standards, useView.getState().units));
   return Boolean(outcome?.part);
 }
 
@@ -66,7 +67,8 @@ export async function openDesignFile(file: DesignFile, glbs: File[] = []): Promi
 export async function loadPickedFiles(list: FileList | File[]) {
   const ticket = beginLoad();
   const s = useDesigner.getState();
-  s.setLoadMessage("");
+  const units = useView.getState().units;
+  useView.getState().setLoadMessage("");
   const files = [...list];
   const pending = useLibrary.getState().pendingShare;
   const completes = pending && !files.some((f) => /\.json$/i.test(f.name)) && files.some((f) => f.name === pending.part.model);
@@ -77,9 +79,9 @@ export async function loadPickedFiles(list: FileList | File[]) {
           files.filter((f) => /\.glb$/i.test(f.name)),
           catalog.parts,
           s.standards,
-          s.units,
+          units,
         )
-      : loadPartFiles(files, [...catalog.parts, ...s.extraParts], catalog.parts, s.standards, s.units),
+      : loadPartFiles(files, [...catalog.parts, ...s.extraParts], catalog.parts, s.standards, units),
   );
   if (completes && outcome?.part) useLibrary.getState().setPendingShare(null);
 }

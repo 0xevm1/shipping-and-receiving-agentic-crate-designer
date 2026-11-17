@@ -7,6 +7,7 @@ import type { Layout } from "@/domain/packing";
 import { densityDelta, densityText, describeLayout, usd, usdDelta } from "@/lib/format";
 import { dims, lengthUnit, volume, type Units } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { CrateTypePicker } from "./CrateTypePicker";
 import styles from "./LayoutsTab.module.css";
 
@@ -22,7 +23,7 @@ const RANKING_LABELS: { id: Ranking; label: string }[] = [
 /** Every way to pack the batch, recommended first, each with a top and side drawing. */
 export function LayoutsTab({ design }: { design: CrateDesign }) {
   const layouts = useDesigner((s) => s.result.layouts);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const setLayoutKey = useDesigner((s) => s.setLayoutKey);
   const standards = useDesigner((s) => s.standards);
   const ranking = useDesigner((s) => s.ranking);

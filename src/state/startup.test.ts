@@ -3,8 +3,10 @@ import { currentDesignFile } from "@/lib/currentDesign";
 import { beginLoad } from "./loadSequence";
 import { createStartup, type StartupDeps } from "./startup";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 const initial = useDesigner.getState();
+const viewInitial = useView.getState();
 const s = () => useDesigner.getState();
 
 function savedCrate() {
@@ -23,7 +25,10 @@ function deps(over: Partial<StartupDeps> = {}): StartupDeps {
 }
 
 describe("startup source", () => {
-  beforeEach(() => useDesigner.setState(initial, true));
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    useView.setState(viewInitial, true);
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it("runs once however many times it is called (StrictMode mounts twice)", async () => {
@@ -53,23 +58,23 @@ describe("startup source", () => {
     expect(await start()).toBe("share");
     expect(d.openShare).toHaveBeenCalledTimes(1);
     expect(d.restore).not.toHaveBeenCalled();
-    expect(s().designStartedAt).not.toBeNull();
+    expect(useView.getState().designStartedAt).not.toBeNull();
   });
 
   it("holds the scene back while restoring, then releases it", async () => {
     let finish!: (v: boolean) => void;
     const d = deps({ savedDesign: savedCrate, restore: () => new Promise<boolean>((r) => (finish = r)) });
     const done = createStartup(d)();
-    expect(s().restoring).toBe(true);
+    expect(useView.getState().restoring).toBe(true);
     finish(true);
     await done;
-    expect(s().restoring).toBe(false);
-    expect(s().designStartedAt).toBeNull();
+    expect(useView.getState().restoring).toBe(false);
+    expect(useView.getState().designStartedAt).toBeNull();
   });
 
   it("starts the clock when the last design could not reopen", async () => {
     await createStartup(deps({ savedDesign: savedCrate, restore: async () => false }))();
-    expect(s().designStartedAt).not.toBeNull();
+    expect(useView.getState().designStartedAt).not.toBeNull();
   });
 
   it("leaves the clock to a load that superseded the restore", async () => {
@@ -81,6 +86,6 @@ describe("startup source", () => {
       },
     });
     await createStartup(d)();
-    expect(s().designStartedAt).toBeNull();
+    expect(useView.getState().designStartedAt).toBeNull();
   });
 });

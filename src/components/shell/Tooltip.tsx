@@ -1,11 +1,11 @@
 "use client";
 
-import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./Tooltip.module.css";
 
 /** What the pointer is over in the 3D view: the board's name and its stock and cut. */
 export function Tooltip() {
-  const tip = useDesigner((s) => s.tooltip);
+  const tip = useView((s) => s.tooltip);
   if (!tip) return null;
   const left = Math.min(tip.x + 14, window.innerWidth - 260);
   return (

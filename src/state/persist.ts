@@ -7,9 +7,9 @@
  * is now stored. Missing storage (the server, or blocked by the browser) is a failed save.
  *
  * Where saves are triggered differs by module, and that is deliberate rather than tidy:
- * standards and units save inside their `useDesigner` actions, the library inside its own
- * store (`libraryStore.ts`), and the last design from an external debounced subscriber (it
- * changes on every edit and reads the whole designer state).
+ * standards save inside their `useDesigner` actions, units inside `useView`'s, the library
+ * inside its own store (`libraryStore.ts`), and the last design from an external debounced
+ * subscriber (it changes on every edit and reads the whole design).
  */
 
 export type KeyValueStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;

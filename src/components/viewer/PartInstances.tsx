@@ -9,6 +9,7 @@ import { framedScene, roundSizeMm } from "@/lib/partFrame";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { cloneWithMaterial, GHOST_PART, hasFocus, partMaterial, setOpacity } from "./scene";
 import { type LoadedPart } from "@/lib/part";
 
@@ -54,24 +55,23 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
   const copies = useMemo(() => Array.from({ length: count }, () => cloneWithMaterial(scene, material)), [scene, material, count]);
 
   useFrame(() => {
-    const s = useDesigner.getState();
-    const opacity = hasFocus(s) ? GHOST_PART : 1;
+    const opacity = hasFocus(useView.getState()) ? GHOST_PART : 1;
     setOpacity(materialRef.current, opacity);
   });
 
   const onMove = (i: number) => (e: ThreeEvent<PointerEvent>) => {
-    if (hasFocus(useDesigner.getState())) return;
+    if (hasFocus(useView.getState())) return;
     e.stopPropagation();
-    const s = useDesigner.getState();
-    s.setHover(null);
-    s.setTooltip({
+    const view = useView.getState();
+    view.setHover(null);
+    view.setTooltip({
       x: e.nativeEvent.clientX,
       y: e.nativeEvent.clientY,
       title: part.name,
-      detail: `Part ${i + 1} of ${count}. ${part.material ?? "Material not given"}, ${partWeight(part.mass_kg, s.units)}`,
+      detail: `Part ${i + 1} of ${count}. ${part.material ?? "Material not given"}, ${partWeight(part.mass_kg, view.units)}`,
     });
   };
-  const onOut = () => useDesigner.getState().setTooltip(null);
+  const onOut = () => useView.getState().setTooltip(null);
 
   const [a, b, c] = layout.cellSize;
   return (
