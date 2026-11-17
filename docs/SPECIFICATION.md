@@ -157,7 +157,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
 | `src/domain/cradles.ts` | Cradles for slender parts (#6, §7.5a): `isSlender`, `usesCradles`, `cradleStations`, `notchFor`, `addCradleDunnage`, and the notch outline (`cradleProfile`, `cradleSolidAt`) |
-| `src/components/viewer/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB |
+| `src/lib/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB (`components/viewer/cradleGeometry.ts` re-exports it) |
+| `src/lib/sceneMaterials.ts` | The wood colours and part material the viewer and the GLB share (`components/viewer/scene.ts` re-exports them), so `lib` imports nothing from `components` |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/profile.ts` | Shaped blocking (#16, §7.5b): the `PartProfile` type, `usableProfile`, rotating a profile into the crate (`rotationMatrix`, `sideGrid`), post placement and shaped blocks (`planShapedBlocking`, `slotPlans`), and the restraint metric (`restraint`) |
 | `src/domain/message.ts` | `Message`: sentences with lengths and masses as data (`msg`, `mm`, `shopMm`, `kg`), so checks stay unit-free (#62, §7.7) |
@@ -166,8 +167,11 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
-| `src/domain/export.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (an export edge, formatted with `src/lib`), `downloadText()`, `ASSEMBLY_NAMES` |
-| `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign`, `parseDesignFile` (version check and migrations), `restoreDesign` |
+| `src/domain/assemblyNames.ts` | `ASSEMBLY_NAMES`: how each assembly is named for people (belongs beside `ASSEMBLIES` in the domain core) |
+| `src/domain/export.ts` | Compatibility re-exports only (`bomToCsv`, `shipmentToCsv`, `downloadText`, `downloadBytes` now live in `src/lib/csv.ts` and `download.ts`); delete once the last importers move |
+| `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file and the library |
+| `src/domain/profileCodec.ts` | `encodeProfile` / `decodeProfile`: a part profile packed losslessly for the design file (§6.5) |
+| `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign` (app name and version passed in), `parseDesignFile` (version check and migrations), `fileProfile`, `restoreDesign` (its notes are typed `Message`s) |
 | `src/domain/designLibrary.ts` | The design library (#14, §9): `partKey`, entries (`createEntry`, rename, remove / restore, `mergeEntries`, `entriesForPart`), the versioned envelope (`libraryToJson`, `parseLibrary`) |
 | `src/domain/shareLink.ts` | Share links (#14, §9): base64url, `shareHash` / `shareUrl`, `readShareHash` (validated by `parseDesignFile`) |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
@@ -178,15 +182,19 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions, the one mass rule) |
 | `src/lib/message.ts` | `renderMessage`: check messages (typed quantities) rendered for the selected units (#62, §7.7) |
 | `src/lib/lumber.ts` | US shop names (#15): `NOMINAL_LUMBER` (`nominalLumber`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
-| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions; scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
+| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
 | `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached by model URL |
-| `src/lib/currentDesign.ts` | `currentDesignFile()`: the design on screen as a design file (§6.5), for the library and share links |
+| `src/lib/currentDesign.ts` | `currentDesignText()` / `currentDesignFile()`: the design on screen as a design file (§6.5) with its part outline and ranking, for the download, the print link, the library and share links |
+| `src/lib/appInfo.ts` | `APP`: the name and version written into design files and the README |
+| `src/lib/csv.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (CSV keeps data precision) |
+| `src/lib/download.ts` | `downloadText()` and `downloadBytes()`: the one browser download edge |
+| `src/lib/memberBounds.ts` | `memberBounds()`: the box around a set of members, for the GLB, the label and the drawings |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
 | `src/lib/changes.ts` | A design diff as screen text: `changeSummary` ("Crate grew: 2176 × 936 × 831 mm, 878 kg"), `changeNote` (the full "Gross 16 → 20 kg, outside … → … mm") or "No change to the crate" (#62) |
-| `src/lib/printable.ts` | The export document's model (#26, §7.11): `buildPrintable` (plan → `PrintableDesign`), `printableFromDesignFile`, freight terms, the cut list by stock, fasteners, assembly steps and the label |
+| `src/lib/printable.ts` | The export document's model (#26, §7.11): `buildPrintable` (plan → `PrintableDesign`), `printableFromDesignFile`, freight terms, the cut list by stock, fasteners, assembly steps (`stepOfMember`) and the label |
 | `src/lib/drawings.ts` | `crateDrawings`: top, front and end views and two sections projected from the members, as data in mm |
-| `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url, plus the units (`printHash`, `readPrintHash`) |
+| `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url (the share link's encoding), plus the units (`printHash`, `readPrintHash`) |
 | `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles |
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
 | `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
@@ -504,7 +512,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 ```jsonc
 {
   "kind": "crate-design",          // tells it apart from a parts.json catalog
-  "schemaVersion": 1,              // DESIGN_SCHEMA_VERSION
+  "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
   "part": {
@@ -515,10 +523,13 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     "mass_kg": 21.5,
     "massAssumed": true,           // optional; only written when the 10 kg stand-in is in use
     "dimensions_mm": [360, 220, 258],
-    "model": "PART-001-machined-steel-bracket.glb"
+    "model": "PART-001-machined-steel-bracket.glb",
+    "outline": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 3.5,   // optional: the measured
+                 "grids": [[63, 74], …], "data": "eJz…" }                 // part profile, packed
   },
   "settings": { "quantity": 4, "keepUpright": true, "maxLayers": 2,
                 "partGapMm": 50, "wallClearanceMm": 50, "panelThickness": "auto" },
+  "ranking": "volume",             // "volume" | "cost" | "density" (§7.2)
   "layoutKey": "u:870x590x358:221", // Layout.key of the layout on screen
   "summary": {                     // for people, and to check a reopened design
     "quantity": 4,
@@ -528,6 +539,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     // "shipment": [{ "count": 6, "quantity": 30 }, { "count": 1, "quantity": 20 }]
     //   only for a batch split across crates (#25, §7.10); the summary above then
     //   describes the crate type that was on screen
+    // "shapeUnknown": true  only from the 1 → 2 migration (see Versions)
   }
 }
 ```
@@ -540,9 +552,24 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   zod schema. `settings` must already pass `CrateSettingsSchema` (out-of-range values are
   rejected, not clamped). Unknown extra keys are dropped. Each failure is one plain sentence,
   naming the field when there is one (`part.mass_kg: …`).
-- **Versions.** A file from a newer format is refused ("saved by a newer version of the app").
-  An older one runs through `MIGRATIONS` one version at a time before validation. There are
-  none yet; a breaking change bumps `DESIGN_SCHEMA_VERSION` and adds one.
+- **The same file, the same crate.** Shaped blocking (§7.5b) depends on the part's measured
+  outline, and the layout list and its "why" (§7.8) on the ranking. The app measures the
+  outline from the model a moment after it first renders, so a file that left out either would
+  rebuild a different crate (the print and the reload once showed 12 fewer blocks, a lighter
+  gross and fewer screws). So the file carries both: `ranking`, and `part.outline`, the profile
+  packed by `src/domain/profileCodec.ts`. The packing is lossless (depths are whole tenths of a
+  millimetre, stored as differences, zigzag-varint, deflated by fflate, base64), so the planned
+  crate is identical, not approximately so. It costs 0.4 to 2.7 KB per file for the catalog
+  parts (raw JSON is 18 to 138 KB). `outline` is optional: it is absent when the model had not
+  been measured yet at save time (the file then describes the bounding-box crate it was saved
+  with) and a damaged outline is refused like any other bad field. An outline measured on
+  another size is ignored (`usableProfile`).
+- **Versions.** A file from a newer format is refused ("saved by a newer version of the app;
+  format N, this app reads up to M"). An older one runs through the migrations one version at
+  a time before validation (`readEnvelope`, `src/domain/envelope.ts`). Format 2 added `ranking`
+  and `part.outline`. The 1 → 2 migration sets `ranking: "volume"` (every older file was
+  ranked that way) and marks the summary `shapeUnknown`, because an older file's summary may
+  include shaped blocks that the file has no outline for.
 - **Restoring** (`loadDesign` in `loadPart.ts`, then `restoreDesign`):
   - A `catalog` part is rebuilt from the bundled catalog entry and its `/public/parts` model.
   - A `custom` part (or a catalog id this app doesn't have) needs its GLB in the same pick or
@@ -553,9 +580,15 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     file to add.
   - Settings are restored as saved. The saved layout key is restored if that layout still
     exists; otherwise the recommended layout is used and the message says so.
+  - The part gets the file's outline (when it fits the model), and the plan is made with the
+    file's ranking, so the rebuilt crate is the saved one: the app after a reload, a share link,
+    the library, `/print` and the zip agree.
   - The rebuilt crate is compared with `summary`. If the outside size or gross differs (for
     example, a catalog mass or a shop rule changed), the message gives the new and the saved
-    values.
+    values in the selected units. For a format 1 file (`shapeUnknown`) with no outline to use,
+    a difference is not reported as numbers: the message says plainly that the file was saved
+    before the part's shape was kept, so sizes and weights can differ slightly until the model
+    is measured (the viewer then measures it and the saved crate comes back).
   - **A split batch (#25):** the design is rebuilt with this browser's shop standards and
     re-planned (§7.10). The crate type on screen when it was saved (the one whose part count is
     `summary.quantity`) is shown again. If the plan differs from `summary.shipment` (for
@@ -1094,13 +1127,22 @@ The PM's hand-off: logistics books freight from the crate spec, the shop builds 
 sheet, and the dock ships with the label. It is a print-styled route, `/print`, saved as a PDF
 with the browser's "Save as PDF". There is no server, and every drawing is vector SVG.
 
-**Model.** `buildPrintable({ part, plan, standards, units, generatedAt })` in
+**Model.** `buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone })` in
 `src/lib/printable.ts` is pure and unit-tested. It turns a shipment plan (§7.10) into a
 `PrintableDesign` of rows, sentences, tables and drawing data, already formatted in the selected
 units. The print page only renders it (`src/components/print/PrintDocument.tsx`), so a
 programmatic PDF export (#51) can build the same model and lay it out itself.
-`printableFromDesignFile(text, standards, units, generatedAt)` rebuilds it from a design file
-(§6.5) the way reopening the file does, and also returns the reopen notes.
+`printableFromDesignFile(text, standards, units, generatedAt, timeZone?)` rebuilds it from a design
+file (§6.5) the way reopening the file does, and also returns the reopen notes (worded in
+`units`). The part comes from the file with its measured outline, and the plan is made with the
+file's ranking, so the print is the crate that was saved: same shaped blocks, gross, screws and
+lumber as the app and the zip.
+
+**Ranking and date.** The ranking is an input: "why this layout won" and the runner-up follow
+it (`explainLayout(layouts, layout, standards, ranking)`), under cost and density as under
+volume, in the print, the PDF and the zip. The document date is the date on the clock where it
+was made, in the device's time zone, not UTC (`documentDate`, with the zone as a parameter so it
+is testable). The same date is in the PDF header and the zip's README.txt.
 
 **Pages**, in print order (Letter, 0.5″ margins, a page break between sheets):
 
@@ -1114,7 +1156,7 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
      domestic divisor `DIM_DIVISOR_IN3_PER_LB`, rounded up; in kg when metric), billable weight
      (the larger of gross and dimensional), and density in **lb/ft³** (gross ÷ outside volume,
      with kg/m³ under it when metric). A **freight class** row appears only when the design
-     carries a `freightClass` (#17 adds it);
+     carries a `freightClass`;
    - the layout on screen, why it won (`explainLayout`, worded as in the Layouts tab), and the
      runner-up (the next layout in rank order, with its size, volume and the difference);
    - every check (the domain checks plus the stand-in mass caution), cautions first, marked
@@ -1139,12 +1181,16 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
      its running length (lumber) or area (plywood). Plywood, lumber and screw totals follow.
    - **Fasteners:** `screwSchedule` line by line, with each spacing in the selected units, and
      the total (equal to the screw estimate).
-   - **Assembly order:** 1 Base (with floor joists, #7: "screw 7 2x4 floor joists on edge across
+   - **Assembly order:** (the fasteners and the assembly order are kept together: if they do
+     not fit under the cut list, both start the next page, so no step is alone on a page.
+     `stepOfMember` assigns each cut-list line its step from its assembly and kind: bearers and
+     floor cradles go before the parts, all other inside pieces after.) 1 Base (with floor joists, #7: "screw 7 2x4 floor joists on edge across
      them … and screw the floor to the joists", and "The base is rated for … of parts"), 2 Walls, 3 Load the parts (bearers first), 4 Blocking and
      separators (layer by layer when stacked), 5 Lid. Each step has a sentence, the pieces it
      uses and its screws. Every cut-list piece is in exactly one step, and the steps' screws
      sum to the schedule's total.
-3. **Shipping label**, one page per crate type:
+3. **Shipping label**, exactly one page per crate type (the end view scales to the room the
+   page has left, and `e2e/29-print-layout.spec.ts` checks the page count in print media):
    - part number and name, quantity ("4 PCS"), and outside size;
    - gross weight in the selected units, with the other units under it;
    - "THIS SIDE UP" with the ISO 780 two-arrow mark;
@@ -1154,7 +1200,7 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
      same ones the forklift and pallet-jack checks measure (`PrintableLabel.openings`);
    - the **centre-of-gravity** mark (ISO 7000-0627, the quartered circle) at the design's
      `centerOfGravityMm`, projected onto the end view (`cogEnd`: Y and Z from the outside
-     bottom-left corner). A design without a usable CoG (not three finite numbers) has no mark.
+     bottom-left corner). Every design has a CoG, so the mark is always drawn.
 
 **How the design reaches the page.** The Cut list's **Print / save PDF** serializes the design
 on screen as a design file (§6.5, `serializeDesign`) and opens
@@ -2199,7 +2245,25 @@ range ignored), the type is kept across edits while it exists, a lower max gross
 - A split batch records `summary.shipment` (single-crate files are unchanged), re-opens to the
   same plan and crate type with no notes, and with other standards notes the changed plan.
 - A layout key that no longer exists falls back to the recommended layout with a note; a
-  heavier catalog part or a changed summary gives a note with the new and saved values.
+  heavier catalog part or a changed summary gives a note with the new and saved values (typed
+  messages, rendered here with `metricText`).
+- Format 2: the ranking and the part outline are written; a format 1 file migrates (ranking
+  `volume`, `shapeUnknown`).
+
+**`src/domain/envelope.test.ts`** checks the versioned-envelope reader: a current document, every
+migration from the file's version up, each refusal in the format's own words (not JSON, wrong
+kind, no or fractional version, newer version, missing migration), a renamed version field, the
+writer's trailing newline and `hasKind`.
+
+**`src/lib/shapedRoundTrip.test.ts`** checks that one design file gives one crate everywhere
+(§6.5): the profile packs and unpacks exactly for the three catalog parts; a damaged outline is
+refused; share and print links stay under 4,000 characters (about 1.5 KB for the bracket and the
+shaft, 3.5 KB for the housing, against 0.8 KB without the outline); reopening from the file
+gives the saved layout, gross and cut list with no notes; the print shows the same gross, cut
+list pieces and screws as the app; without the outline the bracket loses its 12 shaped blocks; a
+format 1 file opens and says plainly why totals may differ (no "Gross is now"); a remaining
+difference is worded in the selected units; cost and density rankings travel with the file and
+explain the winner in the print model (and a hand pick still says so).
 
 **`src/domain/designLibrary.test.ts`** checks the design library (#14): part keys (catalog by id
 and model; custom by file name and rounded size, unaffected by name and mass), trimmed names and
@@ -2302,7 +2366,7 @@ and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into t
 CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
 4x6, …, either order and 1 mm of rounding, no name for non-stock), plywood by sold thickness with
 the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
-**`src/domain/export.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
+**`src/lib/csv.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
 units line, `cut_in`), nominal stock, fractional cuts and ASCII only; the metric header and
 `cut_mm`; the same rows and quantities in both; and a split shipment in both.
 **`src/state/units.store.test.ts`** checks the imperial default, the versioned key round trip,
@@ -2313,12 +2377,12 @@ names, and filtering a `parts.json`. For design files: catalog vs custom source,
 design restored from the bundled catalog, a custom design without its GLB naming the file,
 other JSON still read as a catalog, and plain messages for a bad design or bad JSON.
 
-**`src/lib/printable.test.ts`** checks the export document (#26, §7.11):
+**`src/lib/printable.test.ts`** checks the export document (§7.11):
 
 - For PART-001 × 4: the spec rows; the imperial outside size with the metric size under it;
   the dimensional weight and the lb/ft³ density; the design's freight class; the label's
-  centre of gravity equal to the design's, on the end view mid-width and above the bottom of
-  the skids, and none for a non-finite CoG (#8); the fork-arrow openings exactly between the
+  centre of gravity from the design's, on the end view mid-width and above the bottom of
+  the skids; the fork-arrow openings exactly between the
   skids; why the layout won and the runner-up.
 - Every check is listed with Pass / Caution; a 10 mm gap puts the blocking caution first.
 - The cut list is grouped once per stock, with piece counts that match the cut list and ft /
@@ -2331,8 +2395,23 @@ other JSON still read as a catalog, and plain messages for a bad design or bad J
 - Metric text: mm, kg, kg/m³ and `19 × 89 lumber`.
 - A split batch (200) has the plan, and one spec, five-step build sheet and label per crate
   type, each with `crate-limit`.
-- The print hash round-trips the file and the units URL-safely and refuses a missing or damaged
-  hash. The document rebuilt from the file equals the one built from the plan.
+- The print hash round-trips the file (compacted, so the URL is shorter) and the units
+  URL-safely, refuses a missing, padded, truncated or damaged hash and still reads the old `d`
+  parameter. The document rebuilt from the file equals the one built from the plan.
+- Every member of every catalog design (three parts × three quantities × one or two layers) maps
+  to an assembly step, every step's pieces sum to the member count and its screws to the
+  estimate; `stepOfMember` puts bearers and floor cradles before the parts and the rest after.
+- The document date follows the time zone given (23:16 on the 16th in Los Angeles is the 16th,
+  not the UTC 17th).
+
+**`src/lib/drawings.test.ts`** checks `crateDrawings` directly: the five drawings in order, the
+outside views equal the crate's size with their dimension lines (whole mm, or inches with ″),
+every board painted, dashed parts per slot in each section, and for a cradled shaft the cradles
+below the plan cut and cut through the notch (only the solid part) in the side section.
+
+**`src/lib/memberBounds.test.ts`** and **`src/lib/format.test.ts`** (`documentDate`) check the
+member box and the date in a time zone. **`src/lib/changes.test.ts`** pins the weight rule in
+change notes: a detail in whole units, the summary's gross by the mass rule.
 
 **`src/lib/exportBundle.test.ts`** checks the Export pill's package (#51, §7.13) with stand-in
 GLB and PDF makers: the stem and zip name (a custom id made file-safe); the file list and names
@@ -2451,6 +2530,13 @@ HTML report as `playwright-report`.
     projects): save and reuse inside the drawer with 44 px targets and no page scroll.
     Screenshots `14-saved-designs-list`, `14-saved-designs-island`, `14-share-link-restored`,
     `14-share-link-invalid`, `14-<project>-drawer-saved-designs`.
+  - `29-print-layout`: `/print` in print media, rendered with `page.pdf()` and read back page
+    by page with Ghostscript (skipped when it is not installed): five pages for one crate,
+    the label (part number to fork note) on exactly one page, and the assembly order
+    (Base to Lid) whole on one page. The PDF is saved to `e2e/screenshots/29-print-layout.pdf`.
+    A second case downloads the design after the model is measured (it has an `outline` and
+    `ranking: "volume"`), opens it on `/print`, and finds no note and the app's gross (304 lb)
+    and the shaped blocks in the cut list.
   - `20-last-design` (#71): quantity 8, two layers, a 40 mm gap, Rank by Crate cost, a picked
     layout and the Layouts tab in metric survive a reload (same outside size, no load message,
     no "Designed in"); a custom `widget_v2.glb` with a 12.5 kg mass at quantity 2 comes back from
@@ -2485,14 +2571,16 @@ HTML report as `playwright-report`.
     screen past the first split (≥ 7) and all fade afterwards; again in exploded mode; none fire
     with size labels off or with reduced motion (12 s each). Saves `22-pulse-closed` and
     `22-pulse-exploded`.
-  - `18-scorecard` (#17): the Overview's scorecard (PART-001 × 4, imperial: $186, "$91 material
-    + $95 labour", 2 h 43 m, class 65, 26.7 lb/ft³, 139 lb dim weight, "÷ 139 in³/lb") sits
-    between the outside size and the chain, and reads 428 kg/m³ and 63 kg in metric; at
+  - `18-scorecard` (#17): checks the wiring, not the figures that the domain tests pin (it
+    once pinned $186 for PART-001 × 4, which became $201 with shaped blocks). The Overview's
+    scorecard sits between the outside size and the chain: every tile is there in its format,
+    material + labour equal the crate cost (within a rounded dollar), and the metric density and
+    dim weight equal the imperial ones converted (1 lb/ft³ = 16.0185 kg/m³); at
     quantity 8 the recommended Layouts card shows "$… to build · class …" and every other card
     a cost and class delta; Rank by Crate cost leaves no stable card cheaper than the
     recommendation and says "Ranked by crate cost", Freight class says "Ranked by freight",
     Volume goes back; the Labour group lists the rate (35) and minutes, Screw cost and the dim
-    divisor, and a $70/h rate raises the crate cost to $281 until Reset to defaults; the first
+    divisor, and a $70/h rate (double) adds exactly the old labour cost until Reset to defaults; the first
     cut-list download shows "Designed in …". Crops are saved to `e2e/screenshots/crops/17-*`.
     `02-tabs` and `11-design-json` find layout cards as `button.opt`, since the toggle also has
     pressed buttons.

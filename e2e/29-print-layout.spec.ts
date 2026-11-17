@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openTab, panel } from "./helpers";
+import { openApp, openTab, panel, pollCrate, setUnits } from "./helpers";
 
 /**
  * The print route in print media (spec §6.5): the sheets paginate as designed. Rendered with
@@ -67,3 +67,24 @@ test("print media: the label is one page, and the assembly order stays together"
 async function document_fonts(page: Page) {
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
+
+test("the print page shows the crate the app shows: shaped blocks, gross and screws", async ({ page }) => {
+  await openApp(page);
+  await setUnits(page, "imperial");
+  // The design is saved once the model has been measured, as a user's would be.
+  await pollCrate(page, (s) => s.shapedBlocking, { timeout: 20_000 }).toBe(true);
+  await openTab(page, "Overview");
+  const appGross = (await panel(page).textContent())?.match(/\d+ lb/)?.[0];
+  const text = await designText(page);
+  expect(JSON.parse(text).part.outline).toBeTruthy();
+  expect(JSON.parse(text).ranking).toBe("volume");
+
+  await page.goto(`/print${hash(text, "imperial")}`);
+  const doc = page.locator(".print-doc");
+  await expect(doc.getByLabel("Crate spec").first()).toBeVisible();
+  // No note about a different crate, and the print says what the app says.
+  await expect(doc.locator(".notes")).toHaveCount(0);
+  expect(appGross).toBeTruthy();
+  await expect(doc.locator(".sheet").first()).toContainText(appGross!);
+  await expect(doc).toContainText("Shaped block");
+});
