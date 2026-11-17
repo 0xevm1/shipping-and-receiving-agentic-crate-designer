@@ -5,12 +5,14 @@ import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult, type Rankin
 import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import type { PartProfile } from "@/domain/profile";
-import { planShipment, type ShipmentPlan } from "@/domain/shipment";
+import type { ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
+import type { DesignResponse, EngineStamp } from "@/engine/schemas";
 import { catalogPart, type LoadedPart } from "@/lib/part";
 import type { Units } from "@/lib/units";
 import { loadStandards, saveStandards, type KeyValueStore } from "./standardsStorage";
+import { engine } from "./engineClient";
 import { DEFAULT_UNITS, loadUnits, saveUnits } from "./unitsStorage";
 
 export type Tab = "overview" | "layouts" | "cut" | "rules" | "checks";
@@ -83,6 +85,12 @@ export interface DesignerState {
   crateIndex: number;
   /** The shown crate type's layouts and design: `plan.crates[crateIndex].result`. */
   result: DesignResult;
+  /**
+   * The inputs `plan` was designed from, with the engine's stamp (spec §5.1). The same as the
+   * store's own inputs, except for the few milliseconds an edit's design spends in the engine's
+   * Web Worker: an edit shows in its control at once, and the design follows.
+   */
+  designedFrom: Designed;
   /** Extra catalog entries from a dropped parts.json. */
   extraParts: Part[];
   /** The shop's house rules every design is built to. Saved in localStorage. */
@@ -191,25 +199,29 @@ export function currentMode(v: Pick<ViewState, "lid" | "front" | "explode">): Mo
   return null;
 }
 
-/** The preloaded part's plan: one crate at the default quantity. */
-function initialPlan(): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
-  const plan = planShipment(initialPart, DEFAULT_SETTINGS);
-  return { plan, crateIndex: 0, result: plan.crates[0].result };
+type Planned = Pick<DesignerState, "plan" | "crateIndex" | "result">;
+
+/** The preloaded part's plan: one crate at the default quantity, designed in this thread. */
+function initialPlan(): Planned & Pick<DesignerState, "designedFrom"> {
+  const input: PlanInput = { part: initialPart, settings: DEFAULT_SETTINGS, standards: DEFAULT_STANDARDS, layoutKey: null, ranking: "volume" };
+  const out = engine.designSync(input);
+  return { ...place(out.plan, 0), designedFrom: designed(input, out) };
 }
 
 /** A fresh time-to-design clock, for a newly loaded part or design. */
 const newDesignClock = (): Pick<DesignerState, "designStartedAt" | "designedInMs"> => ({ designStartedAt: Date.now(), designedInMs: null });
 
-type PlanInput = Pick<DesignerState, "part" | "settings" | "layoutKey" | "standards" | "ranking" | "crateIndex">;
+/** What the engine designs from (spec §5.1): its request, with the part as loaded. */
+type PlanInput = Pick<DesignerState, "part" | "settings" | "layoutKey" | "standards" | "ranking">;
+export type Designed = PlanInput & EngineStamp;
 
-/**
- * Plans the shipment for these inputs and picks the crate type to show: the current one while
- * the plan still has it, else the first.
- */
-function replan(s: PlanInput): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
-  const plan = planShipment(s.part, s.settings, s.layoutKey, s.standards, s.ranking);
-  const crateIndex = s.crateIndex < plan.crates.length ? s.crateIndex : 0;
-  return { plan, crateIndex, result: plan.crates[crateIndex].result };
+const planInput = ({ part, settings, layoutKey, standards, ranking }: PlanInput): PlanInput => ({ part, settings, layoutKey, standards, ranking });
+const designed = (input: PlanInput, { engineVersion, inputHash }: DesignResponse): Designed => ({ ...input, engineVersion, inputHash });
+
+/** Shows a plan: the crate type at `crateIndex` while the plan still has it, else the first. */
+function place(plan: ShipmentPlan, crateIndex: number): Planned {
+  const i = crateIndex < plan.crates.length ? crateIndex : 0;
+  return { plan, crateIndex: i, result: plan.crates[i].result };
 }
 
 /** Clears a pin, and a hover, that name a cut-list line the new design no longer has. */
@@ -238,27 +250,67 @@ export const useDesigner = create<DesignerState>()((set, get) => {
   };
 
   /**
+   * Edits whose design is still in the engine's worker, oldest first. Always empty where the
+   * engine runs in this thread (tests, server rendering): there the design lands before
+   * `redesign` returns, in the same `set` as the edit, exactly as a direct call would.
+   */
+  let waiting: { ticket: number; patch: Partial<DesignerState>; restoring?: boolean }[] = [];
+  let tickets = 0;
+
+  /**
+   * Applies an edit and designs for it (spec §5.1). With the worker, the edit is stored at once
+   * (its control never lags) and its design lands when the engine answers; a newer edit's design
+   * supersedes an older one still on its way. What waits for the design: the plan, the crate
+   * type shown (`patch.crateIndex` may only exist in the new plan) and `finish`, which adds what
+   * follows from the design. `next` is the state the design lands on and `patch` every edit
+   * that lands with it.
+   */
+  const redesign = (
+    patch: Partial<DesignerState>,
+    finish: (planned: Planned, next: DesignerState, patch: Partial<DesignerState>) => Partial<DesignerState>,
+  ) => {
+    const ticket = ++tickets;
+    const now = { ...patch };
+    delete now.crateIndex;
+    waiting.push({ ticket, patch });
+    const input = planInput({ ...get(), ...now });
+    let inline = true;
+    engine.design(input, (out) => {
+      const landed = waiting.filter((w) => w.ticket <= ticket);
+      waiting = waiting.filter((w) => w.ticket > ticket);
+      const merged: Partial<DesignerState> = Object.assign({}, ...landed.map((w) => w.patch));
+      const restoring = landed.findLast((w) => w.restoring !== undefined)?.restoring;
+      const next = { ...get(), ...(inline ? now : {}), ...("crateIndex" in merged ? { crateIndex: merged.crateIndex } : {}) };
+      const planned = place(out.plan, next.crateIndex);
+      set({
+        ...(inline ? now : {}),
+        ...planned,
+        designedFrom: designed(input, out),
+        ...(restoring !== undefined ? { restoring } : {}),
+        ...finish(planned, next, merged),
+      });
+    });
+    inline = false;
+    if (waiting.some((w) => w.ticket === ticket)) set(now);
+  };
+
+  /**
    * Recompute the design after any input change, dropping a pin whose cut-list line is gone.
    * With a `source`, records what moved in `lastChange`; without one (a new part) clears it.
    */
-  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
-    const next = { ...get(), ...patch };
-    const { plan, crateIndex, result } = replan(next);
-    // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
-    const staleClock = get().designedInMs !== null && !("designedInMs" in patch);
-    const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
-    set({
-      ...patch,
-      plan,
-      crateIndex,
-      result,
-      ...(source ? change(source, get().result, result) : { lastChange: null }),
-      ...(staleClock ? { designedInMs: null } : {}),
-      hover: null,
-      ...dropStaleLines({ pin: next.pin, hover: null }, result),
-      ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
+  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) =>
+    redesign(patch, ({ result }, next, merged) => {
+      // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
+      const staleClock = get().designedInMs !== null && !("designedInMs" in merged);
+      const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || merged.part;
+      return {
+        ...(source ? change(source, get().result, result) : { lastChange: null }),
+        ...(staleClock ? { designedInMs: null } : {}),
+        hover: null,
+        ...dropStaleLines({ pin: next.pin, hover: null }, result),
+        ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
+      };
     });
-  };
 
   /** Switches to new standards: carries changed defaults into the rules, re-designs and saves. */
   const applyStandards = (standards: ShopStandards, save = true) => {
@@ -325,7 +377,9 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         settings: normalizeSettings(settings, DEFAULT_SETTINGS),
       }),
     setRestoring: (restoring) => {
-      if (get().restoring !== restoring) set({ restoring });
+      // While a reopened crate's design is on its way, the scene stays held until it lands.
+      if (waiting.length) waiting[waiting.length - 1].restoring = restoring;
+      else if (get().restoring !== restoring) set({ restoring });
     },
     setCrateIndex: (index) => {
       const { plan, crateIndex, fit } = get();
@@ -334,12 +388,10 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     },
     setMeasured: (measured) => set({ measured }),
     setPartProfile: (modelUrl, profile) => {
-      const { part: current, settings, layoutKey, standards, ranking, crateIndex } = get();
+      const current = get().part;
       if (!profile || current.modelUrl !== modelUrl || current.profile) return;
-      const part: LoadedPart = { ...current, profile };
-      const next = replan({ part, settings, layoutKey, standards, ranking, crateIndex });
       // Shaped blocks change the cut list, so a pin or hover may name a line that is gone.
-      set({ part, ...next, ...dropStaleLines(get(), next.result) });
+      redesign({ part: { ...current, profile } }, ({ result }) => dropStaleLines(get(), result));
     },
     setPartDetails: (input) => {
       const current = get().part;
@@ -359,9 +411,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       }
       // Name and material don't move anything: refresh the result (checks may quote the
       // part) without re-framing the camera or dropping the user's layout pick.
-      const { plan, crateIndex, result } = replan({ ...get(), part });
       const source: ChangeSource = mass_kg !== undefined ? "mass" : "material" in meta ? "material" : "name";
-      set({ part, plan, crateIndex, result, ...change(source, get().result, result) });
+      redesign({ part }, ({ result }) => change(source, get().result, result));
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
