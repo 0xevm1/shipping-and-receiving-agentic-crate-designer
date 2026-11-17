@@ -37,8 +37,23 @@
   margin-top: 6px;
   font-size: 12px;
 }
+/* "Use" / "In use": a short word, so on touch it gets a full 44 px square target, centred on the word. */
+.useBtn {
+  flex: none;
+}
 @media (max-width: 980px), (pointer: coarse) {
   .whyBtn {
     min-height: var(--touch);
+  }
+  .useBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--touch);
+    min-height: var(--touch);
+    margin: calc((var(--touch) - 1.2em) / -2) 0;
+  }
+  .head {
+    align-items: center;
   }
 }
