@@ -79,10 +79,19 @@ describe("S3 blob store", () => {
     plain.search = "";
     expect((await fetch(plain)).status).toBe(403);
 
-    const short = await store.presignGet(key, { expiresInSeconds: 1 });
-    expect((await fetch(short.url)).status).toBe(200);
-    await new Promise((r) => setTimeout(r, 2_100));
-    expect((await fetch(short.url)).status).toBe(403);
+    // Expiry, without racing a clock: waiting out a 1 s URL failed under load, when the store's
+    // clock (in a VM) lagged this machine's. Both URLs are signed ten minutes ago, far beyond any
+    // such skew, and differ only in their lifetime: one still covers now and works (so a
+    // signature from the past is accepted), the other ran out nine minutes ago and is refused.
+    const tenMinutesAgo = new Date(Date.now() - 600_000);
+    const live = await store.presignGet(key, { expiresInSeconds: 900, signedAt: tenMinutesAgo });
+    expect(live.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect((await fetch(live.url)).status).toBe(200);
+    const expired = await store.presignGet(key, { expiresInSeconds: 60, signedAt: tenMinutesAgo });
+    expect(expired.expiresAt.getTime()).toBeLessThan(Date.now());
+    const refused = await fetch(expired.url);
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toMatch(/expired/i);
   });
 
   it("answers the browser's CORS preflight and GET for a presigned URL", async () => {

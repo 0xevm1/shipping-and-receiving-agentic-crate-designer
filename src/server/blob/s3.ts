@@ -109,8 +109,9 @@ export function createS3BlobStore(config: BlobConfig): BlobStore {
         Key: key,
         ResponseContentDisposition: options.downloadName ? attachment(options.downloadName) : undefined,
       });
-      const signedAt = Date.now();
-      const url = await getSignedUrl(presigner, command, { expiresIn });
+      const signingDate = options.signedAt ?? new Date();
+      const signedAt = signingDate.getTime();
+      const url = await getSignedUrl(presigner, command, { expiresIn, signingDate });
       return { url, expiresAt: new Date(signedAt + expiresIn * 1000) };
     },
 

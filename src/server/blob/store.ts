@@ -30,6 +30,11 @@ type PresignOptions = {
   expiresInSeconds?: number;
   /** Sets `Content-Disposition: attachment; filename=…` on the download. */
   downloadName?: string;
+  /**
+   * When the URL is signed; default now. Its lifetime counts from here, so tests sign in the past
+   * to get a URL that has already expired, without waiting on (or racing) the store's clock.
+   */
+  signedAt?: Date;
 };
 
 /** Presigned GETs last about five minutes: long enough to start a download, short enough to leak little. */
