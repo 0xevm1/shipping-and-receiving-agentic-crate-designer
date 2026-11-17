@@ -1351,7 +1351,7 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
-  - `14-app-icons` (#58, HTTP only): `/favicon.ico`, `/icon.svg`, `/icon1.png` and
+  - `15-app-icons` (#58, HTTP only): `/favicon.ico`, `/icon.svg`, `/icon1.png` and
     `/apple-icon.png` return 200 with their image types; `/icon.svg` is the crate mark;
     `/site.webmanifest` has name "Crate Designer", start URL `/`, theme `#002548` and two icon
     srcs that return PNGs; the HTML head has the title and the manifest, icon and
