@@ -7,7 +7,7 @@ import { layoutName } from "@/lib/format";
 import { dims, dimsOther, fraction, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
-import { ShipmentSummary } from "./Shipment";
+import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
 export function OverviewTab({ design }: { design: CrateDesign }) {
@@ -33,7 +33,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
       <ShipmentSummary />
       <h2>
         {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name.toLowerCase()}
-        {crateType && <small className="ship-each">{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
+        {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
       {/* Values an edit changed flash gold for 1.2 s (#39). */}
       <div className="big">

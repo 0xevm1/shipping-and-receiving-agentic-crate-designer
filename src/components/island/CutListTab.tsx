@@ -9,7 +9,7 @@ import { cutText, stockText } from "@/lib/format";
 import { designFilePart } from "@/lib/loadPart";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
-import { CrateTypePicker } from "./Shipment";
+import { CrateTypePicker, shipmentStyles } from "./Shipment";
 
 /**
  * Cut list grouped by assembly. Hovering a row lights those boards in 3D and
@@ -50,7 +50,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
     <>
       <h2>{!plan.split ? "Cut list" : whole ? "Cut list for the whole shipment" : `Cut list for crate ${crateType.label}`}</h2>
       {plan.split && (
-        <div className="seg ship-seg cut-scope" role="group" aria-label="Cut list for">
+        <div className={`seg ${shipmentStyles.picker} ${shipmentStyles.cutScope}`} role="group" aria-label="Cut list for">
           <button type="button" aria-pressed={!whole} onClick={() => setScope("crate")}>
             This crate
           </button>

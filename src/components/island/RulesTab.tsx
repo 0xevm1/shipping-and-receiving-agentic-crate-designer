@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
-import type { CrateSettings } from "@/domain/schema";
+import { settingsAdjustments, type CrateSettings } from "@/domain/schema";
+import { clampNote } from "@/lib/clampNote";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { ShopStandards } from "./ShopStandards";
@@ -10,6 +11,8 @@ import { ShopStandards } from "./ShopStandards";
 const MAX_QTY = 200;
 const GAP_MAX_MM = 150;
 const PANELS: CrateSettings["panelThickness"][] = ["auto", 12, 15, 19];
+/** How long a clamp note stays; it fades over the end of it (`.changenote`, none with reduced motion). */
+const CLAMP_NOTE_MS = 5000;
 
 /** Packing rules, including quantity — the main input. The crate updates as you go. */
 export function RulesTab({ design }: { design: CrateDesign }) {
@@ -23,6 +26,18 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const { setSettings, resetRules } = useDesigner.getState();
   const setQty = (q: number) => setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
   const mm = (v: number) => `${length(v, units)} ${lengthUnit(units)}`;
+  // A typed quantity goes to the store as typed; if it was clamped or rejected, say so by the field.
+  const [note, setNote] = useState<{ id: number; text: string } | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(null), CLAMP_NOTE_MS);
+    return () => clearTimeout(t);
+  }, [note]);
+  const typeQty = (q: number) => {
+    const [adj] = settingsAdjustments({ quantity: q }, useDesigner.getState().settings);
+    setNote(adj ? { id: Date.now(), text: clampNote(adj, "Quantity") } : null);
+    setSettings({ quantity: q });
+  };
 
   return (
     <>
@@ -35,7 +50,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           <button type="button" className="step" aria-label="One fewer" onClick={() => setQty(settings.quantity - 1)}>
             −
           </button>
-          <QuantityInput value={settings.quantity} onCommit={setQty} />
+          <QuantityInput value={settings.quantity} onCommit={typeQty} />
           <button type="button" className="step" aria-label="One more" onClick={() => setQty(settings.quantity + 1)}>
             +
           </button>
@@ -45,6 +60,9 @@ export function RulesTab({ design }: { design: CrateDesign }) {
               {n}
             </button>
           ))}
+        </div>
+        <div className="changenote" role="status" style={{ gridColumn: "1 / -1" }}>
+          {note && <span key={note.id}>{note.text}</span>}
         </div>
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>

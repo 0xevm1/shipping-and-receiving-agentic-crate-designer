@@ -11,7 +11,7 @@ import {
   type ShopStandards,
 } from "@/domain/standards";
 import { useDesigner } from "@/state/store";
-import "./shopStandards.css";
+import styles from "./ShopStandards.module.css";
 
 /** One editable standard: where it lives in `ShopStandards`, and how to show it. */
 interface Field {
@@ -150,11 +150,11 @@ export function ShopStandards() {
   };
 
   return (
-    <details className="std">
-      <summary className="std-summary">
+    <details className={styles.root}>
+      <summary className={styles.summary}>
         <b>Shop standards</b>
-        <span className="std-sub">· house rules for every crate</span>
-        {customised && <span className="std-badge">Customised</span>}
+        <span className={styles.sub}>· house rules for every crate</span>
+        {customised && <span className={styles.badge}>Customised</span>}
       </summary>
       <p className="lede">
         The stock, thresholds, limits and rates every crate is designed to. Changes apply at once and are saved in this
@@ -163,14 +163,14 @@ export function ShopStandards() {
 
       {GROUPS.map((g) => (
         <section key={g.title} aria-label={g.title}>
-          <h3 className="std-group">{g.title}</h3>
+          <h3 className={styles.group}>{g.title}</h3>
           {g.fields.map((f) => (
             <StandardInput key={f.path.join(".")} field={f} standards={standards} onChange={setStandards} />
           ))}
         </section>
       ))}
 
-      <div className="actions std-actions">
+      <div className={`actions ${styles.actions}`}>
         <button type="button" className="btn" onClick={resetStandards} disabled={!customised}>
           Reset to defaults
         </button>
@@ -228,11 +228,11 @@ function StandardInput({
   };
 
   return (
-    <div className={changed ? "rule std-changed" : "rule"}>
+    <div className={changed ? `rule ${styles.changed}` : "rule"}>
       <b>
         <label htmlFor={id}>{f.label}</label>
       </b>
-      <span className="std-field">
+      <span className={styles.field}>
         <input
           id={id}
           type="number"
@@ -247,10 +247,10 @@ function StandardInput({
             setError(null);
           }}
         />
-        <span className="std-unit">{f.unit}</span>
+        <span className={styles.unit}>{f.unit}</span>
       </span>
       {error ? (
-        <small id={`${id}-error`} className="std-error">
+        <small id={`${id}-error`} className={styles.error}>
           {error.replace(/^[\w.]+: /, "")}
         </small>
       ) : (

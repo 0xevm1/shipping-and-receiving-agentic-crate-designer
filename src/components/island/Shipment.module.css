@@ -1,7 +1,7 @@
 /*
- * Shipment planning (#25): the "Ships as …" block at the top of the Overview and the crate
- * type picker shared by the Overview, Layouts, Cut list and Checks. A plain stylesheet with
- * `ship-` names, like shopStandards.css (the Tailwind turbopack rule drops module class names).
+ * Shipment planning (#25): the "Ships as …" block at the top of the Overview, the crate type
+ * picker shared by the Overview, Layouts, Cut list and Checks, and the cut list scope toggle.
+ * A CSS module; the picker also carries the global `.seg` pill style from globals.css.
  */
 
 .ship {
@@ -10,8 +10,8 @@
   border-bottom: 1px solid var(--hair);
 }
 
-.ship-eyebrow {
-  font: 600 11px/1.2 var(--wide, var(--sans));
+.eyebrow {
+  font: 500 11px/1.2 var(--wide);
   font-stretch: 125%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -19,26 +19,26 @@
   margin-bottom: 6px;
 }
 
-.ship-plan {
+.plan {
   margin: 0;
   font-size: 15px;
   color: var(--soft);
 }
-.ship-plan b {
+.plan b {
   font-weight: 500;
   color: var(--text);
 }
 
-.ship-note {
+.note {
   margin: 6px 0 0;
   font-size: 12.5px;
   color: var(--muted);
 }
-.ship-note.warn {
+.warn {
   color: var(--gold);
 }
 
-.ship-each {
+.each {
   display: block;
   margin-top: 3px;
   font: 400 12.5px/1.2 var(--mono);
@@ -46,17 +46,17 @@
   letter-spacing: 0;
 }
 
-.ship-seg {
+.picker {
   display: flex;
   flex-wrap: wrap;
   margin: 12px 0 14px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--hair);
 }
-.ship .ship-seg {
+.ship .picker {
   margin-bottom: 0;
 }
-.ship-seg button {
+.picker button {
   flex: 1 1 0;
   display: flex;
   flex-direction: column;
@@ -64,14 +64,14 @@
   gap: 1px;
   padding: 6px 14px;
 }
-.ship-seg button small {
+.picker button small {
   font: 400 11.5px/1.2 var(--mono);
   color: var(--muted);
 }
-.ship-seg button[aria-pressed="true"] small {
+.picker button[aria-pressed="true"] small {
   color: var(--soft);
 }
 
-.cut-scope {
+.cutScope {
   margin: 0 0 10px;
 }

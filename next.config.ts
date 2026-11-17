@@ -7,14 +7,7 @@ const nextConfig: NextConfig = {
   // branch in CrateViewer and never bundle E2EProbe. An unset NEXT_PUBLIC_ var isn't inlined.
   env: { NEXT_PUBLIC_E2E: process.env.NEXT_PUBLIC_E2E === "1" ? "1" : "0" },
   partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
+  // Tailwind runs through postcss.config.mjs, not a Turbopack loader rule (#54).
 };
 
 export default nextConfig;
