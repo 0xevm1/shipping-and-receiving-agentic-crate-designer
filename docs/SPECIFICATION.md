@@ -267,7 +267,7 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 **Stamps.** Every engine output carries `engineVersion` and `inputHash`:
 
 - **`engineVersion`** = `ENGINE_VERSION` (`version.ts`): the package version plus
-  `ENGINE_REVISION`, as `0.1.0+engine.10`. **Rule:** bump `ENGINE_REVISION` in the same change as
+  `ENGINE_REVISION`, as `0.1.0+engine.11`. **Rule:** bump `ENGINE_REVISION` in the same change as
   anything that gives a different output for the same input (a rule, a constant, an algorithm, a
   default standard, or the text of a generated file). A refactor that leaves every output
   identical doesn't bump it. The parity baseline (below) shows which kind a change is: if it had
@@ -949,10 +949,10 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 ```jsonc
 {
   "kind": "crate-design",          // tells it apart from a parts.json catalog
-  "schemaVersion": 4,              // DESIGN_SCHEMA_VERSION
+  "schemaVersion": 5,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
-  "engine": { "version": "0.1.0+engine.10", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
+  "engine": { "version": "0.1.0+engine.11", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -2457,7 +2457,7 @@ boards only).
 |---|---|---|---|
 | `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
 | `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
-| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.10, input …` before the column names |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.11, input …` before the column names |
 
 A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
 
