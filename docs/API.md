@@ -3,12 +3,19 @@
 The server side of the crate designer (#46): parts, design jobs, saved configurations and live
 events. Route Handlers live in `src/app/api/v1/` (Node.js runtime), their logic in `src/server/`,
 and the request and response shapes are Zod schemas any client can import:
-`src/lib/api/parts.ts`, `src/lib/api/jobs.ts` and `src/lib/events.ts`. The browser calls them
-through `src/state/jobApi.ts` and `src/state/jobSync.ts`.
+`src/lib/api/parts.ts`, `src/lib/api/jobs.ts`, `src/lib/api/artifacts.ts`, `src/lib/api/designs.ts`
+and `src/lib/events.ts`. The browser calls them through `src/state/jobApi.ts` and
+`src/state/jobSync.ts`; scripts through `bun run crate` ([QUEUE.md](QUEUE.md#command-line)).
 
-Storage and events are described in [POSTGRES.md](POSTGRES.md), GLB uploads and object keys in
-[BLOB_STORAGE.md](BLOB_STORAGE.md), and the engine that designs and verifies crates in
-[SPECIFICATION.md §5.1](SPECIFICATION.md#51-the-crate-engine-srcengine-46).
+This file is the reference for every endpoint and event type. The other server docs:
+
+| Doc | Covers |
+|---|---|
+| [POSTGRES.md](POSTGRES.md) | Tables, org scoping, scripts, environment and ports, the event outbox, LISTEN/NOTIFY and the SSE route |
+| [BLOB_STORAGE.md](BLOB_STORAGE.md) | The S3 API and providers, object keys, part uploads and their checks, presigned downloads, orphan cleanup, lifecycle |
+| [QUEUE.md](QUEUE.md) | The engine's worker threads, the Postgres job queue and its job kinds, `POST /designs`, API keys, the command line |
+| [SPECIFICATION.md §5.2](SPECIFICATION.md#52-the-server-46) | How the pieces fit: the architecture diagram and the rules that hold across them |
+| [SPECIFICATION.md §5.1](SPECIFICATION.md#51-the-crate-engine-srcengine-46) | The engine that designs and verifies crates, its stamps (`engineVersion`, `inputHash`) |
 
 ## Conventions
 
@@ -70,7 +77,6 @@ saves on the device and sends them later, without showing an error (`src/state/j
 | `POST` | `/designs` | Stateless headless calculation: a GLB and the part's facts in, the ranked configurations, recommendation, 1–200 curve and (with `total`) the even split out. Nothing saved; needs an API key from scripts. Runs on the engine's worker threads ([QUEUE.md](QUEUE.md#post-apiv1designs)) |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
 | `GET` | `/health` | Database and event-listener liveness |
-
 | `GET` | `/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}` | One file of a saved configuration, built by the server on the first request and kept in blob storage; a presigned URL (`?redirect=1`: a 302 to it) ([Artifacts](#artifacts)) |
 | `GET` | `/jobs/:id/bundle.zip?configs=…` | The job's configurations in one ZIP: a folder each, `manifest.json`, `comparison.pdf` (spec §7.17); 200 with a presigned URL, or 202 while the queue builds a large one ([Artifacts](#artifacts)) |
 
@@ -265,7 +271,7 @@ Writes emit events in the same transaction, as its last statements (POSTGRES.md 
 | The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash` |
 | The queue, when a sweep is dead-lettered | `job.error` | the job | `message` (generic; the cause is in `queue_job.last_error`) |
 | A server-built file or bundle stored (first request, or the queue's bundle job) | `artifact.ready` | the job | `artifactId`, `configurationId` (a bundle's first), `kind` (`glb`, `pdf`, `csv`, `zip`), plus `file` or `bundleId` |
-| A deploy with a new engine (later slice) | `engine.updated` | none (org-wide) | `engineVersion` |
+| Reserved for a deploy with a new engine; not emitted yet (an old tab learns of a new engine from the `409` on its next save) | `engine.updated` | none (org-wide) | `engineVersion` |
 
 The browser re-reads the snapshot when a job event arrives (several at once cause one read), and
 shows the reload prompt on an `engine.updated` naming another engine version.
