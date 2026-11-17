@@ -149,7 +149,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                             </Fragment>
                           ))}
                       </td>
-                      <td data-testid="cut-qty">{l.qty}</td>
+                      <td data-testid="cut-qty">{groupDigits(l.qty)}</td>
                     </>
                   );
                   // Shipment totals span crate types, so their rows don't light boards in the one crate on screen.

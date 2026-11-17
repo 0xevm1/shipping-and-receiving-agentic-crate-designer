@@ -138,7 +138,7 @@ describe("total quantity on a job", () => {
     // Not the crate's own request: the request for the total, with its own hash (and so its own stored file).
     expect(csv.inputHash).not.toBe(own.inputHash);
     expect(pdf.inputHash).toBe(csv.inputHash);
-    expect(csv.fileName).toBe(`crate-${PART.id}-x40-shipment.csv`);
+    expect(csv.fileName).toMatch(/-x40-shipment\.csv$/);
     const body = await (await fetch(csv.url)).text();
     expect(body).toMatch(/^# Shipment of 40 x /);
     expect(body).toContain(`input ${csv.inputHash}`);

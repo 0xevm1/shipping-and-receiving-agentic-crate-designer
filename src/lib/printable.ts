@@ -200,7 +200,10 @@ export const RANKING_WORDS: Record<Ranking, string> = { volume: "volume", cost: 
  * the crate is the quantity sweep's recommendation: its layout is then the one cheapest per part,
  * not one picked by hand.
  */
-function whyText(e: LayoutExplanation, ranking: Ranking, recommended: boolean): string {
+function whyText(e: LayoutExplanation, ranking: Ranking, recommended: boolean, total = false): string {
+  if (e.kind === "picked" && total) {
+    return `Chosen by the total's plan: the lowest crate cost per part for this many parts in a crate. The layouts are ranked by ${RANKING_WORDS[ranking]}, where it ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the top layout.`;
+  }
   if (e.kind === "picked" && recommended) {
     return `Recommended: cheapest per part. This is the quantity sweep's crate, the lowest crate cost per part. The layouts are ranked by ${RANKING_WORDS[ranking]}, where it ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the top layout.`;
   }
@@ -426,7 +429,12 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       freight: freightRows(design, u),
       layout: {
         chosen: `${layoutText(layout, u)}, ${volume(layout.externalVolumeM3, u)}`,
-        why: whyText(explainLayout(layouts, layout, standards, input.ranking), input.ranking, isRecommended(input.plan, input.sweep)),
+        why: whyText(
+          explainLayout(layouts, layout, standards, input.ranking),
+          input.ranking,
+          isRecommended(input.plan, input.sweep),
+          input.plan.total !== undefined,
+        ),
         runnerUp: runnerUp(layouts, layout, u),
       },
       checks: checks.map((k) => ({
@@ -526,7 +534,7 @@ function shipmentRows(plan: ShipmentPlan, u: Units): Row[] {
     { label: "Crates", value: groupDigits(totals.crates) },
     { label: "Parts", value: groupDigits(totals.parts) },
     { label: "Gross, all crates", value: weight(totals.grossKg, u), note: weight(totals.grossKg, other(u)) },
-    { label: "Volume, all crates", value: volume(totals.volumeM3, u), note: volume(totals.volumeM3, other(u)) },
+    { label: "Volume, all crates", value: groupThousands(volume(totals.volumeM3, u)), note: groupThousands(volume(totals.volumeM3, other(u))) },
   ];
   if (!plan.total) return rows;
   const f = shipmentFigures(plan, u);
