@@ -164,7 +164,7 @@ export const pickedLayout = (page: Page) => panel(page).getByRole("group", { nam
 export const otherLayout = (page: Page) => panel(page).getByRole("group", { name: "Layouts", exact: true }).getByRole("button", { pressed: false });
 
 /**
- * Opens Layouts and picks the layout its ranking puts first (the card marked "recommended"), for a
+ * Opens Layouts and picks the layout its ranking puts first (the card marked "top by …"), for a
  * spec whose next step re-picks the layout by the ranking (a standards change, a stale layout key).
  * The app opens at the quantity sweep's crate, cheapest per part (spec §7.16), whose layout need
  * not be the list's top: the tab then says "Recommended: cheapest per part" (probe `layoutPick`
@@ -174,7 +174,7 @@ export async function useTopRankedLayout(page: Page) {
   await openTab(page, "Layouts");
   const use = panel(page).getByRole("button", { name: /^Use the (top-ranked|recommended) layout$/ });
   if (await use.isVisible()) await use.click();
-  await expect(pickedLayout(page)).toContainText("recommended");
+  await expect(pickedLayout(page)).toContainText("top by");
   await pollCrate(page, (s) => s.layoutPick).toBe("ranking");
 }
 

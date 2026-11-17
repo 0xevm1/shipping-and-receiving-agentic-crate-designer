@@ -42,7 +42,10 @@ test("Layouts says the crate on screen is the recommendation, and a layout picke
   await shot(panel(page), "island-layouts-recommended");
 
   // A layout picked by hand (neither the list's top nor the recommendation's) says so.
-  await otherLayout(page).filter({ hasNotText: "recommended" }).first().click();
+  await otherLayout(page)
+    .filter({ hasNotText: /top by|recommended/ })
+    .first()
+    .click();
   await expect.poll(async () => (await crate(page)).layoutPick).toBe("hand");
   await expect(panel(page)).toContainText("Your pick ships");
   await expect(panel(page).getByTestId("layout-recommended")).toHaveCount(0);

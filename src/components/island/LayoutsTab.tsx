@@ -41,6 +41,8 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
   const [showAll, setShowAll] = useState(false);
   const current = design.layout;
   const best = layouts[0];
+  // The quantity sweep's crate (cheapest per part) is on screen and isn't the list's top.
+  const sweepPick = isRecommended(plan, sweep) && current.key !== best.key;
 
   const shown = useMemo(() => {
     const cards = showAll ? layouts.slice() : layouts.slice(0, FIRST_SHOWN);
@@ -60,7 +62,7 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
         <Why
           explanation={explainLayout(layouts, current, standards, ranking)}
           ranking={ranking}
-          sweep={isRecommended(plan, sweep) ? sweep : null}
+          sweep={sweepPick ? sweep : null}
           onUseBest={() => setLayoutKey(null)}
         />{" "}
         Each drawing shows the crate from above, then from the side.
@@ -86,7 +88,8 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
             <span>
               <span className={styles.optTitle}>
                 {describeLayout(l)}
-                {l.key === best.key && <span className={styles.badge}>recommended</span>}
+                {l.key === best.key && <span className={styles.badge}>top by {RANKING_WORDS[ranking]}</span>}
+                {sweepPick && l.key === current.key && <span className={styles.badge}>recommended</span>}
                 {!l.stable && <span className={`${styles.badge} ${styles.tall}`}>may tip</span>}
               </span>
               <span className={styles.optDims}>
@@ -215,6 +218,7 @@ function Recommended({ morePct, ranking, sweep, onUseBest }: { morePct: number; 
         <button type="button" className="linkbtn" onClick={onUseBest}>
           Use the top-ranked layout
         </button>
+        .
       </span>
       {open && <RecommendationWhy sweep={sweep} id={whyId} />}
     </>

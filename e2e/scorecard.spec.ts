@@ -80,7 +80,7 @@ test("the Layouts cards show deltas against the recommendation, and the ranking 
   await openTab(page, "Layouts");
   const cards = layoutCards(page);
   expect(await cards.count()).toBeGreaterThan(1);
-  await expect(cards.first()).toContainText("recommended");
+  await expect(cards.first()).toContainText("top by volume");
   await expect(cards.first()).toContainText(/\$\d+ to build · class \d+/);
   // Every other card says how it compares in dollars and freight class.
   const count = await cards.count();
