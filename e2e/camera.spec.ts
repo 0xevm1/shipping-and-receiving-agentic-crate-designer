@@ -47,7 +47,7 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     await openApp(page);
     const isl = await screenBox(island(page));
-    // Drag hard in every direction, twice each: toward the island, away from it, up and down.
+    // Drag hard in every direction (each drag is longer than the window): toward the island, away from it, up and down.
     for (const [dx, dy] of [
       [700, 0],
       [700, 200],
@@ -56,8 +56,7 @@ for (const [width, height] of [
       [0, 500],
       [700, -300],
     ]) {
-      await rightDrag(page, dx, dy);
-      await rightDrag(page, dx, dy);
+      await rightDrag(page, dx * 2, dy * 2);
       await waitForFrames(page, 2);
       const box = (await crate(page)).crateScreen!;
       const cx = (box.left + box.right) / 2;

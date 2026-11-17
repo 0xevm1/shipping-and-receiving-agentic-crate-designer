@@ -1,5 +1,22 @@
 import { expect, test } from "@playwright/test";
-import { burger, drawer, expectNoPageScroll, hidePanelsButton, openApp, openDrawer, openTab, panel, screenBox, shot, stage, summary } from "./helpers";
+import {
+  burger,
+  closeDrawerButton,
+  crate,
+  drawer,
+  expectNoPageScroll,
+  hidePanelsButton,
+  openApp,
+  openDrawer,
+  openTab,
+  panel,
+  pollCrate,
+  screenBox,
+  shot,
+  stage,
+  summary,
+  waitForFrames,
+} from "./helpers";
 
 // Narrow project (900 × 900, mouse): below 980 px the island is a drawer (spec §8.2).
 // Phones are covered in drawer.mobile.spec.ts and layout.mobile.spec.ts.
@@ -31,4 +48,21 @@ test("at 900 px the scene is full-bleed and the island is a drawer", async ({ pa
   await page.mouse.click(40, 450);
   await expect(drawer(page)).toBeHidden();
   await expect(burger(page)).toBeFocused();
+});
+
+test.describe("with motion", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("idle rotation holds while the drawer is open", async ({ page }) => {
+    test.setTimeout(90_000);
+    await openApp(page);
+    await openDrawer(page, "click");
+    // The page has been idle for longer than IDLE_MS (5 s), with no input since the click that opened the drawer...
+    await pollCrate(page, (s) => s.idle, { timeout: 30_000 }).toBe(true);
+    await waitForFrames(page, 3);
+    // ...and the crate still isn't turning.
+    expect((await crate(page)).autoplay).toBe(false);
+    await closeDrawerButton(page).click();
+    await pollCrate(page, (s) => s.autoplay, { timeout: 30_000 }).toBe(true);
+  });
 });

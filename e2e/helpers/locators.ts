@@ -14,8 +14,11 @@ export async function openTab(page: Page, name: string | RegExp) {
   await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
 }
 
-/** The hidden "Load a part" file input (the Rules tab has its own, for standards, after it). */
-export const fileInput = (page: Page) => island(page).locator('input[type="file"]').first();
+/**
+ * The hidden "Load a part" file input (the Rules tab has its own, for standards, after it). Found through the island's
+ * id, because on a narrow screen the closed drawer is out of the accessibility tree but its input still takes files.
+ */
+export const fileInput = (page: Page) => page.locator('#island input[type="file"]').first();
 
 /** The part name, material and mass fields in the header (unknown parts only). */
 export const nameField = (page: Page) => header(page).getByLabel("Part name");

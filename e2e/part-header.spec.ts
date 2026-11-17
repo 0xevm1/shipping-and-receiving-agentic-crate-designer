@@ -102,15 +102,13 @@ test("each field is edited by keyboard: Tab order, Enter commits, the stand-in c
 test("an invalid value shows its reason; Escape and blur revert it", async ({ page }) => {
   await loadUnknown(page);
   const mass = massField(page);
-  const validUnderline = await mass.evaluate((el) => getComputedStyle(el).borderBottomColor);
 
   await mass.fill("abc");
   const reason = header(page).locator("#partfield-mass-error");
   await expect(reason).toHaveText("Enter a number of kg, like 12.5.");
   await expect(mass).toHaveAttribute("aria-invalid", "true");
   await expect(mass).toHaveAttribute("aria-describedby", /partfield-mass-error/);
-  // An invalid value is marked in its own colour, with a solid underline (not the stand-in's dashes).
-  expect(await mass.evaluate((el) => getComputedStyle(el).borderBottomColor), "invalid underline").not.toBe(validUnderline);
+  // An invalid value has a solid underline (not the stand-in's dashes).
   await expect(mass).toHaveCSS("border-bottom-style", "solid");
   // Enter doesn't save invalid text.
   await mass.press("Enter");

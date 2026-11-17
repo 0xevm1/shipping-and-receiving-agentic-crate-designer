@@ -25,7 +25,6 @@ import {
   standards,
   summary,
   tab,
-  waitForFrames,
 } from "./helpers";
 
 // Phone projects: mobile-390 (390 × 844) and mobile-360 (360 × 800), with touch. The scene is
@@ -191,21 +190,4 @@ test("resizing across 980 px and rotating to landscape switch cleanly", async ({
   await page.setViewportSize(vp);
   await expect(drawer(page)).toBeVisible();
   await expectNoPageScroll(page);
-});
-
-test.describe("with motion", () => {
-  test.use({ reducedMotion: "no-preference" });
-
-  test("idle rotation holds while the drawer is open", async ({ page }) => {
-    test.setTimeout(90_000);
-    await openApp(page);
-    await openDrawer(page);
-    // The page has been idle for longer than IDLE_MS (5 s), with no input since the tap that opened the drawer...
-    await pollCrate(page, (s) => s.idle, { timeout: 30_000 }).toBe(true);
-    await waitForFrames(page, 3);
-    // ...and the crate still isn't turning.
-    expect((await crate(page)).autoplay).toBe(false);
-    await closeDrawerButton(page).tap();
-    await pollCrate(page, (s) => s.autoplay, { timeout: 30_000 }).toBe(true);
-  });
 });

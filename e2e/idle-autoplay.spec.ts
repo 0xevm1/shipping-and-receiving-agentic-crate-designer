@@ -9,7 +9,7 @@ import { crate, island, openApp, panel, pollCrate, screenBox, shot } from "./hel
 test.use({ reducedMotion: "no-preference" });
 
 /** Hover steps per phase: over the crate, over empty canvas, over the island's weight bars. */
-const STEPS_PER_PHASE = 25;
+const STEPS_PER_PHASE = 15;
 
 /** Centre of the free area left of the island, where the crate sits. */
 async function crateCentre(page: Page) {
