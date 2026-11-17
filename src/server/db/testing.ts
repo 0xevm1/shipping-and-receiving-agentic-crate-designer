@@ -9,8 +9,9 @@ import { databaseName, databaseUrl, withDatabase } from "./config";
 import { dropDatabase, migrateDatabase } from "./migrate";
 import { createRepository, type Database, type Repository } from "./repository";
 import * as schema from "./schema";
+import { createSystemQueries, type SystemQueries } from "./system";
 
-export type TestDatabase = { url: string; sql: postgres.Sql; db: Database; repo: Repository; drop(): Promise<void> };
+export type TestDatabase = { url: string; sql: postgres.Sql; db: Database; repo: Repository; system: SystemQueries; drop(): Promise<void> };
 
 /** The URL of a new, uniquely named database next to the configured one (not yet created). */
 export function scratchDatabaseUrl(label: string): string {
@@ -29,6 +30,7 @@ export async function createTestDatabase(label: string): Promise<TestDatabase> {
     sql,
     db,
     repo: createRepository(db),
+    system: createSystemQueries(db),
     async drop() {
       await sql.end({ timeout: 5 });
       await dropDatabase(url);
