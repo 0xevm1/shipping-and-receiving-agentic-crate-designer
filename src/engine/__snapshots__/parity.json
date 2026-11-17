@@ -2,7 +2,7 @@
   {
     "part": "PART-001",
     "quantity": 1,
-    "inputHash": "bb07af887bf2e66e2f6925554b8135487c18258980e54d5ee70a807c4d421d98",
+    "inputHash": "d1f4a00cb3c9865a48c173734ec1a1e5575931cb500b73c827132ef95413fb44",
     "summary": {
       "quantity": 1,
       "split": false,
@@ -42,7 +42,7 @@
   {
     "part": "PART-001",
     "quantity": 4,
-    "inputHash": "925c478c82de900ffb90945100ff4be8932b30274ec5c98071dc7483489cf236",
+    "inputHash": "e72e03b89942be2baf91a6c88041d1246c89653fbebaeda600f173be4b330a1f",
     "summary": {
       "quantity": 4,
       "split": false,
@@ -82,7 +82,7 @@
   {
     "part": "PART-001",
     "quantity": 8,
-    "inputHash": "32d2afce110ace297fc0a2865e340d969e83224b0ce826fc6a9ae23cedbaa65b",
+    "inputHash": "82d17c210dee8b40ed86a2971452102ba0822a5efb960726db40fa11df00ff75",
     "summary": {
       "quantity": 8,
       "split": false,
@@ -122,7 +122,7 @@
   {
     "part": "PART-002",
     "quantity": 1,
-    "inputHash": "c60f2c514f31fa966133e5b656bc2d3e214a6171b8f575197cf699d00743c592",
+    "inputHash": "faffa8ff79061f6bd8008fa8a4bac4694812a8278c04e456bb9452bc02290be0",
     "summary": {
       "quantity": 1,
       "split": false,
@@ -162,7 +162,7 @@
   {
     "part": "PART-002",
     "quantity": 2,
-    "inputHash": "3cc3ef11e5f008658ddf805b63fc9bee69fe3aed54635fb130d19888440f0ec5",
+    "inputHash": "3ff84025c6ff2cd34fc79e9705345bad3431b00dfe7800adf3a92ac4a3021e16",
     "summary": {
       "quantity": 2,
       "split": false,
@@ -202,7 +202,7 @@
   {
     "part": "PART-002",
     "quantity": 4,
-    "inputHash": "dcbc174015a85606c42013fac57684f476b0fd344b52ba21f08be9fa936a63e9",
+    "inputHash": "af2080c24631a8fb110ba6c055f8ddf7297c243720564601858b15eff192441c",
     "summary": {
       "quantity": 4,
       "split": false,
@@ -242,7 +242,7 @@
   {
     "part": "PART-003",
     "quantity": 1,
-    "inputHash": "0ce51ca15ea2622edb5d93da0de9d8de2d7fc259aff99c9d8bae6e7f2de73b63",
+    "inputHash": "9b53271ce0b9893b307f30e2cc3cdefae781107984d653a72873ad4747beab53",
     "summary": {
       "quantity": 1,
       "split": false,
@@ -282,7 +282,7 @@
   {
     "part": "PART-003",
     "quantity": 4,
-    "inputHash": "9761c9a6b6cc89284d820ca0053b77fe0e47ec0de8a0de412626a741c1d4ae2e",
+    "inputHash": "dede1a23e228d2e2ed0ed6cad5e5966f869288e74e9ee9a8256989f920e5f435",
     "summary": {
       "quantity": 4,
       "split": false,
@@ -322,7 +322,7 @@
   {
     "part": "PART-003",
     "quantity": 8,
-    "inputHash": "04852e6cc5c4b27d47f68d3ddd8e7b790f59d776dd33a15bf80db9cd4e37dbaf",
+    "inputHash": "7c6b020b2d0b31d23d7f98a1d0fa708ef840dc061b7559b272c1fd791311f02a",
     "summary": {
       "quantity": 8,
       "split": false,
@@ -357,6 +357,52 @@
     "csv": {
       "imperial": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 43.4 x 42.6 x 31.9 in, gross 430 lb\n# Layout 2 x 2 x 2, Turned 90°\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1\nBase: Skid,lumber,4x4,43 3/8 in,3\nSide walls: Side panel,plywood,1/2 in,41 7/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 7/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,40 3/16 in x 26 3/8 in,2\nEnd walls: End rail,lumber,1x4,42 5/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 7/8 in x 41 1/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 7/8 in,2\nLid: Lid cross cleat,lumber,1x4,34 1/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 15/16 in x 40 3/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,12\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,12\nWood screws (approx),fastener,,,308\n",
       "metric": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1102 x 1082 x 809 mm, gross 195 kg\n# Layout 2 x 2 x 2, Turned 90°\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1102 x 1082,1\nBase: Skid,lumber,89 × 89,1102,3\nSide walls: Side panel,plywood,12 mm,1064 x 670,2\nSide walls: Side rail,lumber,19 × 89,1064,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,1020 x 670,2\nEnd walls: End rail,lumber,19 × 89,1082,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1064 x 1044,1\nLid: Lid edge cleat,lumber,19 × 89,1064,2\nLid: Lid cross cleat,lumber,19 × 89,866,3\nInside the crate: Layer separator,plywood,12 mm,1040 x 1020,1\nInside the crate: Bearer,lumber,50 × 89,445,8\nInside the crate: Blocking post,lumber,50 × 89,354,12\nInside the crate: Blocking post,lumber,50 × 89,254,12\nWood screws (approx),fastener,,,308\n"
+    }
+  },
+  {
+    "part": "PART-003",
+    "sizeLimitMm": {
+      "length": 1200,
+      "width": 800,
+      "height": 1000
+    },
+    "quantity": 8,
+    "inputHash": "0b300d7bbe8b1a3e11c2e7a587a11772e9a12dd92c9f7ddb664c278301108905",
+    "summary": {
+      "quantity": 8,
+      "split": true,
+      "crates": [
+        {
+          "label": "A",
+          "count": 2,
+          "quantity": 4,
+          "layoutKey": "u:1020x545x670:212",
+          "outsideMm": [
+            1082,
+            607,
+            809
+          ],
+          "grossKg": 112.13197384,
+          "tareKg": 64.93197384,
+          "screws": 238,
+          "costUsd": 226.54873541666666
+        }
+      ],
+      "totals": {
+        "crates": 2,
+        "parts": 8,
+        "grossKg": 224.26394768,
+        "tareKg": 129.86394768,
+        "volumeM3": 1.062660332,
+        "costUsd": 453.0974708333333
+      },
+      "problem": null
+    },
+    "planHash": "f86307fb9bfa61f72ed247eb3a2f673c6fc94cef238fa4de5b0670ed9fa02bcb",
+    "csv": {
+      "imperial": "# Crate for 4 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 42.6 x 23.9 x 31.9 in, gross 247 lb\n# Layout 2 x 1 x 2, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,42 5/8 in x 23 7/8 in,1\nBase: Skid,lumber,4x4,42 5/8 in,2\nSide walls: Side panel,plywood,1/2 in,41 1/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 1/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,26 3/8 in x 21 7/16 in,2\nEnd walls: End rail,lumber,1x4,23 7/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 1/8 in x 22 3/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 1/8 in,2\nLid: Lid cross cleat,lumber,1x4,15 3/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 3/16 in x 21 7/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/8 in,4\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,7\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,7\nWood screws (approx),fastener,,,238\n",
+      "metric": "# Crate for 4 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1082 x 607 x 809 mm, gross 112 kg\n# Layout 2 x 1 x 2, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1082 x 607,1\nBase: Skid,lumber,89 × 89,1082,2\nSide walls: Side panel,plywood,12 mm,1044 x 670,2\nSide walls: Side rail,lumber,19 × 89,1044,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,670 x 545,2\nEnd walls: End rail,lumber,19 × 89,607,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1044 x 569,1\nLid: Lid edge cleat,lumber,19 × 89,1044,2\nLid: Lid cross cleat,lumber,19 × 89,391,3\nInside the crate: Layer separator,plywood,12 mm,1020 x 545,1\nInside the crate: Bearer,lumber,50 × 89,435,4\nInside the crate: Blocking post,lumber,50 × 89,354,7\nInside the crate: Blocking post,lumber,50 × 89,254,7\nWood screws (approx),fastener,,,238\n",
+      "shipment": "# Shipment of 8 x PART-003 Irregular aluminum housing: 2 x crate A (4 each)\n# Part 6061-T6 aluminum, 26.01 lb each\n# 2 crates, gross 494 lb in all; quantities are for every crate\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,42 5/8 in x 23 7/8 in,2\nBase: Skid,lumber,4x4,42 5/8 in,4\nSide walls: Side panel,plywood,1/2 in,41 1/8 in x 26 3/8 in,4\nSide walls: Side rail,lumber,1x4,41 1/8 in,8\nSide walls: Side upright,lumber,1x4,19 3/8 in,12\nEnd walls: End panel,plywood,1/2 in,26 3/8 in x 21 7/16 in,4\nEnd walls: End rail,lumber,1x4,23 7/8 in,8\nEnd walls: End upright,lumber,1x4,19 3/8 in,12\nLid: Lid panel,plywood,1/2 in,41 1/8 in x 22 3/8 in,2\nLid: Lid edge cleat,lumber,1x4,41 1/8 in,4\nLid: Lid cross cleat,lumber,1x4,15 3/8 in,6\nInside the crate: Layer separator,plywood,1/2 in,40 3/16 in x 21 7/16 in,2\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/8 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,14\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,14\nWood screws (approx),fastener,,,476\n"
     }
   }
 ]

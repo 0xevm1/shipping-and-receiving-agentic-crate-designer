@@ -17,6 +17,17 @@ const mm = (min: number, max: number) => z.number().finite().min(min).max(max);
 const kg = (min: number, max: number) => z.number().finite().min(min).max(max);
 const minutes = (min: number, max: number) => z.number().finite().min(min).max(max);
 
+/** Smallest and largest per-crate outside size a shop can set (mm): a crate can't be smaller, no truck is longer. */
+const MAX_OUTSIDE_RANGE_MM = { min: 200, max: 30000 } as const;
+/** One side of the per-crate size limit: 0 means no limit on that side, else a plausible crate size. */
+const outsideLimitMm = z
+  .number()
+  .finite()
+  .refine((v) => v === 0 || (v >= MAX_OUTSIDE_RANGE_MM.min && v <= MAX_OUTSIDE_RANGE_MM.max), {
+    message: "Leave empty for no limit, or enter a size from 200 mm (7.9 in) to 30,000 mm (98.4 ft)",
+  })
+  .default(0);
+
 /** A lumber section, actual size in mm (e.g. a 1×4 is 19 × 89). */
 const SectionSchema = z.object({
   thick: mm(6, 300),
@@ -111,13 +122,20 @@ export const ShopStandardsSchema = z
       lowUtilization: z.number().finite().min(0).max(1),
       /**
        * Per-crate limits for splitting a batch across crates. A crate must also fit the
-       * trailer door and floor (`trailerMm`), so there is no separate size limit.
+       * trailer door and floor (`trailerMm`); `maxOutsideMm` is a tighter size limit of the
+       * shop's own (a pallet position, a door).
        */
       perCrate: z.object({
         /** Most gross weight one crate may have (a handling limit); a heavier batch is split. The base rating also applies. */
         maxGrossKg: kg(1, 100000),
         /** Most parts in one crate; 0 means no limit. */
         maxParts: z.number().int().min(0).max(200),
+        /**
+         * Most outside size of one crate; 0 on a side means no limit there. Length and width may
+         * swap (a crate can be turned on its pallet position), height never does. Absent in
+         * standards saved before this limit existed: those read as no limit.
+         */
+        maxOutsideMm: z.object({ length: outsideLimitMm, width: outsideLimitMm, height: outsideLimitMm }).default({ length: 0, width: 0, height: 0 }),
       }),
     }),
     /** Material properties, prices and fastening. */
@@ -299,7 +317,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
      * also held to its computed base rating. No part-count limit. No sample part splits at
      * its suggested quantities.
      */
-    perCrate: { maxGrossKg: 1000, maxParts: 0 },
+    perCrate: { maxGrossKg: 1000, maxParts: 0, maxOutsideMm: { length: 0, width: 0, height: 0 } },
   },
   rates: {
     densityKgM3: { plywood: 600, lumber: 480 },

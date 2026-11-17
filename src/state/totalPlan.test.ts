@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { DEFAULT_SETTINGS } from "@/domain/design";
+import { planShipment, withinSizeLimit } from "@/domain/shipment";
 import { planTotal, sweepQuantities } from "@/domain/sweep";
+import { custom } from "@/domain/testFixtures";
 import { explainTotalPlan } from "@/domain/totalPlan";
 import { ENGINE_VERSION } from "@/engine/version";
 import { MAX_TOTAL_QUANTITY } from "@/lib/api/designs";
@@ -101,5 +103,21 @@ describe("totalPlanView", () => {
     const v = totalPlanView({ total: 5, sweep: none, server: null });
     expect(v.shown!.headline).toBe("5 parts → no plan passes every check");
     expect(v.shown!.crates).toEqual([]);
+  });
+});
+
+describe("Parts to ship under a per-crate size limit (#108)", () => {
+  const limited = custom({ limits: { perCrate: { maxOutsideMm: { length: 1000, width: 700, height: 700 } } } });
+  const limitedSweep = sweepQuantities(getPart("PART-001"), DEFAULT_SETTINGS, limited);
+
+  it("splits so no crate is over the limit", () => {
+    const view = totalPlanView({ total: 40, sweep: limitedSweep, server: null });
+    const plain = totalPlanView({ total: 40, sweep, server: null });
+    expect(view.shown!.crates.reduce((n, c) => n + c.count * c.quantity, 0)).toBe(40);
+    for (const c of view.shown!.crates) {
+      const d = planShipment(getPart("PART-001"), { ...DEFAULT_SETTINGS, quantity: c.quantity }, c.layoutKey, limited).crates[0].result.design!;
+      expect(withinSizeLimit(d.layout.external, limited)).toBe(true);
+    }
+    expect(Math.max(...view.shown!.crates.map((c) => c.quantity))).toBeLessThan(Math.max(...plain.shown!.crates.map((c) => c.quantity)));
   });
 });

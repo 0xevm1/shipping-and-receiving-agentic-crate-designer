@@ -173,7 +173,13 @@ function StandardInput({
           {error}
         </small>
       ) : (
-        (hint || name || changed) && <small>{[hint, name, changed && `Default ${groupDigits(fallback)}${withUnit(unit)}.`].filter(Boolean).join(" ")}</small>
+        (hint || name || changed) && (
+          <small>
+            {[hint, name, changed && (f.zero && fallback === 0 ? `Default ${f.zero}.` : `Default ${groupDigits(fallback)}${withUnit(unit)}.`)]
+              .filter(Boolean)
+              .join(" ")}
+          </small>
+        )
       )}
     </div>
   );

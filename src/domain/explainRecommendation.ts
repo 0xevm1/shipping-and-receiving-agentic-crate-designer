@@ -1,5 +1,6 @@
 import { joinMessages, kg, mm, msg, parts, shopMm, type Message } from "./message";
 import type { CrateSettings } from "./schema";
+import { sizeLimitText } from "./shipment";
 import { costsArePlaceholder, DEFAULT_STANDARDS, PLACEHOLDER_COST_NOTE, type ShopStandards } from "./standards";
 import { SWEEP_CONSTRAINTS, type QuantitySweep, type ScoreBasis, type SweepConstraint, type SweepPoint, type SweepRecommendation } from "./sweep";
 
@@ -20,6 +21,7 @@ export const CONSTRAINT_TEXT: Record<SweepConstraint, string> = {
   "base-rating": "base rating",
   "max-gross": "per-crate gross limit",
   "max-parts": "per-crate part limit",
+  "max-size": "per-crate size limit",
 };
 
 export type ExplanationSectionId = "compared" | "score" | "pick" | "limit" | "considerations";
@@ -282,6 +284,7 @@ function considerationsOf(standards: ShopStandards, rules: ExplainParams, option
     parts(`stable: height at most ${lim.stableHeightRatio}× the crate's short side`),
     msg`every part blocked in: at least ${shopMm(standards.construction.minBlockingGapMm)} beside each part for blocking`,
     parts(`within the base rating: the skids, joists and floor carry the payload with a ${standards.structure.loadFactor}× load factor`),
+    ...(sizeLimitText(standards) ? [msg`crate outside size within ${sizeLimitText(standards)!}`] : []),
     msg`at most ${kg(maxGrossKg)} gross per crate`,
     parts(maxParts > 0 ? `at most ${maxParts} parts per crate` : "no limit on parts per crate"),
   ];
