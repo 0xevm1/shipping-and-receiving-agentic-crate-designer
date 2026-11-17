@@ -141,7 +141,7 @@ export function totalPlanView({
 }
 
 /** The total in effect for the part on screen and whether it is still unsynced. */
-export function useJobTotal(): { total: number | null; unsynced: boolean } {
+function useJobTotal(): { total: number | null; unsynced: boolean } {
   const job = useJobSync((s) => s.job);
   const partKey = useJobSync((s) => s.partKey);
   const items = usePendingChanges((s) => s.items);
