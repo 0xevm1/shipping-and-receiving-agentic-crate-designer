@@ -1,4 +1,4 @@
-import type { BomLine } from "./bom";
+import { tellApart, type BomLine } from "./bom";
 import type { Check } from "./check";
 import { designCrate } from "./crate";
 import type { CrateDesign } from "./crateDesign";
@@ -301,10 +301,10 @@ export function shipmentBom(plan: ShipmentPlan): ShipmentBom {
     screws += d.screws * t.count;
   }
   // Keep each piece's sizes together (crate A's floor, then crate B's), in first-seen order.
-  const all = [...lines.values()];
+  const all = tellApart([...lines.values()]);
   const firstSeen = new Map<string, number>();
-  all.forEach((l, i) => firstSeen.set(`${l.assembly}|${l.label}`, firstSeen.get(`${l.assembly}|${l.label}`) ?? i));
-  const order = (l: BomLine) => firstSeen.get(`${l.assembly}|${l.label}`)!;
+  all.forEach((l, i) => firstSeen.set(`${l.assembly}|${l.name}`, firstSeen.get(`${l.assembly}|${l.name}`) ?? i));
+  const order = (l: BomLine) => firstSeen.get(`${l.assembly}|${l.name}`)!;
   if (plan.crates.length > 1) all.sort((x, y) => order(x) - order(y));
   return { lines: all, plywoodM2, lumberM, screws };
 }

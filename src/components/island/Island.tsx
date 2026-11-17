@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef, type ReactNode, type Ref } from "react";
+import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { allChecks } from "@/state/checks";
 import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
@@ -27,10 +27,13 @@ const TABS: { id: Tab; label: string }[] = [
 
 const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout"];
 
-/** The island's id, for the hamburger's `aria-controls` on narrow screens (#42). */
+/** The island's id, for the hamburger's `aria-controls` on narrow screens. */
 export const ISLAND_ID = "island";
 
-/** On narrow screens the island is a modal drawer (#42); the shell owns its state and focus. */
+const tabId = (t: Tab) => `island-tab-${t}`;
+const PANEL_ID = "island-panel";
+
+/** On narrow screens the island is a modal drawer; the shell owns its state and focus. */
 export interface DrawerProps {
   open: boolean;
   onClose: () => void;
@@ -52,7 +55,22 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   const setTab = useDesigner((s) => s.setTab);
   const loadFiles = useLoadFiles();
   const fileInput = useRef<HTMLInputElement>(null);
-  const cautions = design ? allChecks(design.checks, part, measured).filter((c) => c.level === "caution").length : 0;
+  // One pass over the checks, shared by the tab badges, the Overview verdict and the Checks tab.
+  const checks = useMemo(() => (design ? allChecks(design.checks, part, measured) : []), [design, part, measured]);
+  const cautions = checks.filter((c) => c.level === "caution").length;
+  const notes = checks.filter((c) => c.level === "info").length;
+  const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+
+  // WAI-ARIA tabs with automatic activation: one tab stop, arrows move and select.
+  const onTabKey = (e: KeyboardEvent) => {
+    const i = TABS.findIndex((t) => t.id === tab);
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const to = TABS[(next + TABS.length) % TABS.length].id;
+    setTab(to);
+    tabRefs.current[to]?.focus();
+  };
 
   return (
     <aside
@@ -80,33 +98,72 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
           />
           {drawer && (
             <button type="button" className="iconbtn drawer-close" aria-label="Close the panel" onClick={drawer.onClose}>
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="22"
+                height="22"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
             </button>
           )}
         </div>
-        <div aria-label="The part on its own. Drag to turn it, double-click to reset.">
+        <div role="group" aria-label="The part on its own. Drag to turn it, double-click to reset.">
           <PartView />
         </div>
-        {/* What a rules or layout edit moved, over the foot of the part view (#39). */}
+        {/* What a rules or layout edit moved, over the foot of the part view. */}
         <ChangeNote sources={ISLAND_SOURCES} className="island-note" />
-        <nav className="seg tabs" role="tablist" aria-label="Sections">
+        <div className="seg tabs" role="tablist" aria-label="Sections" onKeyDown={onTabKey}>
           {TABS.map((t) => (
-            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+            <button
+              key={t.id}
+              ref={(el) => {
+                tabRefs.current[t.id] = el;
+              }}
+              type="button"
+              role="tab"
+              id={tabId(t.id)}
+              aria-selected={tab === t.id}
+              aria-controls={PANEL_ID}
+              tabIndex={tab === t.id ? 0 : -1}
+              onClick={() => setTab(t.id)}
+            >
               {t.label}
-              {t.id === "checks" && cautions > 0 && <span className="count">{cautions}</span>}
+              {t.id === "checks" && cautions > 0 && (
+                <span className="count">
+                  {cautions}
+                  <span className="sr-only"> {cautions === 1 ? "caution" : "cautions"}</span>
+                </span>
+              )}
+              {t.id === "checks" && notes > 0 && (
+                <span className="count info">
+                  {notes}
+                  <span className="sr-only"> {notes === 1 ? "note" : "notes"}</span>
+                </span>
+              )}
             </button>
           ))}
-        </nav>
+        </div>
       </div>
-      <div className="panel" role="tabpanel">
+      <div
+        className="panel"
+        role="tabpanel"
+        id={PANEL_ID}
+        aria-labelledby={tabId(tab)}
+        // Straight on the element, so scrolling doesn't re-render the island: CSS fades the top edge while scrolled.
+        onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 2)}
+      >
         {!design ? (
           <div role="alert">
             <h2>{problem?.title ?? "No crate to show"}</h2>
             <p className="lede">{problem?.detail}</p>
             {(problem?.id === "settings" || problem?.id === "no-layout") && (
-              <div className="actions" style={{ marginTop: 16 }}>
+              <div className="actions spaced">
                 <button type="button" className="btn" onClick={() => useDesigner.getState().resetRules()}>
                   Reset rules
                 </button>
@@ -114,7 +171,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
             )}
           </div>
         ) : tab === "overview" ? (
-          <OverviewTab design={design} />
+          <OverviewTab design={design} checks={checks} />
         ) : tab === "layouts" ? (
           <LayoutsTab design={design} />
         ) : tab === "cut" ? (
@@ -122,7 +179,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         ) : tab === "rules" ? (
           <RulesTab design={design} />
         ) : (
-          <ChecksTab design={design} />
+          <ChecksTab checks={checks} />
         )}
       </div>
       {footer && <div className="island-foot">{footer}</div>}

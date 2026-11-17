@@ -7,7 +7,8 @@ const SHAFT = "PART-002-long-steel-shaft.glb";
 
 const section = (page: Page) => panel(page).getByRole("region", { name: "Saved designs" });
 const list = (page: Page) => section(page).getByRole("list", { name: "Saved designs for this part" });
-const loadMessage = (page: Page, text: string) => page.locator(".loadrow").getByRole("status").filter({ hasText: text });
+// The load row shows a message as a note (status) or an error (alert); both are `.loadmsg`.
+const loadMessage = (page: Page, text: string) => page.locator(".loadrow .loadmsg", { hasText: text });
 
 /** Opens the app at `path` (a share link) and waits for the scene, like `openApp`. */
 async function openAt(page: Page, path: string) {
@@ -94,7 +95,7 @@ test("saved designs can be renamed, and deleted with an undo", async ({ page }) 
   await section(page).getByRole("button", { name: "Delete Bracket standard" }).click();
   await expect(section(page).getByRole("status")).toContainText("Deleted “Bracket standard”.");
   await expect(list(page)).toBeHidden();
-  await section(page).getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await section(page).getByRole("button", { name: "Undo" }).click(); // outside the live region
   await expect(list(page).getByRole("listitem")).toHaveCount(1);
   await expect(list(page)).toContainText("Bracket standard");
 });
@@ -125,10 +126,18 @@ test("a share link opens the same crate on a fresh page", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
   await expect(page.getByRole("banner")).toContainText("PART-002");
   await setQuantity(page, 8);
+  const defaultOutside = (await crate(page)).outside;
   await openTab(page, "Layouts");
-  await panel(page).getByRole("button", { pressed: false }).first().click();
+  // A layout card other than the one on screen (the Rank-by buttons are not in this group).
+  const card = panel(page).getByRole("group", { name: "Layouts", exact: true }).getByRole("button", { pressed: false }).first();
+  const cardText = await card.innerText();
+  const cardSize = /\d+ × \d+ × \d+/.exec(cardText)![0];
+  await card.click();
   await openTab(page, "Overview");
   const outside = (await crate(page)).outside;
+  // The pick really changed the crate, to the size the card showed.
+  expect(outside).not.toEqual(defaultOutside);
+  expect(outside!.map(Math.round).join(" × ")).toBe(cardSize);
   const link = await copyShareLink(page);
   expect(link).toMatch(/\/#design=[A-Za-z0-9_-]+$/);
 
@@ -148,13 +157,13 @@ test("a share link opens the same crate on a fresh page", async ({ page }) => {
 
 test("a damaged share link falls back to the default crate with a message", async ({ page }) => {
   await openAt(page, "/#design=eyJraW5kIjoiY3JhdGUtZGVzaWduIiwic2NoZW1hVmVyc2lvbiI6MSwic2V0dGluZ3MiOnsicXVhbnRpdHkiOjUwMDB9fQ");
-  await expect(loadMessage(page, "Share link not opened, so the default crate is shown.")).toBeVisible();
+  await expect(loadMessage(page, "The default crate is shown.")).toBeVisible();
   await pollCrate(page, (s) => s.partId).toBe("PART-001");
   await pollCrate(page, (s) => s.quantity).toBe(4);
   expect(new URL(page.url()).hash).toBe("");
 
   await openAt(page, "/#design=not*base64");
-  await expect(loadMessage(page, "This share link is damaged or incomplete.")).toBeVisible();
+  await expect(loadMessage(page, "That share link is damaged or incomplete.")).toBeVisible();
   await shot(page, "14-share-link-invalid");
 });
 
@@ -171,7 +180,7 @@ test("a custom part's share link names the model to load, then opens with it", a
 
   const fresh = page;
   await openAt(fresh, link);
-  await expect(loadMessage(fresh, "Load widget_v2.glb with Load a part")).toBeVisible();
+  await expect(loadMessage(fresh, "This link needs widget_v2.glb.")).toBeVisible();
   await pollCrate(fresh, (s) => s.partId).toBe("PART-001");
   await fileInput(fresh).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(loadMessage(fresh, "Design loaded: 1 × Widget v2.")).toBeVisible();

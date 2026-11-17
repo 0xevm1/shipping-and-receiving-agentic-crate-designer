@@ -184,7 +184,6 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/assemblyNames.ts` | `ASSEMBLY_NAMES`: how each assembly is named for people (belongs beside `ASSEMBLIES` in the domain core) |
-| `src/domain/export.ts` | Compatibility re-exports only (`bomToCsv`, `shipmentToCsv`, `downloadText`, `downloadBytes` now live in `src/lib/csv.ts` and `download.ts`); delete once the last importers move |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file and the library |
 | `src/domain/profileCodec.ts` | `encodeProfile` / `decodeProfile`: a part profile packed losslessly for the design file (§6.5) |
 | `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign` (app name and version passed in), `parseDesignFile` (version check and migrations), `fileProfile`, `restoreDesign` (its notes are typed `Message`s) |
@@ -216,8 +215,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
 | `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
 | `src/lib/exportPdf.ts` | `printableToPdf`: the `PrintableDesign` as a vector PDF with jsPDF (#51); loaded only with `import()` |
-| `src/components/shell/ExportPill.tsx` | The green Export pill under the part header and its idle / busy / done / error states (#51) |
-| `src/components/shell/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill (#51; #77 briefly shared it with a View popover button, removed in #62) |
+| `src/components/shell/ExportPill.tsx` | The green Export pill under the part header, its idle / busy / done / error states, and an amber dot with a tooltip and description ("2 cautions, see Checks") when the design has cautions; exporting is never blocked |
+| `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill; a success note clears after 8 s, an error after 15 s |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
@@ -226,21 +225,29 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
-| `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
-| `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger, focus trap and summary chip (#42); idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
+| `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
+| `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
+| `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
+| `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
+| `src/components/shell/LoadToast.tsx` | The load message as a glass toast under the part header: a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
-| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
-| `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design; `openDesignFile()` for the library and share links |
-| `src/components/shell/SavedStateLoader.tsx` | Applies the saved units, shop standards and design library once the app has mounted, then opens a share link (`shareLinkLoader.ts`) or else the last-opened crate (`lastDesignLoader.ts`) |
-| `src/components/shell/lastDesignLoader.ts` | `restoreLastDesign()` and `watchLastDesign()`: reopens the last-opened crate, and saves it (debounced) plus a custom GLB's bytes (§9, #71) |
+| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (`usePopover`), Hide panels |
+| `src/components/shell/useLoadFiles.ts` | The thin hook over `loadPickedFiles`; re-exports `openDesignFile` for `SavedDesigns` |
+| `src/state/partLoader.ts` | `applyOutcome`, `openDesignFile()` (library, share links) and `loadPickedFiles()` (picked / dropped files, and a waiting shared design, forgotten only once it opened); each load takes a ticket and only the latest is applied |
+| `src/state/loadSequence.ts` | `beginLoad()`: the load ticket; `current()` is false once a later load started |
+| `src/state/startup.ts` | `createStartup` / `startSavedState`: the run-once startup (saved units, standards, library, then share link, last crate or default) that survives StrictMode's second effect run |
+| `src/components/shell/SavedStateLoader.tsx` | Runs `startSavedState()` once, then keeps saving (`watchLastDesign`) and follows `hashchange` share links |
+| `src/state/lastDesignLoader.ts` | `restoreLastDesign()` (with a load ticket) and `watchLastDesign()`: reopens the last-opened crate, and saves it (debounced) plus a custom GLB's bytes (§9) |
 | `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope, validation, precedence, debounced saver (§9) |
 | `src/state/glbCache.ts` | The last custom GLB's bytes in IndexedDB, one record, 50 MB cap (§9) |
-| `src/components/shell/shareLinkLoader.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
-| `src/components/island/*.tsx` | The island and its five tabs |
+| `src/state/shareLink.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
+| `src/components/island/*.tsx` | The island and its five tabs. `Island.tsx` owns the WAI-ARIA tabs (§8.3a) and computes `allChecks` once for the tab badges, the Overview verdict and the Checks tab |
 | `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
-| `src/components/island/Scorecard.tsx` | The Overview's design scorecard (#17): crate cost, build time, freight class and density, dimensional weight, the shipment's totals, the time to design (`Scorecard.module.css`) |
-| `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
+| `src/components/island/Scorecard.tsx` | The Overview's design scorecard (#17): crate cost, build time, freight class and density, dimensional weight, the time to design in the heading row (`Scorecard.module.css`) |
+| `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab; its inputs render only while the section is open (`ShopStandards.module.css`) |
+| `src/components/island/standardsFields.ts` | The typed table of editable standards (`StandardPath` is every numeric path in `ShopStandards`, so a typo fails to compile), `readStandard`, `standardPatch`; `standardsFields.test.ts` checks every path resolves and no hint carries ticket numbers |
+| `src/lib/fileNames.ts` | File names of the cut list CSV and the design file |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
@@ -608,16 +615,20 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     the library, `/print` and the zip agree.
   - The rebuilt crate is compared with `summary`. If the outside size or gross differs (for
     example, a catalog mass or a shop rule changed), the message gives the new and the saved
-    values in the selected units. For a format 1 file (`shapeUnknown`) with no outline to use,
-    a difference is not reported as numbers: the message says plainly that the file was saved
-    before the part's shape was kept, so sizes and weights can differ slightly until the model
-    is measured (the viewer then measures it and the saved crate comes back).
+    values in the selected units ("Gross is now 304 lb (was 298 lb)."). For a format 1 file
+    (`shapeUnknown`) with no outline to use, a difference is not reported at all: the viewer
+    measures the model and the saved crate comes back, so a note about file history would only
+    be noise.
   - **A split batch (#25):** the design is rebuilt with this browser's shop standards and
     re-planned (§7.10). The crate type on screen when it was saved (the one whose part count is
     `summary.quantity`) is shown again. If the plan differs from `summary.shipment` (for
     example, a different max gross per crate), the message says "The batch now ships as …
-    (saved: …)". A single-crate file has no `shipment` and is byte-identical to before.
+    (was …)". A single-crate file has no `shipment` and is byte-identical to before.
   - The load message starts "Design loaded: {quantity} × {name}." and adds any of those notes.
+  - **Wording of load messages:** short, plain, in the selected units, and never about file
+    history. An error says what happened and what to do ("That isn't a .glb file. Choose a .glb
+    or a design .json."). A message with no part opened is an error (`loadMessageKind`), shown
+    with `role="alert"` until dismissed; a note goes by itself (§8.2).
 ## 7. Algorithms
 
 ### 7.1 Orientations
@@ -1313,8 +1324,10 @@ Labour 2.709 h × $35 = **$94.82**; wood $75.16 + screws 202 / 100 × $8 = $16.1
 **Time to design.** The store records `designStartedAt` when the app mounts with the preloaded
 part (unless the last-opened crate is reopened, which leaves the clock stopped, §9) and again on
 every `setPart` / `loadDesign`, and `designedInMs` at the first export or
-download after that (Download or Copy cut list, Download design (.json), the Export pill's or
-the View popover's .zip); later exports don't move it. The Overview shows "Designed in 1 m 12 s". The manual
+download after that (Download or Copy cut list, Download design (.json), the Export pill's .zip);
+later exports don't move it, but an edit clears it (it would describe a design that is gone) and
+the next export records the time to the edited design. The scorecard shows "Designed in 1 m 12 s"
+in its heading row, muted, in a region that is always mounted: showing or clearing it moves nothing. The manual
 baseline it compares with is an assumption in the README.
 
 ### 7.13 Export package (the Export pill, #51)
@@ -1374,8 +1387,10 @@ edit during the busy state doesn't change the package.
 **The separate downloads stay** in the Cut list tab (CSV and Copy, Download design (.json),
 Print / save PDF): someone who wants one file gets it in one click, and the print route is still
 the quickest way to paper. **The pill is the one export control** (#62): its run and state live in
-`src/components/shell/exportRun.ts`, and a second click while busy does nothing. The View popover
-has no export button (#77 added one; the user removed it as a duplicate). The zip replaced #27's
+`src/state/exportRun.ts`, and a second click while busy does nothing. The View popover
+has no export button (#77 added one; the user removed it as a duplicate). A design with
+cautions still exports (no confirm dialog), but the pill carries an amber dot, a `title` and an
+`aria-describedby` note such as "1 caution, see Checks". The zip replaced #27's
 "Download 3D model (.glb)" and its "Include parts" switch; its GLB always includes the parts.
 
 ### 7.14 Centre of gravity and handling (`src/domain/handling.ts`, #8)
@@ -1623,14 +1638,16 @@ The canvas fills the window. Four regions float above it:
 |---|---|
 | Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a), then the green **Export** pill (#51, §7.13), left-aligned with the lines, with its status note beside it. Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
 | Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
-| Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads). Above it, any load message (shown only when there is one) |
+| Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads).  |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
 
 - **Crate centring:** the crate is centred in the area the overlays leave free, not in the
   window. `DesignerShell` measures the island and sets the insets. `Director` shifts the projection with `camera.setViewOffset` and
   fits the bounding sphere into the free rectangle (insets: left 40, top 96, right = island width
   + 56, bottom 130 px). Hide panels fades out everything except the "Show panels" pill and the
-  credit, and keeps only the bottom inset so the crate clears the credit.
+  credit, and keeps only the bottom inset so the crate clears the credit. The hidden panels are
+  `visibility: hidden` after the fade (not just transparent), so their controls are out of the
+  tab order and the accessibility tree.
 - **981–1180 px:** as desktop, with the tagline hidden and a 420 px island.
 - **Narrow screens (below 980 px, #42):** the scene stays full-bleed and the island becomes a
   drawer. `DesignerShell` switches on `matchMedia("(max-width: 980px)")`; the CSS is the
@@ -1657,12 +1674,12 @@ The canvas fills the window. Four regions float above it:
     name, Load a part and close, the part view (130 px; 84 px on screens under 560 px tall),
     the tabs, the panel (the only thing that scrolls), then the credit at half size (hidden on
     short screens). `drawerOpen` in the store is separate from `panelsHidden`.
-  - **Foot:** the load message (when there is one), the **summary chip** (outside size and gross
-    weight in amber; for a split batch, "Crate A outside" with the shown type's size and
+  - **Foot:** the **summary chip** (always the width of the foot, outside size and gross
+    weight in amber, with thousands separators, the size shortening before it can touch the weight; for a split batch, "Crate A outside" with the shown type's size and
     "Gross, 7 crates" with the shipment's gross; tapping it opens the drawer on Overview; it flashes with the Overview on an
     edit), then the compact view bar: mode icon, units and View; no Hide panels. From 600 px
     wide (tablets, phones in landscape) the chip and the bar share one row. The View popover
-    opens upward from the right edge, is at most `100vw − 24px` wide and scrolls inside when
+    opens above the whole foot, right-aligned (never over the summary chip), is at most `100vw − 24px` wide and scrolls inside when
     the screen is short. Its gesture hint names pinch and two-finger drag on touch screens.
   - **Touch targets** are at least 44 px: hamburger, close, Load a part, tabs, panel buttons,
     the bar's controls and the popover's switches. Inside the panels (#62), under the 980 px
@@ -1684,14 +1701,22 @@ The canvas fills the window. Four regions float above it:
 
 | Tab | Contents |
 |---|---|
-| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part"; the outside size in amber; the other-unit size; volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; for a split, the whole shipment's cost, labour and dimensional weight; after the first export, "Designed in 1 m 12 s". A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
+| **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
-| **Cut list** | Grouped by assembly. Piece, stock, cut, qty (the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions and, on narrow screens, stock names wrap, so Qty is always fully inside the panel, #62). Hover a row to highlight; click (or Enter / Space) to pin. Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
+| **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
 | **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
-| **Checks** | Every check, cautions first, with a count badge on the tab when there are cautions |
+| **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
 open question for the user (see #20).
+
+### 8.3a Tabs, focus and the panel
+
+- **Tabs** follow the WAI-ARIA tabs pattern: a `role="tablist"` of `role="tab"` buttons with ids, `aria-controls` the one `role="tabpanel"`, which has `aria-labelledby` its tab. One tab stop (roving `tabindex`): Left / Right move and select (wrapping), Home / End go to the first / last.
+- **Panel:** on desktop the island has one height (the viewport less 120 px, at most 800 px) on every tab, so switching tabs never resizes it. A 22 px mask fades the top edge of the panel's content, only while it is scrolled (`data-scrolled`, set from the scroll handler without re-rendering).
+- **Saved designs:** after Save, Rename, Cancel or Delete the focus goes to a control that still exists (Save design, the row's Rename, the section heading). The status region holds text only; Undo is a button beside it. A storage failure from `remove`, `undoRemove` or `save` is shown. "Reused" is said only when the design is on screen.
+- **Shop standards:** a validation error is `role="alert"` with the domain's plain message (`parseStandards` returns `path` and `message` beside `error`); a standards file that can't be read, and a failed download, say so in the live status.
+- **Numbers:** one formatter per quantity in `lib/units.ts`. Masses use `weight` (one decimal under 100, whole from 100, thousands separators: "13,518 lb"; `weightFromLb` for freight weights). Plywood and sections are labelled by `plywoodLabel` / `sectionLabel` in `lib/lumber.ts`. Times like "2 h 59 m" use `.tight` (word spacing) so the monospace gaps don't read as columns.
 
 ### 8.4 3D behaviour
 
@@ -1702,6 +1727,15 @@ open question for the user (see #20).
   - The mode icon steps closed → open → exploded. The View popover has camera presets (3D, Top,
     Front, End), switches for lid, front wall, blocking, parts and size labels, and a
     continuous Pull apart slider. A mix that matches no mode shows the "custom" icon.
+- **View popover placement and surface:** on desktop it opens over the canvas with its right
+  edge 16 px left of the island, so it never covers the scorecard; on narrow screens above the
+  foot. Its surface is near-opaque (0.97 / 0.98), as is the drawer's, so the crate's colours don't
+  show through the blur. It closes on Escape (focus returns to View), a press outside, or focus
+  leaving it; `aria-controls` is set only while it exists.
+- **Load messages (`LoadToast`):** one glass toast under the part header on every layout, never
+  loose text over the floor. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
+  region and goes after 9 s; an error is `role="alert"`, has a gold edge and stays until
+  dismissed or the next load. Both have a dismiss button.
 - **Export specs:** only the header's Export pill (§7.13) exports; the View popover has no export
   button (#77 added one, removed in #62). The zip's `crate-{part id}-x{quantity}.glb` (#27) is built from the
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
@@ -2060,12 +2094,12 @@ written to a server log.
   it and validates it with `parseDesignFile`. A catalog part restores fully through
   `loadDesign`, with the §6.5 notes.
 - **A custom part** can't travel in a URL, because its GLB is a local file. The message names
-  it ("This link shares a 1 × Widget design for a custom part. Load widget_v2.glb with Load a
-  part …"), the design waits, and loading a GLB with that file name opens it. The copy status
-  warns the sender too.
+  it , the design waits, and loading a GLB with that file name opens it. The copy status
+  warns the sender too. The message reads "This link needs widget_v2.glb. Load it (or drop it
+  here) to open the 1 × Widget design." (an error: it stays until dismissed).
 - **A damaged or tampered link** (bad base64, cut short, not JSON, wrong kind, a newer version,
   out-of-range settings) changes nothing: on first load the default crate stays, and the load
-  row says "Share link not opened, so the default crate is shown." with the reason.
+  row says why ("That share link is damaged or incomplete. The default crate is shown.").
 - **Tidy URL:** the hash is removed with `history.replaceState` as soon as it is read, so the
   address bar is clean and a reload doesn't re-open the link over later edits.
 
@@ -2102,11 +2136,16 @@ refresh or a reopened tab brings back the crate on screen:
   (3) else the default part. A share link that opens is saved as the last-opened crate.
 - **Reopening** goes through `loadDesign` (§6.5), the same path as a design file. A custom part
   uses the kept GLB when its name matches the saved `model`. When it doesn't (never kept, over
-  the cap, IndexedDB unavailable), the default part opens, the load row says "Your last crate
-  (2 × Widget) wasn't reopened: this browser didn't keep widget.glb (models over 50 MB aren't
-  kept). Load widget.glb to reopen it.", and loading that file reopens the design (the pending
+  the cap, IndexedDB unavailable), the default part opens, the load row says "Load widget.glb
+  to reopen your last crate (2 × Widget).", and loading that file reopens the design (the pending
   design of a shared custom link). The §6.5 notes (layout no longer fits, different size) show
-  as "Your last crate reopened. …"; otherwise the reopen is silent.
+  as "Reopened. …"; otherwise the reopen is silent.
+- **One startup:** the source is decided once per page load (`src/state/startup.ts`), so React
+  StrictMode's second effect run in development can't restore the saved crate over a share link
+  that the first run already opened (it removed the hash). Every load (picked, dropped, library,
+  link, reopen) takes a ticket (`loadSequence.ts`); only the latest outcome is applied, so a slow
+  GLB parse can't overwrite a later quick load. Production builds run effects once, so the e2e
+  suite cannot cover the StrictMode case; `startup.test.ts` does.
 - **Safe load:** an entry that isn't JSON, has the wrong kind or version, an unknown tab or
   ranking, or a design that fails `parseDesignFile` (bad settings, newer format) is ignored with
   a `console.warn` and the default part opens. So does a design that no longer makes a crate, a
@@ -2408,7 +2447,7 @@ a refused save, the load precedence (share link, even a damaged one, then the la
 the default) and the debounced saver (one write of the latest value; flush and cancel).
 **`src/state/glbCache.test.ts`** checks the IndexedDB wrapper with `fake-indexeddb`: one record
 (the last saved), the 50 MB cap (not kept, the older record dropped), bad records ignored with a
-warning, and IndexedDB missing or throwing. **`src/components/shell/lastDesignLoader.test.ts`**
+warning, and IndexedDB missing or throwing. **`src/state/lastDesignLoader.test.ts`**
 reopens a catalog crate with its rules, layout, tab and ranking and the clock stopped (an export
 records nothing; a new part starts it), and without the custom part's kept GLB (or with a
 damaged one) keeps the default part, naming the file and holding the design until it is loaded.
@@ -2592,7 +2631,7 @@ HTML report as `playwright-report`.
     "Showing N × piece", Escape clears it.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
     View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
-    Hide panels keeps the credit; idle auto-play starts after 5 s without input; from the
+    Hide panels keeps the credit and makes the hidden controls unfocusable; idle auto-play starts after 5 s without input; from the
     exploded view, the pill's export (the popover has no export button) shows "Exporting…" and saves
     `crate-PART-001-x4.zip` with the pill's five entries, whose GLB has the `glTF` header, a
     matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1` … `Part 4`),
@@ -2639,6 +2678,13 @@ HTML report as `playwright-report`.
     projects): save and reuse inside the drawer with 44 px targets and no page scroll.
     Screenshots `14-saved-designs-list`, `14-saved-designs-island`, `14-share-link-restored`,
     `14-share-link-invalid`, `14-<project>-drawer-saved-designs`.
+  - `31-shell-a11y` (and `.mobile`): the View popover (Escape and focus return, focus-out, press
+    outside, `aria-controls`, placement and an opaque surface at 1440 × 900, 1280 × 720,
+    900 × 800 and 390 × 844); text dragged over the page doesn't raise the drop veil; an error
+    toast (alert, stays, dismissible) and a note toast (status, goes by itself) at desktop and
+    390 × 844; the Export pill's caution dot, title and description; on a phone, Tab reaches and
+    opens Shop standards in the drawer, and the summary chip keeps its width and a gap at
+    quantity 200. Screenshots `31-*`.
   - `29-print-layout`: `/print` in print media, rendered with `page.pdf()` and read back page
     by page with Ghostscript (skipped when it is not installed): five pages for one crate,
     the label (part number to fork note) on exactly one page, and the assembly order
@@ -2692,8 +2738,10 @@ HTML report as `playwright-report`.
     Volume goes back; the Labour group lists the rate (35) and minutes, Screw cost and the dim
     divisor, and a $70/h rate (double) adds exactly the old labour cost until Reset to defaults; the first
     cut-list download shows "Designed in …". Crops are saved to `e2e/screenshots/crops/17-*`.
-    `02-tabs` and `11-design-json` find layout cards as `button.opt`, since the toggle also has
-    pressed buttons.
+    `02-tabs` and `11-design-json` find layout cards as `button.opt`; `17-design-library` finds them
+    in the `Layouts` group, since the Rank-by toggle also has pressed buttons, and checks that the
+    picked card's size becomes the crate's.
+  - `32-island-a11y` and `32-island-cutlist.mobile` (#89): the tabs are one tab stop and move with arrows, Home and End, the panel is labelled by its tab; a cut-list row is a real toggle button (Space / Enter), Overview bars are named groups; Save, Rename and Delete leave focus on a live control and Undo is outside the status region; Shop standards render inputs only when open and announce a bad value; the Overview verdict (clear, then "1 caution: parts are not restrained" linking to Checks); the Checks tab counts cautions and notes apart; the panel's top fade only when scrolled; one island height on all tabs; "Designed in" shifts nothing and is gone after an edit; at quantity 200 the Shipment block shows cost, labour and grouped weights and the scorecard no longer says "Whole shipment"; layout-card delta parts stay on one line; piece names stay on one line; on a phone the cut list has no sideways scroll and keeps Cut and Qty inside the drawer. Screenshots `32-*`.
   - `10-shop-standards`: the section is collapsed by default and shows all eight groups when
     opened; changing the plywood cost to 2200 shows "Customised" and raises the Overview's
     "$ of wood", which survives a reload; Reset to defaults restores the cost (also after a
@@ -2801,7 +2849,7 @@ HTML report as `playwright-report`.
     gives mm / kg CSV, PDF and README. 200 brackets give both crate GLBs, both cut lists, the
     shipment cut list and a PDF with both build sheets. A loaded custom GLB exports, its README
     names the GLB to load, and the design reopens with it to the same size. With motion on, the
-    busy state ("Exporting…", `aria-busy`) lasts at least 1.4 s. Hide panels hides it. At
+    busy state ("Exporting…", `aria-busy`) lasts at least 1.4 s. Hide panels hides it (and Tab can't reach it). At
     390 × 844 it stays under the part lines at 44 px and exports. Screenshots `19-export-idle`,
     `-loading`, `-success`, `-narrow` and the PDF `19-export.pdf`.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use

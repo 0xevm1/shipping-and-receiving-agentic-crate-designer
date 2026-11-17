@@ -12,7 +12,7 @@ const header = (page: Page) => page.getByRole("banner");
 const nameField = (page: Page) => header(page).getByLabel("Part name");
 const materialField = (page: Page) => header(page).getByLabel("Part material");
 const massField = (page: Page) => header(page).getByLabel(/Mass of one part in/);
-const note = (page: Page) => header(page).getByRole("status");
+const note = (page: Page) => header(page).locator(".changenote");
 
 /** A crop of the top-left header, for the PR (saved beside the full-page shots). */
 async function shotHeader(page: Page, name: string) {

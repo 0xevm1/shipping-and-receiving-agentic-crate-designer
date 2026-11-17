@@ -27,7 +27,7 @@ test("the sample quantities still ship as one crate", async ({ page }) => {
   expect(s.crateTypes).toEqual([{ label: "A", count: 1, quantity: 8 }]);
   await openTab(page, "Overview");
   await expect(panel(page).getByRole("region", { name: "Shipment" })).toHaveCount(0);
-  await expect(panel(page).getByRole("heading", { level: 2 })).toHaveText("Crate for 8 × machined steel bracket");
+  await expect(panel(page).getByRole("heading", { level: 2 })).toHaveText("Crate for 8 × Machined steel bracket");
 });
 
 test("200 brackets split into crates within the 1,000 kg limit, and switching crate type follows through", async ({ page }) => {
@@ -43,7 +43,7 @@ test("200 brackets split into crates within the 1,000 kg limit, and switching cr
   const summary = panel(page).getByRole("region", { name: "Shipment" });
   await expect(summary).toContainText(`Ships as ${a.count} × crate A (${a.quantity} each) + 1 × crate B (${b.quantity})`);
   await expect(summary).toContainText("200 parts");
-  await expect(panel(page).getByRole("heading", { level: 2 })).toContainText(`Crate A: ${a.quantity} × machined steel bracket`);
+  await expect(panel(page).getByRole("heading", { level: 2 })).toContainText(`Crate A: ${a.quantity} × Machined steel bracket`);
   // Every crate type passes the base rating and the per-crate limit.
   await shot(page, "13-split-overview-a");
 
@@ -53,7 +53,7 @@ test("200 brackets split into crates within the 1,000 kg limit, and switching cr
   const sb = await crate(page);
   expect(sb.crateParts).toBe(b.quantity);
   expect(sb.outside).not.toEqual(outsideA);
-  await expect(panel(page).getByRole("heading", { level: 2 })).toContainText(`Crate B: ${b.quantity} × machined steel bracket`);
+  await expect(panel(page).getByRole("heading", { level: 2 })).toContainText(`Crate B: ${b.quantity} × Machined steel bracket`);
   await shot(page, "13-split-overview-b");
 
   // The Checks follow the crate on screen and include the per-crate limit.

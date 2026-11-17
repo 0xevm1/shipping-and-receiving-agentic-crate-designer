@@ -121,12 +121,15 @@ tab at a time.
    cycles through the modes, easing back to the middle first if you had panned. If the browser takes
    the graphics away, a cover with a **Bring back the 3D view** button replaces the blank canvas.
 5. **Read off the build data:**
-   - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost
+   - **Overview:** outside size, a one-line verdict ("All checks clear", or "1 caution: parts
+     are not restrained" linking to Checks), gross weight, then the **scorecard** (#17): crate cost
      (material and labour), build time, the estimated LTL freight class with its density in
-     lb/ft³, and the dimensional weight; for a split batch, the whole shipment's cost. Then how
-     it's built, and crate weight by assembly. After the first export (cut list, design file,
-     3D model or the Export pill's .zip) a note says how long the design took: "Designed in 1 m 12 s"
-   - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside). Point at a row
+     lb/ft³, and the dimensional weight. For a split batch the Shipment block at the top carries
+     the whole shipment's cost and labour. Then how it's built, and crate weight by assembly. After
+     the first export since your last edit (cut list, design file, 3D model or the Export pill's
+     .zip) the scorecard heading says how long the design took: "Designed in 1 m 12 s"
+   - **Cut list:** grouped by assembly (base, side walls, end walls, lid, inside); on a phone each
+     row stacks so nothing scrolls sideways. Point at (or focus) a row
      to light those boards in 3D; click a board in 3D to find its row
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
      tip-over, blocking, stack load, base rating, centre of gravity, forklift and pallet-jack

@@ -2,14 +2,12 @@
 
 import type { CrateDesign } from "@/domain/crate";
 import { densityText, elapsedText, hoursText, usd } from "@/lib/format";
-import { weight } from "@/lib/units";
+import { weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import styles from "./Scorecard.module.css";
 
-const LB_PER_KG = 2.20462;
-
 /**
- * The design scorecard (#17): what the crate costs to build and how it looks to a freight
+ * The design scorecard: what the crate costs to build and how it looks to a freight
  * booker, under the outside size on the Overview. Numbers come from the domain
  * (`design.cost`, `design.labour`, `design.freight`); this only formats them.
  */
@@ -19,11 +17,17 @@ export function Scorecard({ design }: { design: CrateDesign }) {
   const plan = useDesigner((s) => (s.plan.split ? s.plan : null));
   const designedInMs = useDesigner((s) => s.designedInMs);
   const { cost, labour, freight } = design;
-  const lb = (v: number) => weight(v / LB_PER_KG, units);
+  const lb = (v: number) => weightFromLb(v, units);
 
   return (
     <section className={styles.card} aria-label="Scorecard">
-      <div className={styles.eyebrow}>Scorecard{plan ? " · each crate" : ""}</div>
+      <div className={styles.head}>
+        <div className={styles.eyebrow}>Scorecard{plan ? " · each crate" : ""}</div>
+        {/* Always mounted, so a screen reader announces the text when it appears and nothing moves. */}
+        <span className={styles.clock} role="status">
+          {designedInMs !== null && `Designed in ${elapsedText(designedInMs)}`}
+        </span>
+      </div>
       <dl className={styles.grid}>
         <div>
           <dt>Crate cost</dt>
@@ -34,10 +38,8 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         </div>
         <div>
           <dt>Build time</dt>
-          <dd className={styles.value}>{hoursText(labour.hours)}</dd>
-          <dd>
-            labour at {usd(rate)}/h
-          </dd>
+          <dd className={`${styles.value} tight`}>{hoursText(labour.hours)}</dd>
+          <dd>labour at {usd(rate)}/h</dd>
         </div>
         <div>
           <dt>Freight class</dt>
@@ -53,20 +55,9 @@ export function Scorecard({ design }: { design: CrateDesign }) {
         </div>
       </dl>
       <p className={styles.note}>
-        Material is {usd(cost.woodUsd)} of wood and {usd(cost.fastenersUsd)} of screws. The class is an estimate from the
-        NMFC density scale; rates come from the shop standards.
+        Material is {usd(cost.woodUsd)} of wood and {usd(cost.fastenersUsd)} of screws. The class is an estimate from the NMFC density scale; rates
+        come from the shop standards.
       </p>
-      {plan && (
-        <p className={styles.note}>
-          Whole shipment: <b>{usd(plan.totals.costUsd)}</b> to build {plan.totals.crates} crates,{" "}
-          <b>{hoursText(plan.totals.labourHours)}</b> of labour, {lb(plan.totals.dimWeightLb)} dim weight.
-        </p>
-      )}
-      {designedInMs !== null && (
-        <p className={`${styles.note} ${styles.clock}`} role="status">
-          Designed in {elapsedText(designedInMs)}
-        </p>
-      )}
     </section>
   );
 }

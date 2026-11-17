@@ -190,9 +190,16 @@ test.describe("view controls", () => {
 
     await expect(page.getByRole("button", { name: "Show panels" })).toBeVisible();
     await pollCrate(page, (s) => s.panelsHidden).toBe(true);
-    await expect(island(page)).toHaveCSS("opacity", "0");
-    await expect(page.getByRole("banner")).toHaveCSS("opacity", "0");
-    await expect(viewButton(page)).toHaveCSS("pointer-events", "none");
+    // Hidden for real, not just transparent: out of the tab order and the accessibility tree.
+    const hidden = [page.locator("#island"), page.locator("header.tl"), page.locator(".loadrow"), page.locator(".br .hideable").first()];
+    for (const el of hidden) await expect(el).toHaveCSS("visibility", "hidden");
+    await expect(viewButton(page)).toBeHidden();
+    // Tab from the Hide panels button never lands in a hidden control.
+    await page.getByRole("button", { name: "Show panels" }).focus();
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press("Tab");
+      expect(await page.evaluate(() => !!document.activeElement?.closest("#island, header.tl, .loadrow, .hideable"))).toBe(false);
+    }
     await expect(credit).toBeVisible();
     await expect(credit).toHaveCSS("opacity", "1");
     await expect(credit).toContainText("HADRIAN");
@@ -201,7 +208,8 @@ test.describe("view controls", () => {
     await shot(page, "06-view-panels-hidden");
 
     await page.getByRole("button", { name: "Show panels" }).click();
-    await expect(island(page)).toHaveCSS("opacity", "1");
+    await expect(page.locator("#island")).toHaveCSS("visibility", "visible");
+    await expect(island(page)).toBeVisible();
   });
 });
 

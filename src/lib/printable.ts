@@ -30,7 +30,8 @@ import { allChecks } from "@/state/checks";
 import { crateDrawings, type Drawing } from "./drawings";
 import { cutText, describeLayout, documentDate, stockText } from "./format";
 import { memberBounds } from "./memberBounds";
-import { area, cut, dims, dimsOther, LB_PER_KG, lengthUnit, run, volume, weight, type Units } from "./units";
+import { LB_PER_KG } from "@/domain/units";
+import { area, cut, dims, dimsOther, groupDigits, lengthUnit, run, volume, weight, type Units } from "./units";
 
 /** A labelled value, with an optional second line (the other units, or how it was worked out). */
 export interface Row {
@@ -188,7 +189,7 @@ function runnerUp(layouts: Layout[], shown: Layout, u: Units): string | null {
 function freightRows(design: CrateDesign, u: Units): Row[] {
   const f = design.freight;
   const imperial = u === "imperial";
-  const dimText = imperial ? `${f.dimWeightLb} lb` : `${Math.ceil(f.dimWeightLb / LB_PER_KG)} kg`;
+  const dimText = imperial ? `${groupDigits(f.dimWeightLb)} lb` : `${groupDigits(Math.ceil(f.dimWeightLb / LB_PER_KG))} kg`;
   const grossWins = f.grossLb >= f.dimWeightLb;
   return [
     { label: "Dimensional weight", value: dimText, note: `L × W × H in inches ÷ ${f.dimDivisorIn3PerLb}` },

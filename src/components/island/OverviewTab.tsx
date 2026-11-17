@@ -2,10 +2,12 @@
 
 import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
 import type { DesignField } from "@/domain/diff";
-import { ASSEMBLY_NAMES } from "@/domain/export";
-import { layoutName } from "@/lib/format";
-import { plywoodText, sectionText } from "@/lib/lumber";
+import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { countKind } from "@/domain/members";
+import { cautionVerdict, layoutName, usd } from "@/lib/format";
+import { plywoodLabel, sectionLabel } from "@/lib/lumber";
 import { dims, dimsOther, lengthUnit, partWeight, volume, weight } from "@/lib/units";
+import type { CheckItem } from "@/state/checks";
 import { useDesigner } from "@/state/store";
 import { Flash } from "../shell/ChangeFeedback";
 import { SavedDesigns } from "./SavedDesigns";
@@ -13,34 +15,33 @@ import { Scorecard } from "./Scorecard";
 import { ShipmentSummary, shipmentStyles } from "./Shipment";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
-export function OverviewTab({ design }: { design: CrateDesign }) {
+export function OverviewTab({ design, checks }: { design: CrateDesign; checks: readonly CheckItem[] }) {
   const part = useDesigner((s) => s.part);
   const units = useDesigner((s) => s.units);
   const crateType = useDesigner((s) => (s.plan.split ? s.plan.crates[s.crateIndex] : null));
   const auto = useDesigner((s) => s.settings.panelThickness === "auto");
   const setHover = useDesigner((s) => s.setHover);
+  const setTab = useDesigner((s) => s.setTab);
   const { layout, construction: c } = design;
-  // Parts in the crate on screen: the whole batch, or one crate type's share of a split (#25).
+  // Parts in the crate on screen: the whole batch, or one crate type's share of a split.
   const quantity = layout.slots.length;
-  const imperial = units === "imperial";
-  const count = (kind: string) => design.members.filter((m) => m.kind === kind).length;
-  const posts = count("blocking");
-  const bearers = count("bearer");
-  const separators = count("separator");
-  const cradles = count("cradle");
-  // Imperial uses shop names (#15): "1/2″" plywood, "1x4" cleats, "4x4" skids.
-  const ply = (v: number) => (imperial ? plywoodText(v) : `${v} mm`);
-  const section = (a: number, b: number) => (imperial ? sectionText(a, b) : `${a} × ${b}`);
+  const posts = countKind(design.members, "blocking");
+  const bearers = countKind(design.members, "bearer");
+  const separators = countKind(design.members, "separator");
+  const cradles = countKind(design.members, "cradle");
+  // Imperial uses shop names: "1/2″" plywood, "1x4" cleats, "4x4" skids.
+  const ply = (v: number) => plywoodLabel(v, units);
+  const section = (a: number, b: number) => sectionLabel(a, b, units);
   const maxAssembly = Math.max(...Object.values(design.tareKgByAssembly));
 
   return (
     <>
       <ShipmentSummary />
       <h2>
-        {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name.toLowerCase()}
+        {crateType ? `Crate ${crateType.label}: ${quantity}` : `Crate for ${quantity}`} × {part.name}
         {crateType && <small className={shipmentStyles.each}>{crateType.count > 1 ? `${crateType.count} of these` : "one of these"}</small>}
       </h2>
-      {/* Values an edit changed flash gold for 1.2 s (#39). */}
+      {/* Values an edit changed flash gold for 1.2 s. */}
       <div className="big">
         <Flash on={["outside"]}>{dims(layout.external, units)}</Flash>
         <small>{lengthUnit(units)}</small>
@@ -49,6 +50,7 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
       <div className="line">
         <span className="mono muted">{dimsOther(layout.external, units)}</span>
       </div>
+      <Verdict cautions={checks.filter((c) => c.level === "caution").map((c) => c.title)} onReview={() => setTab("checks")} />
       <div className="line">
         Ships at <span className="mono">{volume(layout.externalVolumeM3, units)}</span>, gross{" "}
         <Flash on={["gross"]} className="mono">
@@ -80,7 +82,8 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
               joists and a{" "}
             </>
           )}
-          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
+          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of
+          parts
         </Step>
         {cradles > 0 ? (
           <Step name="Cradles" value={`${cradles} cradles`}>
@@ -93,8 +96,8 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           </Step>
         )}
         <Step name="Gross weight" value={weight(design.grossKg, units)} flash={["gross"]} end>
-          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about $
-          {Math.round(design.materialCostUsd)} of wood
+          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about {usd(design.materialCostUsd)} of
+          wood
         </Step>
       </ul>
 
@@ -105,7 +108,17 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           const on = () => setHover({ assembly: a, source: "list" });
           const off = () => setHover(null);
           return (
-            <div key={a} className="barrow" tabIndex={0} onMouseEnter={on} onMouseLeave={off} onFocus={on} onBlur={off}>
+            <div
+              key={a}
+              className="barrow"
+              role="group"
+              aria-label={`${ASSEMBLY_NAMES[a]}, ${weight(kg, units)}`}
+              tabIndex={0}
+              onMouseEnter={on}
+              onMouseLeave={off}
+              onFocus={on}
+              onBlur={off}
+            >
               <span>{ASSEMBLY_NAMES[a]}</span>
               <span className="v">{weight(kg, units)}</span>
               <span className="track">
@@ -116,9 +129,31 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
         })}
       </div>
 
-      {/* The design library (#14): save, list and reuse this part's designs; share links. */}
+      {/* The design library: save, list and reuse this part's designs; share links. */}
       <SavedDesigns />
     </>
+  );
+}
+
+/** The checks at a glance, so a caution isn't only a small badge on another tab. */
+function Verdict({ cautions, onReview }: { cautions: readonly string[]; onReview: () => void }) {
+  if (!cautions.length) {
+    return (
+      <p className="verdict clear">
+        <i aria-hidden="true" />
+        All checks clear
+      </p>
+    );
+  }
+  const text = cautionVerdict(cautions);
+  return (
+    <button type="button" className="verdict caution" title={`${text}. Open Checks.`} onClick={onReview}>
+      <i aria-hidden="true" />
+      <span>{text}</span>
+      <span className="go" aria-hidden="true">
+        Checks →
+      </span>
+    </button>
   );
 }
 

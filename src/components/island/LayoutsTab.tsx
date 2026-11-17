@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
 import { explainLayout, scoreLayouts, type LayoutExplanation, type LayoutScore, type Ranking } from "@/domain/design";
 import type { Layout } from "@/domain/packing";
@@ -11,7 +11,7 @@ import { CrateTypePicker } from "./Shipment";
 
 const FIRST_SHOWN = 4;
 
-/** The ranking options (#17), in the order of the toggle. */
+/** The ranking options, in the order of the toggle. */
 const RANKING_LABELS: { id: Ranking; label: string }[] = [
   { id: "volume", label: "Volume" },
   { id: "cost", label: "Crate cost" },
@@ -28,25 +28,32 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
   const setRanking = useDesigner((s) => s.setRanking);
   const part = useDesigner((s) => s.part);
   const settings = useDesigner((s) => s.settings);
-  // Parts in the crate type on screen: its layouts are for this many (#25).
+  // Parts in the crate type on screen: its layouts are for this many.
   const quantity = useDesigner((s) => s.plan.crates[s.crateIndex]?.quantity ?? s.settings.quantity);
   const [showAll, setShowAll] = useState(false);
   const current = design.layout;
   const best = layouts[0];
 
-  const shown = showAll ? layouts.slice() : layouts.slice(0, FIRST_SHOWN);
-  if (!shown.some((l) => l.key === current.key)) shown.push(current);
+  const shown = useMemo(() => {
+    const cards = showAll ? layouts.slice() : layouts.slice(0, FIRST_SHOWN);
+    if (!cards.some((l) => l.key === current.key)) cards.push(current);
+    return cards;
+  }, [layouts, showAll, current]);
   const maxVolume = Math.max(...shown.map((l) => l.externalVolumeM3));
-  // Each card's cost and freight against the recommendation (#17). Only the cards on screen are
-  // designed (about 1 ms for five); the React Compiler memoizes it between renders.
-  const scores = scoreLayouts(part, { ...settings, quantity }, [best, ...shown], standards);
+  // Each card's cost and freight against the recommendation. Only the cards on screen are
+  // designed (about 1 ms for five). The React Compiler is not enabled, so memoize by hand: the
+  // hover and flash re-renders would otherwise design every card again.
+  const scores = useMemo(
+    () => scoreLayouts(part, { ...settings, quantity }, [best, ...shown], standards),
+    [part, settings, quantity, best, shown, standards],
+  );
 
   return (
     <>
       <h2>Ways to pack it</h2>
       <p className="lede">
-        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the
-        crate from above, then from the side.
+        <Why explanation={explainLayout(layouts, current, standards, ranking)} onUseBest={() => setLayoutKey(null)} /> Each drawing shows the crate
+        from above, then from the side.
       </p>
       <div className="seg rank" role="group" aria-label="Rank layouts by">
         {RANKING_LABELS.map((r) => (
@@ -56,34 +63,42 @@ export function LayoutsTab({ design }: { design: CrateDesign }) {
         ))}
       </div>
       <CrateTypePicker />
-      {shown.map((l) => (
-        <button
-          key={l.key}
-          type="button"
-          className="opt"
-          aria-pressed={l.key === current.key}
-          onClick={() => setLayoutKey(l.key === best.key ? null : l.key)}
-        >
-          <Thumb layout={l} design={design} />
-          <span>
-            <span className="opt-title">
-              {describeLayout(l)}
-              {l.key === best.key && <span className="badge">recommended</span>}
-              {!l.stable && <span className="badge tall">may tip</span>}
+      <div role="group" aria-label="Layouts">
+        {shown.map((l) => (
+          <button
+            key={l.key}
+            type="button"
+            className="opt"
+            aria-pressed={l.key === current.key}
+            onClick={() => setLayoutKey(l.key === best.key ? null : l.key)}
+          >
+            <Thumb layout={l} design={design} />
+            <span>
+              <span className="opt-title">
+                {describeLayout(l)}
+                {l.key === best.key && <span className="badge">recommended</span>}
+                {!l.stable && <span className="badge tall">may tip</span>}
+              </span>
+              <span className="opt-dims">
+                {dims(l.external, units)}
+                {"\u00a0"}
+                {lengthUnit(units)}
+              </span>
+              <span className="opt-meta">
+                {l.orientation.label}, {volume(l.externalVolumeM3, units)}
+              </span>
+              <Delta score={scores.get(l.key)} best={scores.get(best.key)} isBest={l.key === best.key} units={units} />
+              <span className="volbar">
+                <i
+                  style={{
+                    width: `${((l.externalVolumeM3 / maxVolume) * 100).toFixed(0)}%`,
+                  }}
+                />
+              </span>
             </span>
-            <span className="opt-dims">
-              {dims(l.external, units)} {lengthUnit(units)}
-            </span>
-            <span className="opt-meta">
-              {l.orientation.label}, {volume(l.externalVolumeM3, units)}
-            </span>
-            <Delta score={scores.get(l.key)} best={scores.get(best.key)} isBest={l.key === best.key} units={units} />
-            <span className="volbar">
-              <i style={{ width: `${((l.externalVolumeM3 / maxVolume) * 100).toFixed(0)}%` }} />
-            </span>
-          </span>
-        </button>
-      ))}
+          </button>
+        ))}
+      </div>
       {layouts.length > FIRST_SHOWN && (
         <button type="button" className="more" onClick={() => setShowAll(!showAll)}>
           {showAll ? "Show fewer" : `Show all ${layouts.length} layouts`}
@@ -99,7 +114,11 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   if (isBest) {
     return (
       <span className="opt-delta">
-        {usd(score.costUsd)} to build · class {score.freightClass} · {densityText(score.densityLbFt3, units)}
+        <span className="nw">{usd(score.costUsd)} to build</span>
+        {" · "}
+        <span className="nw">class {score.freightClass}</span>
+        {" · "}
+        <span className="nw">{densityText(score.densityLbFt3, units)}</span>
       </span>
     );
   }
@@ -108,12 +127,17 @@ function Delta({ score, best, isBest, units }: { score?: LayoutScore; best?: Lay
   const sameClass = score.freightClass === best.freightClass;
   return (
     <span className="opt-delta" title="Against the recommended layout">
-      <span className={cost > 0 ? "worse" : cost < 0 ? "better" : undefined}>{usdDelta(cost)}</span>
+      <span className={`nw ${cost > 0 ? "worse" : cost < 0 ? "better" : ""}`}>{usdDelta(cost)}</span>
       {" · "}
-      <span className={sameClass ? undefined : score.freightClass > best.freightClass ? "worse" : "better"}>
+      <span className={`nw ${sameClass ? "" : score.freightClass > best.freightClass ? "worse" : "better"}`}>
         {sameClass ? `same class ${score.freightClass}` : `class ${best.freightClass} → ${score.freightClass}`}
       </span>
-      {density && ` · ${density}`}
+      {density && (
+        <>
+          {" · "}
+          <span className="nw">{density}</span>
+        </>
+      )}
     </span>
   );
 }
@@ -133,8 +157,8 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
         <>Ranked by crate cost: the recommended layout is the cheapest stable, fully blocked crate to build.</>
       ) : (
         <>
-          Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable,
-          fully blocked crates without an LTL length charge.
+          Ranked by freight: the recommended layout has the lowest estimated freight class, then the lightest gross, of the stable, fully blocked
+          crates without an LTL length charge.
         </>
       );
     case "picked":
@@ -149,7 +173,11 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
   }
 }
 
-/** Top view above side view, to scale, parts in slate on plywood. */
+/**
+ * Top view above side view, to scale, parts in slate on plywood. A second small drawing next to
+ * `lib/drawings` (the print and PDF elevations), with its own palette; the two draw different things
+ * (slots of one layout, not a whole design), so they are not unified yet.
+ */
 function Thumb({ layout: l, design }: { layout: Layout; design: CrateDesign }) {
   const c = design.construction;
   const wall = c.panelMm + c.cleat.thick;

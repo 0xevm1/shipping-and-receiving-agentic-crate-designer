@@ -1,15 +1,16 @@
 "use client";
 
 import { describeShipment } from "@/domain/shipment";
+import { hoursText, usd } from "@/lib/format";
 import { renderMessage } from "@/lib/message";
-import { volume, weight } from "@/lib/units";
+import { volume, weight, weightFromLb } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import styles from "./Shipment.module.css";
 
 export { styles as shipmentStyles };
 
 /**
- * Which crate type of a split batch is on screen (#25). The 3D view, Layouts, Cut list and
+ * Which crate type of a split batch is on screen. The 3D view, Layouts, Cut list and
  * Checks all follow it. Renders nothing for a single crate.
  */
 export function CrateTypePicker() {
@@ -46,6 +47,10 @@ export function ShipmentSummary() {
       <div className="line">
         {totals.parts} parts at <span className="mono">{volume(totals.volumeM3, units)}</span>, gross{" "}
         <span className="mono">{weight(totals.grossKg, units)}</span> in all
+      </div>
+      <div className="line">
+        <span className="mono">{usd(totals.costUsd)}</span> to build, <span className="mono tight">{hoursText(totals.labourHours)}</span> of labour,{" "}
+        <span className="mono">{weightFromLb(totals.dimWeightLb, units)}</span> dim weight
       </div>
       {plan.unmet ? (
         <p className={`${styles.note} ${styles.warn}`}>{renderMessage(plan.unmet, units)}</p>

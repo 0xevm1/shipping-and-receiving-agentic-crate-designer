@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { densityDelta, densityText, documentDate, elapsedText, hoursText, usd, usdDelta } from "./format";
+import { cautionNote, cautionVerdict, densityDelta, densityText, documentDate, elapsedText, hoursText, modelNote, savedDateText, usd, usdDelta } from "./format";
+
+describe("cautionVerdict", () => {
+  it("is empty without cautions", () => {
+    expect(cautionVerdict([])).toBe("");
+  });
+
+  it("names one caution by its title", () => {
+    expect(cautionVerdict(["Parts are not restrained"])).toBe("1 caution: parts are not restrained");
+  });
+
+  it("names two, and summarises more", () => {
+    expect(cautionVerdict(["Parts are not restrained", "Part mass is a stand-in"])).toBe(
+      "2 cautions: parts are not restrained and part mass is a stand-in",
+    );
+    expect(cautionVerdict(["Parts are not restrained", "Part mass is a stand-in", "3D model does not match"])).toBe(
+      "3 cautions: parts are not restrained and 2 more",
+    );
+  });
+
+  it("keeps the case of an acronym or a number", () => {
+    expect(cautionVerdict(["3D model does not match the catalog"])).toBe("1 caution: 3D model does not match the catalog");
+    expect(cautionVerdict(["LTL surcharge applies"])).toBe("1 caution: LTL surcharge applies");
+  });
+});
 
 describe("scorecard formatting (#17)", () => {
   it("dollars", () => {
@@ -46,5 +70,29 @@ describe("documentDate", () => {
 
   it("falls back to the text's own date for a timestamp it cannot read", () => {
     expect(documentDate("2026-11-16 garbage")).toBe("2026-11-16");
+  });
+});
+
+describe("savedDateText", () => {
+  it("shows a saved-on date for people, and anything unreadable as it came", () => {
+    expect(savedDateText("2026-11-16T12:00:00.000Z")).toMatch(/2026/);
+    expect(savedDateText("last Tuesday")).toBe("last Tuesday");
+  });
+});
+
+describe("modelNote", () => {
+  it("says what the measurement was compared with", () => {
+    expect(modelNote(true, false)).toBe("model matches catalog");
+    expect(modelNote(false, true)).toBe("model does not match catalog");
+    expect(modelNote(null, true)).toBe("file read as millimetres");
+    expect(modelNote(null, undefined)).toBe("size measured from the file");
+  });
+});
+
+describe("cautionNote", () => {
+  it("counts cautions and points at Checks", () => {
+    expect(cautionNote(0)).toBe("");
+    expect(cautionNote(1)).toBe("1 caution, see Checks");
+    expect(cautionNote(3)).toBe("3 cautions, see Checks");
   });
 });

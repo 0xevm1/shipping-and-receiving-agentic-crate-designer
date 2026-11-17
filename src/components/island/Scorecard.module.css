@@ -1,5 +1,5 @@
 /*
- * The design scorecard (#17) on the Overview: crate cost, build time, freight class and
+ * The design scorecard on the Overview: crate cost, build time, freight class and
  * dimensional weight as four tiles, then short notes. A CSS module, using the tokens in
  * globals.css.
  */
@@ -12,13 +12,21 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 1.2em;
+  margin-bottom: 10px;
+}
+
 .eyebrow {
   font: 500 11px/1.2 var(--wide);
   font-stretch: 125%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--gold);
-  margin-bottom: 10px;
 }
 
 .grid {
@@ -56,7 +64,9 @@
   color: var(--soft);
 }
 
+/* The export clock shares the eyebrow's row, so showing or clearing it moves nothing. */
 .clock {
-  color: var(--sky);
-  font-family: var(--mono);
+  font: 400 11.5px/1.2 var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
 }

@@ -47,7 +47,7 @@ test("a heavy batch gets 4x6 skids and floor joists, in the cut list, checks, 3D
   await expect(row(page, "Skid").locator("td").last()).toHaveText("3");
   // Pin the joists, so the 3D view lights them up.
   await row(page, "Floor joist").click();
-  await expect(row(page, "Floor joist")).toHaveAttribute("aria-pressed", "true");
+  await expect(row(page, "Floor joist").getByRole("button")).toHaveAttribute("aria-pressed", "true");
   await shot(page, "24-structure-cutlist");
 
   await openTab(page, "Checks");

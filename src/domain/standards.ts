@@ -390,14 +390,19 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-type StandardsResult = { ok: true; standards: ShopStandards } | { ok: false; error: string };
+/**
+ * A failure carries `error` ("stock.cleatMm.wide: Too small") for a file-level message, and the
+ * same problem split into the `path` and the plain-words `message` for a message by one field.
+ */
+export type StandardsResult = { ok: true; standards: ShopStandards } | { ok: false; error: string; path?: string; message?: string };
 
 /** Validates standards, returning the first problem in plain words. */
 export function parseStandards(input: unknown): StandardsResult {
   const r = ShopStandardsSchema.safeParse(input);
   if (r.success) return { ok: true, standards: r.data };
   const issue = r.error.issues[0];
-  return { ok: false, error: `${issue.path.join(".") || "Standards"}: ${issue.message}` };
+  const path = issue.path.join(".");
+  return { ok: false, error: `${path || "Standards"}: ${issue.message}`, path, message: issue.message };
 }
 
 /** File and storage format version. Bump it when a field changes meaning. */

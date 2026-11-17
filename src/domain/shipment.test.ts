@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { catalog, getPart } from "./catalog";
 import { computeDesign } from "./design";
-import { shipmentToCsv } from "./export";
+import { shipmentToCsv } from "@/lib/csv";
 import { describeShipment, planShipment, shipmentBom, withinOutsideLimits, type ShipmentPlan } from "./shipment";
 import type { DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";

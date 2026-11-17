@@ -47,7 +47,7 @@ test("the header note stays on one line at quantity 200", async ({ page }) => {
   await header(page).getByLabel(/Mass of one part in/).fill("230.5");
   await header(page).getByLabel(/Mass of one part in/).press("Enter");
 
-  const span = header(page).getByRole("status").locator("> span");
+  const span = header(page).locator(".changenote").locator("> span");
   await expect(span).toContainText("Crate");
   const [box, line] = await Promise.all([span.boundingBox(), span.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))]);
   expect(box!.height, "one line").toBeLessThanOrEqual(line + 2);

@@ -76,6 +76,9 @@ interface Insets {
 }
 
 /** Which input an edit came from, so the change note can sit by it. */
+/** How the load row shows its message: a note goes by itself, an error waits to be dismissed. */
+export type LoadMessageKind = "note" | "error";
+
 export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
 
 /** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
@@ -119,6 +122,8 @@ export interface DesignerState {
   panelsHidden: boolean;
   insets: Insets;
   loadMessage: string;
+  /** An error stays until dismissed or the next load; a note goes by itself. */
+  loadMessageKind: LoadMessageKind;
   /** Bumped whenever the camera should re-frame the crate. */
   fit: { nonce: number; instant: boolean };
   /** The last edit's effect on the design. Units changes and loading a part don't set it. */
@@ -187,14 +192,17 @@ export interface DesignerState {
   setLabels: (l: SizeLabel[]) => void;
   togglePanels: () => void;
   setInsets: (i: Insets) => void;
-  setLoadMessage: (m: string) => void;
+  setLoadMessage: (m: string, kind?: LoadMessageKind) => void;
   requestFit: (instant?: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
   /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
   setRanking: (ranking: Ranking) => void;
   /** Starts the time-to-design clock if it isn't running (called once after mount). */
   startDesignClock: (now?: number) => void;
-  /** Records the first export or download since the part was loaded. Later exports don't move it. */
+  /**
+   * Records the time from the clock start to the first export or download of the design on screen.
+   * Later exports don't move it; an edit clears it, and the next export records the new time.
+   */
   markExported: (now?: number) => void;
 }
 
@@ -280,6 +288,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
   const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
     const next = { ...get(), ...patch };
     const { plan, crateIndex, result } = replan(next);
+    // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
+    const staleClock = get().designedInMs !== null && !("designedInMs" in patch);
     const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
     set({
       ...patch,
@@ -287,6 +297,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       crateIndex,
       result,
       ...(source ? change(source, get().result, result) : { lastChange: null }),
+      ...(staleClock ? { designedInMs: null } : {}),
       hover: null,
       ...dropStaleLines({ pin: next.pin, hover: null }, result),
       ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
@@ -323,6 +334,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     panelsHidden: false,
     insets: { left: 0, top: 0, right: 0, bottom: 0 },
     loadMessage: "",
+    loadMessageKind: "note",
     fit: { nonce: 0, instant: true },
     lastChange: null,
     drawerOpen: false,
@@ -452,7 +464,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         set({ insets, fit: { nonce: get().fit.nonce + 1, instant: true } });
       }
     },
-    setLoadMessage: (loadMessage) => set({ loadMessage }),
+    setLoadMessage: (loadMessage, loadMessageKind = "note") => set({ loadMessage, loadMessageKind }),
     requestFit: (instant = false) => set({ fit: { nonce: get().fit.nonce + 1, instant } }),
     setDrawerOpen: (drawerOpen) => {
       if (get().drawerOpen !== drawerOpen) set({ drawerOpen });

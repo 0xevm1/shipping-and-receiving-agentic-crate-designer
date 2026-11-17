@@ -3,10 +3,10 @@
  * helpers convert at the last moment for the metric / imperial toggle.
  */
 
+import { LB_PER_KG, MM_PER_IN } from "@/domain/units";
+
 export type Units = "metric" | "imperial";
 
-const MM_PER_IN = 25.4;
-export const LB_PER_KG = 2.20462;
 const FT3_PER_M3 = 35.3147;
 const FT2_PER_M2 = 10.7639;
 const FT_PER_M = 3.28084;
@@ -51,21 +51,27 @@ export function cut(mm: number, u: Units): string {
 
 /**
  * The one rule for a mass shown to people: in the displayed unit, one decimal under 100
- * ("47.4 lb"; a trailing .0 is dropped) and whole numbers from 100 up ("297 lb"). `group` adds
- * thousands separators ("1,240 kg"), as check messages always had. CSV and JSON keep their own
- * precision.
+ * ("47.4 lb"; a trailing .0 is dropped) and whole numbers from 100 up ("297 lb"), with thousands
+ * separators ("13,518 lb"), as money and check messages have. Pass `group = false` for text that
+ * a program reads back. CSV and JSON keep their own precision.
  */
-export function weight(kg: number, u: Units, group = false): string {
+export function weight(kg: number, u: Units, group = true): string {
   const v = u === "imperial" ? kg * LB_PER_KG : kg;
   const tenth = Math.round(v * 10) / 10;
-  const n = Math.abs(tenth) < 100 ? String(tenth) : group ? Math.round(v).toLocaleString("en-US") : String(Math.round(v));
+  const n = Math.abs(tenth) < 100 ? String(tenth) : group ? groupDigits(Math.round(v)) : String(Math.round(v));
   return `${n} ${u === "imperial" ? "lb" : "kg"}`;
 }
 
+/** A mass given in pounds (freight weights are in lb), shown by the same rule as every other mass. */
+export const weightFromLb = (lb: number, u: Units): string => weight(lb / LB_PER_KG, u);
+
 /** Whole units only ("16 kg"): for change notes, where the point is the size of the move. */
 export function weightWhole(kg: number, u: Units): string {
-  return u === "imperial" ? `${Math.round(kg * LB_PER_KG)} lb` : `${Math.round(kg)} kg`;
+  return u === "imperial" ? `${groupDigits(Math.round(kg * LB_PER_KG))} lb` : `${groupDigits(Math.round(kg))} kg`;
 }
+
+/** A number with thousands separators ("30,000"), for a quantity shown beside its unit. */
+export const groupDigits = (n: number): string => n.toLocaleString("en-US");
 
 /** A single part's mass: the same rule as every other mass. */
 export const partWeight = weight;

@@ -37,14 +37,14 @@ export const metadata: Metadata = {
   title: "Crate Designer",
   description: "Design wooden shipping crates for batches of identical parts",
   /*
-   * Static manifest in `public/` (#58). The tab and home-screen icons come from the file
+   * Static manifest in `public/`. The tab and home-screen icons come from the file
    * conventions in this folder (`favicon.ico`, `icon.svg`, `icon1.png`, `apple-icon.png`),
    * so there are no hand-written `<link rel="icon">` tags.
    */
   manifest: "/site.webmanifest",
 };
 
-/** `viewport-fit=cover` lets the scene run under a phone's notch; the overlays keep clear with `env(safe-area-inset-*)` (#42). */
+/** `viewport-fit=cover` lets the scene run under a phone's notch; the overlays keep clear with `env(safe-area-inset-*)`. */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
