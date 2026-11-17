@@ -26,11 +26,15 @@ invariants) is in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 
 ## Quick start
 
+Requirements: [Bun](https://bun.sh) 1.3+, Node 24 and **Docker** (Docker Desktop, or Engine
+with the compose plugin), running.
+
 ```bash
 git clone git@github.com:0xevm1/shipping-ui.git
 cd shipping-ui
 bun install
 bun run dev          # Docker must be running → http://localhost:3000
+bun run worker       # optional, in a second terminal: background sweeps and large bundles
 ```
 
 `bun run dev` starts Postgres and an S3-compatible blob emulator in Docker
@@ -76,6 +80,46 @@ Next.js on the host. [`docs/POSTGRES.md`](docs/POSTGRES.md) covers the data stor
   pre-commit hook don't need it. No environment variables are needed: the defaults match
   `docker-compose.yml`, and `.env.example` lists what `.env.local` can override. The sample GLBs
   are bundled in `public/parts/`.
+
+### Environment
+
+No variables are needed for local work: the defaults match `docker-compose.yml`. Copy
+`.env.example` to `.env.local` to change any of them (full list:
+[docs/POSTGRES.md](docs/POSTGRES.md#environment), [docs/QUEUE.md](docs/QUEUE.md)).
+
+| Variable | Default | |
+|---|---|---|
+| `DATABASE_URL` | built from `DB_PORT`, `DB_NAME` | Postgres; set it for a hosted database |
+| `DB_PORT`, `DB_NAME` | `5432`, `crate_designer` | The Docker Postgres's host port and database |
+| `BLOB_ENDPOINT`, `BLOB_REGION`, `BLOB_BUCKET` | `http://localhost:9000`, `us-east-1`, `crate-designer-dev` | Blob storage (S3 API) |
+| `BLOB_ACCESS_KEY_ID`, `BLOB_SECRET_ACCESS_KEY` | the emulator's | Server-only; never `NEXT_PUBLIC_` |
+| `BLOB_FORCE_PATH_STYLE`, `BLOB_PUBLIC_ENDPOINT` | `true`, `BLOB_ENDPOINT` | Path-style URLs; the host written into presigned URLs |
+| `ENGINE_POOL_SIZE`, `QUEUE_CONCURRENCY` | CPUs − 1 (1–4), `2` | Engine worker threads; queue jobs at once per worker |
+| `CRATE_API_URL`, `CRATE_API_KEY` | `http://localhost:3000`, none | The command line's server and key |
+
+**Real S3 or GCS.** Pointing the `BLOB_*` variables at a real bucket works without code changes:
+the app speaks only the S3 API. For AWS S3 leave `BLOB_ENDPOINT` empty and set
+`BLOB_FORCE_PATH_STYLE=false`; for Cloudflare R2 use the account endpoint and region `auto`; for
+Google Cloud Storage use `BLOB_ENDPOINT=https://storage.googleapis.com` with HMAC keys. In each case
+set `BLOB_REGION`, `BLOB_BUCKET` and the key pair, and give the bucket a CORS rule allowing `GET`
+from the app's origin (`infra/blob-cors.json`). Details:
+[docs/BLOB_STORAGE.md](docs/BLOB_STORAGE.md#one-api-s3).
+
+**Several worktrees at once.** Each needs its own Docker project and ports (and a Playwright port,
+`E2E_PORT`). Put them in the worktree's `.env.local`:
+
+```bash
+COMPOSE_PROJECT_NAME=crate-wt2
+DB_PORT=55432
+BLOB_PORT=59000
+BLOB_CONSOLE_PORT=59001
+BLOB_ENDPOINT=http://localhost:59000
+E2E_PORT=3321
+```
+
+`bun run e2e` uses its own database, `crate_designer_e2e` (`E2E_DB_NAME`), and the
+`crate-designer-test` bucket, so it never touches the dev data; without Docker the specs that need
+the server skip.
 
 ## Command line
 

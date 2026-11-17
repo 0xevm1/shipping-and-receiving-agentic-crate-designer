@@ -304,7 +304,7 @@ out). It runs the same engine, so the browser and the server can't disagree.
 | Org scoping | `src/server/auth.ts`, `src/server/db/org.ts`, `repository.ts` | No query runs without an `OrgContext`; another org's row answers like a missing one (`404`). One default org until there are accounts; row-level security, per-org channels, fair scheduling and quotas are deferred to a second org (#60) |
 | Trust | `src/server/jobs/verify.ts` | A configuration from a browser is recomputed with the running engine and stored only if `engineVersion`, `inputHash` and summary match: another engine is `409` (the tab reloads), anything else `422` (§5.1) |
 | Events | `src/server/events/` | A write and its `event` row commit in one transaction; a trigger NOTIFYs `crate_events` with ids only; one dedicated LISTEN connection per process (reconnecting with backoff) fans out to SSE streams, which replay from the `event` table after `Last-Event-ID` (§9, [POSTGRES.md](POSTGRES.md#events)) |
-| Engine work | `src/server/workers/` | Never on the thread that serves requests and SSE: a `worker_threads` pool (`bun run engine:build` bundles its entry). A test holds the event-loop lag under 50 ms during full sweeps |
+| Engine work | `src/server/workers/` | Sweeps, files and bundles never run on the thread that serves requests and SSE: a `worker_threads` pool (`bun run engine:build` bundles its entry). A test holds the event-loop lag under 50 ms during full sweeps. The ~2 ms recompute of a save still runs on the request thread for now |
 | Queue | `src/server/queue/`, `bun run worker` | Background sweeps (queued with every new job) and large bundles: `queue_job`, `FOR UPDATE SKIP LOCKED`, woken by `NOTIFY crate_jobs` with polling, leases, retries, dead letter ([QUEUE.md](QUEUE.md)). Without a running worker, jobs wait; nothing in the UI needs one |
 | Files | `src/server/blob/`, `src/server/artifacts/` | GLBs and generated files only in S3-compatible storage, never Postgres or local disk; object first, then the row; content-addressed, org-scoped keys; ~5 min presigned GETs; credentials stay on the server ([BLOB_STORAGE.md](BLOB_STORAGE.md)) |
 | Offline | `src/state/pendingChanges.ts`, `pendingSync.ts`, `jobCache.ts`, `src/lib/liveness.ts` | Saves are local first and replay with an `Idempotency-Key` once the server is reachable (§9, [API.md](API.md#offline-46-slice-7a)) |
@@ -751,7 +751,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
-  "engine": { "version": "0.1.0+engine.2", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
+  "engine": { "version": "0.1.0+engine.3", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -1874,7 +1874,7 @@ boards only).
 |---|---|---|---|
 | `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
 | `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
-| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.2, input …` before the column names |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.3, input …` before the column names |
 
 A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
 

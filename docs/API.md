@@ -133,7 +133,7 @@ Saves a configuration designed in the browser (`SaveConfigurationRequestSchema`)
 ```json
 {
   "request": { "part": { … }, "settings": { … }, "standards": { … }, "layoutKey": null, "ranking": "volume" },
-  "engineVersion": "0.1.0+engine.1",
+  "engineVersion": "0.1.0+engine.3",
   "inputHash": "9f2c…",
   "summary": { "quantity": 4, "split": false, "crates": [ … ], "totals": { … }, "problem": null }
 }
