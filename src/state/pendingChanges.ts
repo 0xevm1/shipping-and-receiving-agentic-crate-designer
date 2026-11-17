@@ -76,7 +76,7 @@ const PendingPatchSchema = BaseSchema.extend({
   serverJob: JobSchema.optional(),
 });
 
-export const PendingChangeSchema = z.discriminatedUnion("kind", [PendingConfigSchema, PendingPatchSchema]);
+const PendingChangeSchema = z.discriminatedUnion("kind", [PendingConfigSchema, PendingPatchSchema]);
 export type PendingChange = z.infer<typeof PendingChangeSchema>;
 export type PendingConfig = z.infer<typeof PendingConfigSchema>;
 export type PendingPatch = z.infer<typeof PendingPatchSchema>;
@@ -89,7 +89,7 @@ export interface PendingStore {
 }
 
 /** The list as stored: an envelope, so a future format can be told apart. Bad entries are skipped. */
-export function parsePending(text: string): { ok: true; value: PendingChange[] } | { ok: false; error: string } {
+function parsePending(text: string): { ok: true; value: PendingChange[] } | { ok: false; error: string } {
   let json: unknown;
   try {
     json = JSON.parse(text);

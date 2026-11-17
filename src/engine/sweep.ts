@@ -64,7 +64,7 @@ export function sweepInputHash(req: SweepRequest): string {
   );
 }
 
-export const sweepStamp = (req: SweepRequest): EngineStamp => ({ engineVersion: ENGINE_VERSION, inputHash: sweepInputHash(req) });
+const sweepStamp = (req: SweepRequest): EngineStamp => ({ engineVersion: ENGINE_VERSION, inputHash: sweepInputHash(req) });
 
 /** The sweep (and, with `total`, the even split). Pure; never throws for valid input. */
 export function runSweep(req: SweepRequest): SweepResponse {

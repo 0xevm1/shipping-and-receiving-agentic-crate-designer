@@ -7,6 +7,10 @@
  *   (`public/parts/<model>`) as a `part_model` of the org, content-addressed like an upload (object
  *   first, then the row), and every later build reads it from the store like any other model.
  * - Neither: no model, and the GLB has the boards only.
+ *
+ * `partModelSha256` names the model without reading it, for the keys of files that embed it
+ * (`artifactKey(…, "crate.glb", modelSha256)`, the bundle id): the engine's `inputHash` hashes the
+ * part's design fields only, so two parts with equal fields but different meshes share it.
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -23,11 +27,34 @@ const GLB_CONTENT_TYPE = "model/gltf-binary";
 
 const toArrayBuffer = (b: Uint8Array): ArrayBuffer => b.slice().buffer as ArrayBuffer;
 
-async function catalogModel(repo: Repository, blob: BlobStore, org: OrgContext, catalogId: string): Promise<PartModelBytes | null> {
+async function catalogFile(catalogId: string): Promise<{ file: Uint8Array; sha256: string; name: string } | null> {
   const entry = catalog.parts.find((p) => p.id === catalogId);
   if (!entry) return null;
   const file = new Uint8Array(await readFile(join(/* turbopackIgnore: true */ process.cwd(), "public", "parts", entry.model)));
-  const sha256 = createHash("sha256").update(file).digest("hex");
+  return { file, sha256: createHash("sha256").update(file).digest("hex"), name: entry.model };
+}
+
+/** The bundled sample GLBs don't change while the process runs: hash each once. */
+const catalogShas = new Map<string, Promise<string | null>>();
+
+/** The sha256 of the model a part's files embed, or null when it has none (no bytes are fetched from blob storage). */
+export function partModelSha256(part: Part): Promise<string | null> {
+  if (part.modelSha256) return Promise.resolve(part.modelSha256);
+  if (!part.catalogId) return Promise.resolve(null);
+  const id = part.catalogId;
+  let sha = catalogShas.get(id);
+  if (!sha) {
+    sha = catalogFile(id).then((f) => f?.sha256 ?? null);
+    sha.catch(() => catalogShas.delete(id));
+    catalogShas.set(id, sha);
+  }
+  return sha;
+}
+
+async function catalogModel(repo: Repository, blob: BlobStore, org: OrgContext, catalogId: string): Promise<PartModelBytes | null> {
+  const found = await catalogFile(catalogId);
+  if (!found) return null;
+  const { file, sha256 } = found;
   const key = modelKey(org, sha256);
   if (!(await repo.partModels.get(org, sha256)) || !(await blob.head(key))) {
     await blob.put(key, file, { contentType: GLB_CONTENT_TYPE });
@@ -35,7 +62,7 @@ async function catalogModel(repo: Repository, blob: BlobStore, org: OrgContext, 
       sha256,
       sizeBytes: file.byteLength,
       objectKey: key,
-      validation: { format: "glb", source: "catalog", catalogId, file: entry.model, readAsMm: false },
+      validation: { format: "glb", source: "catalog", catalogId, file: found.name, readAsMm: false },
     });
   }
   const stored = await blob.get(key);

@@ -8,7 +8,9 @@
  * - **What is built:** the configuration's stored `DesignRequest` (the one the server verified when
  *   it was saved), by the running engine, with the job's part model read from blob storage
  *   (`model.ts`). Files go through `storeOnce` (`store.ts`): built on the first request, then
- *   served from blob storage under a content-addressed key (`artifactKey`, `bundleKey`).
+ *   served from blob storage under a content-addressed key (`artifactKey`, `bundleKey`). The
+ *   crate GLB's key and the bundle id also name the part model's sha256: the GLB embeds the mesh,
+ *   and `inputHash` hashes the part's design fields only (spec §5.1).
  * - **Deterministic bytes:** a file is dated with its configuration's `createdAt` (a bundle with
  *   its newest configuration's), in UTC, imperial units (the app's default): the same inputs and
  *   engine always give the same bytes, which is what makes the key content-addressed.
@@ -19,7 +21,7 @@ import { ARTIFACT_CONTENT_TYPES, type ArtifactRequest } from "@/engine/artifacts
 import { type DesignRequest, DesignRequestSchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
 import { ARTIFACT_FILE_KINDS, type ArtifactFileName, type ArtifactUrlResponse, type BundleResponse, MAX_BUNDLE_CONFIGS } from "@/lib/api/artifacts";
-import { artifactKey, bundleKey, versionSegment } from "../blob/keys";
+import { artifactKey, bundleKey, modelSegment, versionSegment } from "../blob/keys";
 import type { BlobStore } from "../blob/store";
 import type { OrgContext } from "../db/org";
 import { createRepository, type Database, type DesignJob, inTransaction, type JobConfiguration, type Repository } from "../db/repository";
@@ -27,7 +29,7 @@ import { ApiFailure, requireId } from "../http";
 import { BundleJobPayloadSchema, enqueueBundle } from "../queue/jobs";
 import { type JobHandler, PermanentJobError } from "../queue/runner";
 import type { EnginePool } from "../workers/pool";
-import { partModelBytes, type PartModelBytes } from "./model";
+import { partModelBytes, type PartModelBytes, partModelSha256 } from "./model";
 import { type Stored, storeOnce } from "./store";
 
 export type ArtifactsDeps = {
@@ -73,6 +75,12 @@ async function loadModel(repo: Repository, blob: BlobStore, org: OrgContext, job
   return part ? partModelBytes(repo, blob, org, part) : null;
 }
 
+/** The sha256 of the model the job's part embeds in a GLB, or null for none. */
+async function jobModelSha256(repo: Repository, org: OrgContext, job: DesignJob): Promise<string | null> {
+  const part = await repo.parts.get(org, job.partId);
+  return part ? partModelSha256(part) : null;
+}
+
 async function presigned(blob: BlobStore, stored: Stored): Promise<{ url: string; expiresAt: string }> {
   const { url, expiresAt } = await blob.presignGet(stored.row.objectKey as Parameters<BlobStore["presignGet"]>[0], { downloadName: stored.fileName });
   return { url, expiresAt: expiresAt.toISOString() };
@@ -108,7 +116,7 @@ export async function configurationArtifact(jobId: string, configurationId: stri
   let stored: Stored;
   try {
     stored = await storeOnce(deps, {
-      key: artifactKey(org, config.inputHash, ENGINE_VERSION, file as ArtifactFileName),
+      key: artifactKey(org, config.inputHash, ENGINE_VERSION, file as ArtifactFileName, kind === "glb" ? await jobModelSha256(repo, org, job) : null),
       kind,
       configurationId: config.id,
       jobId: job.id,
@@ -150,9 +158,11 @@ async function planBundle(repo: Repository, org: OrgContext, jobId: string, ids:
   const seen = new Set<string>();
   configs = configs.filter((c) => !seen.has(c.inputHash) && seen.add(c.inputHash));
   if (!configs.length) throw new ApiFailure(422, "invalid_request", "This job has no saved configurations to bundle yet.", "configs");
-  // The manifest's bundleHash (spec §7.17): SHA-256 of the input hashes joined by newlines.
+  // The manifest's bundleHash (spec §7.17): SHA-256 of the input hashes joined by newlines. The
+  // id adds the part model (the bundle's GLBs embed it) and the engine version.
   const bundleHash = sha256(configs.map((c) => c.inputHash).join("\n"));
-  return { job, configs, bundleHash, bundleId: `${bundleHash}-${versionSegment(ENGINE_VERSION)}` };
+  const model = modelSegment(await jobModelSha256(repo, org, job));
+  return { job, configs, bundleHash, bundleId: `${bundleHash}-${model}-${versionSegment(ENGINE_VERSION)}` };
 }
 
 /** Builds (or finds) a planned bundle. Shared by the request path and the queue's `bundle` job. */

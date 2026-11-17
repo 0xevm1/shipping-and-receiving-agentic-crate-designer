@@ -85,7 +85,7 @@ export interface PdfHead {
   createdAt?: string;
 }
 
-/** "Engine 0.1.0+engine.2 · input 3f2a…", the footer and keywords line. */
+/** "Engine 0.1.0+engine.3 · input 3f2a…", the footer and keywords line. */
 export const stampText = (s: PrintableStamp) => `Engine ${s.engineVersion} · input ${s.inputHash}`;
 
 /** A cursor over the pages, with the header of the sheet being written repeated on overflow. */

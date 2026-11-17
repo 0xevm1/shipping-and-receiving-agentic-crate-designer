@@ -224,6 +224,9 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
   - `v` is bumped if the hashed shape changes, so old and new hashes never collide. The engine
     version is not in the hash: equal inputs hash the same across versions, and a server compares
     both before trusting a result.
+  - The part's mesh is not hashed either. A file that embeds it (the crate GLB, a bundle) is
+    therefore not named by `inputHash` alone: the server's object keys add the part model's
+    sha256 (§7.17, [BLOB_STORAGE.md](BLOB_STORAGE.md#object-keys)).
   - File outputs (`cutList`, `buildBundleZip`, `buildArtifact`) carry their design's stamp; their
     own options (units, scope, crate type, time) are not hashed. The stamp is also written
     **inside** every file the engine builds (§7.17): the GLB's scene `extras`, the PDF's keywords
@@ -240,6 +243,11 @@ its own, latest-wins too, so a sweep never delays a design.
 Where there is no worker (server rendering, vitest in Node or jsdom) or it fails (an error, a
 request that can't be cloned), it designs in the page instead, before returning, so the store
 and its tests stay synchronous there. The first design (the preloaded part) is made in the page.
+
+**Instant:** a quantity, layout or rule change goes to the worker and back in 2–4 ms (10–16 ms at
+200 parts per crate), with no network call; `src/state/interaction.test.ts` measures it for every
+sample part through the worker protocol (copied messages, answers on the next task) and fails above
+a load-aware 100 ms. The 3D view draws the result on its next frame.
 
 The store applies an edit at once, so its control never lags, and lands the design with the
 inputs it was made from (`designedFrom`, with the stamp) when the worker answers; the crate type
@@ -270,6 +278,40 @@ the `inputHash`, a SHA-256 of the whole plan, and the cut-list CSVs. Both pass o
 runtimes give identical results, equal to the app's as the baseline was written. A change that
 moves any of it fails both; re-write the baseline with `bunx vitest run src/engine/parity -u` and
 bump `ENGINE_REVISION`.
+
+### 5.2 The server (#46)
+
+The browser designs on its own (§5.1); the server makes designs **shared** (other tabs, people
+and scripts see them as they happen) and **headless** (a part in, the best quantity, crate and files
+out). It runs the same engine, so the browser and the server can't disagree.
+
+```
+┌──────── Browser ─────────┐          ┌────── Next.js on the host (next dev / next start) ──────┐      ┌──── Docker (docker-compose.yml) ────┐
+│ store ─▶ engine Worker    │          │ Route Handlers /api/v1/*  → src/server/*                │      │ Postgres                            │
+│  (designs, sweep, files)  │── HTTP ─▶│   org from auth → org-scoped repository (OrgContext)    │─SQL─▶│   tables, event outbox,             │
+│ jobSync + offline queue   │          │   saves: recompute with the engine, compare the stamps  │      │   queue_job, idempotency_key        │
+│ EventSource /events ◀─────┼── SSE ───│   one LISTEN connection ─▶ hub ─▶ SSE streams           │◀─────│   NOTIFY crate_events, crate_jobs   │
+│ presigned GET ◀───────────┼────┐     │   engine worker_threads pool (sweeps, files, bundles)   │      │                                     │
+└───────────────────────────┘    │     │   blob store (S3 API): put / head / get / presign       │─S3──▶│ S3 emulator: models, artifacts,     │
+  CLI / scripts ─ HTTP + key ──▶ │     └─────────────────────────────────────────────────────────┘      │   bundles (buckets -dev, -test)     │
+                                 └──────────────────────────────────────────────────────────────────────┤                                     │
+            bun run worker (1..n processes): claims queue_job (SKIP LOCKED), runs on its own pool ──────▶└─────────────────────────────────────┘
+```
+
+| Piece | Where | Rule |
+|---|---|---|
+| API | `src/app/api/v1/` (Node.js runtime) over `src/server/`; shapes in `src/lib/api/*`, `src/lib/events.ts` | Every endpoint and event type: [API.md](API.md) |
+| Org scoping | `src/server/auth.ts`, `src/server/db/org.ts`, `repository.ts` | No query runs without an `OrgContext`; another org's row answers like a missing one (`404`). One default org until there are accounts; row-level security, per-org channels, fair scheduling and quotas are deferred to a second org (#60) |
+| Trust | `src/server/jobs/verify.ts` | A configuration from a browser is recomputed with the running engine and stored only if `engineVersion`, `inputHash` and summary match: another engine is `409` (the tab reloads), anything else `422` (§5.1) |
+| Events | `src/server/events/` | A write and its `event` row commit in one transaction; a trigger NOTIFYs `crate_events` with ids only; one dedicated LISTEN connection per process (reconnecting with backoff) fans out to SSE streams, which replay from the `event` table after `Last-Event-ID` (§9, [POSTGRES.md](POSTGRES.md#events)) |
+| Engine work | `src/server/workers/` | Sweeps, files and bundles never run on the thread that serves requests and SSE: a `worker_threads` pool (`bun run engine:build` bundles its entry). A test holds the event-loop lag under 50 ms during full sweeps. The ~2 ms recompute of a save still runs on the request thread for now |
+| Queue | `src/server/queue/`, `bun run worker` | Background sweeps (queued with every new job) and large bundles: `queue_job`, `FOR UPDATE SKIP LOCKED`, woken by `NOTIFY crate_jobs` with polling, leases, retries, dead letter ([QUEUE.md](QUEUE.md)). Without a running worker, jobs wait; nothing in the UI needs one |
+| Files | `src/server/blob/`, `src/server/artifacts/` | GLBs and generated files only in S3-compatible storage, never Postgres or local disk; object first, then the row; content-addressed, org-scoped keys; ~5 min presigned GETs; credentials stay on the server ([BLOB_STORAGE.md](BLOB_STORAGE.md)) |
+| Offline | `src/state/pendingChanges.ts`, `pendingSync.ts`, `jobCache.ts`, `src/lib/liveness.ts` | Saves are local first and replay with an `Idempotency-Key` once the server is reachable (§9, [API.md](API.md#offline-46-slice-7a)) |
+
+Hosting needs a long-running Node server (SSE and LISTEN hold connections; no serverless or edge
+functions) and a proxy that doesn't buffer SSE, with idle timeouts above the 15 s heartbeat. A
+deploy runs `db:migrate` before the new version serves traffic.
 
 ### File map
 
@@ -312,6 +354,7 @@ bump `ENGINE_REVISION`.
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/testFixtures.ts` | Shared test builders: `custom` standards, `settings`, `designOf` |
+| `src/domain/testTiming.ts` | Load-aware wall-clock checks for tests (`loadAwareBudget`, `medianMs`, `median`; #48) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
@@ -708,7 +751,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
-  "engine": { "version": "0.1.0+engine.2", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
+  "engine": { "version": "0.1.0+engine.3", "inputHash": "3f2a…" },  // optional; only in files the engine built (§5.1)
   "part": {
     "source": "catalog",           // "catalog": bundled in /public/parts; "custom": the user's GLB
     "id": "PART-001",
@@ -1831,7 +1874,7 @@ boards only).
 |---|---|---|---|
 | `glb` | `crate-PART-001-x4.glb` (`…-crate-A.glb` for a split batch's type at `crateIndex`) | `model/gltf-binary` | scene `extras` `{ engineVersion, inputHash }` (reads back as the scene's `userData`) |
 | `pdf` | `crate-PART-001-x4.pdf`: crate spec, build sheets, labels (§7.11, §7.13), with the quantity section | `application/pdf` | keywords `engineVersion=… inputHash=…` and a footer line on every page |
-| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.2, input …` before the column names |
+| `csv` | `crate-PART-001-x4.csv`: the cut list (`…-shipment.csv`, the whole shipment, for a split batch) | `text/csv; charset=utf-8` | `# Engine 0.1.0+engine.3, input …` before the column names |
 
 A GLB or CSV for a request with no crate (§7.9) throws `NoCrateError`; the PDF says why.
 
@@ -1890,6 +1933,11 @@ model from blob storage. To make the bytes a function of the inputs alone (conte
 keys, one object per key however many requests race), the server writes imperial units, UTC, and
 the configuration's own save time as `generatedAt` (a bundle: its newest configuration's). Files
 are built on the first request and served from blob storage after; see docs/API.md "Artifacts".
+**Rule:** the key of a file that embeds the part's mesh (the crate GLB; a bundle, whose id is
+`<bundleHash>-<modelSha256>-<engineVersion>`) names the part model's sha256 (`no-model` without
+one), because `inputHash` hashes the part's design fields only (§5.1): two parts with equal fields
+and different meshes never share a GLB. The PDF and CSV are keyed by `inputHash` and engine version
+alone. Test: `artifacts.integration.test.ts` "files that embed the part model", `keys.test.ts`.
 
 **Download all (browser).** Beside the Export pill (§8.2), an outlined pill **Download all**
 builds this ZIP in the page (`useDownloadAll`, `src/state/downloadAll.ts`): `run(configs?)` takes
@@ -2495,23 +2543,41 @@ refresh or a reopened tab brings back the crate on screen:
 - **Starting fresh:** there is no "clear" control. Loading another part, design file, library
   design or share link replaces the remembered crate, because whatever is on screen is saved.
 
-**Next: Postgres (#46).** Everything else lives in memory. The shared store is Postgres in
-Docker, reached only from the server through `src/server/db/` (drizzle on postgres.js), with GLBs
-and generated files in S3-compatible blob storage. Slice 1 is in: the compose file, migrations
-in `db/migrations/`, the first tables (`org`, `part`, `part_model`, `design_job`,
-`configuration`, `artifact`, `event`, `shop_standard`, `idempotency_key`), each scoped by
-`org_id`, and an org-scoped repository that refuses any query without an `OrgContext`. Slice 2
-adds live events: an `event` row written in the same transaction as the change NOTIFYs channel
-`crate_events`, one LISTEN connection per process fans out to `GET /api/v1/events?job=…` (SSE,
-resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Slice 5 adds the
-jobs and configurations API (`docs/API.md`): when a part loads, the app opens (or reuses) a job for
-it on the server and lists the job's saved configurations; **Save to job** posts the crate on
-screen, which the server recomputes with the engine before storing, and other tabs see it through
-the job's events. When the server or database can't be reached, saves wait on the device (below) and
-everything else works as before; the browser storage above is still what reopens a crate after a
-reload. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
-through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The
-earlier SQLite WASM plan, `DATA_STORE.md`, was dropped for this.)
+**On the server: Postgres, blob storage and events (#46).** Everything above lives in one browser. What is **shared** (parts, design jobs, saved
+configurations, generated files, events) lives on the server, which reaches Postgres only through
+`src/server/db/` (drizzle on postgres.js) and blob storage only through `src/server/blob/`. The
+browser storage above is still what reopens a crate after a reload; with the server unreachable,
+everything but sharing works as before.
+
+- **Postgres** (Docker locally, managed in production; [POSTGRES.md](POSTGRES.md)): versioned
+  migrations in `db/migrations/` (`bun run db:migrate`; CI fails a schema change without one). The
+  tables: `org`, `part`, `part_model` (GLB metadata by sha256), `design_job` (one per part being
+  crated, with a `version` for optimistic concurrency), `configuration` (content-addressed by
+  `inputHash`, never changed once saved; the stored `DesignRequest` is re-validated on read),
+  `job_configuration` (which configurations a job holds), `artifact` (a generated file's key,
+  hash and `built_by`), `event` (the append-only outbox), `queue_job`, `api_key`,
+  `idempotency_key` and `shop_standard`. Every root table has `org_id`, and the repository
+  refuses a query without an `OrgContext`.
+- **Blob storage** (S3 API; SeaweedFS in Docker, any S3-compatible provider in production;
+  [BLOB_STORAGE.md](BLOB_STORAGE.md)): part GLBs, server-built GLB / PDF / CSV files and bundle
+  ZIPs, under org-scoped, content-addressed keys. **No GLB or file bytes go in Postgres or on the
+  server's disk.** The object is written before its row, so a crash leaves an orphan that
+  `bun run blob:gc` removes after 24 h, never a row with nothing behind it. Generated files are
+  tagged `retention=ephemeral` for a lifecycle rule (they can be rebuilt); part models are kept.
+  The browser downloads through ~5 min presigned URLs; the `BLOB_*` credentials never leave the
+  server.
+- **Events** ([POSTGRES.md](POSTGRES.md#events), types in [API.md](API.md#events)): each write
+  that clients care about inserts one `event` row in its own transaction, and a trigger calls
+  `pg_notify('crate_events', {id, orgId, jobId, type})`. One LISTEN connection per Next.js process
+  (outside the pool, reconnecting with backoff) fans out to `GET /api/v1/events?job=…` (SSE, a
+  heartbeat every 15 s). NOTIFY is fire-and-forget, so a stream that reconnects with
+  `Last-Event-ID` is replayed from the table first: no gaps, no duplicates. `GET /api/v1/health`
+  reports the database, the listener and `pg_notification_queue_usage()`.
+- **Jobs and saves** ([API.md](API.md)): when a part loads, the app opens (or reuses) the part's
+  job and lists its configurations; **Save to job** posts the crate on screen, which the server
+  recomputes before storing (§5.1), and other tabs see it through the job's events. A new job also
+  queues a server-side sweep ([QUEUE.md](QUEUE.md)) that saves the shortlist as `precomputed`
+  configurations.
 
 **Offline saves (#46 slice 7a).** Saves to the shared job are local first: each is written to
 `localStorage` under `crate-designer.pending-changes.v1` (`src/state/pendingChanges.ts`, behind a

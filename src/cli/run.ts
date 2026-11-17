@@ -30,7 +30,7 @@ export class CliError extends Error {
 }
 
 /** The checks the app and the API make on a GLB, with their messages. */
-export function checkGlb(bytes: Uint8Array, fileName: string): void {
+function checkGlb(bytes: Uint8Array, fileName: string): void {
   if (bytes.byteLength > MAX_GLB_BYTES) throw new CliError(GLB_MESSAGES.tooLarge);
   if (/\.gltf$/i.test(fileName) || looksLikeTextGltf(bytes)) throw new CliError(GLB_MESSAGES.textGltf);
   const problem = glbProblem(bytes);

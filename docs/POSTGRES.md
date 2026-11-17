@@ -1,14 +1,14 @@
 # Postgres data store
 
-The shared store for parts, design jobs, configurations, generated files and events (#46). It
-replaces the earlier SQLite WASM plan. Postgres and an S3-compatible blob emulator run in
-Docker; the Next.js app runs on the host and reaches them through environment variables.
+The shared store for parts, design jobs, configurations, generated files and events (#46).
+Postgres and an S3-compatible blob emulator run in Docker; the Next.js app runs on the host and
+reaches them through environment variables. Postgres is also the event bus (LISTEN/NOTIFY, below)
+and the job queue ([QUEUE.md](QUEUE.md)), so there is no Redis or broker to run.
 
-**Status:** infrastructure, migrations, the first tables and the org-scoped repository (slice 1);
-the blob store's client, part uploads (`POST /api/v1/parts`) and presigned model downloads (slice
-1a, [BLOB_STORAGE.md](BLOB_STORAGE.md)); and the event framework: LISTEN/NOTIFY, the SSE stream and
-the health check (slice 2, see [Events](#events)); and the jobs and configurations API, which the
-UI uses to save configurations to a shared job (slice 5, [API.md](API.md)).
+The other server docs: every endpoint and event type in [API.md](API.md), GLBs and generated files
+in [BLOB_STORAGE.md](BLOB_STORAGE.md), the job queue, worker threads, API keys and the CLI in
+[QUEUE.md](QUEUE.md), and how they fit together in
+[SPECIFICATION.md §5.2](SPECIFICATION.md#52-the-server-46) and §9.
 
 ## Quick start
 
@@ -81,9 +81,11 @@ BLOB_CONSOLE_PORT=59001
 BLOB_ENDPOINT=http://localhost:59000
 ```
 
-To keep e2e or experiments from touching your dev data on the same server, set `DB_NAME`
-instead (for example `DB_NAME=crate_designer_e2e`): `db:migrate` creates that database on first
-use. The integration tests already do this on their own: each test file creates a throwaway
+To keep experiments from touching your dev data on the same server, set `DB_NAME` instead (for
+example `DB_NAME=crate_designer_scratch`): `db:migrate` creates that database on first use.
+`bun run e2e` does this by itself: `playwright.config.ts` starts the infrastructure, migrates
+`crate_designer_e2e` (`E2E_DB_NAME`) on the same server and serves the app against it and the
+`crate-designer-test` bucket, so a run never wipes or fills the dev database. The integration tests already do this on their own: each test file creates a throwaway
 database named `<DB_NAME>_it_<label>_<random>`, migrates it and drops it.
 
 ## Services (`docker-compose.yml`)
@@ -229,7 +231,7 @@ receives every org's notifications and filters them in memory.
 | `recommendation.changed` | yes | `configurationId` (null when cleared) |
 | `artifact.ready` | yes | `artifactId`, `configurationId`, `kind`, plus `file` or `bundleId`: a server-built file is stored (docs/API.md "Artifacts") |
 | `job.error` | yes | `message` (safe to show) |
-| `engine.updated` | no (org-wide) | `engineVersion`: open tabs should reload |
+| `engine.updated` | no (org-wide) | `engineVersion`: open tabs should reload (reserved for deploys; nothing emits it yet, [API.md](API.md#events)) |
 
 Events with no job (`engine.updated`, a job-less `part.created`) go to every stream of that org.
 
