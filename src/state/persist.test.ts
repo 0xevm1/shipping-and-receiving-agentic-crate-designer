@@ -127,10 +127,13 @@ describe("stored data from before persist.ts still loads", () => {
     const loaded = loadStandards(memoryStorageWith(STANDARDS_STORAGE_KEY, fixture("shop-standards.v1.json")));
     expect(loaded.defaults.maxLayers).toBe(3);
     expect(loaded.stock.floorPlywoodMm).toBe(19);
-    // Saving what was loaded writes the same stored text back.
+    // A standard added since (#113) takes its default, so the stored text gains only that field.
+    expect(loaded.handling.handCarryMaxKg).toBe(23);
     const store = memoryStorage();
     expect(saveStandards(loaded, store)).toBe(true);
-    expect(store.data.get(STANDARDS_STORAGE_KEY)).toBe(fixture("shop-standards.v1.json"));
+    const old = JSON.parse(fixture("shop-standards.v1.json"));
+    old.standards.handling.handCarryMaxKg = 23;
+    expect(JSON.parse(store.data.get(STANDARDS_STORAGE_KEY)!)).toEqual(old);
   });
 
   it("units (crate-designer.units.v1) are the bare word", () => {

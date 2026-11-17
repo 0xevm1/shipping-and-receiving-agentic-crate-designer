@@ -239,6 +239,7 @@ describe("handling standards", () => {
       palletJack: { minClearMm: 85, tineWidthMm: 180, spreadMm: { min: 520, max: 690 } },
       cogOffsetRatio: 0.1,
       minTipAngleDeg: 30,
+      handCarryMaxKg: 23,
     });
   });
 
