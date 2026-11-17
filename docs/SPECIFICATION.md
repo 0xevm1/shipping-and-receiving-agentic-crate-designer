@@ -267,7 +267,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/glbInfo.ts` | `readGlb`: a .glb's header, JSON chunk and accessor bounds to its size and centre, or the first reason it can't be used. Pure; sizes match three.js's |
 | `src/lib/fileCheckReport.ts` | The toast's one line (`verdict`), the report's counts, grouping and plain-text copy (`reportText`), `reportFor` |
 | `src/lib/loadPart.ts` | `loadPartFiles` (decides from `checkFiles`: entries, the model that opens, the frame, the message) and `loadDesign` (opening a design file); `designFilePart` |
-| `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached by model URL |
+| `src/lib/modelRegistry.ts` | The model registry (#89, §8.4): owns each loaded part file (its Blob, object URL, parsed scene, derived data) and frees it when the last holder releases it: `adopt`, `acquire`, `scene`, `blob`, `memo` |
+| `src/lib/disposeScene.ts` | Disposes a loaded model's geometries, materials and textures, each once |
+| `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached per model and frame in the registry's `memo` |
 | `src/lib/currentDesign.ts` | `currentDesignText()` / `currentDesignFile()`: the design on screen as a design file (§6.5) with its part outline and ranking, for the download, the print link, the library and share links |
 | `src/lib/appInfo.ts` | `APP`: the name and version written into design files and the README |
 | `src/lib/csv.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (CSV keeps data precision) |
@@ -287,7 +289,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/exportPdf.ts` | `printableToPdf`: the `PrintableDesign` as a vector PDF with jsPDF (#51); loaded only with `import()` |
 | `src/components/shell/ExportPill.tsx` | The green Export pill under the part header, its idle / busy / done / error states, and an amber dot with a tooltip and description ("2 cautions, see Checks") when the design has cautions; exporting is never blocked |
 | `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill; a success note clears after 8 s, an error after 15 s |
-| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
+| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; file name, binary download |
 | `src/state/store.ts` | `useDesigner`: the design store (part, settings, layout pick, standards, ranking, plan and result) and its actions; emits a `DesignEdit` after each one |
 | `src/state/viewStore.ts` | `useView`: the view store (tab, 3D view, hover / pin, tooltip, panels, drawer, insets, `fit`, load message, `restoring`, `lastChange`, the time-to-design clock, units); reacts to `DesignEdit`; `currentMode()` |
 | `src/state/designEvents.ts` | `DesignEdit`, `onDesignEdit` / `emitDesignEdit` and `ChangeSource`: how the design store tells the view store what changed |
@@ -322,7 +324,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab; its inputs render only while the section is open (`ShopStandards.module.css`) |
 | `src/components/island/standardsFields.ts` | The typed table of editable standards (`StandardPath` is every numeric path in `ShopStandards`, so a typo fails to compile), `readStandard`, `standardPatch`; `standardsFields.test.ts` checks every path resolves and no hint carries ticket numbers |
 | `src/lib/fileNames.ts` | File names of the cut list CSV and the design file |
-| `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
+| `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
 | `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…"), or with `problem` the no-crate message on a dark pill with a next-step line; shared by the shell and the viewer |
@@ -2215,11 +2217,21 @@ open question for the user (see #20).
   the loss with the `WEBGL_lose_context` extension.
 - **The canvas stays mounted** through a problem state and while the last design is restoring
   (only the scene's contents come and go, and the message is an overlay), so the WebGL context is
-  created once. `Director` re-frames when the scene returns. Part models: when the part changes,
-  `CrateViewer` clears the old model's entry from drei's `useGLTF` cache. The blob URL itself is
-  not revoked (the last-design loader still fetches it), and the old model's geometry and
-  textures are not disposed on the GPU: a full fix needs a model registry that owns the object
-  URLs and disposes the scene when the part is replaced.
+  created once. `Director` re-frames when the scene returns. Part models belong to the model
+  registry (below), not to the canvas: a lost context or a rebuilt canvas leaves them as they are,
+  and the new renderer uploads them again.
+- **Model lifetime (#89):** `src/lib/modelRegistry.ts` owns every loaded part file: the Blob, its
+  object URL, the one parsed scene (`useModelScene` in the viewer, the export, all share it) and
+  data derived from it (the profile). `adopt` makes the URL and gives the loader the first hold;
+  `acquire` takes another. A model is freed when its last hold is released, never on a timer: the URL
+  is revoked, geometries, materials and textures disposed once each (clones share geometry), the
+  profile dropped. Holders: the loader until its outcome is applied or discarded (a superseded
+  load's model is freed at once), the design store while it is the part (`store.ts` swaps holds
+  whenever `part.modelUrl` changes), each viewer component that draws it (the 3D view's
+  `PartInstances`, the thumbnail's `Turntable`), a running export, and the last-design saver while
+  it copies the bytes out. A parse still running when the model is freed finishes first. The
+  bundled `/parts/*.glb` models are never freed. The thumbnail's frame loop pauses while it is
+  folded away or off screen (`PartView`).
 - **Part view:** a second `<Canvas>` in the island turns the part at 0.25 rad/s (slowed from
   the handoff's 0.45 and reversed, at the user's request). The turn is driven from frame time in
   `useFrame`, not OrbitControls' `autoRotate`, which steps per frame and runs double speed at
@@ -2390,7 +2402,7 @@ the same proven crate in one click:
   from `design.part` on every read, so an edited key can't misfile an entry.
 - **Listing:** the Overview lists the entries whose key matches the part on screen, newest first.
 - **Reuse** goes through `loadDesign` (§6.5), the same path as a picked design file. For a
-  custom part the GLB already loaded is passed along (read back from its object URL).
+  custom part the GLB already loaded is passed along (the registry's Blob).
 - **Safe load:** the envelope must be right (kind, a version from 1 up to `LIBRARY_VERSION`, an
   entries list); otherwise the library starts empty with a `console.warn`. Then each entry is
   checked on its own, its design through `parseDesignFile` (so design-file versions and
@@ -2447,7 +2459,7 @@ refresh or a reopened tab brings back the crate on screen:
   kept in **IndexedDB** (`src/state/glbCache.ts`: database `crate-designer`, store `glb`, one
   record under the key `last`: `{ name, bytes: ArrayBuffer, savedAt }`). Whenever a part with a
   `blob:` model that isn't a bundled catalog part comes on screen (picked or dropped, reused from
-  the library, a shared custom design), its bytes are read back from the object URL and replace
+  the library, a shared custom design), its bytes are read from the registry's Blob and replace
   the record. Files over `MAX_CACHED_GLB_BYTES` (50 MB) aren't kept, and the older record is
   dropped. Catalog parts need nothing kept: they restore from the bundled catalog.
 - **Load precedence** (`startupSource`, in `SavedStateLoader` after the saved units, standards
