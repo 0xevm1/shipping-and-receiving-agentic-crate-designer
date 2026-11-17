@@ -1,5 +1,5 @@
-import type { Layout } from "./packing";
-import type { CrateSettings, Part, Vec3 } from "./schema";
+import { STABLE_HEIGHT_RATIO, type Layout } from "./packing";
+import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 
 /**
  * Turns a packing layout into a buildable wooden crate: every board as an
@@ -34,9 +34,25 @@ export type MemberKind =
 
 export type WoodMaterial = "plywood" | "lumber";
 
+/** The sub-assemblies a carpenter builds, in build order. The cut list groups by these. */
+export const ASSEMBLIES = ["base", "sides", "ends", "lid", "inside"] as const;
+export type Assembly = (typeof ASSEMBLIES)[number];
+
+/**
+ * Which face of the crate a board belongs to, so the viewer can move it when
+ * exploded or fade it when opened. `side-` is the front (−Y) wall.
+ */
+export type Face = "base" | "side-" | "side+" | "end-" | "end+" | "lid" | "inside";
+
 export interface Member {
   kind: MemberKind;
   material: WoodMaterial;
+  assembly: Assembly;
+  face: Face;
+  /** Shop name for the piece, e.g. "Side rail". */
+  label: string;
+  /** Key of the cut-list line this board belongs to. */
+  bomKey: string;
   min: Vec3;
   size: Vec3;
 }
@@ -49,18 +65,29 @@ export interface Construction {
 }
 
 export interface BomLine {
-  material: WoodMaterial;
+  /** Unique per line; equals `bomKey` on its members. */
+  key: string;
+  assembly: Assembly;
+  label: string;
   kind: MemberKind;
+  material: WoodMaterial;
   /** e.g. "19 × 89" lumber section or "12 mm" plywood. */
   stock: string;
   /** Cut size: length for lumber, L × W for plywood. */
   cut: string;
+  /** Stock in mm: [thickness] for plywood, [thickness, width] for lumber. */
+  stockMm: number[];
+  /** Cut in mm: [length] for lumber, [length, width] for plywood. */
+  cutMm: number[];
   qty: number;
 }
 
-export interface Warning {
-  level: "info" | "caution";
-  message: string;
+export interface Check {
+  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "export";
+  /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
+  level: "ok" | "caution" | "info";
+  title: string;
+  detail: string;
 }
 
 export interface CrateDesign {
@@ -70,12 +97,15 @@ export interface CrateDesign {
   bom: BomLine[];
   payloadKg: number;
   tareKg: number;
+  /** Empty-crate weight split by sub-assembly; sums to `tareKg`. */
+  tareKgByAssembly: Record<Assembly, number>;
   grossKg: number;
   plywoodM2: number;
   lumberM: number;
   screws: number;
   materialCostUsd: number;
-  warnings: Warning[];
+  /** Every rule, passed or not, in a fixed order. */
+  checks: Check[];
 }
 
 /** Choose board sizes from payload mass. Simple, documented thresholds. */
@@ -98,7 +128,7 @@ export function structureAllowance(c: Omit<Construction, "skidCount">): Vec3 {
   return [wall, wall, c.skid.tall + c.floorMm + c.panelMm + CLEAT.thick];
 }
 
-export function designCrate(part: Part, settings: CrateSettings, layout: Layout): CrateDesign {
+export function designCrate(part: DesignPart, settings: CrateSettings, layout: Layout): CrateDesign {
   const payloadKg = part.mass_kg * settings.quantity;
   const base = resolveConstruction(settings, payloadKg);
   const t = base.panelMm;
@@ -110,30 +140,32 @@ export function designCrate(part: Part, settings: CrateSettings, layout: Layout)
   const construction: Construction = { ...base, skidCount };
 
   const members: Member[] = [];
-  const add = (kind: MemberKind, material: WoodMaterial, min: Vec3, size: Vec3) => {
-    if (size.every((s) => s > 0.5)) members.push({ kind, material, min, size });
+  const add: AddMember = (kind, material, tag, min, size) => {
+    if (size.every((s) => s > 0.5)) members.push({ kind, material, ...tag, bomKey: "", min, size });
   };
 
   // Base: floor sheet over the full footprint, skids underneath.
   const x0 = -t - ct;
   const y0 = -t - ct;
   const extL = L + 2 * (t + ct);
-  add("floor", "plywood", [x0, y0, -base.floorMm], [extL, extW, base.floorMm]);
+  const baseTag = (label: string): Tag => ({ assembly: "base", face: "base", label });
+  add("floor", "plywood", baseTag("Floor"), [x0, y0, -base.floorMm], [extL, extW, base.floorMm]);
   const skidZ = -base.floorMm - base.skid.tall;
   spread(y0, extW, base.skid.wide, skidCount).forEach((y) =>
-    add("skid", "lumber", [x0, y, skidZ], [extL, base.skid.wide, base.skid.tall]),
+    add("skid", "lumber", baseTag("Skid"), [x0, y, skidZ], [extL, base.skid.wide, base.skid.tall]),
   );
 
   // Long side walls (−Y and +Y). Panels run the full outside length of the end walls.
   for (const side of [-1, 1] as const) {
     const panelY = side < 0 ? -t : W;
     const cleatY = side < 0 ? -t - ct : W + t;
-    add("side", "plywood", [-t, panelY, 0], [L + 2 * t, t, H]);
+    const tag = (label: string): Tag => ({ assembly: "sides", face: side < 0 ? "side-" : "side+", label });
+    add("side", "plywood", tag("Side panel"), [-t, panelY, 0], [L + 2 * t, t, H]);
     // Perimeter frame + intermediate verticals.
-    add("cleat", "lumber", [-t, cleatY, 0], [L + 2 * t, ct, cw]);
-    add("cleat", "lumber", [-t, cleatY, H - cw], [L + 2 * t, ct, cw]);
+    add("cleat", "lumber", tag("Side rail"), [-t, cleatY, 0], [L + 2 * t, ct, cw]);
+    add("cleat", "lumber", tag("Side rail"), [-t, cleatY, H - cw], [L + 2 * t, ct, cw]);
     spread(-t, L + 2 * t, cw, verticalCount(L + 2 * t)).forEach((x) =>
-      add("cleat", "lumber", [x, cleatY, cw], [cw, ct, H - 2 * cw]),
+      add("cleat", "lumber", tag("Side upright"), [x, cleatY, cw], [cw, ct, H - 2 * cw]),
     );
   }
 
@@ -141,30 +173,35 @@ export function designCrate(part: Part, settings: CrateSettings, layout: Layout)
   for (const side of [-1, 1] as const) {
     const panelX = side < 0 ? -t : L;
     const cleatX = side < 0 ? -t - ct : L + t;
-    add("end", "plywood", [panelX, 0, 0], [t, W, H]);
-    add("cleat", "lumber", [cleatX, y0, 0], [ct, extW, cw]);
-    add("cleat", "lumber", [cleatX, y0, H - cw], [ct, extW, cw]);
+    const tag = (label: string): Tag => ({ assembly: "ends", face: side < 0 ? "end-" : "end+", label });
+    add("end", "plywood", tag("End panel"), [panelX, 0, 0], [t, W, H]);
+    add("cleat", "lumber", tag("End rail"), [cleatX, y0, 0], [ct, extW, cw]);
+    add("cleat", "lumber", tag("End rail"), [cleatX, y0, H - cw], [ct, extW, cw]);
     spread(y0, extW, cw, verticalCount(extW)).forEach((y) =>
-      add("cleat", "lumber", [cleatX, y, cw], [ct, cw, H - 2 * cw]),
+      add("cleat", "lumber", tag("End upright"), [cleatX, y, cw], [ct, cw, H - 2 * cw]),
     );
   }
 
   // Lid: panel plus a cleat frame on top, screwed down (removable for unpacking).
-  add("lid", "plywood", [-t, -t, H], [L + 2 * t, W + 2 * t, t]);
-  add("lid-cleat", "lumber", [-t, -t, H + t], [L + 2 * t, cw, ct]);
-  add("lid-cleat", "lumber", [-t, W + t - cw, H + t], [L + 2 * t, cw, ct]);
+  const lidTag = (label: string): Tag => ({ assembly: "lid", face: "lid", label });
+  add("lid", "plywood", lidTag("Lid panel"), [-t, -t, H], [L + 2 * t, W + 2 * t, t]);
+  add("lid-cleat", "lumber", lidTag("Lid edge cleat"), [-t, -t, H + t], [L + 2 * t, cw, ct]);
+  add("lid-cleat", "lumber", lidTag("Lid edge cleat"), [-t, W + t - cw, H + t], [L + 2 * t, cw, ct]);
   spread(-t, L + 2 * t, cw, verticalCount(L + 2 * t)).forEach((x) =>
-    add("lid-cleat", "lumber", [x, -t + cw, H + t], [cw, W + 2 * t - 2 * cw, ct]),
+    add("lid-cleat", "lumber", lidTag("Lid cross cleat"), [x, -t + cw, H + t], [cw, W + 2 * t - 2 * cw, ct]),
   );
 
   addDunnage(layout, settings, t, add);
 
   const bom = buildBom(members);
   const volumes = { plywood: 0, lumber: 0 };
+  const tareKgByAssembly: Record<Assembly, number> = { base: 0, sides: 0, ends: 0, lid: 0, inside: 0 };
   let plywoodM2 = 0;
   let lumberM = 0;
   for (const m of members) {
-    volumes[m.material] += (m.size[0] * m.size[1] * m.size[2]) / 1e9;
+    const volumeM3 = (m.size[0] * m.size[1] * m.size[2]) / 1e9;
+    volumes[m.material] += volumeM3;
+    tareKgByAssembly[m.assembly] += volumeM3 * DENSITY_KG_M3[m.material];
     const sorted = [...m.size].sort((p, q) => q - p);
     if (m.material === "plywood") plywoodM2 += (sorted[0] * sorted[1]) / 1e6;
     else lumberM += sorted[0] / 1000;
@@ -179,14 +216,15 @@ export function designCrate(part: Part, settings: CrateSettings, layout: Layout)
     bom,
     payloadKg,
     tareKg,
+    tareKgByAssembly,
     grossKg: payloadKg + tareKg,
     plywoodM2,
     lumberM,
     screws: estimateScrews(members, layout.interior),
     materialCostUsd,
-    warnings: [],
+    checks: [],
   };
-  design.warnings = evaluateWarnings(design, part, settings);
+  design.checks = evaluateChecks(design, part, settings);
   return design;
 }
 
@@ -201,7 +239,7 @@ function addDunnage(
   layout: Layout,
   settings: CrateSettings,
   separatorMm: number,
-  add: (kind: MemberKind, material: WoodMaterial, min: Vec3, size: Vec3) => void,
+  add: AddMember,
 ) {
   const [L, W] = layout.interior;
   const [a, b, c] = layout.cellSize;
@@ -211,15 +249,15 @@ function addDunnage(
   const layerBase = (k: number) => clear + k * (c + gap + separatorMm);
 
   for (let k = 1; k < nz; k++) {
-    add("separator", "plywood", [0, 0, layerBase(k) - separatorMm], [L, W, separatorMm]);
+    add("separator", "plywood", insideTag("Layer separator"), [0, 0, layerBase(k) - separatorMm], [L, W, separatorMm]);
   }
 
   const placed = new Set<string>();
-  const block = (min: Vec3, size: Vec3, kind: MemberKind = "blocking") => {
+  const block = (min: Vec3, size: Vec3, kind: "blocking" | "bearer" = "blocking") => {
     const key = [...min, ...size].map((v) => Math.round(v)).join(",");
     if (placed.has(key)) return;
     placed.add(key);
-    add(kind, "lumber", min, size);
+    add(kind, "lumber", insideTag(kind === "bearer" ? "Bearer" : "Blocking post"), min, size);
   };
 
   for (const slot of layout.slots) {
@@ -253,6 +291,13 @@ function addDunnage(
   }
 }
 
+type Tag = Pick<Member, "assembly" | "face" | "label">;
+type AddMember = (kind: MemberKind, material: WoodMaterial, tag: Tag, min: Vec3, size: Vec3) => void;
+
+function insideTag(label: string): Tag {
+  return { assembly: "inside", face: "inside", label };
+}
+
 /** `count` evenly spaced start positions for boards of `width` across [start, start + span]. */
 function spread(start: number, span: number, width: number, count: number): number[] {
   if (count <= 1) return [start];
@@ -264,16 +309,24 @@ function verticalCount(span: number): number {
   return Math.max(2, Math.ceil(span / MAX_CLEAT_SPACING) + 1);
 }
 
+/** Groups members into cut-list lines by assembly, piece name, stock and cut, and links each member to its line. */
 function buildBom(members: Member[]): BomLine[] {
   const lines = new Map<string, BomLine>();
   for (const m of members) {
     const s = [...m.size].map((v) => Math.round(v)).sort((p, q) => q - p);
-    const stock = m.material === "plywood" ? `${s[2]} mm` : `${s[2]} × ${s[1]}`;
-    const cut = m.material === "plywood" ? `${s[0]} × ${s[1]}` : `${s[0]}`;
-    const key = `${m.kind}|${stock}|${cut}`;
+    const plywood = m.material === "plywood";
+    const stockMm = plywood ? [s[2]] : [s[2], s[1]];
+    const cutMm = plywood ? [s[0], s[1]] : [s[0]];
+    const stock = plywood ? `${s[2]} mm` : `${s[2]} × ${s[1]}`;
+    const cut = cutMm.join(" × ");
+    const key = `${m.assembly}|${m.label}|${stock}|${cut}`;
+    m.bomKey = key;
     const line = lines.get(key);
     if (line) line.qty++;
-    else lines.set(key, { material: m.material, kind: m.kind, stock, cut, qty: 1 });
+    else {
+      const { assembly, label, kind, material } = m;
+      lines.set(key, { key, assembly, label, kind, material, stock, cut, stockMm, cutMm, qty: 1 });
+    }
   }
   return [...lines.values()];
 }
@@ -294,28 +347,60 @@ function estimateScrews(members: Member[], interior: Vec3): number {
   return screws;
 }
 
-function evaluateWarnings(d: CrateDesign, part: Part, settings: CrateSettings): Warning[] {
-  const w: Warning[] = [];
+const DOOR_CLEARANCE_MM = 2440; // 8 ft trailer / container door
+const OVERSIZE_LENGTH_MM = 3000;
+const STACK_LIMIT_KG = 100;
+const BASE_RATING_KG = 1000;
+const LOW_UTILIZATION = 0.25;
+
+/** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
+function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings): Check[] {
+  const checks: Check[] = [];
   const [eL, eW, eH] = d.layout.external;
-  if (eW > 2440 || eH > 2440) {
-    w.push({ level: "caution", message: "Crate exceeds 2.44 m (8 ft) in width or height — check trailer/container door clearance." });
+  const nz = d.layout.counts[2];
+
+  checks.push(
+    eW > DOOR_CLEARANCE_MM || eH > DOOR_CLEARANCE_MM
+      ? { id: "door", level: "caution", title: "Too big for a standard trailer door", detail: `Width or height is over ${DOOR_CLEARANCE_MM} mm. Confirm door clearance with the carrier.` }
+      : { id: "door", level: "ok", title: "Fits a standard trailer door", detail: `Width and height are under ${DOOR_CLEARANCE_MM} mm.` },
+  );
+
+  const ratio = eH / Math.min(eL, eW);
+  checks.push(
+    d.layout.stable
+      ? { id: "stable", level: "ok", title: "Stable footprint", detail: `Height is ${ratio.toFixed(2)}× the short side. The limit is ${STABLE_HEIGHT_RATIO}×.` }
+      : { id: "stable", level: "caution", title: "Tip-over risk", detail: `Height is ${ratio.toFixed(2)}× the short side, over the ${STABLE_HEIGHT_RATIO}× limit. Strap it down or pick a lower layout.` },
+  );
+
+  const posts = d.members.filter((m) => m.kind === "blocking").length;
+  checks.push(
+    Math.min(settings.partGapMm, settings.wallClearanceMm) < MIN_BLOCKING_GAP
+      ? { id: "blocking", level: "caution", title: "Parts are not restrained", detail: `Gaps under ${MIN_BLOCKING_GAP} mm leave no room for blocking. Widen the gap or the wall clearance.` }
+      : { id: "blocking", level: "ok", title: "Every part is blocked in", detail: `${posts} blocking posts hold the parts on all four sides.` },
+  );
+
+  if (nz > 1) {
+    const stackedKg = part.mass_kg * (nz - 1);
+    checks.push(
+      stackedKg > STACK_LIMIT_KG
+        ? { id: "stack", level: "caution", title: "Heavy stack on the bottom layer", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. Consider fewer layers.` }
+        : { id: "stack", level: "ok", title: "Stack load is light", detail: `Each bottom position carries ${Math.round(stackedKg)} kg from above. The limit is ${STACK_LIMIT_KG} kg.` },
+    );
   }
-  if (eL > 3000) w.push({ level: "info", message: "Crate longer than 3 m — may ship as oversize freight." });
-  if (Math.min(settings.partGapMm, settings.wallClearanceMm) < MIN_BLOCKING_GAP) {
-    w.push({
-      level: "caution",
-      message: `Gaps under ${MIN_BLOCKING_GAP} mm are too tight for wood blocking — parts there are unrestrained.`,
-    });
+
+  const skidName = d.construction.skid.tall === 89 ? "4×4" : "4×6";
+  checks.push(
+    d.grossKg > BASE_RATING_KG
+      ? { id: "base-rating", level: "caution", title: "Over 1,000 kg gross", detail: "Needs heavier skids and floor joists than this design includes." }
+      : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under 1,000 kg, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
+  );
+
+  if (eL > OVERSIZE_LENGTH_MM) {
+    checks.push({ id: "oversize", level: "info", title: "Oversize freight", detail: `Length is over ${OVERSIZE_LENGTH_MM} mm. Expect an oversize surcharge.` });
   }
-  const stackedKg = part.mass_kg * Math.max(0, d.layout.counts[2] - 1);
-  if (stackedKg > 100) {
-    w.push({ level: "caution", message: `${stackedKg.toFixed(0)} kg of parts stacked above each bottom-layer position — confirm the blocking posts and separators can carry it.` });
+  if (d.layout.utilization < LOW_UTILIZATION) {
+    checks.push({ id: "utilization", level: "info", title: "Mostly empty space", detail: "Parts are packed by their bounding box, so irregular shapes leave air. A nested layout could be smaller." });
   }
-  if (!d.layout.stable) w.push({ level: "caution", message: "Crate is much taller than it is wide — tip-over risk in handling." });
-  if (d.grossKg > 1000) w.push({ level: "caution", message: "Gross weight over 1,000 kg — consider heavier skids and floor joists." });
-  if (d.layout.utilization < 0.25) {
-    w.push({ level: "info", message: "Low space utilization — bounding-box packing can't nest irregular shapes; consider smaller clearances or a different quantity." });
-  }
-  w.push({ level: "info", message: "For export, use ISPM-15 heat-treated, stamped lumber." });
-  return w;
+  checks.push({ id: "export", level: "info", title: "Export shipments", detail: "Use ISPM-15 heat-treated, stamped lumber." });
+  return checks;
 }

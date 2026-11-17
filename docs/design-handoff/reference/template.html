@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crate Designer</title>
+<style>/*__CSS__*/</style>
+</head>
+<body>
+<div id="app">
+  <header class="tl">
+    <div class="brandrow">
+      <h1>Crate Designer</h1>
+      <span class="tagline">Shipping and receiving</span>
+    </div>
+    <div class="partmeta" id="partMeta"></div>
+  </header>
+
+  <section id="stage" aria-label="3D view of the crate">
+    <canvas id="gl"></canvas>
+    <div id="dims"></div>
+    <div class="tip glass" id="tip"></div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <div class="br" id="viewrow">
+    <div class="pinbar" id="pinbar"><span id="pintext"></span><button type="button" id="unpin">Show everything</button></div>
+    <button type="button" class="iconbtn" id="modeBtn"></button>
+    <div class="glass seg" id="units" role="group" aria-label="Units">
+      <button type="button" data-u="mm">mm kg</button><button type="button" data-u="in">in lb</button>
+    </div>
+    <div class="viewwrap">
+      <button type="button" class="glass pillbtn" id="viewBtn" aria-expanded="false" aria-controls="viewPop">View</button>
+      <div class="glass pop" id="viewPop" hidden>
+        <div class="seg" id="cams" role="group" aria-label="Camera">
+          <button type="button" data-c="iso">3D</button><button type="button" data-c="top">Top</button><button type="button" data-c="front">Front</button><button type="button" data-c="end">End</button>
+        </div>
+        <div id="dock" style="display:grid;gap:10px">
+          <label>Lid <input type="checkbox" class="switch" data-v="lid"></label>
+          <label>Front wall <input type="checkbox" class="switch" data-v="front"></label>
+          <label>Blocking <input type="checkbox" class="switch" data-v="blocking"></label>
+          <label>Parts <input type="checkbox" class="switch" data-v="parts"></label>
+          <label>Size labels <input type="checkbox" class="switch" data-v="dims"></label>
+        </div>
+        <div><span class="lab">Pull apart</span><input type="range" id="explode" min="0" max="100" step="1" aria-label="Pull apart"></div>
+        <span class="lab">Drag to turn, scroll to zoom, shift-drag to move. Floor squares are <span id="gridnote">500 mm</span>.</span>
+      </div>
+    </div>
+    <button type="button" class="glass pillbtn" id="hudBtn">Hide panels</button>
+  </div>
+
+  <div class="loadrow" id="loadrow">
+    <span class="loadhint">Drop a .glb file anywhere</span>
+    <span class="loadmsg" id="loadMsg" role="status"></span>
+    <input type="file" id="fileInput" accept=".glb,.json,model/gltf-binary,application/json" multiple hidden>
+  </div>
+  <div class="dropveil" id="dropveil"><div class="glass card">Drop a .glb file to load the part</div></div>
+
+  <aside class="glass card side" id="side">
+    <div class="parthead">
+      <div class="partbar"><h2 id="partName"></h2><button type="button" class="pillbtn small" id="loadBtn">Load a part</button></div>
+      <canvas id="partCanvas" aria-label="The part on its own. Drag to turn it, double-click to reset."></canvas>
+      <nav class="seg tabs" id="tabs" role="tablist" aria-label="Sections">
+        <button type="button" role="tab" data-t="overview">Overview</button>
+        <button type="button" role="tab" data-t="layout">Layouts</button>
+        <button type="button" role="tab" data-t="cut">Cut list</button>
+        <button type="button" role="tab" data-t="rules">Rules</button>
+        <button type="button" role="tab" data-t="checks">Checks<span class="count" id="checkCount" hidden></span></button>
+      </nav>
+    </div>
+    <div class="panel" id="p-overview" role="tabpanel"></div>
+    <div class="panel" id="p-layout" role="tabpanel" hidden></div>
+    <div class="panel" id="p-cut" role="tabpanel" hidden></div>
+    <div class="panel" id="p-rules" role="tabpanel" hidden>
+      <h2>Packing rules</h2>
+      <p>Change these when a part needs different handling. The crate updates as you go.</p>
+      <div class="rule"><b>How many parts</b><div class="seg qty">
+        <button type="button" class="step" id="qtyDown" aria-label="One fewer">−</button>
+        <input id="qty" type="number" min="1" max="200" inputmode="numeric" aria-label="Quantity">
+        <button type="button" class="step" id="qtyUp" aria-label="One more">+</button>
+        <span class="sep"></span><span id="qtyChips" style="display:inline-flex;gap:2px"></span>
+      </div><small>One crate holds the whole batch.</small></div>
+      <div class="rule"><b>Keep parts upright</b><input type="checkbox" class="switch" id="r-upright" aria-label="Keep parts upright"><small>Turn off to let parts lie on their side or stand on end.</small></div>
+      <div class="rule"><b>Most layers allowed</b><div class="seg" id="r-layers"><button type="button" data-n="1">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button></div><small>A plywood separator goes between layers.</small></div>
+      <div class="rule"><b>Gap between parts</b><output id="o-gap"></output><input type="range" id="r-gap" min="0" max="150" step="5" aria-label="Gap between parts"><small>Filled with wood blocking. Under 19 mm leaves no room for it.</small></div>
+      <div class="rule"><b>Clearance to walls</b><output id="o-clr"></output><input type="range" id="r-clr" min="0" max="150" step="5" aria-label="Clearance to walls"><small>Bearers go underneath, blocking at the sides.</small></div>
+      <div class="rule"><b>Wall and lid plywood</b><div class="seg" id="r-panel"><button type="button" data-n="auto">Auto</button><button type="button" data-n="12">12</button><button type="button" data-n="15">15</button><button type="button" data-n="19">19</button></div><small id="n-panel"></small></div>
+      <div class="actions" style="margin-top:16px"><button type="button" class="btn" id="r-reset">Reset rules</button></div>
+    </div>
+    <div class="panel" id="p-checks" role="tabpanel" hidden></div>
+  </aside>
+</div>
+<script>/*__DOMAIN__*/</script>
+<script>const CATALOG = __PARTS__; const GLB64 = __GLBS__;</script>
+<script>/*__APP__*/</script>
+</body>
+</html>

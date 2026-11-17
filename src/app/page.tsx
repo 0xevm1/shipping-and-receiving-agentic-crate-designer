@@ -1,5 +1,5 @@
-import { CrateDesigner } from "@/components/CrateDesigner";
+import { DesignerShell } from "@/components/shell/DesignerShell";
 
 export default function Home() {
-  return <CrateDesigner />;
+  return <DesignerShell />;
 }

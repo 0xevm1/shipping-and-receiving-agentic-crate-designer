@@ -19,10 +19,10 @@ export interface Orientation {
 export const ORIENTATIONS: Orientation[] = [
   { id: "as-modeled", label: "As modeled", euler: [0, 0, 0], upright: true },
   { id: "turned", label: "Turned 90°", euler: [0, 0, Q], upright: true },
-  { id: "on-side-x", label: "On side (X axis)", euler: [Q, 0, 0], upright: false },
-  { id: "on-side-x-turned", label: "On side (X axis), turned", euler: [Q, 0, Q], upright: false },
-  { id: "on-end-y", label: "On end (Y axis)", euler: [0, Q, 0], upright: false },
-  { id: "on-end-y-turned", label: "On end (Y axis), turned", euler: [0, Q, Q], upright: false },
+  { id: "on-side-x", label: "On its side", euler: [Q, 0, 0], upright: false },
+  { id: "on-side-x-turned", label: "On its side, turned 90°", euler: [Q, 0, Q], upright: false },
+  { id: "on-end-y", label: "On end", euler: [0, Q, 0], upright: false },
+  { id: "on-end-y-turned", label: "On end, turned 90°", euler: [0, Q, Q], upright: false },
 ];
 
 /**
