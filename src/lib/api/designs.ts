@@ -57,6 +57,19 @@ export type DesignsFields = z.infer<typeof DesignsFieldsSchema>;
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 
+/**
+ * A sentence with its lengths and masses kept as data (the domain's `Message`): plain text and
+ * `{ kind: "length", mm }` / `{ kind: "mass", kg }` parts, so a client renders it in its own
+ * units. Joining the strings and writing each quantity in metric gives the metric sentence.
+ */
+export const MessageSchema = z.array(
+  z.union([
+    z.string(),
+    z.object({ kind: z.literal("length"), mm: z.number(), fine: z.boolean().optional() }),
+    z.object({ kind: z.literal("mass"), kg: z.number() }),
+  ]),
+);
+
 /** One shortlisted quantity, designed in full. Best first; rank 1 is the recommendation. */
 export const RankedConfigurationSchema = z.object({
   rank: z.int().min(1),
@@ -112,6 +125,10 @@ export const DesignsResponseSchema = z.object({
       crateCostUsd: z.number(),
       freightUsd: z.number().nullable(),
       scoreUsdPerPart: z.number(),
+      /** Why this many crates (`explainTotalPlan`, spec §7.16): the plan's cost and its neighbours'. Metric text. */
+      rationale: z.string(),
+      /** The same sentence as a `MessageSchema`, to render in other units. */
+      rationaleMessage: MessageSchema,
     })
     .nullable(),
   /** Every quantity tried: passing ones carry their score, failing ones the rule that stopped them. */
