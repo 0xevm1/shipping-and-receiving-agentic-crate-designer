@@ -9,7 +9,7 @@ export const MODEL_TOLERANCE_MM = 1;
 
 const RANK: Record<CheckItem["level"], number> = { caution: 0, ok: 1, info: 2 };
 
-export function modelMatchesCatalog(part: LoadedPart, measured: Vec3 | null): boolean | null {
+export function modelMatchesCatalog(part: Pick<LoadedPart, "catalogDims">, measured: Vec3 | null): boolean | null {
   if (!measured || !part.catalogDims) return null;
   return measured.every((v, i) => Math.abs(v - part.catalogDims![i]) <= MODEL_TOLERANCE_MM);
 }
@@ -18,7 +18,11 @@ export function modelMatchesCatalog(part: LoadedPart, measured: Vec3 | null): bo
  * Domain checks plus the ones that depend on the loaded file (model size,
  * missing mass), cautions first.
  */
-export function allChecks(domain: Check[], part: LoadedPart, measured: Vec3 | null): CheckItem[] {
+export function allChecks(
+  domain: Check[],
+  part: Pick<LoadedPart, "catalogDims" | "readAsMm" | "massAssumed">,
+  measured: Vec3 | null,
+): CheckItem[] {
   const items: CheckItem[] = [...domain];
   if (measured) {
     const size = measured.map((v) => Math.round(v)).join(" × ");

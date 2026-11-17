@@ -1,0 +1,352 @@
+/*
+ * The export document (#26): Letter pages, black on white, vector SVG drawings.
+ * Imported only by the print route. Next keeps a route's global CSS loaded after navigation,
+ * so every rule is scoped to the print document (`.print-doc`, or `:has()` it).
+ */
+
+@page {
+  size: letter;
+  margin: 0.5in;
+}
+
+html:has(.print-doc, .print-loading),
+html:has(.print-doc, .print-loading) body {
+  height: auto;
+  overflow: visible;
+  color-scheme: light;
+  background: #d9d9d9;
+  color: #000;
+}
+
+.print-loading {
+  margin: 40px;
+  font: 14px var(--sans);
+}
+
+.print-doc {
+  --ink: #000;
+  --rule: #000;
+  --soft-ink: #444;
+  font: 10.5px/1.4 var(--sans);
+  color: var(--ink);
+  padding: 24px 0 48px;
+}
+
+/* Screen: each sheet as a Letter page. Print: the page box from @page does the margins. */
+.print-doc .sheet {
+  box-sizing: border-box;
+  width: 8.5in;
+  min-height: 11in;
+  margin: 0 auto 24px;
+  padding: 0.5in;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.print-doc .toolbar {
+  width: 8.5in;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+.print-doc .toolbar button {
+  font: 600 12px var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 9px 16px;
+  border: 1px solid #000;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+}
+.print-doc .notes,
+.print-doc > .problem {
+  width: 8.5in;
+  margin: 0 auto 16px;
+  padding: 10px 14px;
+  background: #fff4d6;
+  border: 1px solid #b58200;
+  box-sizing: border-box;
+}
+.print-doc .notes p {
+  margin: 0;
+}
+
+/* Type */
+.print-doc h1 {
+  font: 600 20px/1.2 var(--display);
+  letter-spacing: -0.02em;
+  margin: 2px 0 0;
+}
+.print-doc h2 {
+  font: 600 14px/1.25 var(--display);
+  margin: 18px 0 6px;
+  padding-top: 8px;
+  border-top: 2px solid var(--rule);
+}
+.print-doc h3 {
+  font: 700 9px/1.2 var(--wide);
+  font-stretch: 125%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 12px 0 5px;
+}
+.print-doc p {
+  margin: 0 0 6px;
+}
+.print-doc .soft {
+  color: var(--soft-ink);
+}
+.print-doc .eyebrow {
+  font: 700 9px/1.2 var(--wide);
+  font-stretch: 125%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.print-doc .doc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.print-doc .doc-head .meta {
+  text-align: right;
+  font: 9.5px/1.4 var(--mono);
+}
+
+.print-doc .cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* Label / value rows */
+.print-doc .rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 14px;
+  margin: 0;
+}
+.print-doc .rows dt {
+  color: var(--soft-ink);
+}
+.print-doc .rows dd {
+  margin: 0;
+  font-family: var(--mono);
+}
+.print-doc .rows dd small {
+  display: block;
+  font-size: 9px;
+  color: var(--soft-ink);
+}
+.print-doc .ships {
+  font: 600 13px var(--display);
+}
+.print-doc .unmet {
+  font-weight: 600;
+}
+
+.print-doc .crate-spec {
+  break-inside: avoid;
+}
+
+/* Tables */
+.print-doc table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.print-doc td,
+.print-doc th {
+  text-align: left;
+  vertical-align: top;
+  padding: 3px 6px 3px 0;
+  border-bottom: 0.5px solid #999;
+}
+.print-doc th {
+  font: 700 8.5px var(--wide);
+  font-stretch: 125%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+}
+.print-doc td.n,
+.print-doc th.n {
+  text-align: right;
+  font-family: var(--mono);
+}
+.print-doc .cutlist td:nth-child(3) {
+  font-family: var(--mono);
+}
+.print-doc .cutlist tbody {
+  break-inside: avoid;
+}
+.print-doc .cutlist .stock-head td {
+  font-weight: 700;
+  padding-top: 7px;
+  border-bottom: 1px solid var(--rule);
+}
+.print-doc .checks td.lvl {
+  width: 60px;
+  font: 700 9px var(--mono);
+  text-transform: uppercase;
+}
+.print-doc .checks tr.lvl-caution td.lvl::before {
+  content: "▲ ";
+}
+.print-doc .checks tr.lvl-ok td.lvl::before {
+  content: "✓ ";
+}
+.print-doc .checks tr.lvl-info td.lvl::before {
+  content: "i ";
+}
+.print-doc .checks tr.lvl-caution td {
+  font-weight: 600;
+}
+.print-doc .fasteners small {
+  display: block;
+  color: var(--soft-ink);
+}
+.print-doc .fasteners .sum td {
+  font-weight: 700;
+  border-top: 1px solid var(--rule);
+  border-bottom: none;
+}
+.print-doc .stock-totals {
+  display: flex;
+  gap: 24px;
+  margin: 8px 0 4px;
+  font-family: var(--mono);
+}
+
+.print-doc .steps {
+  margin: 0;
+  padding-left: 18px;
+}
+.print-doc .steps li {
+  margin-bottom: 7px;
+  break-inside: avoid;
+}
+.print-doc .steps p {
+  margin: 2px 0 0;
+}
+.print-doc .steps .pieces,
+.print-doc .steps .screws {
+  color: var(--soft-ink);
+  font-size: 9.5px;
+}
+
+/* Drawings */
+.print-doc .views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 10px;
+}
+.print-doc figure {
+  margin: 0;
+  break-inside: avoid;
+}
+.print-doc figcaption {
+  font-size: 9.5px;
+  max-width: 330px;
+}
+.print-doc svg.drawing {
+  display: block;
+  height: auto;
+}
+
+/* Shipping label */
+.print-doc .label {
+  border: 3px solid #000;
+  padding: 0.3in;
+  min-height: 9.6in;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.print-doc .label-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.print-doc .part-no {
+  font: 800 54px/1 var(--display);
+  letter-spacing: -0.02em;
+}
+.print-doc .part-name {
+  font: 500 20px var(--display);
+  margin-top: 4px;
+}
+.print-doc .label-crate {
+  font: 800 20px var(--display);
+  padding: 6px 10px;
+  background: #000;
+  color: #fff;
+  align-self: flex-start;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.print-doc .label-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 12px 24px;
+  border-top: 2px solid #000;
+  border-bottom: 2px solid #000;
+  padding: 12px 0;
+}
+.print-doc .label-grid > div:last-child {
+  grid-column: 1 / -1;
+}
+.print-doc .label .l-big {
+  font: 800 40px/1.05 var(--display);
+}
+.print-doc .label .mid {
+  font: 700 22px var(--mono);
+}
+.print-doc .label .other {
+  font: 600 16px var(--mono);
+}
+.print-doc .this-side-up {
+  font: 900 34px var(--display);
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+.print-doc .fork-note {
+  font: 800 18px var(--display);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+@media print {
+  html:has(.print-doc),
+  html:has(.print-doc) body {
+    background: #fff;
+  }
+  .print-doc {
+    padding: 0;
+  }
+  .print-doc .toolbar,
+  .print-doc .notes {
+    display: none;
+  }
+  .print-doc .sheet {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    break-after: page;
+  }
+  .print-doc .sheet:last-child {
+    break-after: auto;
+  }
+  .print-doc .label {
+    min-height: 9.8in;
+  }
+}
