@@ -2467,7 +2467,7 @@ resumable with `Last-Event-ID`), and `GET /api/v1/health` pings the database. Sl
 jobs and configurations API (`docs/API.md`): when a part loads, the app opens (or reuses) a job for
 it on the server and lists the job's saved configurations; **Save to job** posts the crate on
 screen, which the server recomputes with the engine before storing, and other tabs see it through
-the job's events. When the server or database can't be reached nothing is saved there and
+the job's events. When the server or database can't be reached, saves wait on the device (below) and
 everything else works as before; the browser storage above is still what reopens a crate after a
 reload. See `docs/POSTGRES.md`. Slice 1a adds the blob store (`src/server/blob/`), part uploads
 through `POST /api/v1/parts` and presigned model downloads: see `docs/BLOB_STORAGE.md`. (The
