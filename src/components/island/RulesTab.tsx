@@ -8,6 +8,7 @@ import { clampNote } from "@/lib/clampNote";
 import { plywoodLabel } from "@/lib/lumber";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import rule from "./rule.module.css";
 import styles from "./RulesTab.module.css";
@@ -23,7 +24,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const settings = useDesigner((s) => s.settings);
   const suggested = useDesigner((s) => s.part.suggested_quantities);
   const split = useDesigner((s) => s.plan.split);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const standards = useDesigner((s) => s.standards);
   const minGap = standards.construction.minBlockingGapMm;
   const floorMm = design.construction.floorMm;

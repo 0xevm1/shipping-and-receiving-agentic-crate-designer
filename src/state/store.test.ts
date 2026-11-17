@@ -29,12 +29,10 @@ describe("setPartDetails", () => {
   it("sets the name and material without touching the layout", () => {
     const keys = s().result.layouts.map((l) => l.key);
     s().setLayoutKey(keys[keys.length - 1]);
-    const fit = s().fit.nonce;
 
     expect(s().setPartDetails({ name: "Gear housing", material: "6061-T6 aluminum" })).toBeNull();
     expect(s().part).toMatchObject({ name: "Gear housing", material: "6061-T6 aluminum", mass_kg: 10, massAssumed: true });
     expect(s().layoutKey).toBe(keys[keys.length - 1]);
-    expect(s().fit.nonce).toBe(fit);
   });
 
   it("clears the material when it is blanked", () => {
@@ -68,51 +66,6 @@ describe("setPartDetails", () => {
     const part = s().part;
     expect(s().setPartDetails({ name: "Renamed" })).not.toBeNull();
     expect(s().part).toBe(part);
-  });
-});
-
-describe("lastChange", () => {
-  beforeEach(() => {
-    useDesigner.setState(initial, true);
-    s().setPart({ ...unknownPart, dimensions_mm: [1, 1, 1] });
-  });
-
-  it("is cleared by loading a part", () => {
-    expect(s().lastChange).toBeNull();
-  });
-
-  it("records a mass edit's diff and source", () => {
-    s().setPartDetails({ mass_kg: 14.71 });
-    const c = s().lastChange!;
-    expect(c.source).toBe("mass");
-    expect(c.changes.map((x) => x.field)).toEqual(["gross", "payload"]);
-    const gross = c.changes[0];
-    expect([Math.round(gross.from as number), Math.round(gross.to as number)]).toEqual([16, 20]);
-  });
-
-  it("records a name or material edit as a change with nothing moved", () => {
-    s().setPartDetails({ material: "4140 steel" });
-    expect(s().lastChange).toMatchObject({ source: "material", changes: [] });
-    const id = s().lastChange!.id;
-    s().setPartDetails({ name: "Cover" });
-    expect(s().lastChange).toMatchObject({ source: "name", changes: [], id: id + 1 });
-  });
-
-  it("records rules and layout edits, but not units", () => {
-    s().setSettings({ quantity: 4 });
-    expect(s().lastChange?.source).toBe("rules");
-    expect(s().lastChange?.changes.map((x) => x.field)).toContain("grid");
-    const before = s().lastChange;
-    s().setUnits("metric", null);
-    expect(s().lastChange).toBe(before);
-    s().setLayoutKey(s().result.layouts[s().result.layouts.length - 1].key);
-    expect(s().lastChange?.source).toBe("layout");
-  });
-
-  it("leaves nothing to compare when the design becomes a problem", () => {
-    s().setPart({ ...unknownPart, dimensions_mm: [30_000, 1, 1] });
-    s().setPartDetails({ mass_kg: 5 });
-    expect(s().lastChange).toBeNull();
   });
 });
 
@@ -161,17 +114,15 @@ describe("setPartProfile", () => {
     };
   };
 
-  it("shapes the blocking and keeps the layout pick and the camera", () => {
+  it("shapes the blocking and keeps the layout pick", () => {
     const keys = s().result.layouts.map((l) => l.key);
     s().setLayoutKey(keys[keys.length - 1]);
-    const fit = s().fit.nonce;
     expect(s().result.design!.shapedBlocking).toBeUndefined();
 
     s().setPartProfile("blob:widget", profile());
     expect(s().part.profile).toBeDefined();
     expect(s().result.design!.shapedBlocking).toBeDefined();
     expect(s().layoutKey).toBe(keys[keys.length - 1]);
-    expect(s().fit.nonce).toBe(fit);
   });
 
   it("ignores a profile for a model that is no longer loaded, or a failed analysis", () => {
@@ -179,22 +130,6 @@ describe("setPartProfile", () => {
     s().setPartProfile("blob:widget", null);
     expect(s().part.profile).toBeUndefined();
     expect(s().result.design!.shapedBlocking).toBeUndefined();
-  });
-
-  it("drops a pin or hover on a cut-list line the shaped design no longer has, and keeps one it still has", () => {
-    const kept = s().result.design!.bom[0].key;
-    s().setPin(kept);
-    s().setHover({ key: kept, source: "list" });
-    s().setPartProfile("blob:widget", profile());
-    expect(s().pin).toBe(kept);
-    expect(s().hover?.key).toBe(kept);
-
-    s().setPin("no-such-line");
-    s().setHover({ key: "no-such-line", source: "list" });
-    useDesigner.setState({ part: { ...s().part, profile: undefined } });
-    s().setPartProfile("blob:widget", profile());
-    expect(s().pin).toBeNull();
-    expect(s().hover).toBeNull();
   });
 
   it("keeps the profile through a mass edit, and drops it with a new part", () => {

@@ -11,6 +11,7 @@ import { dims, lengthUnit, weight } from "@/lib/units";
 import { useLibrary } from "@/state/libraryStore";
 import { openDesignFile } from "@/state/partLoader";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./SavedDesigns.module.css";
 import { type LoadedPart } from "@/lib/part";
 
@@ -66,7 +67,7 @@ export function SavedDesigns() {
 }
 
 function PartLibrary({ part, partKey: key }: { part: LoadedPart; partKey: string }) {
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const entries = useLibrary((s) => s.entries);
   const mine = useMemo(() => entriesForPart(entries, key), [entries, key]);
   // The name a new save starts with, set when the form opens (null: the form is closed).
@@ -98,7 +99,7 @@ function PartLibrary({ part, partKey: key }: { part: LoadedPart; partKey: string
     const glbs = entry.design.part.source === "custom" ? await currentModelFile(part) : [];
     if (await openDesignFile(entry.design, glbs)) say(`Reused “${entry.name}”.`);
     else {
-      const { loadMessage } = useDesigner.getState();
+      const { loadMessage } = useView.getState();
       say(`Couldn't open “${entry.name}”.${loadMessage ? ` ${loadMessage}` : ""}`);
     }
   };

@@ -7,7 +7,7 @@ import { Vector3, type Group } from "three";
 import type { Line2, LineSegments2 } from "three-stdlib";
 import type { CrateDesign } from "@/domain/crate";
 import { anim } from "@/state/motion";
-import { reducedMotion } from "@/state/store";
+import { reducedMotion } from "@/state/motion";
 import { buildLines, separatePills, type Axis, type PillBox, type Where } from "./sizeLines";
 import { createPulseClock, dimensionPulses, PULSE_DURATION_S, tickPulse } from "./dimensionPulse";
 import { PhotonLayer } from "./PhotonLayer";

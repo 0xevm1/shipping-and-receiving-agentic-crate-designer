@@ -6,9 +6,12 @@ import { restoreLastDesign } from "./lastDesignLoader";
 import { useLibrary } from "./libraryStore";
 import { beginLoad } from "./loadSequence";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 
 const initial = useDesigner.getState();
+const viewInitial = useView.getState();
 const s = () => useDesigner.getState();
+const v = () => useView.getState();
 
 /** The default crate at quantity 8, two layers, on the Rules tab, ranked by cost. */
 function savedCatalogCrate() {
@@ -20,7 +23,10 @@ function savedCatalogCrate() {
 }
 
 describe("reopening the last crate", () => {
-  beforeEach(() => useDesigner.setState(initial, true));
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    useView.setState(viewInitial, true);
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     useLibrary.getState().setPendingShare(null);
@@ -28,20 +34,20 @@ describe("reopening the last crate", () => {
 
   it("reopens a catalog crate with its rules, layout, tab and ranking, and leaves the clock stopped", async () => {
     const saved = savedCatalogCrate();
-    s().startDesignClock(1000);
+    v().startDesignClock(1000);
     expect(await restoreLastDesign(saved, new IDBFactory())).toBe(true);
     expect(s().settings).toMatchObject({ quantity: 8, maxLayers: 2 });
     expect(s().result.design?.layout.key).toBe(saved.design.layoutKey);
-    expect(s().tab).toBe("rules");
+    expect(v().tab).toBe("rules");
     expect(s().ranking).toBe("cost");
-    expect(s().loadMessage).toBe("");
+    expect(v().loadMessage).toBe("");
     // Not newly loaded: no clock, so an export records no "Designed in" time.
-    expect(s().designStartedAt).toBeNull();
-    s().markExported(5000);
-    expect(s().designedInMs).toBeNull();
+    expect(v().designStartedAt).toBeNull();
+    v().markExported(5000);
+    expect(v().designedInMs).toBeNull();
     // A new part starts it again.
     s().setPart(s().part);
-    expect(s().designStartedAt).not.toBeNull();
+    expect(v().designStartedAt).not.toBeNull();
   });
 
   it("applies nothing when a later load started while it was reading", async () => {
@@ -51,7 +57,7 @@ describe("reopening the last crate", () => {
     beginLoad();
     expect(await reopening).toBe(false);
     expect(s().settings).toEqual(initial.settings);
-    expect(s().tab).toBe(initial.tab);
+    expect(v().tab).toBe(viewInitial.tab);
   });
 
   it("without the custom part's GLB, keeps the default part, names the file and waits for it", async () => {
@@ -65,7 +71,7 @@ describe("reopening the last crate", () => {
     expect(await restoreLastDesign(custom, idb)).toBe(false);
     expect(s().part.id).toBe(initial.part.id);
     expect(s().settings).toEqual(initial.settings);
-    expect(s().loadMessage).toContain("Load widget_v2.glb to reopen your last crate");
+    expect(v().loadMessage).toContain("Load widget_v2.glb to reopen your last crate");
     expect(useLibrary.getState().pendingShare).toEqual(custom.design);
   });
 

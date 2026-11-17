@@ -6,14 +6,15 @@ import { browserIdb, loadLastGlb, saveLastGlb } from "./glbCache";
 import { createDebouncedSaver, saveLastDesign, type LastDesign } from "./lastDesignStorage";
 import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
-import { browserStorage, type KeyValueStore } from "./standardsStorage";
+import { browserStorage, type KeyValueStore } from "./persist";
 import { useDesigner, type DesignerState } from "./store";
+import { useView, type Tab } from "./viewStore";
 import type { LoadedPart } from "@/lib/part";
 
 /** The design on screen as a last-design entry, or null when there is no crate to keep. */
-export function lastDesignOf(s: Pick<DesignerState, "part" | "settings" | "plan" | "result" | "tab" | "ranking">): LastDesign | null {
+export function lastDesignOf(s: Pick<DesignerState, "part" | "settings" | "plan" | "result" | "ranking">, tab: Tab): LastDesign | null {
   const design = currentDesignFile(s);
-  return design ? { design, tab: s.tab, ranking: s.ranking } : null;
+  return design ? { design, tab, ranking: s.ranking } : null;
 }
 
 /**
@@ -35,13 +36,13 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
       if (!ticket.current()) return false;
       if (!kept || kept.name !== file.part.model) {
         useLibrary.getState().setPendingShare(file);
-        useDesigner.getState().setLoadMessage(`Load ${file.part.model} to reopen your last crate (${file.settings.quantity} × ${file.part.name}).`, "error");
+        useView.getState().setLoadMessage(`Load ${file.part.model} to reopen your last crate (${file.settings.quantity} × ${file.part.name}).`, "error");
         return false;
       }
       glbs = [new File([kept.bytes], kept.name, { type: "model/gltf-binary" })];
     }
     const s = useDesigner.getState();
-    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, s.units);
+    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, useView.getState().units);
     if (!ticket.current()) {
       if (outcome.part?.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
       return false;
@@ -58,11 +59,12 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
       if (outcome.part.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
       return false;
     }
-    useDesigner.getState().restoreDesign(outcome.part, settings, layoutKey, crateIndex, { tab: saved.tab, ranking });
+    useDesigner.getState().restoreDesign(outcome.part, settings, layoutKey, crateIndex, ranking);
+    useView.getState().setTab(saved.tab);
     // Only what came out differently is worth a line; the crate itself shows it reopened.
     const lead = `Design loaded: ${file.settings.quantity} × ${outcome.part.name}.`;
     const notes = outcome.message.startsWith(lead) ? outcome.message.slice(lead.length).trim() : "";
-    if (notes) useDesigner.getState().setLoadMessage(`Reopened. ${notes}`);
+    if (notes) useView.getState().setLoadMessage(`Reopened. ${notes}`);
     return true;
   } catch (e) {
     console.warn("Last-opened crate not reopened, opening the default part.", e);
@@ -70,9 +72,9 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
   }
 }
 
-type Watched = Pick<DesignerState, "part" | "settings" | "plan" | "result" | "tab" | "ranking">;
+type Watched = Pick<DesignerState, "part" | "settings" | "plan" | "result" | "ranking">;
 const changed = (a: Watched, b: Watched) =>
-  a.part !== b.part || a.settings !== b.settings || a.result !== b.result || a.plan !== b.plan || a.tab !== b.tab || a.ranking !== b.ranking;
+  a.part !== b.part || a.settings !== b.settings || a.result !== b.result || a.plan !== b.plan || a.ranking !== b.ranking;
 
 /**
  * Saves the crate on screen on every change (debounced), and a newly loaded custom part's GLB
@@ -100,22 +102,27 @@ export function watchLastDesign({
     }
   };
   const saver = createDebouncedSaver<LastDesign>((d) => saveLastDesign(d, storage));
-  const schedule = (s: Watched) => {
-    const d = lastDesignOf(s);
+  // The crate is the design store's; the tab it was on is the view's. Either changing saves.
+  const schedule = () => {
+    const d = lastDesignOf(useDesigner.getState(), useView.getState().tab);
     if (d) saver.schedule(d);
   };
-  const unsubscribe = useDesigner.subscribe((s, prev) => {
-    if (changed(s, prev)) schedule(s);
+  const unsubscribeDesign = useDesigner.subscribe((s, prev) => {
+    if (changed(s, prev)) schedule();
     if (s.part !== prev.part && s.part.modelUrl.startsWith("blob:") && designFilePart(s.part).source === "custom") void keepGlb(s.part);
   });
-  if (saveNow) schedule(useDesigner.getState());
+  const unsubscribeView = useView.subscribe((s, prev) => {
+    if (s.tab !== prev.tab) schedule();
+  });
+  if (saveNow) schedule();
   const onHide = () => saver.flush();
   window.addEventListener("pagehide", onHide);
   const onVisibility = () => document.visibilityState === "hidden" && saver.flush();
   document.addEventListener("visibilitychange", onVisibility);
   return () => {
     saver.flush();
-    unsubscribe();
+    unsubscribeDesign();
+    unsubscribeView();
     window.removeEventListener("pagehide", onHide);
     document.removeEventListener("visibilitychange", onVisibility);
   };

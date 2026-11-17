@@ -3,6 +3,7 @@
 import type { DesignProblem } from "@/domain/design";
 import { renderMessage } from "@/lib/message";
 import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./ProblemCard.module.css";
 
 /** Which way forward each kind of problem has: the part is the trouble, or the rules are, or the shop standards. */
@@ -21,7 +22,7 @@ const FIX: Record<DesignProblem["id"], "part" | "rules" | "standards"> = {
  * action that gets out of it ("Load another part", "Reset rules", "Reset shop standards").
  */
 export function ProblemCard({ problem, onLoad }: { problem: DesignProblem; onLoad: () => void }) {
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const fix = FIX[problem.id];
   const { resetRules, resetStandards } = useDesigner.getState();
   return (

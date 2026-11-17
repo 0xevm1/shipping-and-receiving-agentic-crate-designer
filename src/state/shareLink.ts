@@ -1,7 +1,7 @@
 import { catalog } from "@/domain/catalog";
 import { readShareHash } from "@/domain/shareLink";
 import { useLibrary } from "./libraryStore";
-import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 import { openDesignFile } from "./partLoader";
 
 /**
@@ -18,17 +18,17 @@ export async function openShareLink(initial: boolean) {
   const r = readShareHash(window.location.hash);
   if (!r) return;
   history.replaceState(history.state, "", window.location.pathname + window.location.search);
-  const s = useDesigner.getState();
+  const view = useView.getState();
   if (!r.ok) {
     const why = r.error.replace(/^(This share link|This design file)/, "That share link");
-    s.setLoadMessage(`${why}${initial ? " The default crate is shown." : ""}`, "error");
+    view.setLoadMessage(`${why}${initial ? " The default crate is shown." : ""}`, "error");
     return;
   }
   const file = r.file;
   const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
   if (!inCatalog) {
     useLibrary.getState().setPendingShare(file);
-    s.setLoadMessage(
+    view.setLoadMessage(
       `This link needs ${file.part.model}. Load it (or drop it here) to open the ${file.settings.quantity} × ${file.part.name} design.`,
       "error",
     );

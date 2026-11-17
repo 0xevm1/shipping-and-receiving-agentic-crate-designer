@@ -6,7 +6,9 @@ import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
 import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
-import { useDesigner, type ChangeSource } from "@/state/store";
+import type { ChangeSource } from "@/state/designEvents";
+import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";
 import { LoadToast } from "./LoadToast";
@@ -29,7 +31,7 @@ const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
 export function PartHeader() {
   const part = useDesigner((s) => s.part);
   const measured = useDesigner((s) => s.measured);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const match = modelMatchesCatalog(part, measured);
 
   return (
@@ -69,7 +71,7 @@ export function PartHeader() {
 /** " · crate gross 20 kg", flashing when an edit moves it; nothing while there is no design. */
 function Gross() {
   const gross = useDesigner((s) => s.result.design?.grossKg);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const crates = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
   if (gross === undefined) return null;
   // A split batch: the shipment, not one crate.
@@ -104,7 +106,7 @@ const STAND_IN_HINT = "Stand-in: no mass came with the file, so 10 kg is used. E
  */
 function PartDetailsFields() {
   const part = useDesigner((s) => s.part);
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   const setPartDetails = useDesigner((s) => s.setPartDetails);
   const [errors, setErrors] = useState<Record<FieldId, string | null>>({ name: null, material: null, mass: null });
   const onError = (f: FieldId) => (e: string | null) => setErrors((all) => (all[f] === e ? all : { ...all, [f]: e }));
