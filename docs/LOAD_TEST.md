@@ -350,7 +350,7 @@ the bus when one of these holds, sustained, after improvements 1–4:
 | Need per-tenant channels, replay beyond the `event` table, or payloads > 8 KB | when it arises | Beyond what NOTIFY offers |
 
 At today's ceiling (≥ 150 saves/s per process after the fixes; the lock microbenchmark puts the
-single-statement append at ~200–450 commits/s (noisy)) one to two app instances running flat out reach
+single-statement append at ~200–450 commits/s) one to two app instances running flat out reach
 the first threshold. That is far beyond the prototype's load, so LISTEN/NOTIFY stays the right
 bus, but the event-writing rate across instances is now the first number to watch.
 
