@@ -301,8 +301,10 @@ describe("standards JSON", () => {
   it.each([
     ["not JSON", "{oops", /valid JSON/],
     ["an array", "[1,2]", /doesn't hold/],
-    ["another version", JSON.stringify({ version: 99, standards: {} }), /version 99/],
-    ["an invalid value", JSON.stringify({ standards: { stock: { floorPlywoodMm: 0 } } }), /stock\.floorPlywoodMm/],
+    ["another version", JSON.stringify({ kind: "crate-designer/shop-standards", version: 99, standards: {} }), /newer version.*99/],
+    ["an envelope of another kind", JSON.stringify({ kind: "crate-design", version: 1, standards: {} }), /not a shop standards file/],
+    ["an envelope with no kind", JSON.stringify({ version: 1, standards: {} }), /not a shop standards file/],
+    ["an invalid value", JSON.stringify({ kind: "crate-designer/shop-standards", version: 1, standards: { stock: { floorPlywoodMm: 0 } } }), /stock\.floorPlywoodMm/],
   ])("rejects %s", (_, text, message) => {
     const r = standardsFromJson(text);
     expect(r.ok).toBe(false);

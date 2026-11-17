@@ -1,5 +1,6 @@
 import { RANKINGS, type Ranking } from "@/domain/design";
 import { parseDesignFile, type DesignFile } from "@/domain/designFile";
+import { readEnvelope } from "@/domain/envelope";
 import { readShareHash } from "@/domain/shareLink";
 import { browserStorage, readJson, writeJson, type KeyValueStore } from "./persist";
 import type { Tab } from "./store";
@@ -28,18 +29,11 @@ export function lastDesignToJson({ design, tab, ranking }: LastDesign): string {
   return JSON.stringify({ kind: LAST_DESIGN_KIND, version: LAST_DESIGN_VERSION, tab, ranking, design });
 }
 
-/** Reads a saved entry: the envelope, then the design through `parseDesignFile`. Never throws. */
+/** Reads a saved entry: the shared envelope, then the design through `parseDesignFile`. Never throws. */
 export function parseLastDesign(text: string): { ok: true; value: LastDesign } | { ok: false; error: string } {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "It is not valid JSON." };
-  }
-  if (typeof json !== "object" || json === null || Array.isArray(json)) return { ok: false, error: "It is not an object." };
-  const o = json as Record<string, unknown>;
-  if (o.kind !== LAST_DESIGN_KIND) return { ok: false, error: "It has the wrong kind." };
-  if (o.version !== LAST_DESIGN_VERSION) return { ok: false, error: `Version ${String(o.version)} is not ${LAST_DESIGN_VERSION}.` };
+  const read = readEnvelope(text, { kind: LAST_DESIGN_KIND, version: LAST_DESIGN_VERSION, label: "last-opened crate", what: "a last-opened crate" });
+  if (!read.ok) return read;
+  const o = read.doc;
   if (!TABS.includes(o.tab as Tab)) return { ok: false, error: `Unknown tab ${String(o.tab)}.` };
   if (!RANKINGS.includes(o.ranking as Ranking)) return { ok: false, error: `Unknown ranking ${String(o.ranking)}.` };
   if (typeof o.design !== "object" || o.design === null) return { ok: false, error: "It has no design." };

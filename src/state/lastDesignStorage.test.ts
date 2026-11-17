@@ -97,6 +97,17 @@ describe("last-opened crate", () => {
     expect(warn).toHaveBeenCalledTimes(bad.length);
   });
 
+  it("reads the envelope the way the other saved documents do", () => {
+    const good = JSON.parse(lastDesignToJson(sample()));
+    const err = (v: unknown) => {
+      const r = parseLastDesign(JSON.stringify(v));
+      return r.ok ? "" : r.error;
+    };
+    expect(parseLastDesign("{nope")).toEqual({ ok: false, error: "This last-opened crate is not valid JSON." });
+    expect(err({ ...good, kind: "x" })).toBe("This file is not a last-opened crate.");
+    expect(err({ ...good, version: 2 })).toMatch(/newer version of the app/);
+  });
+
   it("a refused save (quota, blocked) is not an error", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(saveLastDesign(sample(), throwing)).toBe(false);
