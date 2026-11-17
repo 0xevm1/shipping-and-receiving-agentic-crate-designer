@@ -38,6 +38,8 @@ export interface CrateSnapshot {
   tab: string;
   units: string;
   panelsHidden: boolean;
+  /** Narrow screens: the island drawer is open (#42). */
+  drawerOpen: boolean;
   quantity: number;
   partId: string;
   massAssumed: boolean;
@@ -85,6 +87,7 @@ function snapshot(): CrateSnapshot {
     tab: s.tab,
     units: s.units,
     panelsHidden: s.panelsHidden,
+    drawerOpen: s.drawerOpen,
     quantity: s.settings.quantity,
     partId: s.part.id,
     massAssumed: s.part.massAssumed,

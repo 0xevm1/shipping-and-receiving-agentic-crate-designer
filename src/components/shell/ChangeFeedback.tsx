@@ -18,9 +18,15 @@ export function ChangeNote({ sources, className }: { sources: readonly ChangeSou
   const last = useDesigner((s) => s.lastChange);
   const units = useDesigner((s) => s.units);
   const show = last && sources.includes(last.source);
+  const text = show ? changeNote(last.changes, units) : "";
   return (
     <div className={className ? `changenote ${className}` : "changenote"} role="status">
-      {show && <span key={last.id}>{changeNote(last.changes, units)}</span>}
+      {/* `title` keeps the full text where narrow screens cut the note to one line (#42). */}
+      {show && (
+        <span key={last.id} title={text}>
+          {text}
+        </span>
+      )}
     </div>
   );
 }

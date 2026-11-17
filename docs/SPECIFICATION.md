@@ -149,7 +149,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
-| `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
+| `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger, focus trap and summary chip (#42); idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
@@ -732,8 +732,46 @@ The canvas fills the window. Four regions float above it:
   fits the bounding sphere into the free rectangle (insets: left 40, top 96, right = island width
   + 56, bottom 130 px). Hide panels fades out everything except the "Show panels" pill and the
   credit, and keeps only the bottom inset so the crate clears the credit.
-- **Narrow screens:** below 980 px the layout stacks: header, canvas (54 vh), load row, view
-  bar, island. Insets are zero and Hide panels is hidden.
+- **981–1180 px:** as desktop, with the tagline hidden and a 420 px island.
+- **Narrow screens (below 980 px, #42):** the scene stays full-bleed and the island becomes a
+  drawer. `DesignerShell` switches on `matchMedia("(max-width: 980px)")`; the CSS is the
+  matching block in `globals.css`.
+  - **Scene:** the canvas fills the screen; `html` and `body` are `100dvh` with `overflow: hidden`,
+    so the page never scrolls. The viewport is `viewport-fit=cover` (`layout.tsx`) and the
+    overlays keep clear of notches with `env(safe-area-inset-*)`.
+  - **Header** (top left): the title at 24 px without the tagline, and the part sentence at
+    11.5 px. Lines wrap between phrases, not inside a value. The header's change note floats
+    under it on one line with an ellipsis (full text in its `title`), so it doesn't move the
+    framing. A row under the part lines is free for the coming Export pill (#51); the top inset
+    is measured, so the crate moves down to make room.
+  - **Hamburger** (top right, 48 px, "Crate details"): opens the drawer. It has `aria-expanded`
+    and `aria-controls="island"`.
+  - **Drawer:** the island, full height at the right edge, `min(88vw, 440px)` wide, over a
+    scrim. It is a `dialog` with `aria-modal` and is `inert` while closed. Opening it moves
+    focus to its close button, Tab and Shift+Tab cycle inside it, and closing it (close button,
+    scrim, or Escape) returns focus to the hamburger. Escape closes the drawer before it clears
+    a pin. It slides in over 0.28 s, and just appears with `prefers-reduced-motion`. Inside: part
+    name, Load a part and close, the part view (130 px; 84 px on screens under 560 px tall),
+    the tabs, the panel (the only thing that scrolls), then the credit at half size (hidden on
+    short screens). `drawerOpen` in the store is separate from `panelsHidden`.
+  - **Foot:** the load message (when there is one), the **summary chip** (outside size and gross
+    weight in amber; tapping it opens the drawer on Overview; it flashes with the Overview on an
+    edit), then the compact view bar: mode icon, units and View; no Hide panels. From 600 px
+    wide (tablets, phones in landscape) the chip and the bar share one row. The View popover
+    opens upward from the right edge, is at most `100vw − 24px` wide and scrolls inside when
+    the screen is short. Its gesture hint names pinch and two-finger drag on touch screens.
+  - **Touch targets** are at least 44 px: hamburger, close, Load a part, tabs, panel buttons,
+    the bar's controls and the popover's switches.
+  - **Tap a board:** pins its row and switches to Cut list as on desktop (§8.4), and the shell
+    opens the drawer at that row. Closing it keeps the pin and its pin bar.
+  - **Idle auto-play** holds while the drawer is open (§8.4).
+  - **Insets:** left and right 12 px; top is the header's bottom + 8 px and bottom is the foot's
+    height + 8 px, both measured (ResizeObserver), so the crate and its size labels sit between
+    the header and the summary. `Director`'s fit already takes the tighter of width and height,
+    which in portrait is the width.
+  - **Crossing 980 px** (a resize or rotation): going wide closes the drawer, so it is never
+    left open behind the desktop island; going narrow turns Hide panels off, because the
+    narrow layout has no "Show panels" pill.
 
 ### 8.3 Tabs
 
@@ -793,8 +831,8 @@ open question for the user (see #20).
   - After **6 s** with no pointer, wheel, key or touch input anywhere, the camera turns at
     **0.18 rad/s** (slowed from the handoff's 0.3 at the user's request) and steps closed → exploded → open → exploded → …, half a turn per mode. The
     next mode starts 0.12 turn early so it lands as the half-turn completes.
-  - Any input stops it at once. It holds while a row is pinned or anything is hovered, and
-    resumes from the mode on screen. It runs on first load.
+  - Any input stops it at once. It holds while a row is pinned, anything is hovered or the
+    narrow-screen drawer is open (#42), and resumes from the mode on screen. It runs on first load.
   - With `prefers-reduced-motion` it never runs, and mode changes and camera moves are instant.
 - **Size lines:**
   - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
@@ -1055,9 +1093,11 @@ deliberately changes an expected value, update the test and this spec in the sam
 
 `bun run e2e` runs Playwright (`playwright.config.ts`, specs in `e2e/`, excluded from vitest).
 It builds the production app with `NEXT_PUBLIC_E2E=1`, serves it on port 3320 and drives
-headless Chromium with SwiftShader WebGL, so the canvas really renders. Two projects: desktop
-1440 × 900 runs every spec except `*.narrow.spec.ts`; narrow 900 × 900 (the stacked layout)
-runs only those. Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
+headless Chromium with SwiftShader WebGL, so the canvas really renders. Four projects: desktop
+1440 × 900 runs every spec except `*.narrow.spec.ts` and `*.mobile.spec.ts`; narrow 900 × 900
+(the drawer layout with a mouse) runs only `*.narrow.spec.ts`; mobile-390 (390 × 844) and
+mobile-360 (360 × 800), both with touch, `isMobile` and 2× pixels, run only `*.mobile.spec.ts`
+(#42). Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
 transitions are instant (§8.4); one test turns motion back on. Each flow saves named full-page
 screenshots to `e2e/screenshots/` (git-ignored); CI uploads them as `e2e-screenshots` with the
 HTML report as `playwright-report`.
@@ -1095,7 +1135,21 @@ HTML report as `playwright-report`.
     commits); a text `.gltf` is rejected; a 30 m part (a generated GLB read as millimetres)
     shows the over-20 m problem.
   - `08-layout`: at 1440 × 900 the document doesn't scroll and the island panel does; at
-    900 px the layout stacks with no horizontal scroll on any tab.
+    900 px the canvas is full-bleed, the summary and view bar share the bottom row, the drawer
+    opens from the hamburger with every tab and no page scroll, and a scrim click closes it.
+  - `12-mobile` (#42, at 390 × 844 and 360 × 800): the page doesn't scroll, the canvas is
+    full-bleed and the size labels sit between the header and the summary; the summary shows
+    932 × 652 × 497 mm and the gross in amber; the hamburger opens the drawer (a modal dialog
+    85–90 vw wide, focus on close), Tab stays inside it, and Escape, the scrim and the close
+    button each close it and return focus to the hamburger; every tab works inside it with no
+    page scroll and only the panel scrolls; drawer controls are at least 44 px; tapping the
+    crate's front opens the drawer on Cut list with the pinned row in view; the view bar and
+    the View popover (above the bar) stay on screen; Load a part from the drawer loads
+    PART-002; resizing to 1440 px closes the drawer and shows the desktop island, back to
+    narrow with Hide panels off, and landscape keeps the drawer layout; with motion on, idle
+    auto-play holds while the drawer is open and starts after it closes. Screenshots
+    `42-<project>-closed-summary`, `-drawer-overview`, `-drawer-cutlist-pinned` and
+    `-view-popover`.
   - `11-design-json`: Download design (.json) gives `crate-design-PART-001-x4.json` with the
     expected part, settings and summary (932 × 652 × 497); a catalog design (PART-002 × 8, a
     picked layout) reopens on a fresh page with the same quantity, outside size and cut list,

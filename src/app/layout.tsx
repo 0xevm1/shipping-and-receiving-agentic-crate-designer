@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, Geist_Mono, Inter_Tight, Mrs_Saint_Delafield } from "next/font/google";
 import "./globals.css";
 
@@ -36,6 +36,14 @@ const signature = Mrs_Saint_Delafield({
 export const metadata: Metadata = {
   title: "Crate Designer",
   description: "Design wooden shipping crates for batches of identical parts",
+};
+
+/** `viewport-fit=cover` lets the scene run under a phone's notch; the overlays keep clear with `env(safe-area-inset-*)` (#42). */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#002548",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
