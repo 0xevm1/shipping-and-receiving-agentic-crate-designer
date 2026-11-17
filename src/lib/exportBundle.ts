@@ -28,6 +28,7 @@ import { bomToCsv, shipmentToCsv } from "./csv";
 import { documentDate } from "./format";
 import { renderMessage } from "./message";
 import { designFilePart } from "./loadPart";
+import { framedScene } from "./partFrame";
 import { buildPrintable, type PrintableDesign } from "./printable";
 import type { Units } from "./units";
 
@@ -194,7 +195,7 @@ export async function browserMakers(part: LoadedPart): Promise<BundleMakers> {
   const { exportCrateGlb, loadPartScene } = await import("./exportGlb");
   return {
     glb: async (design) => {
-      const scene = await loadPartScene(part.modelUrl);
+      const scene = framedScene(await loadPartScene(part.modelUrl), part.upAxis);
       return exportCrateGlb(design, { scene, mmPerUnit: part.mmPerUnit, material: part.material });
     },
     pdf: async (doc) => (await import("./exportPdf")).printableToPdf(doc),

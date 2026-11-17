@@ -26,9 +26,12 @@ const unknownPart: LoadedPart = {
   dimensions_mm: [1, 1, 1],
   suggested_quantities: [1, 4, 8],
   modelUrl: "blob:widget",
+  modelUnits: "m",
+  upAxis: "z",
+  unitsGuessed: true,
   mmPerUnit: 1000,
+  rawSize: [0.001, 0.001, 0.001],
   massAssumed: true,
-  readAsMm: false,
 };
 
 /** A flat profile, except the -X face is set back 30 mm above half height (shaped blocking). */
@@ -135,6 +138,18 @@ describe("editing an input", () => {
     const gross = c.changes[0];
     expect([Math.round(gross.from as number), Math.round(gross.to as number)]).toEqual([16, 20]);
     expect(v().fit.nonce).toBe(nonce + 1);
+  });
+
+  it("records a change of the file's units or up axis (source frame), and re-frames", () => {
+    d().setPart({ ...unknownPart, rawSize: [0.3, 0.2, 0.1], dimensions_mm: [300, 200, 100] });
+    const nonce = v().fit.nonce;
+    expect(d().setPartFrame({ up: "y" })).toBeNull();
+    expect(v().lastChange?.source).toBe("frame");
+    expect(v().fit.nonce).toBe(nonce + 1);
+    // Choosing what is already in use is no edit.
+    const before = v().lastChange;
+    d().setPartFrame({ up: "y" });
+    expect(v().lastChange).toBe(before);
   });
 
   it("records rules and layout edits, but not units or tab changes", () => {

@@ -1,7 +1,7 @@
 import type { DesignResult } from "@/domain/design";
 
 /** Which input an edit came from, so the change note can sit by it. */
-export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
+export type ChangeSource = "name" | "material" | "mass" | "frame" | "rules" | "layout";
 
 /**
  * What a design action did, told to the view store (`viewStore.ts`) once the design store has

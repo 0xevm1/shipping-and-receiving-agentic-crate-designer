@@ -270,3 +270,74 @@ describe("design file: a split batch (#25)", () => {
     expect(notes).toMatch(/now ships as .*crate A.*\(was .*crate A/);
   });
 });
+
+describe("format 3: the part's file units and up axis (#105)", () => {
+  const inchesYUp: DesignFilePart = { ...widget, units: "in", up: "y", unitsGuessed: true };
+
+  /** A file as format 2 wrote it: the current file with the format 3 part fields taken out. */
+  const asFormat2 = (part: DesignFilePart) => {
+    const doc = JSON.parse(save(part, DEFAULT_SETTINGS).text);
+    doc.schemaVersion = 2;
+    delete doc.part.units;
+    delete doc.part.up;
+    delete doc.part.unitsGuessed;
+    return doc;
+  };
+
+  it("saves the units, the axis and whether the units were a guess, and reads them back", () => {
+    const { text } = save(inchesYUp, DEFAULT_SETTINGS);
+    const json = JSON.parse(text);
+    expect(json.schemaVersion).toBe(3);
+    expect(json.part).toMatchObject({ units: "in", up: "y", unitsGuessed: true });
+    const r = parseDesignFile(text);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.file.part).toMatchObject({ units: "in", up: "y", unitsGuessed: true });
+    // Writing what was read gives the same file.
+    const again = serializeDesign({
+      app: TEST_APP,
+      part: r.file.part,
+      settings: r.file.settings,
+      layoutKey: r.file.layoutKey,
+      design: computeDesign(r.file.part, r.file.settings).design!,
+      savedAt: SAVED_AT,
+    });
+    expect(again).toBe(text);
+  });
+
+  it("rejects units or an axis the app does not offer", () => {
+    for (const bad of [{ units: "ft" }, { up: "x" }, { unitsGuessed: false }]) {
+      const doc = JSON.parse(save(inchesYUp, DEFAULT_SETTINGS).text);
+      Object.assign(doc.part, bad);
+      expect(parseDesignFile(JSON.stringify(doc)).ok).toBe(false);
+    }
+  });
+
+  it("migrates format 2: Z up, a catalog part in metres, a custom part's units left for the reader to find", () => {
+    const custom = parseDesignFile(JSON.stringify(asFormat2(widget)));
+    if (!custom.ok) throw new Error(custom.error);
+    expect(custom.file.schemaVersion).toBe(3);
+    expect(custom.file.part.up).toBe("z");
+    expect(custom.file.part.units).toBeUndefined();
+    const catalog = parseDesignFile(JSON.stringify(asFormat2(catalogFilePart("PART-001"))));
+    if (!catalog.ok) throw new Error(catalog.error);
+    expect(catalog.file.part).toMatchObject({ up: "z", units: "m" });
+  });
+
+  it("migrates format 1 through 2 to 3", () => {
+    const doc = asFormat2(widget);
+    doc.schemaVersion = 1;
+    delete doc.ranking;
+    const r = parseDesignFile(JSON.stringify(doc));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.file).toMatchObject({ schemaVersion: 3, ranking: "volume", part: { up: "z" } });
+  });
+
+  it("keeps the rest of a migrated file as it was", () => {
+    const doc = asFormat2(widget);
+    const r = parseDesignFile(JSON.stringify(doc));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.file.settings).toEqual(doc.settings);
+    expect(r.file.summary).toEqual(doc.summary);
+    expect(r.file.part).toMatchObject({ id: "widget_v2", dimensions_mm: widget.dimensions_mm, model: "widget_v2.glb" });
+  });
+});

@@ -289,7 +289,7 @@ tab at a time.
 |---|---|
 | **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The app shows inches and pounds by default, with a metric toggle; units are converted only at the UI and export edges (`src/lib/units.ts`, `src/lib/lumber.ts`) |
 | **Axes** | Right-handed, **Z up**: the same frame as the source GLBs. X is the crate's long axis (the skids run along X) |
-| **GLB files** | Metres, Z up, not centred on their origin. The viewer scales by ×1000 and re-centres each part on its bounding box. A loaded file more than 20 units across is read as millimetres, and the UI says so |
+| **GLB files** | Metres and Z up by default, not centred on their origin (any distance from it). The viewer re-centres each part on its bounding box. A loaded file's units (metres, millimetres or inches) are guessed from its size and its up axis (Z or Y) starts as Z; both are choices in the part header, saved in the design file, and the header says what the file was read as |
 | **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m; the few world-space users (camera framing, floor) convert with the helpers in `viewer/scene.ts` |
 | **Crate origin** | The interior min corner, on the top face of the floor |
 

@@ -33,8 +33,9 @@ export const PARTS_NODE = "Parts";
 
 /** A loaded part model and how to scale it, as `PartInstances` uses it. */
 export interface PartModel {
+  /** The model already turned to Z up (`framedScene`). */
   scene: Object3D;
-  /** Millimetres per model unit (1000 for metre files). */
+  /** Millimetres per model unit (1000 for metre files, 25.4 for inches). */
   mmPerUnit: number;
   material?: string;
 }

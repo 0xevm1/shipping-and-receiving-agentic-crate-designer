@@ -22,8 +22,16 @@ export const DESIGN_FILE_KIND = "crate-design";
  * Bump when the format changes in a way older readers can't handle, and add a migration.
  * 2: the layout ranking and the part's measured outline joined the file, because the crate
  * planned from a file depends on both.
+ * 3: the part's file units and up axis joined the file, because the model is measured with them.
  */
-export const DESIGN_SCHEMA_VERSION = 2;
+export const DESIGN_SCHEMA_VERSION = 3;
+
+/** What a loaded model's numbers are in (spec §4): metres, millimetres or inches. The measuring is in `src/lib/partFrame.ts`. */
+export const MODEL_UNITS = ["m", "mm", "in"] as const;
+export type ModelUnits = (typeof MODEL_UNITS)[number];
+/** Which model axis points up: Z (the crate's own frame, and the sample files') or Y (glTF's own convention). */
+export const UP_AXES = ["z", "y"] as const;
+export type UpAxis = (typeof UP_AXES)[number];
 
 const DesignFilePartSchema = z.object({
   /** "catalog": the model ships with the app (/public/parts). "custom": the user supplies the GLB. */
@@ -34,8 +42,18 @@ const DesignFilePartSchema = z.object({
   mass_kg: z.number().positive(),
   /** True when the mass is the 10 kg stand-in, not a real value. */
   massAssumed: z.boolean().optional(),
-  /** Bounding box in mm, model frame, as measured or from the catalog. */
+  /** Bounding box in mm, Z up, as measured (with the units and axis below) or from the catalog. */
   dimensions_mm: Vec3Schema,
+  /**
+   * What the GLB's numbers are in. Absent only in a custom part migrated from before format 3,
+   * which was read as metres or millimetres by a size guess: the reader then takes the units
+   * that give `dimensions_mm` again.
+   */
+  units: z.enum(MODEL_UNITS).optional(),
+  /** Which axis of the GLB points up. Absent means Z up: files from before format 3 were all read that way. */
+  up: z.enum(UP_AXES).optional(),
+  /** True when the units are the app's guess from the model's size, not a choice. */
+  unitsGuessed: z.literal(true).optional(),
   /** The GLB's file name. */
   model: z.string().endsWith(".glb"),
   /**
@@ -147,6 +165,12 @@ const FORMAT = {
       ranking: "volume",
       summary: typeof doc.summary === "object" && doc.summary !== null ? { ...doc.summary, shapeUnknown: true } : doc.summary,
     }),
+    // 2 to 3: every earlier file was read Z up. A catalog part is a metre file; a custom part's
+    // units were a guess that the file does not record, so they stay absent (see `units` above).
+    2: (doc: Record<string, unknown>) => {
+      const part = typeof doc.part === "object" && doc.part !== null ? (doc.part as Record<string, unknown>) : null;
+      return part ? { ...doc, part: { ...part, up: "z", ...(part.source === "catalog" ? { units: "m" } : {}) } } : doc;
+    },
   },
 };
 

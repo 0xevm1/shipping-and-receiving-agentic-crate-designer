@@ -360,7 +360,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   if (!design) return null;
   const { layout } = design;
   const schedule = screwSchedule(design.members, layout.interior, standards);
-  const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed, readAsMm: false }, null);
+  const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed }, null);
   const both = (kg: number): Row => ({ label: "", value: weight(kg, u), note: weight(kg, other(u)) });
   return {
     letter: type.label,

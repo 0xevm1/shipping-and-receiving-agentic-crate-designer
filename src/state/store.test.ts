@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import type { PartProfile } from "@/domain/profile";
 import { useDesigner } from "./store";
+import { useView } from "./viewStore";
 import { catalogPart, type LoadedPart } from "@/lib/part";
 
 /** An unknown part as `loadPartFiles` builds it: stand-in mass, no material. */
@@ -12,9 +13,12 @@ const unknownPart: LoadedPart = {
   dimensions_mm: [300, 200, 100],
   suggested_quantities: [1, 4, 8],
   modelUrl: "blob:widget",
+  modelUnits: "m",
+  upAxis: "z",
+  unitsGuessed: true,
   mmPerUnit: 1000,
+  rawSize: [0.3, 0.2, 0.1],
   massAssumed: true,
-  readAsMm: false,
 };
 
 const initial = useDesigner.getState();
@@ -138,5 +142,54 @@ describe("setPartProfile", () => {
     expect(s().result.design!.shapedBlocking).toBeDefined();
     s().setPart({ ...unknownPart, modelUrl: "blob:next" });
     expect(s().result.design!.shapedBlocking).toBeUndefined();
+  });
+});
+
+describe("setPartFrame (#105)", () => {
+  // A loaded 0.3 × 0.2 × 0.1 file: read as inches it is 7.62 × 5.08 × 2.54 mm, as Y up its sides swap.
+  const loaded: LoadedPart = { ...unknownPart, rawSize: [0.3, 0.2, 0.1], modelUrl: "blob:frame" };
+
+  beforeEach(() => {
+    useDesigner.setState(initial, true);
+    s().setPart(loaded);
+  });
+
+  it("re-measures the part and re-plans the crate at once", () => {
+    const before = s().result.design!.layout.external;
+    expect(s().setPartFrame({ units: "mm" })).toBeNull();
+    expect(s().part).toMatchObject({ modelUnits: "mm", mmPerUnit: 1, unitsGuessed: false });
+    expect(s().part.dimensions_mm).toEqual([0.3, 0.2, 0.1]);
+    expect(s().measured).toEqual([0.3, 0.2, 0.1]);
+    expect(s().result.design!.layout.external).not.toEqual(before);
+    expect(useView.getState().lastChange?.source).toBe("frame");
+    expect(useView.getState().fit.nonce).toBeGreaterThan(0);
+  });
+
+  it("turns the part upright for Y up: the two other sides swap", () => {
+    s().setPartFrame({ up: "y" });
+    expect(s().part).toMatchObject({ upAxis: "y", modelUnits: "m" });
+    expect(s().part.dimensions_mm).toEqual([300, 100, 200]);
+  });
+
+  it("drops the part's measured outline, which was taken the old way, and settles the guess", () => {
+    useDesigner.setState({ part: { ...s().part, profile: { version: 1 } as never } });
+    expect(s().part.unitsGuessed).toBe(true);
+    s().setPartFrame({ up: "y" });
+    expect(s().part.profile).toBeUndefined();
+    expect(s().part.unitsGuessed).toBe(false);
+  });
+
+  it("does nothing, and says nothing, when the choice is the one in use", () => {
+    const result = s().result;
+    expect(s().setPartFrame({ units: "m", up: "z" })).toBeNull();
+    expect(s().result).toBe(result);
+    expect(useView.getState().lastChange).toBeNull();
+  });
+
+  it("is not for the catalog's own files", () => {
+    s().setPart(catalogPart(getPart("PART-001")));
+    const part = s().part;
+    expect(s().setPartFrame({ units: "in" })).toMatch(/Catalog/);
+    expect(s().part).toBe(part);
   });
 });

@@ -6,7 +6,8 @@ import type { PartProfile } from "@/domain/profile";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
-import { catalogPart, type LoadedPart } from "@/lib/part";
+import { canSetFrame, catalogPart, framePart, type LoadedPart } from "@/lib/part";
+import type { PartFrame } from "@/lib/partFrame";
 import { emitDesignEdit, type ChangeSource } from "./designEvents";
 import { loadStandards, saveStandards } from "./standardsStorage";
 
@@ -54,6 +55,12 @@ export interface DesignerState {
    * part is a catalog part, which is read-only.
    */
   setPartDetails: (details: PartDetailsInput) => string | null;
+  /**
+   * Re-reads the loaded file with another unit and/or up axis (spec §4): the size follows from the
+   * file's own measurements, the outline is dropped (the viewer measures it again) and the crate
+   * is re-planned. Null on success; an error for a catalog part's bundled file.
+   */
+  setPartFrame: (frame: Partial<PartFrame>) => string | null;
   setSettings: (patch: Partial<CrateSettings>) => void;
   resetRules: () => void;
   setLayoutKey: (key: string | null) => void;
@@ -200,6 +207,16 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       const source: ChangeSource = mass_kg !== undefined ? "mass" : "material" in meta ? "material" : "name";
       set({ part, plan, crateIndex, result });
       emitDesignEdit({ type: "refined", source, prev, next: result });
+      return null;
+    },
+    setPartFrame: (patch) => {
+      const current = get().part;
+      if (!canSetFrame(current)) return "Catalog parts can't be edited.";
+      const frame: PartFrame = { units: patch.units ?? current.modelUnits, up: patch.up ?? current.upAxis };
+      if (frame.units === current.modelUnits && frame.up === current.upAxis) return null;
+      // The person has looked at how the file is read, so the units are no longer just a guess.
+      const part = framePart(current, frame);
+      recompute({ part, measured: part.dimensions_mm, layoutKey: null }, "frame");
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.

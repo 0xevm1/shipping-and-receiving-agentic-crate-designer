@@ -4,6 +4,9 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEve
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX } from "@/domain/partDetails";
 import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
+import { canSetFrame } from "@/lib/part";
+import { UNITS_LABEL, UP_LABEL, type ModelUnits, type UpAxis } from "@/lib/partFrame";
+import { MODEL_UNITS, UP_AXES } from "@/domain/designFile";
 import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
 import type { ChangeSource } from "@/state/designEvents";
@@ -15,7 +18,7 @@ import { LoadToast } from "./LoadToast";
 import styles from "./PartHeader.module.css";
 
 /** Edits from the header's own fields; their change note shows under the header. */
-const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass"];
+const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass", "frame"];
 
 /**
  * Top left: app name, then what is shipping, read as a sentence:
@@ -33,6 +36,10 @@ export function PartHeader() {
   const measured = useDesigner((s) => s.measured);
   const units = useView((s) => s.units);
   const match = modelMatchesCatalog(part, measured);
+  // The file's units and axis are the user's to set on a file they loaded: always for an unknown one (even when its size
+  // leaves no crate to draw, which is when a wrong guess most needs fixing), and for a catalog-named one that doesn't match.
+  const showFrame = canSetFrame(part) && (!part.catalogDims || match === false);
+  const size = measured ?? (showFrame ? part.dimensions_mm : null);
 
   return (
     <header className={styles.header} data-testid="part-header">
@@ -55,9 +62,10 @@ export function PartHeader() {
           // Remount per loaded file so the fields start from that file's values.
           <PartDetailsFields key={part.modelUrl} />
         )}
-        {measured && (
+        {size && (
           <div>
-            {dims(measured, units)} {lengthUnit(units)} · <span className={match === false ? styles.warn : ""}>{modelNote(match, part.readAsMm)}</span>
+            {dims(size, units)} {lengthUnit(units)} · {showFrame && <FrameFields />}
+            <span className={match === false ? styles.warn : ""}>{modelNote(match, part.unitsGuessed)}</span>
           </div>
         )}
         <ChangeNote sources={PART_SOURCES} variant="header" />
@@ -65,6 +73,37 @@ export function PartHeader() {
       <ExportPill />
       <LoadToast />
     </header>
+  );
+}
+
+/**
+ * "file in [inches], [Y up] · ": what the loaded file's numbers are in and which axis points up
+ * (spec §4). Choosing re-measures the part and re-plans the crate straight away.
+ */
+function FrameFields() {
+  const units = useDesigner((s) => s.part.modelUnits);
+  const up = useDesigner((s) => s.part.upAxis);
+  const setPartFrame = useDesigner((s) => s.setPartFrame);
+  return (
+    <>
+      file in{" "}
+      <select className={styles.field} aria-label="File units" value={units} onChange={(e) => setPartFrame({ units: e.target.value as ModelUnits })}>
+        {MODEL_UNITS.map((u) => (
+          <option key={u} value={u}>
+            {UNITS_LABEL[u]}
+          </option>
+        ))}
+      </select>
+      ,{" "}
+      <select className={styles.field} aria-label="Up axis" value={up} onChange={(e) => setPartFrame({ up: e.target.value as UpAxis })}>
+        {UP_AXES.map((a) => (
+          <option key={a} value={a}>
+            {UP_LABEL[a]}
+          </option>
+        ))}
+      </select>{" "}
+      ·{" "}
+    </>
   );
 }
 

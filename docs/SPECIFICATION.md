@@ -75,9 +75,30 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Exported GLB** (`src/lib/exportGlb.ts`) follows the input GLB convention, not three.js's:
   metres, **Z up**. The only conversion from the domain is × 0.001 (mm → m); there is no Y-up
   rotation in the file.
-- **Loaded GLBs** are read as metres, Z up, like the samples. A file more than **20 units**
-  across is read as millimetres instead (`MM_FILE_THRESHOLD` in `src/lib/loadPart.ts`), and the
-  UI says so ("file read as millimetres", plus an info check).
+- **Loaded GLBs (#105)** are read in a **frame**: the units their numbers are in (**metres**,
+  **millimetres** or **inches**) and the axis that points **up** (**Z**, like the samples and the
+  crate, or **Y**, as glTF itself and most CAD exports have it). The frame starts as a guess
+  (`guessUnits` in `src/lib/partFrame.ts`: Z up; metres up to 3 units across, inches up to 20,
+  millimetres beyond) and the user can set both choices for any file they loaded, in the part
+  header (§8.5); the three catalog parts' own files are known and offer no choice. The header's
+  note, the Checks tab's model check and the design file all say what the file was read as
+  ("file in inches, Y up", "units guessed from the size"). The guess is only a start: sizes
+  overlap (a 60 in part looks like a 60 mm one), which is why the choice is one click away.
+  - **Applied once, before measuring.** `src/lib/partFrame.ts` is the only place units and the
+    axis are applied: `framedSizeMm` for the size (mm per unit, and a Y-up model's two other
+    sides swapped, rounded to 0.01 mm so float noise doesn't reach the crate) and `framedScene`
+    for the model (a Y-up model is held in a group turned a quarter about X, Y to Z, a proper
+    rotation; the shared loader cache is never touched). The viewer (`PartInstances`), the part
+    turntable (`PartView`), the part outline (§7.5b), the exported GLB and the zip's GLB all take
+    that framed scene and `mmPerUnit`, so the size, the outline, the views, the export and the
+    print agree. The domain only sees mm, Z up.
+  - **Any distance from the origin.** Files are not centred. The viewer and the export both
+    re-centre each part on the centre of its bounding box (in model units, before scaling), and
+    the outline is taken from the box's own corner, so a mesh tens of metres from the origin
+    loads centred and measures the same as a centred one (fixture `bracket-off-origin.glb`).
+    The outline's grid sampling treats a cell centre within 0.01 cells of a triangle's edge as
+    on it, because drawings on round numbers have edges exactly there and a file's float32
+    rounding puts them a hair either side.
 - **Units in the UI (#15):** **imperial (in / lb) is the default**, for a domestic US shop floor;
   metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
   changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
@@ -229,7 +250,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions, the one mass rule) |
 | `src/lib/message.ts` | `renderMessage`: check messages (typed quantities) rendered for the selected units (#62, §7.7) |
-| `src/lib/part.ts` | `LoadedPart` (a part with its model URL and load facts), `catalogPart()` and `modelUrl()` |
+| `src/lib/part.ts` | `LoadedPart` (a part with its model URL, units, up axis and load facts), `catalogPart()`, `framePart()` and `canSetFrame()` |
+| `src/lib/partFrame.ts` | The file frame (#105, §4): units and up axis applied once: `guessUnits`, `framedSizeMm`, `framedScene`, `fitFrame`, `MM_PER_UNIT` |
 | `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
 | `src/lib/lumber.ts` | US shop names (#15): the nominal-lumber names from `domain/lumber.ts` (`sectionText`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
@@ -312,6 +334,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with both stores' types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
 | `playwright.config.ts`, `e2e/*.spec.ts`, `e2e/helpers/` | End-to-end UI tests and their shared helpers (`bun run e2e`, §10); screenshots go to the git-ignored `e2e/screenshots/` |
 | `scripts/docs-shots.mjs` | `bun run e2e:docs-shots`: copies chosen e2e screenshots into `docs/screenshots/` on request |
+| `scripts/fixtures/units-axis.mjs` | Writes `fixtures/units-axis/*.glb` (#105): PART-001 in metres, millimetres, inches, Y up and 50 m from the origin, and the shaft in inches; deterministic (`bun scripts/fixtures/units-axis.mjs`) |
 | `.prettierrc`, `.prettierignore`, `knip.json` | Formatting (`bun run format`, checked in CI) and the unused-code report (`bun run knip`) |
 
 ## 6. Data model
@@ -386,11 +409,14 @@ measured dimensions and possibly no material.
 The UI wraps it in a **`LoadedPart`** (`src/lib/part.ts`), which adds:
 
 - `modelUrl` (a `/parts/…` path or a `blob:` URL)
-- `mmPerUnit` (1000 for metre files, 1 for files read as millimetres)
+- `modelUnits` (`"m" | "mm" | "in"`), `upAxis` (`"z" | "y"`) and `unitsGuessed` (the units are the
+  size-based guess, not a choice): how the file is read (§4). `mmPerUnit` (1000, 1 or 25.4) is
+  derived from `modelUnits`, and `rawSize` is the model's size as the file has it (file units,
+  file axes). `framePart` sets all of them together and recomputes `dimensions_mm` from `rawSize`,
+  so a change of frame needs no new load
 - `suggested_quantities`
 - `catalogDims`, the catalog size used for the model check (absent for unknown files)
 - `massAssumed`, true when a 10 kg stand-in is in use (`STAND_IN_MASS_KG`)
-- `readAsMm`
 
 Mass is never inferred from the mesh.
 
@@ -409,6 +435,14 @@ Input is checked by `cleanPartDetails` (`src/domain/partDetails.ts`):
 - `material`: tidied the same way, at most 60 characters (`PART_MATERIAL_MAX`). Blank clears it,
   and the UI shows "material not given". Free text; `MATERIAL_SUGGESTIONS` are only offered.
 - `mass_kg`: a finite number above 0. Any accepted mass, even 10, clears `massAssumed`.
+
+**The file's frame.** The store action `setPartFrame({ units?, up? })` (#105) re-reads the loaded
+file in another frame: `framePart` gives the new size, the measured outline is dropped (it was
+taken the old way; the viewer measures it again), the layout pick resets like any input that
+changes the size, the camera re-frames, and the change is recorded in `lastChange` with source
+`frame`. The person has looked at how the file is read, so any choice clears `unitsGuessed`.
+Choosing what is already in use does nothing. It is for files the user loaded (`canSetFrame`:
+a `blob:` URL); the catalog's bundled files return "Catalog parts can't be edited."
 
 Invalid input changes nothing and returns a message. Catalog parts are read-only. A mass change
 recomputes the design and resets the layout pick, like any other input. A name or material
@@ -603,7 +637,7 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 ```jsonc
 {
   "kind": "crate-design",          // tells it apart from a parts.json catalog
-  "schemaVersion": 2,              // DESIGN_SCHEMA_VERSION
+  "schemaVersion": 3,              // DESIGN_SCHEMA_VERSION
   "app": { "name": "crate-designer", "version": "0.1.0" },   // package.json version
   "savedAt": "2026-11-16T12:00:00.000Z",
   "part": {
@@ -613,7 +647,10 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
     "material": "4140 steel",      // optional
     "mass_kg": 21.5,
     "massAssumed": true,           // optional; only written when the 10 kg stand-in is in use
-    "dimensions_mm": [360, 220, 258],
+    "dimensions_mm": [360, 220, 258],   // Z up, mm, read with the units and axis below
+    "units": "m",                  // "m" | "mm" | "in": what the GLB's numbers are in
+    "up": "z",                     // "z" | "y": which GLB axis points up
+    "unitsGuessed": true,          // optional; only written while the units are the size-based guess
     "model": "PART-001-machined-steel-bracket.glb",
     "outline": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 3.5,   // optional: the measured
                  "grids": [[63, 74], …], "data": "eJz…" }                 // part profile, packed
@@ -638,6 +675,12 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
 - **Source.** A part is `catalog` when the bundled catalog has the same id and model, even if
   its GLB was loaded from disk. Anything else, including entries from a dropped `parts.json`, is
   `custom`.
+- **Units and axis (#105).** A custom part's GLB is measured with the saved `units` and `up`
+  before anything else (`loadDesign`), so a reloaded design, a share link, a library entry and the
+  last-opened crate (whose GLB bytes come from IndexedDB, §9) all measure as they did. The saved
+  size is still compared with the measured one (0.5 mm), and the message says when the file
+  differs. `up` is optional and means Z up when absent. `units` is absent only in a custom part
+  migrated from format 2 (below).
 - **Validation.** `parseDesignFile` never throws. It checks, in order: the text is JSON; `kind`
   is `"crate-design"`; `schemaVersion` is a whole number from 1 up to the app's version; then the
   zod schema. `settings` must already pass `CrateSettingsSchema` (out-of-range values are
@@ -660,7 +703,13 @@ or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and 
   a time before validation (`readEnvelope`, `src/domain/envelope.ts`). Format 2 added `ranking`
   and `part.outline`. The 1 → 2 migration sets `ranking: "volume"` (every older file was
   ranked that way) and marks the summary `shapeUnknown`, because an older file's summary may
-  include shaped blocks that the file has no outline for.
+  include shaped blocks that the file has no outline for. Format 3 added `part.units`, `part.up`
+  and `part.unitsGuessed` (#105). The 2 → 3 migration sets `up: "z"` (every older file was read
+  Z up) and, for a catalog part, `units: "m"`. A custom part's units were a size-based guess that
+  older files did not record, so they stay absent, and `loadDesign` takes the units (Z up, then
+  metres, millimetres, inches) that give the saved `dimensions_mm` again (`fitFrame`), falling
+  back to the guess when none does. A format 1 file takes both steps. The last-opened crate and
+  the design library keep their own format 1 and migrate the design inside them on read.
 - **Restoring** (`loadDesign` in `loadPart.ts`, then `restoreDesign`):
   - A `catalog` part is rebuilt from the bundled catalog entry and its `/public/parts` model.
   - A `custom` part (or a catalog id this app doesn't have) needs its GLB in the same pick or
@@ -2036,7 +2085,9 @@ open question for the user (see #20).
   layout instead. A custom part's GLB goes in the same pick or drop; without it, the message
   says which file to add.
 - **A known GLB** (file name equals a catalog `model`) takes that entry's mass, material and
-  quantities, and gets the model check.
+  quantities, and gets the model check. It is read in the frame that gives the catalog size
+  (`fitFrame`); only if none does is it guessed, and then the header offers the choice because the
+  model check fails.
 - **An unknown GLB** gets a name from its file name, no material, and a 10 kg stand-in mass. The
   part header shows editable **name**, **material** (with suggestions: 6061-T6 aluminum, 4140
   steel, 304 stainless steel, or any text) and **mass** fields, and a caution stays until a real
@@ -2053,8 +2104,17 @@ open question for the user (see #20).
 ```
 gearbox-cover · Gearbox cover
 6061-T6 aluminum · 14.71 kg each · crate gross 20 kg
-435 × 445 × 254 mm · size measured from the file
+435 × 445 × 254 mm · file in metres, Z up · units guessed from the size
 ```
+
+- **File units and up axis (#105).** The size line has two native `<select>`s, styled as the
+  underlined fields ("File units": metres, millimetres, inches; "Up axis": Z up, Y up), for a file
+  the user loaded (an unknown GLB, or a catalog-named one whose size does not match). Choosing
+  one calls `setPartFrame` (§6.2a): the size, the crate, the 3D view and the Checks tab update at
+  once, and the change note says what moved ("Crate shrank: …"). The note after them is "units
+  guessed from the size" while the guess stands, "size measured from the file" once a choice
+  was made, and the catalog model check for a catalog file. A Y-up file read Z up lies on its
+  side in the part view and the crate, which is how the person sees it needs the axis.
 
 - **Fields are text with an underline:** no border, background or radius; they inherit the line's
   mono font. A 1 px `--hair` underline, brighter on hover; on focus a 1.5 px sky underline and
@@ -2632,6 +2692,23 @@ names, and filtering a `parts.json`. For design files: catalog vs custom source,
 design restored from the bundled catalog, a custom design without its GLB naming the file,
 other JSON still read as a catalog, and plain messages for a bad design or bad JSON.
 
+**`src/lib/partFrame.test.ts`** and **`partFrame.design.test.ts`** (#105) check the guess's limits,
+`framedSizeMm` (units, the Y-up swap) against measuring the turned scene, `fitFrame`, and the three
+acceptance criteria at the engine level with the fixtures in `fixtures/units-axis/` (written by
+`bun scripts/fixtures/units-axis.mjs`, deterministic): PART-001 in metres, millimetres and inches
+(each read the right way) gives the same size, outline, layout, outside size, cut list and gross as
+the original; a Y-up copy gives the same once Y up is picked (its outline's six faces are the
+original's, so it is upright, not upside down; the base plate is at the bottom), and read Z up it
+lies on its side; a mesh 50 m from the origin measures the same size and outline and sits where
+the original sits in the exported crate; a 60 in shaft is guessed as 60 mm and gives the catalog
+shaft's crate once inches are picked. Reopening: a design saved with units and axis measures the
+same and says nothing; a guess stays marked as one; a format 2 file's units are found from its
+saved size; a different file is called out. **`src/domain/designFile.test.ts`** adds format 3: the
+fields round trip byte for byte, bad units or axis are refused, and the 2 → 3 and 1 → 3
+migrations. **`src/state/persist.test.ts`** adds a format 2 and a format 3 last design beside the
+old fixtures. **`src/state/store.test.ts`** checks `setPartFrame` (re-measure, replan, change note,
+outline dropped, no-op, catalog refused).
+
 **`src/lib/printable.test.ts`** checks the export document (§7.11):
 
 - For PART-001 × 4: the spec rows; the imperial outside size with the metric size under it;
@@ -2752,6 +2829,9 @@ copies chosen shots there on request.
     column is visible in both units; "4x4" keeps a plain x; piece names stay on one line; on a phone each row stacks.
   - `checks`: every check is listed and the default crate has no cautions; check text follows the units; the Overview verdict
     names a caution and links to Checks; the tab counts cautions and notes apart.
+  - `part-units`: a 60 in shaft is guessed as 60 mm, picking inches gives the catalog shaft's size and crate and the
+    viewer measures the same; a Y-up bracket lies on its side until Y up is picked, then the crate and the drawn height match
+    the Z-up bracket (probe `partFrame`); the catalog parts offer no choice; a file far from the origin loads centred; a reload reopens the file read the same way.
   - `load-part`: a catalog GLB fills in its details; an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
     parts are refused with a message; dragging text doesn't raise the drop veil, a file does.
   - `load-messages`: the toast under the header: an error (alert) stays until dismissed, a note (status) goes by itself;
@@ -2806,7 +2886,7 @@ copies chosen shots there on request.
 | Checks report passes, not only problems | The Checks tab shows what was verified, not just what failed | More strings in the domain |
 | Size labels as DOM, not drei `<Html>` | `<Html>` mounts a React root per label, and unmounting those during a render raced in React 19 | Positions are projected manually each frame |
 | Camera framing via `setViewOffset` toward the free area | The crate stays centred beside the island; picking and projection still use one camera | Insets are measured from the DOM |
-| GLBs over 20 units across are read as millimetres | Catches the common "exported in mm" mistake; the UI says when it happened | A real 20 m+ part would be misread (none are expected) |
+| A loaded GLB's units (m, mm, in) and up axis (Z, Y) are guessed from its size, saved in the design file and one choice away in the header (#105) | Interviewers may hand over a file from another CAD system; a wrong guess must be obviously visible and fixable on screen, and a reload must measure the same | The guess can't tell a 60 in part from a 60 mm one; Y up is never guessed, only chosen |
 | No part switcher; parts come in by loading a GLB | The handoff's design; a file is how new parts arrive in practice | The demo needs the sample files at hand |
 | `next/dynamic` with `ssr: false` for the viewer | WebGL only exists in the browser | No server-rendered preview of the canvas |
 | Bun as package manager | The user chose it | `bun test` ≠ vitest, so always use `bun run test` |

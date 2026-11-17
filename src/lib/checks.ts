@@ -2,6 +2,7 @@ import type { Check } from "@/domain/crate";
 import { dimsMessage, msg, parts } from "@/domain/message";
 import type { Vec3 } from "@/domain/schema";
 import type { LoadedPart } from "./part";
+import { frameWords } from "./partFrame";
 
 export type CheckItem = Pick<Check, "level" | "title" | "detail"> & { id: string };
 
@@ -19,7 +20,11 @@ export function modelMatchesCatalog(part: Pick<LoadedPart, "catalogDims">, measu
  * Domain checks plus the ones that depend on the loaded file (model size,
  * missing mass), cautions first.
  */
-export function allChecks(domain: Check[], part: Pick<LoadedPart, "catalogDims" | "readAsMm" | "massAssumed">, measured: Vec3 | null): CheckItem[] {
+export function allChecks(
+  domain: Check[],
+  part: Pick<LoadedPart, "catalogDims" | "massAssumed"> & Partial<Pick<LoadedPart, "modelUnits" | "upAxis" | "unitsGuessed">>,
+  measured: Vec3 | null,
+): CheckItem[] {
   const items: CheckItem[] = [...domain];
   if (measured) {
     const size = dimsMessage(measured.map((v) => Math.round(v)));
@@ -29,7 +34,7 @@ export function allChecks(domain: Check[], part: Pick<LoadedPart, "catalogDims" 
         id: "model",
         level: "info",
         title: "Size comes from the model file",
-        detail: msg`Measured ${size}${part.readAsMm ? ", reading the file as millimetres" : ""}. The model is assumed to have Z pointing up.`,
+        detail: msg`Measured ${size}, reading the file as ${frameWords({ units: part.modelUnits ?? "m", up: part.upAxis ?? "z" })}${part.unitsGuessed ? " (the units are a guess from its size)" : ""}. If that is wrong, set the file's units and up axis under the part's size at the top left.`,
       });
     } else if (match) {
       items.push({ id: "model", level: "ok", title: "3D model matches the catalog size", detail: msg`Measured ${size} from the model file.` });
