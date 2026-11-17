@@ -1363,10 +1363,11 @@ narrow (20.5″) and a standard (27″) jack; any one jack has a fixed spread.
 | `cog-offset` | Centre of gravity near the middle ("It is on both centre lines, within 10% of the length (93 mm) and width (65 mm). 265 mm above the ground.") | caution: Off-centre centre of gravity ("Centre of gravity is 120 mm toward the left end; mark it on the crate. The limit is 10% …") | \|offset X\| ≤ `cogOffsetRatio` × outside length and \|offset Y\| ≤ `cogOffsetRatio` × outside width |
 | `cog-tip` | Low centre of gravity ("… the crate tips over a side only past 51°. The limit is 30°.") | caution: Top-heavy ("… tips over a side at 24°, under the 30° limit. Strap it down, mark the centre of gravity, or pick a lower layout.") | tip angle ≥ `minTipAngleDeg` |
 | `forklift` | Forklift fits from the ends ("Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, …") | caution: Forklift may not fit (too low: "… 70 mm clear under the floor, needs 75 mm. Use taller skids."; too narrow: "the widest opening between the skids is 156 mm; it needs room for …") | `placeTines` with `handling.forklift` |
-| `pallet-jack` | Pallet jack fits from the ends | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either); **info**: "Forklift only: too narrow for a pallet jack" when only the width rules the jack out and a forklift fits | `placeTines` with `handling.palletJack` |
+| `pallet-jack` | Pallet jack fits from the ends; also **"Pallet jack won't fit: use a forklift"** ("The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.") when only the width rules the jack out and a forklift fits | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either) | `placeTines` with `handling.palletJack` |
 
 A crate needs one way to be lifted. A small crate too narrow for a pallet jack is a fact of its
-size rather than a defect, so while a forklift fits it is info, and the default PART-001 × 4
+size rather than a defect, so while a forklift fits it is a pass (an answered question: use a
+forklift, not an open one), and the default PART-001 × 4
 crate (one 474 mm opening, under a jack's 520 mm spread) still has no cautions. Too little height
 under the floor is always a caution.
 
@@ -2493,8 +2494,9 @@ HTML report as `playwright-report`.
     `09-header-*`.
   - `25-handling` (#8, #87): with **bounding-box blocking** (shape analysis stubbed off) the
     Checks tab lists "Centre of gravity near the middle" (on both centre lines), "Low centre of
-    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and "Forklift only: too
-    narrow for a pallet jack", still with no badge; the test hook's `cog.mm` is exactly on the
+    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and the ticked "Pallet jack
+    won't fit: use a forklift" (text in metric and imperial; also at quantity 1, and Pass in the
+    print checks table), still with no badge; the test hook's `cog.mm` is exactly on the
     interior centre lines, there is no CoG marker (centred and low) and there are 2 arrows (one
     opening, both ends), in closed and exploded modes; Size labels off hides the arrows but not
     the CoG. With **shaped blocking** (#16) the blocks in each bracket's −X recess move the CoG

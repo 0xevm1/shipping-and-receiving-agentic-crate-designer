@@ -285,12 +285,13 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
         detail: msg`${name}: enters from the ends, ${clear}, needs ${shopMm(d.needClearMm)}. Use taller skids${d.device === "pallet-jack" && forkliftFits ? " or a forklift" : ""}.`,
       });
     } else if (d.device === "pallet-jack" && forkliftFits) {
-      // Too narrow for a jack is a fact of a small crate, not a defect, while a forklift can lift it.
+      // Too narrow for a jack is a fact of a small crate, not a defect: a forklift lifts it, so it passes.
+      const gap = h.openings.length ? msg`The widest gap between the skids is ${shopMm(widest)}.` : parts("There is no gap between the skids.");
       checks.push({
         id: d.device,
-        level: "info",
-        title: "Forklift only: too narrow for a pallet jack",
-        detail: msg`${name}: ${room}; it needs room for ${spread}, either side of the centre of gravity. Use a forklift.`,
+        level: "ok",
+        title: "Pallet jack won't fit: use a forklift",
+        detail: msg`${gap} A pallet jack needs ${shopMm(std.spreadMm.min)}–${shopMm(std.spreadMm.max)} across its forks.`,
       });
     } else {
       checks.push({
