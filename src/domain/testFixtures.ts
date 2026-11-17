@@ -38,3 +38,21 @@ export function metricText(m: Message): string {
     })
     .join("");
 }
+
+/**
+ * A wall-clock budget that follows machine load (#48). A fixed CPU loop takes about 3.5 ms on an
+ * idle laptop; when the machine is busy it takes proportionally longer, and so does the code
+ * under test. The budget is `ms` or `ratio` loop-times, whichever is larger, so it is never
+ * tighter than `ms` and a 10x regression still fails when the machine is idle.
+ */
+export function loadAwareBudget(ms: number, ratio: number): number {
+  const times: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    const t0 = performance.now();
+    let x = 0;
+    for (let n = 0; n < 3e6; n++) x += Math.sqrt(n);
+    if (x < 0) throw new Error("unreachable: keeps the loop from being optimised away");
+    times.push(performance.now() - t0);
+  }
+  return Math.max(ms, ratio * times.sort((a, b) => a - b)[2]);
+}

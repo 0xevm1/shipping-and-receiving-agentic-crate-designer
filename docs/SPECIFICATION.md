@@ -196,6 +196,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/handling.ts` | Centre of gravity, fork openings, tine placement and the handling checks (`analyseHandling`, `forkOpenings`, `placeTines`, `handlingChecks`; §7.14, #8). Read-only over the members |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
+| `src/domain/sweep.ts` | Choosing the best quantity (#46, §7.16): `sweepQuantities()` (the curve over 1–200 per crate, hard checks first, cost per part, the recommendation and shortlist), `planTotal()` and `evenSplit()` (total-quantity mode), `FreightRatesSchema` / `freightCostUsd()` (caller-supplied rates) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file, the library, the shop standards file and the last-design entry |
@@ -234,6 +235,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/ExportPill.tsx` | The green Export pill under the part header, its idle / busy / done / error states, and an amber dot with a tooltip and description ("2 cautions, see Checks") when the design has cautions; exporting is never blocked |
 | `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill; a success note clears after 8 s, an error after 15 s |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
+| `src/state/bestQuantity.ts` | `useBestQuantity`: the quantity sweep (§7.16) for the part and rules on screen, derived from the store (nothing added to it), run 250 ms after the last change |
+| `src/components/island/BestQuantity.tsx` | The best-quantity hint and its **Use** action on the Rules tab (§7.16) |
 | `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange` |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
 | `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
@@ -1589,6 +1592,61 @@ governing.
 bearing on fork tines between the skids (#8 checks fork entry). The skid support is the
 conservative end-supported case even when the crate sits flat on a trailer floor.
 
+### 7.16 Choosing the best quantity (`src/domain/sweep.ts`, #46)
+
+Given a part, the app recommends how many to put in one crate and which crate, without the user
+choosing. `sweepQuantities(part, settings, standards, { maxQuantity?, freightRates? })` ignores
+`settings.quantity` and, for every quantity per crate `q` from 1 to `SWEEP_MAX_QUANTITY` (**200**,
+the quantity setting's maximum):
+
+1. **Monotonic limits, without designing.** `q` over `limits.perCrate.maxParts` (when above 0) fails
+   `max-parts`; `q × part mass` over `limits.perCrate.maxGrossKg` fails `max-gross` (the parts alone
+   are over it, so every larger `q` is too).
+2. **Layouts.** `rankLayouts` for `q`, with those that pass the cheap hard checks (stable, within
+   the trailer door and floor, the smallest side gap ≥ `minBlockingGapMm`) moved ahead in their
+   usual order. The first `SWEEP_LAYOUTS_PER_QUANTITY` (**3**) are designed.
+3. **Hard checks filter first** (`hardFailure`), in this order: `door`, `stable`, `blocking`,
+   `base-rating` (each a caution from §7.7), then gross over `maxGrossKg` (`max-gross`) and `q` over
+   `maxParts` (`max-parts`). They are never traded for cost.
+4. **Score = cost per part moved** = (crate cost + freight cost) ÷ `q`, where crate cost is
+   `cost.totalUsd` (wood, screws and labour, §7.12). The cheapest passing layout is the point's
+   crate. When none passes, the point is not `ok` and records the first designed layout's failing
+   rule (`binding`) and that check's text (`reason`): the curve shows why.
+
+**Freight dollars only from the caller.** `FreightRates` (`FreightRatesSchema`) is a rate sheet:
+USD per cwt by NMFC class (`{ "65": 30, … }`) and a per-crate `minimumUsd`. A crate's freight is
+`max(minimumUsd, gross lb / 100 × rate)`, billed on gross weight; a class with no rate takes the
+next higher class's rate (dearer, so never an under-estimate), else the highest listed. **Without
+rates** the sweep's `basis` is `crate-only`: the score is crate cost per part, every `freightUsd`
+is null, and the rationale says freight is not priced. The app has no rates (§7.12), so the UI
+always shows the crate-only score.
+
+**Recommendation and ties.** The `ok` points sorted by `compareSweepPoints`: the lower score to the
+cent per part, then **fewer crates** (the larger `q`), then **denser freight** (lb/ft³). The first
+is the recommendation; the first `SWEEP_SHORTLIST_SIZE` (**5**) are the shortlist. Its rationale
+names the score and **what stopped a larger crate**: the first failing quantity above it, with its
+rule and text (`stoppedBy`), and whether larger passing crates cost more per part (`costLimited`).
+With the defaults the sample parts are stopped by the base rating or the 1,000 kg gross limit
+(PART-001 upright: 34 per crate, the base rating stops 35).
+
+**Total-quantity mode (`planTotal(sweep, N)`).** For crate counts `c` from `⌈N / maxQuantity⌉` to
+`N`, the even split `evenSplit(N, c)` puts `N mod c` crates of `⌈N / c⌉` and the rest of
+`⌊N / c⌋`: sizes differ by at most one, so crates × quantity covers N and no crate holds less than
+about half the others. A split counts only when every size is `ok` on the curve. The lowest cost
+per part wins (crate types' costs × counts, plus freight with rates, ÷ N); ties go to fewer crates
+(each `c` has one split, so density never breaks a tie here). Null when no split passes (one part
+alone fails a hard check). `planShipment` (§7.10) is unchanged: it plans the quantity on screen by
+the largest crate that fits; `planTotal` plans a total by cost.
+
+**Speed:** 30–125 ms per sample part on an M-series Mac (the gross-limit cut-off skips most of
+1–200). Built to run off the render thread in a Web Worker. The test fails above 1.5 s or 400 ×
+a fixed CPU loop's time, whichever is larger (load-aware, #48).
+
+**In the UI:** the Rules tab shows the recommendation under "How many parts" (§8.3) with **Use**,
+which sets the quantity and the recommended layout. Loading a part does not change the quantity
+(it still starts at the first suggested quantity). The recommendation can move once the model's
+profile is measured (§7.5b), since shaped blocking changes the crate.
+
 ## 8. UI
 
 The design source of truth is `docs/design-handoff/` (`HANDOFF.md` and a runnable prototype).
@@ -1719,7 +1777,7 @@ The canvas fills the window. Four regions float above it:
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
-| **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Rules** | Quantity (− / input / + and the part's suggested quantities), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen; dimmed while a rule change waits to be swept), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
