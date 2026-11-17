@@ -174,7 +174,9 @@ export function SharedJob() {
 
   return (
     <section className={styles.root} aria-labelledby={TITLE_ID} data-sync={status}>
-      <h3 id={TITLE_ID}>Shared job</h3>
+      <h3 className="subhead" id={TITLE_ID}>
+        Shared job
+      </h3>
       <p className={styles.sub}>
         <span className={styles.dot} aria-hidden="true" />
         {status === "unavailable" && note ? `${STATUS_TEXT.unavailable} ${note}` : STATUS_TEXT[status]}

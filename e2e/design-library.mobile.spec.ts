@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { openApp, openDrawer, openTab, panel, pollCrate, shot } from "./helpers";
 
-// The design library inside the phone drawer: save, list and reuse with touch.
+// The design library inside the phone drawer: save, list and reuse with touch. Skipped: Saved designs is hidden (#150).
 
 const section = (page: Parameters<typeof panel>[0]) => panel(page).getByRole("region", { name: "Saved designs" });
 
-test("saving and reusing a design works inside the drawer", async ({ page }) => {
+test.skip("saving and reusing a design works inside the drawer", async ({ page }) => {
   await openApp(page);
   await openDrawer(page);
   await openTab(page, "Rules");

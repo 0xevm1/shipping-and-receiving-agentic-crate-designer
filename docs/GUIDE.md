@@ -348,14 +348,10 @@ tab at a time.
     crate B (20)" with the shipment's gross and volume, and **Crate A / Crate B** switches the
     crate shown in 3D, Layouts, Cut list and Checks. The Cut list can show **This crate** or
     the **Whole shipment**. Batches that fit one crate look exactly as before. Spec §7.10.
-13. **Keep a design library and share designs** (#14). At the bottom of the **Overview**,
-    **Save design** stores the crate on screen with a name and optional notes. When that part is
-    loaded again (the catalog part, or a custom GLB with the same file name and size), its
-    saved designs are listed with quantity, outside size, gross and date, and **Use** brings one
-    back in a click, through the same path as opening a design file. Rename and delete (with
-    undo) are inline; **Export library** / **Import library** move the whole library between
-    machines as one JSON file. **Copy share link** puts the design in the URL hash
-    (`#design=…`, never sent to a server). Opening the link restores a catalog part fully; for a
+13. **Hand a design off** (#150). Handoffs are manual: **Export specs** (the .zip) or the design
+    JSON file, which **Load a part** opens again. The design library (#14) and its **Saved
+    designs** section are hidden from the Overview. The code stays, so it can come back. A share
+    link made earlier (`#design=…`) still opens: it restores a catalog part fully, and for a
     custom part it names the `.glb` to load. A damaged link keeps the default crate and says
     why. Spec §9.
 14. **Pick up where you left off** (#71). A refresh, or reopening the tab, brings back the crate
