@@ -208,9 +208,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill (#51; #77 briefly shared it with a View popover button, removed in #62) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
-| `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
-| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and the saved units in `localStorage` (§9) |
-| `src/state/libraryStorage.ts` | Loads and saves the design library in `localStorage` (§9) |
+| `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
+| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
+| `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
+| `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
@@ -1373,10 +1374,11 @@ narrow (20.5″) and a standard (27″) jack; any one jack has a fixed spread.
 | `cog-offset` | Centre of gravity near the middle ("It is on both centre lines, within 10% of the length (93 mm) and width (65 mm). 265 mm above the ground.") | caution: Off-centre centre of gravity ("Centre of gravity is 120 mm toward the left end; mark it on the crate. The limit is 10% …") | \|offset X\| ≤ `cogOffsetRatio` × outside length and \|offset Y\| ≤ `cogOffsetRatio` × outside width |
 | `cog-tip` | Low centre of gravity ("… the crate tips over a side only past 51°. The limit is 30°.") | caution: Top-heavy ("… tips over a side at 24°, under the 30° limit. Strap it down, mark the centre of gravity, or pick a lower layout.") | tip angle ≥ `minTipAngleDeg` |
 | `forklift` | Forklift fits from the ends ("Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, …") | caution: Forklift may not fit (too low: "… 70 mm clear under the floor, needs 75 mm. Use taller skids."; too narrow: "the widest opening between the skids is 156 mm; it needs room for …") | `placeTines` with `handling.forklift` |
-| `pallet-jack` | Pallet jack fits from the ends | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either); **info**: "Forklift only: too narrow for a pallet jack" when only the width rules the jack out and a forklift fits | `placeTines` with `handling.palletJack` |
+| `pallet-jack` | Pallet jack fits from the ends; also **"Pallet jack won't fit: use a forklift"** ("The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.") when only the width rules the jack out and a forklift fits | caution: Pallet jack may not fit (too low, or too narrow while a forklift doesn't fit either) | `placeTines` with `handling.palletJack` |
 
 A crate needs one way to be lifted. A small crate too narrow for a pallet jack is a fact of its
-size rather than a defect, so while a forklift fits it is info, and the default PART-001 × 4
+size rather than a defect, so while a forklift fits it is a pass (an answered question: use a
+forklift, not an open one), and the default PART-001 × 4
 crate (one 474 mm opening, under a jack's 520 mm spread) still has no cautions. Too little height
 under the floor is always a caution.
 
@@ -1882,6 +1884,13 @@ version or an invalid value falls back to the defaults with a `console.warn`, an
 is missing or throws (server, private mode, quota) is treated as empty. The version is in the
 key, so an incompatible future format starts fresh rather than misreading old data.
 
+All four saved items (standards, units, library, last design) go through `src/state/persist.ts`
+with one contract: a save never throws and returns `true` only if the value is stored, so a
+missing store (server, blocked) is a failed save. Standards and units save inside their
+`useDesigner` actions, the library inside `useLibrary`, and the last design from a debounced
+subscriber in `lastDesignLoader.ts`. The library shows the "browser refused to store it"
+message when a save, rename, delete (`remove(...).saveError`) or undo fails to store.
+
 **Display units** (#15) are saved under `crate-designer.units.v1` (`src/state/unitsStorage.ts`)
 as `"imperial"` or `"metric"` on every `setUnits`. Either choice is saved, so a later change of
 default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
@@ -2225,9 +2234,22 @@ without `#`), a custom part with non-ASCII text too; `shareUrl` keeps the query 
 design in the hash; a hash without a design is ignored; damaged, truncated and tampered links
 (out-of-range quantity, wrong kind, newer version, not an object) are refused.
 
+**`src/state/persist.test.ts`** checks `readJson` (missing, no store or throwing store give the
+fallback silently; a rejected or throwing parser warns), `writeJson` (store, remove for null,
+false for no store or a throwing store) and that all four save functions return false for null
+and throwing storage. Its fixtures (`src/state/fixtures/*.json`) are the stored text of the
+shop standards, library and last design, and the bare units word, under the four unchanged keys:
+they must keep loading (the standards fixture must also write back byte for byte).
+
+**`src/state/checks.test.ts`** checks `modelMatchesCatalog` (null without a size or measurement;
+the 1 mm tolerance per axis) and `allChecks` (model ok / caution / info notes, the stand-in mass
+caution, cautions-first sorting, domain checks left untouched).
+
 **`src/state/library.store.test.ts`** checks the library's storage (versioned key; empty when
 nothing is saved and nothing stored when empty; unreadable JSON, another kind or a newer version
-fall back to empty with one warning; good entries survive bad ones; throwing storage) and
+fall back to empty with one warning; good entries survive bad ones; throwing storage; a failed
+save with null or throwing storage) and the store reporting the storage-failed message from
+save, rename, remove and undo, and
 `useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
 each time, export and import with duplicates and bad entries counted).
 
@@ -2264,7 +2286,8 @@ given settings and layout pick (unlike `setPart`). It also checks
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
 record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
 `setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
-a profile for another model or a failed analysis, survives a mass edit and is dropped with a new
+a profile for another model or a failed analysis, drops a pin or hover on a cut-list line that is
+gone, survives a mass edit and is dropped with a new
 part.
 
 **`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5b) with synthetic profiles: the
@@ -2482,8 +2505,9 @@ HTML report as `playwright-report`.
     `09-header-*`.
   - `25-handling` (#8, #87): with **bounding-box blocking** (shape analysis stubbed off) the
     Checks tab lists "Centre of gravity near the middle" (on both centre lines), "Low centre of
-    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and "Forklift only: too
-    narrow for a pallet jack", still with no badge; the test hook's `cog.mm` is exactly on the
+    gravity", "Forklift fits from the ends" with its 89 mm / 75 mm text and the ticked "Pallet jack
+    won't fit: use a forklift" (text in metric and imperial; also at quantity 1, and Pass in the
+    print checks table), still with no badge; the test hook's `cog.mm` is exactly on the
     interior centre lines, there is no CoG marker (centred and low) and there are 2 arrows (one
     opening, both ends), in closed and exploded modes; Size labels off hides the arrows but not
     the CoG. With **shaped blocking** (#16) the blocks in each bracket's −X recess move the CoG

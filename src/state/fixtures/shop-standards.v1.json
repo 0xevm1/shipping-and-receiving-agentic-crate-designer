@@ -1,0 +1,137 @@
+{
+  "kind": "crate-designer/shop-standards",
+  "version": 1,
+  "standards": {
+    "stock": {
+      "cleatMm": {
+        "thick": 19,
+        "wide": 89
+      },
+      "skidMm": {
+        "standard": {
+          "wide": 89,
+          "tall": 89
+        },
+        "heavy": {
+          "wide": 89,
+          "tall": 140
+        }
+      },
+      "floorPlywoodMm": 19,
+      "panelPlywoodMm": {
+        "light": 12,
+        "medium": 15,
+        "heavy": 19
+      },
+      "blockWidthMm": 89,
+      "joistMm": {
+        "thick": 38,
+        "wide": 89
+      }
+    },
+    "defaults": {
+      "partGapMm": 50,
+      "wallClearanceMm": 50,
+      "maxLayers": 3,
+      "volumeTolerance": 0.03
+    },
+    "construction": {
+      "panelLightMaxKg": 150,
+      "panelMediumMaxKg": 500,
+      "heavySkidOverKg": 700,
+      "skidSpacingMm": 800,
+      "maxCleatSpacingMm": 600,
+      "minBlockingGapMm": 19
+    },
+    "limits": {
+      "trailerMm": {
+        "interiorLength": 16000,
+        "interiorWidth": 2565,
+        "interiorHeight": 2794,
+        "doorWidth": 2489,
+        "doorHeight": 2743
+      },
+      "ltlExcessiveLengthMm": 2438,
+      "cardboard": {
+        "partKg": 15,
+        "payloadKg": 25,
+        "boxDimSumMm": 1905
+      },
+      "stackKg": 100,
+      "stableHeightRatio": 1.5,
+      "lowUtilization": 0.25,
+      "perCrate": {
+        "maxGrossKg": 1000,
+        "maxParts": 0
+      }
+    },
+    "rates": {
+      "densityKgM3": {
+        "plywood": 600,
+        "lumber": 480
+      },
+      "costUsdPerM3": {
+        "plywood": 1100,
+        "lumber": 650
+      },
+      "screwSpacingMm": {
+        "cleat": 150,
+        "skid": 300,
+        "panelJoint": 200
+      },
+      "screwCostUsdPer100": 8
+    },
+    "labour": {
+      "rateUsdPerHour": 35,
+      "lumberCutMin": 0.75,
+      "plywoodCutMin": 3,
+      "setupMin": 2,
+      "screwMin": 0.15,
+      "assemblyStepMin": 6,
+      "handlingMin": 15
+    },
+    "structure": {
+      "lumberBendingMPa": 7.8,
+      "lumberShearMPa": 0.93,
+      "lumberBearingMPa": 2.93,
+      "plywoodBendingMPa": 6,
+      "loadFactor": 1.5,
+      "supportLengthMm": 100,
+      "minForkOpeningMm": 200,
+      "joistOverKg": 450,
+      "maxJoistSpacingMm": 400,
+      "lidStackKg": 0
+    },
+    "freight": {
+      "dimDivisorIn3PerLb": 139
+    },
+    "handling": {
+      "forklift": {
+        "minClearMm": 75,
+        "tineWidthMm": 100,
+        "spreadMm": {
+          "min": 250,
+          "max": 1100
+        }
+      },
+      "palletJack": {
+        "minClearMm": 85,
+        "tineWidthMm": 180,
+        "spreadMm": {
+          "min": 520,
+          "max": 690
+        }
+      },
+      "cogOffsetRatio": 0.1,
+      "minTipAngleDeg": 30
+    },
+    "cradle": {
+      "slenderRatio": 3,
+      "maxSpacingMm": 600,
+      "endOffsetMm": 150,
+      "notchDepth": 0.25,
+      "roundTolerance": 0.1,
+      "thickMm": 38
+    }
+  }
+}

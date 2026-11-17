@@ -37,7 +37,7 @@ const bracket = filePart("PART-001");
 const shaft = filePart("PART-002");
 const lib = () => useLibrary.getState();
 
-describe("library storage (#14)", () => {
+describe("library storage", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("uses a versioned key", () => {
@@ -94,9 +94,19 @@ describe("library storage (#14)", () => {
     expect(warn).toHaveBeenCalled();
     expect(loadLibrary(null)).toEqual([]);
   });
+
+  it("reports a failed save when storage is unavailable or throws", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const entry = { id: "a", name: "A", notes: "", savedAt: "2026-01-01", partKey: partKey(bracket), design: designFile(bracket) };
+    expect(saveLibrary([entry], null)).toBe(false);
+    expect(saveLibrary([], null)).toBe(false);
+    const full = { ...memoryStorage(), setItem: () => { throw new Error("quota"); } };
+    expect(saveLibrary([entry], full)).toBe(false);
+    expect(saveLibrary([entry], memoryStorage())).toBe(true);
+  });
 });
 
-describe("useLibrary (#14)", () => {
+describe("useLibrary", () => {
   let store: ReturnType<typeof memoryStorage>;
   beforeEach(() => {
     store = memoryStorage();
@@ -150,5 +160,45 @@ describe("useLibrary (#14)", () => {
     expect(lib().importJson(JSON.stringify(json))).toBe("Imported 1 design. 1 entry couldn't be read and was skipped.");
     expect(lib().importJson("{nope")).toBe("This library file is not valid JSON.");
     expect(lib().entries).toHaveLength(2);
+  });
+
+  describe("when the browser refuses to store", () => {
+    const FAILED = "Saved for now, but this browser refused to store it (storage full or blocked).";
+    beforeEach(() => vi.spyOn(console, "warn").mockImplementation(() => {}));
+
+    it("save, rename, remove and undo all report it, with null storage", () => {
+      lib().load(null);
+      expect(lib().save(designFile(bracket), "First")).toBe(FAILED);
+      expect(lib().entries).toHaveLength(1); // kept in memory for this session
+      const id = lib().entries[0].id;
+      expect(lib().rename(id, "Renamed")).toBe(FAILED);
+      const removed = lib().remove(id)!;
+      expect(removed.saveError).toBe(FAILED);
+      expect(lib().undoRemove(removed)).toBe(FAILED);
+      expect(lib().entries.map((e) => e.name)).toEqual(["Renamed"]);
+    });
+
+    it("remove and undo report a throwing store; a working store reports null", () => {
+      lib().save(designFile(bracket), "First");
+      const id = lib().entries[0].id;
+      const setItem = vi.spyOn(store, "setItem").mockImplementation(() => {
+        throw new Error("quota");
+      });
+      const removeItem = vi.spyOn(store, "removeItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      const removed = lib().remove(id)!;
+      expect(removed.saveError).toBe(FAILED);
+      expect(lib().undoRemove(removed)).toBe(FAILED);
+      setItem.mockRestore();
+      removeItem.mockRestore();
+      const again = lib().remove(id)!;
+      expect(again.saveError).toBeNull();
+      expect(lib().undoRemove(again)).toBeNull();
+    });
+
+    it("remove of an unknown id is null", () => {
+      expect(lib().remove("nope")).toBeNull();
+    });
   });
 });

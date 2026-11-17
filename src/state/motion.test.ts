@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IDLE_MS, isDeliberateInput } from "./motion";
 
-describe("idle input (#64)", () => {
+describe("idle input", () => {
   it("idles after 5 s", () => {
     expect(IDLE_MS).toBe(5000);
   });
