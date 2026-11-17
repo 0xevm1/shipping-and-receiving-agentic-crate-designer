@@ -15,6 +15,7 @@ import { ORPHAN_AGE_MS } from "../blob/gc";
 import type { BlobStore } from "../blob/store";
 import type { OrgContext } from "../db/org";
 import { type Database, inTransaction, type Part } from "../db/repository";
+import { emitEvent } from "../events/emit";
 import { ApiFailure } from "../http";
 
 export type PartsDeps = { db: Database; blob: BlobStore; org: OrgContext };
@@ -24,7 +25,7 @@ const FORM_OVERHEAD_BYTES = 64 * 1024;
 
 const GLB_CONTENT_TYPE = "model/gltf-binary";
 
-function partResponse(part: Part): PartResponse {
+export function partResponse(part: Part): PartResponse {
   return {
     id: part.id,
     name: part.name,
@@ -34,6 +35,7 @@ function partResponse(part: Part): PartResponse {
     sizeMm: [part.sizeXMm, part.sizeYMm, part.sizeZMm],
     modelSha256: part.modelSha256,
     source: part.source,
+    catalogId: part.catalogId,
     createdAt: part.createdAt.toISOString(),
   };
 }
@@ -109,8 +111,8 @@ export async function createPart(request: Request, { db, blob, org }: PartsDeps)
       modelSha256: sha256,
       source: "upload",
     });
-    // TODO(#46 events): append `part.created` here, in this transaction, once the event slice
-    // lands, e.g. `await repo.events.append(org, { jobId: null, type: "part.created", payload: { partId: part.id } })`.
+    // Last in the transaction (see emitEvent). Org-wide: the part has no job yet.
+    await emitEvent(repo, org, { jobId: null, type: "part.created", payload: { partId: part.id } });
     return {
       part: partResponse(part),
       model: { sha256, sizeBytes: bytes.byteLength, readAsMm, created: model.created },
