@@ -61,7 +61,8 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   const loadFiles = useLoadFiles();
   const fileInput = useRef<HTMLInputElement>(null);
   // One pass over the checks, shared by the tab badges, the Overview verdict and the Checks tab.
-  const checks = useMemo(() => (design ? allChecks(design.checks, part, measured) : []), [design, part, measured]);
+  const findings = useView((s) => s.fileReport?.findings);
+  const checks = useMemo(() => (design ? allChecks(design.checks, part, measured, findings) : []), [design, part, measured, findings]);
   const cautions = cautionCount(checks);
   const notes = checks.filter((c) => c.level === "info").length;
   // No crate: the problem is the whole panel (Overview's slot) and the other tabs have nothing to show.

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Check } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
-import { allChecks, cautionCount, modelMatchesCatalog, MODEL_TOLERANCE_MM } from "./checks";
+import { allChecks, cautionCount, modelMatchesCatalog } from "./checks";
+import { MAX_PLAUSIBLE_MASS_KG, MODEL_TOLERANCE_MM, type Finding } from "./fileCheck";
+import { metricText } from "./message";
 
 const catalogDims: Vec3 = [360, 220, 258];
 const catalog = { catalogDims, massAssumed: false };
@@ -54,6 +56,23 @@ describe("allChecks", () => {
     const items = allChecks([], { ...catalog, massAssumed: true }, null);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ id: "mass", level: "caution", title: "Part mass is a stand-in" });
+  });
+
+  it("adds a caution when the mass is implausible, and none at the limits (#122)", () => {
+    const item = allChecks([], { ...catalog, massAssumed: false, mass_kg: 99_999_999 }, null)[0];
+    expect(item).toMatchObject({ id: "mass-implausible", level: "caution", title: "Part mass looks wrong" });
+    expect(metricText(item.detail)).toMatch(/^99,999,999 kg is more than 20,000 kg/);
+    expect(allChecks([], { ...catalog, massAssumed: false, mass_kg: MAX_PLAUSIBLE_MASS_KG }, null)).toEqual([]);
+    expect(ids(allChecks([], { ...catalog, massAssumed: false, mass_kg: 0.0001 }, null))).toEqual(["mass-implausible"]);
+  });
+
+  it("adds one caution that points to the File check when the load had errors or warnings, and not for notes", () => {
+    const finding = (severity: Finding["severity"]): Finding => ({ file: "parts.json", severity, code: "x", message: ["x"] });
+    const item = allChecks([], { ...catalog, massAssumed: false }, null, [finding("error"), finding("warning"), finding("note")])[0];
+    expect(item).toMatchObject({ id: "file-check", level: "caution", title: "The files had problems" });
+    expect(metricText(item.detail)).toBe("The file check found 1 error, 1 warning. Open File check, by Load a part, to read what is wrong and what to do.");
+    expect(allChecks([], { ...catalog, massAssumed: false }, null, [finding("note")])).toEqual([]);
+    expect(allChecks([], { ...catalog, massAssumed: false }, null, [])).toEqual([]);
   });
 
   it("sorts cautions first, then ok, then info, keeping order within a level", () => {
