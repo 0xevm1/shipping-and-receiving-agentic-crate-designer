@@ -1,6 +1,7 @@
 # Crate Designer
 
 <p align="center">
+  <a href="https://github.com/0xevm1/shipping-ui/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/0xevm1/shipping-ui/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://bun.sh"><img alt="Bun 1.3.5" src="https://img.shields.io/badge/Bun-1.3.5-F9F1E1?style=for-the-badge&labelColor=002548&logoColor=white&logo=bun"></a>
   <a href="https://nextjs.org"><img alt="Next.js 16.4.6" src="https://img.shields.io/badge/Next.js-16.4.6-000000?style=for-the-badge&labelColor=002548&logoColor=white&logo=nextdotjs"></a>
   <a href="https://react.dev"><img alt="React 19.3.0" src="https://img.shields.io/badge/React-19.3.0-149ECA?style=for-the-badge&labelColor=002548&logoColor=white&logo=react"></a>
@@ -51,6 +52,14 @@ bun run dev          # → http://localhost:3000
   (`bun add three@0.188.0`), then run the tests, lint and build.
 - Nothing else is needed: no environment variables, backend or database. The sample GLBs are
   bundled in `public/parts/`.
+
+## Pull requests
+
+Every pull request to `main`, and every push to `main`, runs
+[CI](.github/workflows/ci.yml): `bun install --frozen-lockfile`, lint, typecheck, tests and
+build. **A green CI run is required before merging.** GitHub can't enforce this on a private
+repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api`
+command that adds a ruleset requiring CI on `main` once the repo is upgraded or made public.
 
 ## Who it's for
 
