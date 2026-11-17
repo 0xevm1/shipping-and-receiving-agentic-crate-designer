@@ -7,7 +7,7 @@ import { ASSEMBLIES } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { glbProblem } from "./loadPart";
-import { buildCrateScene, crateCentreMm, CRATE_NODE, exportCrateGlb, PARTS_NODE, type PartModel } from "./exportGlb";
+import { buildCrateScene, cratePivotMm, CRATE_NODE, exportCrateGlb, PARTS_NODE, type PartModel } from "./exportGlb";
 
 /**
  * GLTFExporter's binary path reads its Blobs with FileReader, which node lacks. A minimal
@@ -106,9 +106,13 @@ describe("GLB export (#27)", () => {
       // Named wood materials.
       expect(boards.every((m) => /^Wood /.test((m.material as { name: string }).name))).toBe(true);
 
-      // The crate's centre is the file's origin (#81), so viewers turn it about its own middle.
-      const centre = crateBounds(back).getCenter(new Vector3());
-      expect(centre.length()).toBeLessThan(0.0005);
+      // The file's origin is the crate's centre of gravity, so viewers turn it about its balance point.
+      const [gx, gy, gz] = d.handling.cogMm;
+      const lo = d.members.reduce((m, b) => b.min.map((v, i) => Math.min(v, m[i])), [Infinity, Infinity, Infinity]);
+      const corner = crateBounds(back).min;
+      expect(corner.x).toBeCloseTo((lo[0] - gx) / 1000, 4);
+      expect(corner.y).toBeCloseTo((lo[1] - gy) / 1000, 4);
+      expect(corner.z).toBeCloseTo((lo[2] - gz) / 1000, 4);
 
       // Parts: one per slot, "Part 1…N", each inside the crate's outside box.
       const parts = back.getObjectByName(PARTS_NODE)!;
@@ -128,12 +132,12 @@ describe("GLB export (#27)", () => {
     expect(back.getObjectByName(PARTS_NODE)).toBeUndefined();
   });
 
-  it("places each part where the packer put it, relative to the centred crate", async () => {
+  it("places each part where the packer put it, measured from the centre of gravity", async () => {
     const d = design("PART-002", 8);
     const scene = buildCrateScene(d, { scene: await sampleModel("PART-002-long-steel-shaft.glb"), mmPerUnit: 1000 });
     scene.updateMatrixWorld(true);
     const parts = scene.getObjectByName(PARTS_NODE)!;
-    const [ox, oy, oz] = crateCentreMm(d);
+    const [ox, oy, oz] = cratePivotMm(d);
     d.layout.slots.forEach((slot, i) => {
       const c = new Box3().setFromObject(parts.children[i]).getCenter(new Vector3());
       const [a, b, cz] = d.layout.cellSize;
@@ -143,10 +147,29 @@ describe("GLB export (#27)", () => {
     });
   });
 
-  it("centres the crate on the origin, also without parts (#81)", () => {
+  it("puts the origin inside the crate, near its middle, also without parts", () => {
     const scene = buildCrateScene(design("PART-001", 4));
     scene.updateMatrixWorld(true);
-    expect(new Box3().setFromObject(scene).getCenter(new Vector3()).length()).toBeLessThan(0.0005);
+    const box = new Box3().setFromObject(scene);
+    const size = box.getSize(new Vector3());
+    const centre = box.getCenter(new Vector3());
+    expect(box.containsPoint(new Vector3())).toBe(true);
+    // A symmetric load: the balance point is within 1% of the middle in plan and 10% in height.
+    expect(Math.abs(centre.x)).toBeLessThan(size.x * 0.01);
+    expect(Math.abs(centre.y)).toBeLessThan(size.y * 0.01);
+    expect(Math.abs(centre.z)).toBeLessThan(size.z * 0.1);
+  });
+
+  it("gives no node above the meshes a transform, like the sample part files' world node", async () => {
+    const back = (
+      await parse(await exportCrateGlb(design("PART-001", 4), { scene: await sampleModel("PART-001-machined-steel-bracket.glb"), mmPerUnit: 1000 }))
+    ).scene;
+    const crate = back.getObjectByName(CRATE_NODE)!;
+    for (const node of [crate, ...crate.children]) {
+      expect(node.position.length()).toBe(0);
+      expect(node.quaternion.x ** 2 + node.quaternion.y ** 2 + node.quaternion.z ** 2).toBe(0);
+      expect(node.scale.toArray()).toEqual([1, 1, 1]);
+    }
   });
 });
 
