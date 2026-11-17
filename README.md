@@ -176,6 +176,14 @@ tab at a time.
     (`#design=…`, never sent to a server). Opening the link restores a catalog part fully; for a
     custom part it names the `.glb` to load. A damaged link keeps the default crate and says
     why. Spec §9.
+12. **Pick up where you left off** (#71). A refresh, or reopening the tab, brings back the crate
+    that was last on screen: the part, every rule, the picked layout, the crate type of a split,
+    the ranking and the open tab (the units and shop standards are remembered as before). It is
+    saved in this browser a moment after each change. A loaded `.glb` is kept too (in
+    IndexedDB, the last one only, up to 50 MB); a bigger one isn't, and the reload opens the
+    default part with a note naming the file to load. To start fresh, just load another part or
+    design: whatever is on screen is what gets remembered. A share link in the URL wins over the
+    remembered crate. Spec §9.
 
 ### The crate it designs
 
@@ -199,8 +207,9 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **A database and accounts.** The shop standards, the display units and the design library
-  are saved in the browser's `localStorage` (per browser, under versioned keys; bad data is
+- **A database and accounts.** The shop standards, the display units, the design library and
+  the last-opened crate are saved in the browser's `localStorage` (and the last loaded `.glb` in
+  IndexedDB), per browser, under versioned keys; bad data is
   skipped with a warning). Designs also move as JSON files (one design, or the whole library)
   and share links. The plan for a real store, SQLite WASM on OPFS, is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md); spec §9 has the details.
