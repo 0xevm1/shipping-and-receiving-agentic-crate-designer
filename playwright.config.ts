@@ -1,5 +1,6 @@
 import { cpus } from "node:os";
 import { defineConfig, devices } from "@playwright/test";
+import { databaseUrl, loadLocalEnv, withDatabase } from "./src/server/db/config";
 
 /**
  * End-to-end UI tests. `bun run e2e` builds the production app with the read-only
@@ -9,9 +10,28 @@ import { defineConfig, devices } from "@playwright/test";
  * Set `E2E_SKIP_BUILD=1` to serve an existing e2e build instead (CI builds in its own step).
  * Set `E2E_PORT` to use another port. Parallel worktrees need distinct ports, because a local run
  * reuses whatever server is already listening and would otherwise test another branch's build.
+ *
+ * The server (#46): before building, the run starts Postgres and the blob emulator from
+ * docker-compose.yml (`infra:up`) and migrates **its own database**, `crate_designer_e2e`
+ * (`E2E_DB_NAME`), on the same Postgres, so a run never touches the dev data; files go to the
+ * `crate-designer-test` bucket (`E2E_BLOB_BUCKET`). Without Docker the app still serves, and the
+ * specs that need the server skip (`serverAvailable`, e2e/helpers/server.ts). `E2E_SKIP_INFRA=1`
+ * skips the Docker step (CI starts and migrates in steps of its own).
  */
 const PORT = Number(process.env.E2E_PORT) || 3320;
 const baseURL = `http://localhost:${PORT}`;
+
+loadLocalEnv();
+const E2E_DATABASE_URL = withDatabase(databaseUrl(), process.env.E2E_DB_NAME || "crate_designer_e2e");
+const serverEnv = {
+  NEXT_PUBLIC_E2E: "1",
+  DATABASE_URL: E2E_DATABASE_URL,
+  BLOB_BUCKET: process.env.E2E_BLOB_BUCKET || "crate-designer-test",
+};
+const infra = process.env.E2E_SKIP_INFRA
+  ? "true"
+  : `(bun scripts/infra.ts up && bun scripts/infra.ts migrate) || echo "e2e: no database (is Docker running?); specs that need the server will skip"`;
+const serve = process.env.E2E_SKIP_BUILD ? `bun run start -p ${PORT}` : `bun run build && bun run start -p ${PORT}`;
 
 /**
  * Local workers. Software WebGL is CPU-heavy, and several worktrees (or agents) often run a suite at once, so
@@ -69,9 +89,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.E2E_SKIP_BUILD ? `bun run start -p ${PORT}` : `bun run build && bun run start -p ${PORT}`,
+    command: `${infra}; ${serve}`,
     url: baseURL,
-    env: { NEXT_PUBLIC_E2E: "1" },
+    env: serverEnv,
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
     stdout: "ignore",
