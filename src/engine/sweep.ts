@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from "@/domain/design";
 import { explainRecommendation } from "@/domain/explainRecommendation";
 import { CrateSettingsSchema } from "@/domain/schema";
 import { ShopStandardsSchema } from "@/domain/standards";
-import { FreightRatesSchema, planTotal, SWEEP_MAX_QUANTITY, sweepQuantities, type QuantitySweep, type TotalPlan } from "@/domain/sweep";
+import { FreightRatesSchema, normalizeCandidates, planTotal, SWEEP_MAX_QUANTITY, sweepQuantities, type QuantitySweep, type TotalPlan } from "@/domain/sweep";
 import type { DesignsResponse, RankedConfiguration } from "@/lib/api/designs";
 import { explainTotalPlan } from "@/domain/totalPlan";
 import { explanationText } from "@/lib/explanation";
@@ -36,6 +36,13 @@ export const SweepRequestSchema = z.object({
   freightRates: FreightRatesSchema.nullable().optional(),
   /** Quantities tried, 1..maxQuantity (default `SWEEP_MAX_QUANTITY`). */
   maxQuantity: z.int().min(1).max(SWEEP_MAX_QUANTITY).optional(),
+  /**
+   * The quantities per crate the recommendation chooses among (#133): the part's suggested
+   * quantities, set by `sweepRequestFor`. Whole numbers 1..200, deduplicated and sorted on
+   * parse. Absent: every quantity on the curve (stored requests and API callers from before).
+   * Total mode (`total`) always reads the full curve.
+   */
+  candidates: z.array(z.int().min(1).max(SWEEP_MAX_QUANTITY)).min(1).transform(normalizeCandidates).optional(),
   /** A total number of parts to ship: adds `total`, the even split (#25). */
   total: z.int().positive().nullable().optional(),
 });
@@ -53,7 +60,7 @@ const SWEEP_HASH_SCHEMA = 1;
 
 /** SHA-256 of the canonical sweep request; the part counts by its design fields only. */
 export function sweepInputHash(req: SweepRequest): string {
-  const { part, rules, standards, freightRates, maxQuantity, total } = req;
+  const { part, rules, standards, freightRates, maxQuantity, total, candidates } = req;
   return sha256Text(
     canonicalJson({
       v: SWEEP_HASH_SCHEMA,
@@ -64,6 +71,8 @@ export function sweepInputHash(req: SweepRequest): string {
       freightRates: freightRates ?? null,
       maxQuantity: maxQuantity ?? SWEEP_MAX_QUANTITY,
       total: total ?? null,
+      // Only when given, so a request without candidates keeps the hash it had before #133.
+      ...(candidates ? { candidates: normalizeCandidates(candidates) } : {}),
     }),
   );
 }
@@ -75,6 +84,7 @@ export function runSweep(req: SweepRequest): SweepResponse {
   const sweep = sweepQuantities(req.part, { ...req.rules, quantity: 1 }, req.standards, {
     maxQuantity: req.maxQuantity,
     freightRates: req.freightRates ?? null,
+    candidates: req.candidates,
   });
   const total = req.total ? planTotal(sweep, req.total) : null;
   return { ...sweepStamp(req), sweep, total };
@@ -126,6 +136,7 @@ export function rankConfigurations(req: SweepRequest, swept: SweepResponse = run
     part: { name: req.part.name, massKg: req.part.mass_kg, sizeMm: [...req.part.dimensions_mm] },
     basis: sweep.basis,
     maxQuantity: sweep.maxQuantity,
+    candidates: sweep.candidates,
     recommendation: rec
       ? {
           quantityPerCrate: rec.quantity,

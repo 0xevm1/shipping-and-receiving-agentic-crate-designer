@@ -284,6 +284,50 @@ describe("an opened design keeps its own settings", () => {
   });
 });
 
+describe("a newly loaded part opens at the cheapest of its suggested quantities (#133)", () => {
+  it.each([
+    ["PART-001", 8],
+    ["PART-002", 4],
+    ["PART-003", 8],
+  ])("%s opens at %i per crate, not at the cheapest of all 200", (id, quantity) => {
+    const part = catalogPart(getPart(id));
+    loadPart(part);
+    const request = queue[0].req;
+    expect(request.candidates).toEqual([...part.suggested_quantities].sort((a, b) => a - b));
+    const sweep = answer();
+    expect(part.suggested_quantities).toContain(sweep.recommendation!.quantity);
+    expect(s().settings.quantity).toBe(quantity);
+    expect(lastChange()?.note).toBe(`Set to the recommended ${quantity} per crate`);
+  });
+
+  it("a loaded GLB with no catalog entry opens at the cheapest of 1, 4 and 8", () => {
+    loadPart(widget);
+    expect(queue[0].req.candidates).toEqual([1, 4, 8]);
+    const sweep = answer();
+    expect([1, 4, 8]).toContain(s().settings.quantity);
+    expect(s().settings.quantity).toBe(sweep.recommendation!.quantity);
+    expect(sweep.shortlist.every((p) => [1, 4, 8].includes(p.quantity))).toBe(true);
+  });
+
+  it("a part suggested in 2 and 6 opens at one of them", () => {
+    loadPart({ ...widget, id: "pair", modelUrl: "blob:pair", suggested_quantities: [2, 6] });
+    expect(queue[0].req.candidates).toEqual([2, 6]);
+    answer();
+    expect([2, 6]).toContain(s().settings.quantity);
+  });
+
+  it("applies nothing when no suggested quantity passes: the part stays at its first suggested quantity", () => {
+    // 4 or 8 of these are over the per-crate gross limit before the crate is built.
+    loadPart({ ...widget, id: "heavy", modelUrl: "blob:heavy", mass_kg: 400, suggested_quantities: [4, 8] });
+    expect(s().settings.quantity).toBe(4);
+    const sweep = answer();
+    expect(sweep.recommendation).toBeNull();
+    expect(s().settings.quantity).toBe(4);
+    expect(s().autoRecommend).toBeNull();
+    expect(lastChange()?.source).not.toBe("recommended");
+  });
+});
+
 /** A sweep request for the part and rules on screen. */
 function sweepRequest(): SweepRequest {
   const { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s().settings;

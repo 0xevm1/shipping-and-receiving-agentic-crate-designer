@@ -111,11 +111,18 @@ describe("designShipment", () => {
 
   it("validates against its own schemas", () => {
     const req = parityRequest("PART-003", 8);
-    // Over the wire only the design fields of the part survive: the load facts aren't inputs.
+    // Over the wire only the design fields of the part survive (its suggested quantities too, #133): the load facts aren't inputs.
     const parsed = DesignRequestSchema.parse(JSON.parse(JSON.stringify(req)));
     expect(parsed).toEqual({
       ...req,
-      part: { id: req.part.id, name: req.part.name, mass_kg: req.part.mass_kg, dimensions_mm: req.part.dimensions_mm, material: req.part.material },
+      part: {
+        id: req.part.id,
+        name: req.part.name,
+        mass_kg: req.part.mass_kg,
+        dimensions_mm: req.part.dimensions_mm,
+        material: req.part.material,
+        suggested_quantities: req.part.suggested_quantities,
+      },
     });
     expect(inputHash(parsed)).toBe(inputHash(req));
     expect(DesignResponseSchema.safeParse(designShipment(req)).success).toBe(true);

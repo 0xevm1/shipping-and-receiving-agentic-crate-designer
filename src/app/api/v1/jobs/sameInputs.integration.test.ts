@@ -138,8 +138,28 @@ describe('browser and server sweep the same part (#46 "same inputs")', () => {
       await drain();
       const { snap, view } = await expectSameAnswer(job.id, sweep);
       expect(snap.totalPlan!.plan!.scoreUsdPerPart).toBeCloseTo(view.shown!.scoreUsdPerPart!, 9);
+      // Both recommend among the part's suggested quantities (#133), not the cheapest of all 200.
+      expect(part.suggested_quantities).toContain(sweep.recommendation!.quantity);
+      expect(snap.configurations.find((c) => c.id === snap.job.selectedConfigurationId)!.quantityPerCrate).toBe(sweep.recommendation!.quantity);
     });
   }
+
+  it("a part with its own suggested quantities (2 and 6): the server recommends among them, as the browser does", async () => {
+    const { sweep, part } = await browserSweep({ ...catalogPart(getPart("PART-001")), suggested_quantities: [2, 6] }, null);
+    expect(sweep.candidates).toEqual([2, 6]);
+    expect([2, 6]).toContain(sweep.recommendation!.quantity);
+    const job = await open({ catalogId: "PART-001", totalQuantity: TOTAL, designPart: designPartBody(part) });
+    await drain();
+    const { snap } = await expectSameAnswer(job.id, sweep);
+    expect(
+      snap.configurations
+        .filter((c) => c.origin === "precomputed")
+        .map((c) => c.quantityPerCrate)
+        .sort(),
+    ).toContain(sweep.recommendation!.quantity);
+    // The total plan still splits by the full curve: 60 parts are not shipped as crates of 2 or 6.
+    expect(snap.totalPlan!.plan!.perCrate).toBeGreaterThan(6);
+  });
 });
 
 describe("PUT /jobs/:id/part", () => {

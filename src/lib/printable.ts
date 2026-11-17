@@ -129,7 +129,7 @@ export interface PrintableCrate {
 export interface PrintableQuantity {
   /** The crate on the page is the sweep's recommendation (its quantity and layout). */
   recommended: boolean;
-  /** "Recommended: 34 per crate", or "20 per crate; the sweep recommends 34". */
+  /** "Recommended: 8 per crate", or "4 per crate; the sweep recommends 8". */
   heading: string;
   /** The sweep's rationale: the score and what stopped a larger crate. */
   rationale: string;
@@ -474,7 +474,11 @@ function quantitySection(input: PrintableInput, sweep: QuantitySweep): Printable
           value: `${stoppedBy.quantity} per crate fails the ${CONSTRAINT_TEXT[stoppedBy.binding]}`,
           note: renderMessage(stoppedBy.reason, u),
         }
-      : { label: "Stopped a larger crate", value: `Nothing up to ${sweep.maxQuantity} per crate` },
+      : {
+          label: "Stopped a larger crate",
+          // Among suggested quantities, nothing larger was compared when the pick is the largest of them (#133).
+          value: sweep.candidates ? "No larger suggested quantity" : `Nothing up to ${sweep.maxQuantity} per crate`,
+        },
     {
       label: "Freight",
       value: sweep.basis === "crate-only" ? "Not priced" : "Priced from the given rates",

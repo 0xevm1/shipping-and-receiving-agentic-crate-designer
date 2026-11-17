@@ -67,6 +67,12 @@ export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm">
    * estimated from the mesh. Absent means assumed at the middle of the bounding box.
    */
   cog?: PartCog;
+  /**
+   * The quantities the part is usually shipped in (#133): the sweep recommends among these. Not a
+   * design input, but part of the engine's part because the PDF's quantity rationale and the
+   * server's sweep read it. Absent: 1, 4 and 8.
+   */
+  suggested_quantities?: number[];
 };
 
 /** User-editable inputs that drive a crate design. The part itself is passed separately. */

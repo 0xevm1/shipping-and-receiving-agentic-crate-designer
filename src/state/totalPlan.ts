@@ -81,6 +81,8 @@ function headline(total: number, plan: { crates: number; types: readonly { quant
   return `${total} parts → ${planText(plan)}, ${usd(plan.scoreUsdPerPart)} per part`;
 }
 
+// Total mode reads the sweep's full 1-200 curve, never its candidates (#133): how to pack N parts is
+// a different question from which suggested quantity is cheapest.
 function browserView(sweep: QuantitySweep, total: number): PlanView {
   const plan = planTotal(sweep, total);
   return {

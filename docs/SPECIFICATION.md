@@ -1832,7 +1832,7 @@ download after that (Download or Copy cut list, Download design (.json), the Exp
 later exports don't move it, but an edit clears it (it would describe a design that is gone) and
 the next export records the time to the edited design. The scorecard shows "Designed in 1 m 12 s"
 in its heading row, muted, in a region that is always mounted: showing or clearing it moves nothing. The manual
-baseline it compares with is an assumption in the README.
+baseline it compares with is an assumption in `docs/GUIDE.md`.
 
 ### 7.13 Export package (the Export pill, #51)
 

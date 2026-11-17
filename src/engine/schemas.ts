@@ -33,6 +33,8 @@ export const DesignPartSchema = PartSchema.pick({ id: true, name: true, mass_kg:
   .extend({
     material: z.string().optional(),
     profile: PartProfileSchema.optional(),
+    /** The quantities the part is usually shipped in (#133); the sweep recommends among them. */
+    suggested_quantities: z.array(z.int().positive()).optional(),
     /** The part's own centre of gravity (#110): an offset from the box centre, inside the box. Absent: assumed at the centre. */
     cog: PartCogSchema.optional(),
   })

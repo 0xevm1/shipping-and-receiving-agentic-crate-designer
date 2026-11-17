@@ -110,11 +110,13 @@ function CostCurve({ points, pick }: { points: ExplanationCurvePoint[]; pick: nu
   }
   if (d) segments.push(d);
   const picked = points[pick - 1];
+  // The suggested quantities the pick was chosen among, when the sweep had some (#133).
+  const marked = points.some((p) => !p.candidate) ? points.filter((p) => p.ok && p.candidate && p.quantity !== pick) : [];
   const failing = points.filter((p) => !p.ok);
   const firstFail = failing.find((p) => p.quantity > pick);
   const base = H - PAD.b;
   const step = (W - PAD.l - PAD.r) / Math.max(1, n - 1);
-  const label = `Cost per part by quantity per crate, 1 to ${n}: ${ok.length} pass; the lowest is ${usdCents(picked.scoreUsdPerPart!)} at ${pick} per crate${
+  const label = `Cost per part by quantity per crate, 1 to ${n}: ${ok.length} pass; ${points.some((p) => !p.candidate) ? "the recommended suggested quantity costs" : "the lowest is"} ${usdCents(picked.scoreUsdPerPart!)} at ${pick} per crate${
     firstFail ? `; ${firstFail.quantity} per crate fails the ${CONSTRAINT_TEXT[firstFail.binding!]}` : ""
   }.`;
 
@@ -141,6 +143,9 @@ function CostCurve({ points, pick }: { points: ExplanationCurvePoint[]; pick: nu
         {failing.map((p) => (
           <line key={p.quantity} className={styles.fail} x1={x(p.quantity)} x2={x(p.quantity)} y1={base - 7} y2={base} />
         ))}
+        {marked.map((p) => (
+          <circle key={p.quantity} className={styles.cand} cx={x(p.quantity)} cy={y(p.scoreUsdPerPart!)} r={3.5} />
+        ))}
         <circle className={styles.pick} cx={x(pick)} cy={y(picked.scoreUsdPerPart!)} r={4.5} />
         {points.map((p) => (
           <rect key={p.quantity} className={styles.hit} x={x(p.quantity) - step / 2} y={PAD.t} width={step} height={base - PAD.t}>
@@ -156,6 +161,11 @@ function CostCurve({ points, pick }: { points: ExplanationCurvePoint[]; pick: nu
         <span>
           <i className={styles.keyLine} aria-hidden="true" /> cost per part (log scale)
         </span>
+        {marked.length > 0 && (
+          <span>
+            <i className={styles.keyCand} aria-hidden="true" /> suggested quantity
+          </span>
+        )}
         <span>
           <i className={styles.keyPick} aria-hidden="true" /> recommended
         </span>
