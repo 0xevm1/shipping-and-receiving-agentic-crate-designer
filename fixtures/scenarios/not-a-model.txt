@@ -1,0 +1,1 @@
+Not a model. The app asks for a .glb or a design .json.

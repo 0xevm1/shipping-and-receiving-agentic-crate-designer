@@ -1,0 +1,205 @@
+{
+  "schema_version": "1.0",
+  "coordinate_system": "right-handed; Z up",
+  "model_units": "meters",
+  "parts": [
+    {
+      "id": "SCN-001",
+      "name": "Heavy block 1500 kg",
+      "model": "heavy-1500kg.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 1500,
+      "dimensions_mm": [
+        900,
+        700,
+        500
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-002",
+      "name": "Heavy block 2000 kg",
+      "model": "heavy-2000kg.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 2000,
+      "dimensions_mm": [
+        900,
+        700,
+        500
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-003",
+      "name": "Overweight block 8000 kg",
+      "model": "overweight-8000kg.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 8000,
+      "dimensions_mm": [
+        1200,
+        800,
+        600
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-004",
+      "name": "Plate wider than the trailer door",
+      "model": "wider-than-door.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 400,
+      "dimensions_mm": [
+        2600,
+        2600,
+        300
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-005",
+      "name": "Mast taller than the trailer door",
+      "model": "taller-than-door.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 150,
+      "dimensions_mm": [
+        400,
+        400,
+        2800
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-006",
+      "name": "Rail longer than 8 ft",
+      "model": "longer-than-8ft.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 40,
+      "dimensions_mm": [
+        2600,
+        300,
+        300
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-007",
+      "name": "Tiny light pin",
+      "model": "tiny-light.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 0.05,
+      "dimensions_mm": [
+        40,
+        30,
+        20
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-008",
+      "name": "Lopsided shaft with end block",
+      "model": "lopsided.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 120,
+      "dimensions_mm": [
+        1200,
+        300,
+        300
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-009",
+      "name": "Tall post",
+      "model": "tall-part.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 12,
+      "dimensions_mm": [
+        150,
+        150,
+        1200
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-010",
+      "name": "Crate wider than a plywood sheet",
+      "model": "bigger-than-sheet.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 300,
+      "dimensions_mm": [
+        2000,
+        1400,
+        800
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "SCN-011",
+      "name": "Part over a pallet footprint",
+      "model": "pallet-overhang.glb",
+      "material": "4140 steel",
+      "density_kg_m3": 7850,
+      "mass_kg": 200,
+      "dimensions_mm": [
+        1300,
+        1100,
+        1000
+      ],
+      "suggested_quantities": [
+        1,
+        4,
+        8
+      ]
+    }
+  ]
+}

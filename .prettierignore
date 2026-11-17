@@ -14,3 +14,6 @@ e2e/screenshots
 
 # Prose keeps its hand-set tables and wrapping.
 *.md
+
+# Generated test fixtures, some deliberately malformed (scripts/fixtures/scenarios.mjs).
+fixtures
