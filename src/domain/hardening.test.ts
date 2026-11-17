@@ -45,17 +45,29 @@ describe("quantity extremes", () => {
   it.each(cases)("%s at quantity 1 and 200 (upright %s, %i layers) packs every part, fast", (id, keepUpright, maxLayers) => {
     const p = parts.find((q) => q.id === id)!;
     for (const quantity of [1, 200]) {
-      const t0 = performance.now();
-      const r = run(p, { quantity, keepUpright, maxLayers });
-      const ms = performance.now() - t0;
+      const settings = { quantity, keepUpright, maxLayers };
+      const r = run(p, settings);
       expect(r.problem).toBeNull();
       expect(r.design!.layout.slots).toHaveLength(quantity);
       expectSound(r.design!);
-      // Measured at 1–3 ms; the budget leaves room for slow CI machines.
-      expect(ms).toBeLessThan(50);
+      // Measured at 1–3 ms. A real regression is a 10× event, so the budget is generous, and
+      // the median of several runs ignores one run stalled by a busy machine (#48).
+      expect(medianMs(() => run(p, settings))).toBeLessThan(50);
     }
   });
 });
+
+/** Median wall time of `TIMING_RUNS` calls, robust to a few runs slowed by GC or CPU load. */
+const TIMING_RUNS = 5;
+function medianMs(fn: () => unknown): number {
+  const times: number[] = [];
+  for (let i = 0; i < TIMING_RUNS; i++) {
+    const t0 = performance.now();
+    fn();
+    times.push(performance.now() - t0);
+  }
+  return times.sort((a, b) => a - b)[Math.floor(TIMING_RUNS / 2)];
+}
 
 describe("part size extremes", () => {
   it.each([
