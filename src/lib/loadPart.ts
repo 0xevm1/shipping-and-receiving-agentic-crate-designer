@@ -1,6 +1,7 @@
 import { Box3, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { catalog } from "@/domain/catalog";
+import { GLB_MESSAGES, glbProblem, idFromFile, nameFromFile, unitsToMm } from "@/domain/glb";
 import { fileProfile, isDesignFileJson, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
 import type { Ranking } from "@/domain/design";
 import type { Message } from "@/domain/message";
@@ -12,49 +13,12 @@ import { catalogPart, type LoadedPart } from "./part";
 import { renderMessage } from "./message";
 import type { Units } from "./units";
 
+// The checks live in the domain so the upload API (#46) gives the same answers.
+export { glbProblem, idFromFile, nameFromFile };
+
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
 const STAND_IN_MASS_KG = 10;
-/**
- * Files are expected in metres (spec §4). A part more than this many units
- * across was almost certainly modelled in millimetres, so it is read that way
- * and the UI says so.
- */
-const MM_FILE_THRESHOLD = 20;
 const DEFAULT_QUANTITIES = [1, 4, 8];
-const GLB_MAGIC = 0x46546c67; // "glTF"
-
-/** Why a .glb can't be used, or null if it looks fine. Reads only the header and JSON chunk. */
-export function glbProblem(buffer: ArrayBuffer): string | null {
-  const view = new DataView(buffer);
-  if (buffer.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC) return "That isn't a .glb file. Choose a .glb or a design .json.";
-  const jsonLength = view.getUint32(12, true);
-  try {
-    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLength)));
-    const required: string[] = json.extensionsRequired ?? [];
-    if (required.some((e) => /draco|meshopt/i.test(e))) {
-      return "That .glb uses compression the viewer can't read. Export it without Draco or Meshopt.";
-    }
-  } catch {
-    return "That .glb file is damaged. Try exporting it again.";
-  }
-  return null;
-}
-
-/** The part id a file name gives: the name without ".glb"; "part" for a file that is only ".glb". */
-export function idFromFile(fileName: string): string {
-  return fileName.replace(/\.glb$/i, "").trim() || "part";
-}
-
-/** "PART-004-cast-iron-cover.glb" → "Cast iron cover"; a file called only ".glb" is "Part". */
-export function nameFromFile(fileName: string): string {
-  const stem = idFromFile(fileName);
-  const words =
-    stem
-      .replace(/^PART-\d+-/i, "")
-      .replace(/[-_]+/g, " ")
-      .trim() || stem;
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
 
 /** Entries from a dropped parts.json that pass the catalog schema; none when it is not JSON. */
 export function partsFromJson(text: string): Part[] {
@@ -77,7 +41,7 @@ function catalogEntries(json: unknown): Part[] {
 async function measure(buffer: ArrayBuffer): Promise<Vec3> {
   const gltf = await new GLTFLoader().parseAsync(buffer, "");
   const size = new Box3().setFromObject(gltf.scene).getSize(new Vector3());
-  if (size.lengthSq() === 0) throw new Error("No solid geometry was found in this file.");
+  if (size.lengthSq() === 0) throw new Error(GLB_MESSAGES.noGeometry);
   return [size.x, size.y, size.z];
 }
 
@@ -94,9 +58,7 @@ async function readGlb(glb: File): Promise<ReadGlb | string> {
   const problem = glbProblem(buffer);
   if (problem) return problem;
   const sizeUnits = await measure(buffer);
-  const readAsMm = Math.max(...sizeUnits) > MM_FILE_THRESHOLD;
-  const mmPerUnit = readAsMm ? 1 : 1000;
-  const sizeMm = sizeUnits.map((v) => v * mmPerUnit) as Vec3;
+  const { sizeMm, mmPerUnit, readAsMm } = unitsToMm(sizeUnits);
   const url = URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" }));
   return { url, sizeMm, mmPerUnit, readAsMm };
 }
@@ -151,7 +113,7 @@ export async function loadPartFiles(
     const message = catalogAdditions.length
       ? "Part details loaded. Now choose its .glb file."
       : files.some((f) => /\.gltf$/i.test(f.name))
-        ? "Text .gltf files can't be used. Export the part as a single .glb file."
+        ? GLB_MESSAGES.textGltf
         : "Choose a .glb file or a design .json.";
     return { catalogAdditions, message };
   }

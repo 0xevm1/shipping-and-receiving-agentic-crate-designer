@@ -377,8 +377,8 @@ src/engine/        the crate engine, may import lib and domain: one API (design,
                    output stamped with engineVersion and inputHash (spec §5.1)
 src/state/         may import engine, lib and domain: zustand stores, persistence, loading
                    flows, the engine's Web Worker and its client, per-frame animation values
-src/server/        server-only (Postgres via drizzle, #46), may import engine, lib and domain;
-                   only src/app/ may import it
+src/server/        server-only (Postgres via drizzle, S3 blob storage, #46), may import engine,
+                   lib and domain; only src/app/ may import it (Route Handlers in src/app/api/v1/)
 src/components/    may import everything below except src/server/: shell/ (overlays), island/
                    (tabs), viewer/ (three.js via react-three-fiber); src/app/ is the same layer
 ```
@@ -395,7 +395,7 @@ public/            also site.webmanifest and its 192/512 icons (tab icons: src/a
 e2e/               Playwright end-to-end UI tests (bun run e2e)
 db/migrations/     SQL migrations written by drizzle-kit (bun run db:generate)
 infra/             blob emulator bucket setup (CORS) for docker-compose.yml
-docs/              SPECIFICATION.md, POSTGRES.md, design-handoff/
+docs/              SPECIFICATION.md, POSTGRES.md, BLOB_STORAGE.md, design-handoff/
 ```
 
 ## Docs
@@ -404,6 +404,10 @@ docs/              SPECIFICATION.md, POSTGRES.md, design-handoff/
   algorithms, construction rules, invariants, decisions and roadmap.
 - [`docs/POSTGRES.md`](docs/POSTGRES.md): the Postgres data store: tables, org scoping,
   scripts, environment and ports.
+- [`docs/BLOB_STORAGE.md`](docs/BLOB_STORAGE.md): GLBs and generated files in S3-compatible
+  storage: object keys, the part upload API, presigned downloads, orphan cleanup. Pointing the
+  `BLOB_*` variables at real AWS S3, Cloudflare R2 or GCS (S3 XML API with HMAC keys) works
+  without code changes.
 - [`docs/design-handoff/`](docs/design-handoff/HANDOFF.md): the UI design handoff and its
   runnable prototype.
 

@@ -5,8 +5,9 @@ replaces the earlier SQLite WASM plan. Postgres and an S3-compatible blob emulat
 Docker; the Next.js app runs on the host and reaches them through environment variables.
 
 **Status (slice 1):** infrastructure, migrations, the first tables and the org-scoped repository
-are in. Nothing in the UI reads or writes the database yet; the blob store's TypeScript client,
-the event framework (LISTEN/NOTIFY, SSE) and the jobs API are later slices of #46.
+are in. Slice 1a adds the blob store's client, part uploads (`POST /api/v1/parts`) and presigned
+model downloads: [BLOB_STORAGE.md](BLOB_STORAGE.md). Nothing in the UI reads or writes the
+database yet; the event framework (LISTEN/NOTIFY, SSE) and the jobs API are later slices of #46.
 
 ## Quick start
 
@@ -30,7 +31,8 @@ starts. `bun run dev:app` starts Next.js alone, without touching Docker.
 | `bun run db:reset` | Drops the database and migrates it again. **Deletes its data** |
 | `bun run db:psql` | `psql` inside the `db` container, on the configured database |
 | `bun run db:generate` | After editing `src/server/db/schema.ts`: writes the next migration (`drizzle-kit generate`). Commit it with the schema change |
-| `bun run test:integration` | The `*.integration.test.ts` files, against the Docker Postgres. Run `infra:up` first |
+| `bun run test:integration` | The `*.integration.test.ts` files, against the Docker Postgres and blob emulator. Run `infra:up` first |
+| `bun run blob:gc` | Deletes blob objects no row names, older than 24 h (`-- --dry-run` lists them). See [BLOB_STORAGE.md](BLOB_STORAGE.md#orphan-cleanup-bun-run-blobgc) |
 
 `bun run build`, `bun run test` and the pre-commit hook never need Docker.
 
@@ -55,6 +57,10 @@ Next.js, the bun scripts, `vitest.integration.config.mts` and `drizzle.config.ts
 | `BLOB_BUCKET` | `crate-designer-dev` | Bucket for this environment (`crate-designer-test` for e2e and CI) |
 | `BLOB_ACCESS_KEY_ID` / `BLOB_SECRET_ACCESS_KEY` | `crate-dev` / `crate-dev-secret` | The emulator's only identity (compose reads them too). Server-only: never `NEXT_PUBLIC_` |
 | `BLOB_FORCE_PATH_STYLE` | `true` | Path-style URLs, which the emulator needs |
+| `BLOB_PUBLIC_ENDPOINT` | `BLOB_ENDPOINT` | Optional: the endpoint written into presigned URLs, when the browser reaches the store by another host |
+
+Pointing the `BLOB_*` variables at AWS S3, Cloudflare R2 or GCS (HMAC keys) works without code
+changes; [BLOB_STORAGE.md](BLOB_STORAGE.md#one-api-s3) has the values for each.
 
 The local credentials (`crate` / `crate`, `crate-dev`) are for the Docker services only. Every
 host port binds to `127.0.0.1`.
@@ -136,11 +142,12 @@ default org, but the scoping is built in from the first migration:
   channels, fair queue scheduling between orgs and per-org quotas.
 
 Blob object keys are org-scoped too: `org/<orgId>/models/<sha256>.glb`,
-`org/<orgId>/artifacts/<inputHash>/<engineVersion>/…`, `org/<orgId>/bundles/<id>.zip`.
+`org/<orgId>/artifacts/<inputHash>/<engineVersion>/…`, `org/<orgId>/bundles/<id>.zip`, built only
+from an `OrgContext` (`src/server/blob/keys.ts`, [BLOB_STORAGE.md](BLOB_STORAGE.md#object-keys)).
 
 ## Code (`src/server/db/`)
 
-`src/server/` is server-only. ESLint keeps it, and the `postgres` / `drizzle-orm` packages, out
+`src/server/` is server-only (the blob store is `src/server/blob/`, [BLOB_STORAGE.md](BLOB_STORAGE.md)). ESLint keeps it, and the `postgres` / `drizzle-orm` / `@aws-sdk/*` packages, out
 of `src/domain`, `src/lib`, `src/state` and `src/components`; only `src/app` (Route Handlers,
 Server Components) may import it. `client.ts` also imports `server-only`, so a Client Component
 that reached it would fail the build.
@@ -149,7 +156,7 @@ that reached it would fail the build.
 |---|---|
 | `index.ts` | What route handlers use: `getRepository()`, `getDb()`, `closeDb()`, `inTransaction`, `DEFAULT_ORG`, `orgContext`, `OrgContext`, row types |
 | `client.ts` | The pooled postgres.js client and drizzle handle, created on first use (so `next build` needs no database) |
-| `repository.ts` | `createRepository(db)`: `parts`, `partModels`, `jobs` (with versioned `update`), `configurations` (content-addressed `save`), `events` (`append`, `listAfter`); `inTransaction(db, repo => …)` |
+| `repository.ts` | `createRepository(db)`: `parts`, `partModels`, `jobs` (with versioned `update`), `configurations` (content-addressed `save`), `events` (`append`, `listAfter`), `blobRefs` (`referenced`, for orphan cleanup); `inTransaction(db, repo => …)` |
 | `org.ts` | `OrgContext`, `orgContext(id)`, `DEFAULT_ORG`, `requireOrg` |
 | `schema.ts` | The drizzle tables |
 | `config.ts` | `databaseUrl()` (from `DATABASE_URL`, or `DB_PORT` / `DB_NAME`), `loadLocalEnv()` |

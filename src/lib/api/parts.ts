@@ -1,0 +1,98 @@
+/**
+ * Request and response shapes for `/api/v1/parts` (#46). Pure Zod, so the server validates with
+ * them and a browser or script client can parse responses with the same schemas.
+ *
+ * POST /api/v1/parts   multipart/form-data:
+ *   file      the part's binary .glb (no Draco / Meshopt, at most MAX_GLB_BYTES)
+ *   mass      kg per part, required (spec §6.1: never inferred from the mesh); "12.5" or "12.5 kg"
+ *   material  optional text
+ *   density   optional kg/m³
+ *   name      optional; defaults to one made from the file name
+ * GET /api/v1/parts/:id/model   a ~5 min presigned GET URL for the part's GLB (`?redirect=1`: 302 to it)
+ */
+import { z } from "zod";
+import { Vec3Schema } from "@/domain/schema";
+import { parseMass } from "../partFields";
+
+/** A form field as text: missing → "", trimmed. */
+const field = z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string());
+
+const optionalText = (label: string, max: number) =>
+  field.pipe(z.string().max(max, `${label} can be at most ${max} characters.`)).transform((v) => v || undefined);
+
+/** The text fields of a part upload, as the form sends them (strings, or absent). */
+export const CreatePartFieldsSchema = z.object({
+  mass: field.transform((text, ctx) => {
+    // The API takes kg only: refuse a pound value rather than reading "30 lb" as 30 kg.
+    const parsed = /lbs?\.?$/i.test(text) ? parseMass("x", "metric") : parseMass(text, "metric");
+    if (!parsed.ok) {
+      ctx.addIssue({ code: "custom", message: parsed.error });
+      return z.NEVER;
+    }
+    return parsed.kg;
+  }),
+  material: optionalText("Material", 120),
+  density: field.transform((text, ctx) => {
+    if (text === "") return undefined;
+    const value = Number(text.replace(/\s*kg\/m(3|³)$/i, "").replace(",", "."));
+    if (!Number.isFinite(value)) {
+      ctx.addIssue({ code: "custom", message: "Enter a density in kg/m³, like 7850." });
+      return z.NEVER;
+    }
+    if (!(value > 0)) {
+      ctx.addIssue({ code: "custom", message: "Density must be more than 0 kg/m³." });
+      return z.NEVER;
+    }
+    return value;
+  }),
+  name: optionalText("Name", 200),
+});
+export type CreatePartFields = z.infer<typeof CreatePartFieldsSchema>;
+
+const PartResponseSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  material: z.string().nullable(),
+  densityKgM3: z.number().nullable(),
+  massKg: z.number().positive(),
+  /** Bounding box of the model in mm, [x, y, z], measured by the server. */
+  sizeMm: Vec3Schema,
+  modelSha256: z.string().nullable(),
+  source: z.enum(["catalog", "upload"]),
+  createdAt: z.iso.datetime({ offset: true }),
+});
+export type PartResponse = z.infer<typeof PartResponseSchema>;
+
+export const CreatePartResponseSchema = z.object({
+  part: PartResponseSchema,
+  model: z.object({
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    sizeBytes: z.number().int().positive(),
+    /** The file was more than 20 units across, so it was read as millimetres (spec §4). */
+    readAsMm: z.boolean(),
+    /** False when this org already had the same file: no second copy was stored. */
+    created: z.boolean(),
+  }),
+});
+export type CreatePartResponse = z.infer<typeof CreatePartResponseSchema>;
+
+export const ModelUrlResponseSchema = z.object({
+  url: z.url(),
+  expiresAt: z.iso.datetime({ offset: true }),
+  sha256: z.string(),
+  sizeBytes: z.number().int().positive(),
+});
+export type ModelUrlResponse = z.infer<typeof ModelUrlResponseSchema>;
+
+const API_ERROR_CODES = ["invalid_request", "unsupported_file", "invalid_glb", "too_large", "not_found", "internal"] as const;
+
+export const ApiErrorSchema = z.object({
+  error: z.object({
+    code: z.enum(API_ERROR_CODES),
+    /** One plain sentence for the user, the same words the app shows. */
+    message: z.string(),
+    /** The form field it is about, when there is one. */
+    field: z.string().optional(),
+  }),
+});
+export type ApiError = z.infer<typeof ApiErrorSchema>;

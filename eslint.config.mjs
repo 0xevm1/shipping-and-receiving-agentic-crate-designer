@@ -8,7 +8,7 @@ import nextTs from "eslint-config-next/typescript";
  *   components/, app/   render; may import everything below (components: all but server/)
  *   state/              zustand stores and persistence, the engine's Web Worker and its client;
  *                       may import engine, lib and domain
- *   server/             server-only data access (Postgres, #46); may import engine, lib and
+ *   server/             server-only data access (Postgres, blob storage, #46); may import engine, lib and
  *                       domain. Only app/ (Route Handlers, Server Components) may import it
  *   engine/             the crate engine (#46, spec §5.1): domain plus the file builders behind
  *                       one API that runs unchanged in a browser tab, a Web Worker and Node. May
@@ -17,8 +17,9 @@ import nextTs from "eslint-config-next/typescript";
  *   lib/                edge code (format, load, export); may import domain
  *   domain/             pure TypeScript in mm/kg, Z-up; imports nothing above it
  *
- * server/ sits beside state/, not under it: neither imports the other. Its database packages
- * (postgres, drizzle-orm) are banned everywhere but server/, so a client bundle can't pull them in.
+ * server/ sits beside state/, not under it: neither imports the other. Its database and S3
+ * packages (postgres, drizzle-orm, @aws-sdk/*) are banned everywhere but server/, so a client
+ * bundle can't pull them (or the blob-store credentials) in.
  *
  * The engine sits above lib, not below it, because the builders it serves (CSV, PDF, bundle)
  * are made of lib's unit formatting and print model; moving all of that under the engine would
@@ -41,10 +42,11 @@ const upState = ban("src/state", ...layer("state"));
 const upComponents = ban("src/components", ...layer("components"));
 const upApp = ban("src/app", ...layer("app"));
 const upServer = ban("src/server", ...layer("server"));
-// Server-only packages: reachable only through src/server.
+// Server-only packages: reachable only through src/server. The S3 SDK is here so blob-store
+// credentials (BLOB_*) can never be bundled into browser code (#46 §2a).
 const serverPackages = {
-  group: ["postgres", "drizzle-orm", "drizzle-orm/**", "drizzle-kit", "server-only"],
-  message: "Database access is server-only: go through src/server (and only from src/app).",
+  group: ["postgres", "drizzle-orm", "drizzle-orm/**", "drizzle-kit", "server-only", "@aws-sdk/*", "@aws-sdk/**"],
+  message: "Database and blob-store access are server-only: go through src/server (and only from src/app).",
 };
 
 const DOMAIN_PACKAGES = [

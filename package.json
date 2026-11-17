@@ -22,6 +22,7 @@
     "db:reset": "bun scripts/infra.ts reset",
     "db:psql": "bun scripts/infra.ts psql",
     "db:generate": "drizzle-kit generate",
+    "blob:gc": "bun scripts/blob-gc.ts",
     "preinstall": "node scripts/require-bun.mjs",
     "prepare": "simple-git-hooks",
     "format": "prettier --write .",
@@ -32,6 +33,8 @@
     "pre-commit": "if [ -f scripts/pre-commit.mjs ]; then exec bun scripts/pre-commit.mjs; fi"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1161.0",
+    "@aws-sdk/s3-request-presigner": "3.1161.0",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
     "drizzle-orm": "0.45.4",
