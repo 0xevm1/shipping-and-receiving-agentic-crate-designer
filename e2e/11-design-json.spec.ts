@@ -49,7 +49,7 @@ test("the Cut list tab downloads the design as JSON with a summary", async ({ pa
   expect(typeof json.layoutKey).toBe("string");
   expect(json.summary.grossKg).toBeGreaterThan(4 * 21.5);
   await expect(panel(page).getByRole("status")).toHaveText("Design downloaded.");
-  await shot(page, "09-design-download");
+  await shot(page, "11-design-download");
 });
 
 test("a catalog design reopens with its rules, layout and cut list", async ({ page }) => {
@@ -79,7 +79,7 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
   await pollCrate(page, (s) => s.outside).toEqual(picked);
   await openTab(page, "Cut list");
   expect(await panel(page).locator("table.cut").innerText()).toBe(cutList);
-  await shot(page, "09-design-catalog-restored");
+  await shot(page, "11-design-catalog-restored");
 
   // Saving it again gives the same design.
   const again = await downloadDesign(page);
@@ -113,7 +113,7 @@ test("a custom design needs its model: named when missing, restored when added",
     loadMessage(page, "This design uses a custom model. Add widget_v2.glb together with the design file: pick or drop both at once."),
   ).toBeVisible();
   await expect(page.getByRole("banner")).toContainText("PART-001");
-  await shot(page, "09-design-custom-needs-model");
+  await shot(page, "11-design-custom-needs-model");
 
   // With the model picked at the same time: restored, entered details and all.
   await fileInput(page).setInputFiles([designFile(saved.text), sampleFile(SHAFT, "widget_v2.glb")]);
@@ -125,7 +125,7 @@ test("a custom design needs its model: named when missing, restored when added",
   await pollCrate(page, (s) => s.outside).toEqual(outside);
   await openTab(page, "Overview");
   await expect(panel(page)).toContainText("12.5 kg, 6061-T6 aluminum");
-  await shot(page, "09-design-custom-restored");
+  await shot(page, "11-design-custom-restored");
 });
 
 test("a design from a newer app is refused with a message", async ({ page }) => {

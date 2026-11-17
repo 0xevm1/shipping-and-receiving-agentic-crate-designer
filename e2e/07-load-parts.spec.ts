@@ -11,7 +11,10 @@ test("a catalog GLB fills in its mass and material", async ({ page }) => {
   await fileInput(page).setInputFiles(sampleFile(SHAFT));
 
   const header = page.getByRole("banner");
-  await expect(header).toContainText("PART-002 · 4140 steel · 27 kg each");
+  await expect(header).toContainText("PART-002 · Long steel shaft");
+  await expect(header).toContainText(/4140 steel · 27 kg each · crate gross \d+ kg/);
+  // Catalog parts are read-only: the same sentence, with no fields.
+  await expect(header.locator("input")).toHaveCount(0);
   await expect(header).toContainText("model matches catalog");
   await expect(island(page).getByRole("heading", { name: "Long steel shaft", exact: true })).toBeVisible();
   await pollCrate(page, (s) => s.outside).toEqual([1692, 334, 411]);
@@ -25,7 +28,8 @@ test("an unknown GLB uses a stand-in mass until details are entered", async ({ p
 
   const header = page.getByRole("banner");
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
-  await expect(header).toContainText("10 kg is a stand-in");
+  await expect(header.getByLabel("Mass of one part in kilograms")).toHaveValue("10");
+  await expect(header).toContainText("kg each stand-in");
   await expect(header).toContainText("size measured from the file");
   await expect(tab(page, /Checks/)).toHaveText("Checks1");
   await pollCrate(page, (s) => s.massAssumed).toBe(true);
@@ -33,9 +37,13 @@ test("an unknown GLB uses a stand-in mass until details are entered", async ({ p
   await expect(panel(page)).toContainText("Part mass is a stand-in");
   await shot(page, "07-unknown-part-standin");
 
+  // The inline fields commit on Enter (spec §8.5).
   await page.getByLabel("Part name").fill("Test widget");
+  await page.getByLabel("Part name").press("Enter");
   await page.getByLabel("Part material").fill("6061-T6 aluminum");
+  await page.getByLabel("Part material").press("Enter");
   await page.getByLabel("Mass of one part in kilograms").fill("12.5");
+  await page.getByLabel("Mass of one part in kilograms").press("Enter");
 
   await expect(island(page).getByRole("heading", { name: "Test widget", exact: true })).toBeVisible();
   await expect(header).not.toContainText("stand-in");

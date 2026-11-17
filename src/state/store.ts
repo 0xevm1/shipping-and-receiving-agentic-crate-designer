@@ -1,11 +1,14 @@
 import { create } from "zustand";
 import { catalog, modelUrl } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
-import { computeDesign, DEFAULT_SETTINGS, type DesignResult } from "@/domain/design";
+import { computeDesign, DEFAULT_SETTINGS, settingsFromStandards, type DesignResult } from "@/domain/design";
+import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import type { Units } from "@/lib/units";
 import { anim } from "./motion";
+import { loadStandards, saveStandards } from "./standardsStorage";
 
 /** The part being crated: catalog metadata or a GLB loaded at runtime. */
 export interface LoadedPart extends DesignPart {
@@ -68,6 +71,23 @@ export interface Insets {
   bottom: number;
 }
 
+/** Which input an edit came from, so the change note can sit by it (#39). */
+export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
+
+/** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
+export interface LastChange {
+  /** Increments per change, so the UI can restart its highlight. */
+  id: number;
+  /** `Date.now()` when the change was made. */
+  at: number;
+  source: ChangeSource;
+  /** From `diffDesigns(previous, next)`; empty when nothing moved. */
+  changes: DesignChange[];
+}
+
+/** How long the change note stays (it fades over the end). The Overview flash is 1.2 s. */
+export const CHANGE_NOTE_MS = 5000;
+
 export interface DesignerState {
   part: LoadedPart;
   /** Bounding box measured from the loaded model, in mm. */
@@ -77,6 +97,8 @@ export interface DesignerState {
   result: DesignResult;
   /** Extra catalog entries from a dropped parts.json. */
   extraParts: Part[];
+  /** The shop's house rules every design is built to (#19). Saved in localStorage. */
+  standards: ShopStandards;
 
   units: Units;
   tab: Tab;
@@ -90,6 +112,8 @@ export interface DesignerState {
   loadMessage: string;
   /** Bumped whenever the camera should re-frame the crate. */
   fit: { nonce: number; instant: boolean };
+  /** The last edit's effect on the design (#39). Units changes and loading a part don't set it. */
+  lastChange: LastChange | null;
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
@@ -104,6 +128,16 @@ export interface DesignerState {
   setSettings: (patch: Partial<CrateSettings>) => void;
   resetRules: () => void;
   setLayoutKey: (key: string | null) => void;
+  /**
+   * Deep-merges a patch onto the shop standards, validates the result and re-designs.
+   * Returns an error message (and changes nothing) if the result is invalid. Changing a
+   * default gap, clearance or layer count also applies it to the current rules.
+   */
+  setStandards: (patch: DeepPartial<ShopStandards>) => string | null;
+  /** Back to the shipped standards (and their default rules). */
+  resetStandards: () => void;
+  /** Reads the standards saved in this browser. Called once after the app mounts. */
+  loadSavedStandards: () => void;
   addCatalogParts: (parts: Part[]) => void;
   setUnits: (u: Units) => void;
   setTab: (t: Tab) => void;
@@ -151,19 +185,47 @@ export const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export const useDesigner = create<DesignerState>()((set, get) => {
-  /** Recompute the design after any input change, dropping a pin whose cut-list line is gone. */
-  const recompute = (patch: Partial<DesignerState>) => {
+  let changeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The `lastChange` for an edit from `source` that moves the design from `prev` to `next`. */
+  const change = (source: ChangeSource, prev: DesignResult, next: DesignResult): Pick<DesignerState, "lastChange"> => {
+    clearTimeout(changeTimer);
+    // A problem on either side (no design) has its own message; there is nothing to compare.
+    if (!prev.design || !next.design) return { lastChange: null };
+    const id = (get().lastChange?.id ?? 0) + 1;
+    changeTimer = setTimeout(() => {
+      if (get().lastChange?.id === id) set({ lastChange: null });
+    }, CHANGE_NOTE_MS);
+    return { lastChange: { id, at: Date.now(), source, changes: diffDesigns(prev.design, next.design) } };
+  };
+
+  /**
+   * Recompute the design after any input change, dropping a pin whose cut-list line is gone.
+   * With a `source`, records what moved in `lastChange`; without one (a new part) clears it.
+   */
+  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
     const next = { ...get(), ...patch };
-    const result = computeDesign(next.part, next.settings, next.layoutKey);
+    const result = computeDesign(next.part, next.settings, next.layoutKey, next.standards);
     const pinGone = next.pin && !result.design?.bom.some((l) => l.key === next.pin);
     const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
     set({
       ...patch,
       result,
+      ...(source ? change(source, get().result, result) : { lastChange: null }),
       hover: null,
       ...(pinGone ? { pin: null } : {}),
       ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
     });
+  };
+
+  /** Switches to new standards: carries changed defaults into the rules, re-designs and saves. */
+  const applyStandards = (standards: ShopStandards, save = true) => {
+    const { settings, standards: old } = get();
+    const next = { ...settings };
+    for (const key of ["partGapMm", "wallClearanceMm", "maxLayers"] as const) {
+      if (standards.defaults[key] !== old.defaults[key]) next[key] = standards.defaults[key];
+    }
+    recompute({ standards, settings: normalizeSettings(next, settings), layoutKey: null });
+    if (save) saveStandards(standards);
   };
 
   return {
@@ -173,6 +235,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     layoutKey: null,
     result: computeDesign(initialPart, DEFAULT_SETTINGS),
     extraParts: [],
+    standards: DEFAULT_STANDARDS,
 
     units: "metric",
     tab: "overview",
@@ -185,6 +248,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     insets: { left: 0, top: 0, right: 0, bottom: 0 },
     loadMessage: "",
     fit: { nonce: 0, instant: true },
+    lastChange: null,
 
     setPart: (part) =>
       recompute({
@@ -209,20 +273,33 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         part.massAssumed = false;
         // Mass changes the construction, so the layout choice resets as for any other input.
         if (mass_kg !== current.mass_kg) {
-          recompute({ part, layoutKey: null });
+          recompute({ part, layoutKey: null }, "mass");
           return null;
         }
       }
       // Name and material don't move anything: refresh the result (checks may quote the
       // part) without re-framing the camera or dropping the user's layout pick.
-      const { settings, layoutKey } = get();
-      set({ part, result: computeDesign(part, settings, layoutKey) });
+      const { settings, layoutKey, standards } = get();
+      const result = computeDesign(part, settings, layoutKey, standards);
+      const source: ChangeSource = mass_kg !== undefined ? "mass" : "material" in meta ? "material" : "name";
+      set({ part, result, ...change(source, get().result, result) });
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
-    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }),
-    resetRules: () => recompute({ settings: { ...DEFAULT_SETTINGS, quantity: get().settings.quantity }, layoutKey: null }),
-    setLayoutKey: (layoutKey) => recompute({ layoutKey }),
+    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }, "rules"),
+    resetRules: () => recompute({ settings: settingsFromStandards(get().standards, get().settings.quantity), layoutKey: null }, "rules"),
+    setLayoutKey: (layoutKey) => recompute({ layoutKey }, "layout"),
+    setStandards: (patch) => {
+      const r = parseStandards(mergeStandards(get().standards, patch));
+      if (!r.ok) return r.error;
+      applyStandards(r.standards);
+      return null;
+    },
+    resetStandards: () => applyStandards(DEFAULT_STANDARDS),
+    loadSavedStandards: () => {
+      const standards = loadStandards();
+      if (standards !== get().standards) applyStandards(standards, false);
+    },
     addCatalogParts: (parts) => {
       const byModel = new Map(get().extraParts.map((p) => [p.model, p]));
       for (const p of parts) byModel.set(p.model, p);

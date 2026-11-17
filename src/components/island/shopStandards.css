@@ -1,0 +1,113 @@
+/*
+ * Shop standards (#19): a collapsible section at the bottom of the Rules tab. Rows reuse `.rule`
+ * from globals.css. A plain stylesheet with `std-` names, not a CSS module: the Tailwind
+ * turbopack rule in next.config.ts handles every *.css file and drops module class names.
+ */
+
+.std {
+  margin-top: 22px;
+  border-top: 1px solid var(--hair);
+}
+
+.std-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px 0 6px;
+  cursor: pointer;
+  list-style: none;
+}
+.std-summary::-webkit-details-marker {
+  display: none;
+}
+.std-summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.15s;
+}
+.std[open] > .std-summary::before {
+  transform: rotate(90deg);
+}
+.std-summary b {
+  font-weight: 500;
+  font-size: 15px;
+}
+.std-summary .std-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.std-badge {
+  margin-left: auto;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--gold);
+  font: 500 10.5px/1.5 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.panel .std p.lede {
+  margin: 4px 0 6px;
+}
+
+/* `.panel` prefix to win over `.panel h3` in globals.css. */
+.panel .std .std-group {
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+  font: 500 11px/1.3 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.std .rule {
+  padding: 9px 0;
+}
+.std .rule b {
+  font-size: 13.5px;
+}
+
+.std-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.std-field input {
+  width: 80px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 7px;
+  text-align: right;
+  font: 400 13px/1.4 var(--mono);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.std-field input::-webkit-inner-spin-button,
+.std-field input::-webkit-outer-spin-button {
+  display: none;
+}
+.std-changed .std-field input {
+  border-color: rgba(243, 160, 0, 0.6);
+  background: rgba(243, 160, 0, 0.08);
+}
+.std-field input[aria-invalid="true"] {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+.std-unit {
+  min-width: 40px;
+  color: var(--muted);
+  font: 400 11.5px/1 var(--mono);
+}
+.std .rule small.std-error {
+  color: var(--gold);
+}
+.std-actions {
+  margin-top: 16px;
+}
+.std-actions .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

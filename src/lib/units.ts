@@ -6,7 +6,7 @@
 export type Units = "metric" | "imperial";
 
 const MM_PER_IN = 25.4;
-const LB_PER_KG = 2.20462;
+export const LB_PER_KG = 2.20462;
 const FT3_PER_M3 = 35.3147;
 const FT2_PER_M2 = 10.7639;
 const FT_PER_M = 3.28084;

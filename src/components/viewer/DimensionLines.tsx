@@ -12,7 +12,6 @@ import { useDesigner } from "@/state/store";
 import { EXPLODE_WALL_MM } from "./scene";
 import { labelElements } from "./SizeLabels";
 
-const CLEAT_MM = 19;
 const LINE = "#e6eef7";
 const PART_LINE = "#70b8fd";
 
@@ -89,10 +88,22 @@ export function DimensionLines({ design, units, showParts }: { design: CrateDesi
   );
 }
 
+/**
+ * Anchors of the crate's size labels (length, width, height) in crate-interior mm, moved out
+ * with the walls by explode amount `e`, as `DimensionLines` draws them. `Director` frames these.
+ * The part's labels sit inside the crate, so they don't need their own room.
+ */
+export function crateLabelAnchors(design: CrateDesign, e: number): Vec3[] {
+  const out = EXPLODE_WALL_MM * e;
+  return buildLines(design, false).anchors.map(({ at, where }) =>
+    where === "front" ? [at[0], at[1] - out, at[2]] : where === "right" ? [at[0] + out, at[1], at[2]] : at,
+  );
+}
+
 function buildLines(design: CrateDesign, withPart: boolean) {
   const { layout, construction } = design;
   const ext = layout.external;
-  const o = construction.panelMm + CLEAT_MM;
+  const o = construction.panelMm + construction.cleat.thick;
   const mn: Vec3 = [-o, -o, -construction.floorMm - construction.skid.tall];
   const mx: Vec3 = [mn[0] + ext[0], mn[1] + ext[1], mn[2] + ext[2]];
   const longest = Math.max(...ext);
