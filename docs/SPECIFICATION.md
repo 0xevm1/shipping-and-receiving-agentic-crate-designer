@@ -152,6 +152,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/Floor.tsx` | Grid and warm light pool |
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
 | `src/components/viewer/scene.ts` | Colours, explode offsets, opacity rules, highlight rules, part material |
+| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook; only in `NEXT_PUBLIC_E2E=1` builds (§10) |
+| `playwright.config.ts`, `e2e/*.spec.ts` | End-to-end UI tests (`bun run e2e`, §10) |
 
 ## 6. Data model
 
@@ -718,6 +720,50 @@ names, and filtering a `parts.json`.
 When you change packing or construction rules, keep these passing. If a rule change
 deliberately changes an expected value, update the test and this spec in the same PR.
 
+### End-to-end UI tests (#34)
+
+`bun run e2e` runs Playwright (`playwright.config.ts`, specs in `e2e/`, excluded from vitest).
+It builds the production app with `NEXT_PUBLIC_E2E=1`, serves it on port 3320 and drives
+headless Chromium with SwiftShader WebGL, so the canvas really renders. Two projects: desktop
+1440 × 900 runs every spec except `*.narrow.spec.ts`; narrow 900 × 900 (the stacked layout)
+runs only those. Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
+transitions are instant (§8.4); one test turns motion back on. Each flow saves named full-page
+screenshots to `e2e/screenshots/` (git-ignored); CI uploads them as `e2e-screenshots` with the
+HTML report as `playwright-report`.
+
+- **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`)
+  exposes a read-only `window.__crate` with `getState()` (mode from the view targets, view
+  switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play,
+  the outside size, problem id, tab, units, quantity, frame count) and `canvasCoverage()` (share
+  of canvas pixels drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`.
+  `next.config.ts` always inlines the flag (`"0"` when unset), so normal builds drop the branch
+  and don't bundle the module. Everything else is found by role, label or text; the only test
+  id is `size-labels` (the labels are `aria-hidden`).
+- **Coverage:**
+  - `01-load`: PART-001 × 4, the header line and "model matches catalog", 932 × 652 × 497 mm,
+    the canvas draws.
+  - `02-tabs`: Overview chain and weight bars; Layouts cards with "recommended"; Cut list
+    groups; Rules controls; Checks with "Fits a 53' dry van" and no count badge.
+  - `03-rules`: quantity 8 gives 938 × 658 × 823; a typed 500 clamps to 200; Reset rules
+    restores the defaults and keeps the quantity.
+  - `04-units`: mm → in in the header, Overview (36.7 × 25.7 × 19.6 in) and size labels, and
+    back.
+  - `05-cutlist`: hovering a row sets the hover key, clicking pins it and shows
+    "Showing N × piece", Escape clears it.
+  - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
+    View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
+    Hide panels keeps the credit; idle auto-play starts after 6 s without input.
+  - `07-load-parts` (through the hidden file input, in-memory files): a catalog GLB fills in
+    mass and material (PART-002: 1692 × 334 × 411); an unknown GLB gets the stand-in caution
+    and Checks badge until name, material and mass are entered; a text `.gltf` is rejected; a
+    30 m part (a generated GLB read as millimetres) shows the over-20 m problem.
+  - `08-layout`: at 1440 × 900 the document doesn't scroll and the island panel does; at
+    900 px the layout stacks with no horizontal scroll on any tab.
+- **Known bug, marked `test.fixme`:** the first framing runs before OrbitControls registers,
+  so the orbit target stays at the floor until the first re-frame.
+- **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
+  its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
+
 ## 11. Decision log
 
 | Decision | Why | Trade-off |
@@ -791,4 +837,8 @@ Other known gaps:
 - **Dev server gotcha:** the scaffold's `@tailwindcss/turbopack` loader rule in `next.config.ts`
   doesn't always pick up edits to `globals.css`. If a style change doesn't show, restart
   `bun run dev` (and delete `.next/` if needed). Production builds are unaffected.
-- Before you push, run `bun run test`, `bun run lint` and `bun run build`.
+- Before you push, run `bun run test`, `bun run lint` and `bun run build`. For UI changes, also
+  run `bun run e2e` and update the specs in `e2e/` (§10); CI's `e2e` job runs them on every PR.
+- Prefer roles and accessible names for anything the e2e tests need to find. Add a
+  `data-testid` only where there is no accessible handle, and read 3D state through the
+  `window.__crate` hook (`E2EProbe`) rather than adding DOM for tests.

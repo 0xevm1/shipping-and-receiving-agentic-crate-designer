@@ -38,6 +38,7 @@ bun run dev          # → http://localhost:3000
 | `bun run dev` | Dev server with hot reload |
 | `bun run build && bun run start` | Production build and serve |
 | `bun run test` | Domain unit tests (vitest) |
+| `bun run e2e` | End-to-end UI tests (Playwright): builds the app with the test hook, serves it on port 3320, runs every flow and saves screenshots to `e2e/screenshots/`. First run `bunx playwright install chromium` once. `bun run e2e:ui` opens Playwright's UI mode |
 | `bun run lint` | ESLint |
 | `bun run typecheck` | `next typegen` (route types), then `tsc --noEmit` |
 
@@ -62,10 +63,21 @@ bun run dev          # → http://localhost:3000
 ## Pull requests
 
 Every pull request to `main`, and every push to `main`, runs
-[CI](.github/workflows/ci.yml): `bun install --frozen-lockfile`, lint, typecheck, tests and
-build. **A green CI run is required before merging.** GitHub can't enforce this on a private
-repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api`
-command that adds a ruleset requiring CI on `main` once the repo is upgraded or made public.
+[CI](.github/workflows/ci.yml) as two jobs:
+
+- **`checks`:** `bun install --frozen-lockfile`, lint, typecheck, unit tests and build.
+- **`e2e`:** the Playwright suite (`bun run e2e`) in headless Chromium against a production
+  build. It uploads the screenshots (`e2e-screenshots`) and the HTML report
+  (`playwright-report`) as artifacts, even when a test fails.
+
+**A green CI run (both jobs) is required before merging.** GitHub can't enforce this on a
+private repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api`
+command that adds a ruleset requiring both jobs on `main` once the repo is upgraded or made
+public.
+
+**UI changes:** run `bun run e2e` before you push, update the specs in `e2e/` when the
+behaviour changes, and attach screenshots from `e2e/screenshots/` (or the CI artifact) to the
+PR instead of hand-captured ones.
 
 ## Who it's for
 
@@ -181,6 +193,7 @@ src/state/         zustand store; per-frame animation values; checks for the UI
 src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
 src/data/          parts.json catalog
 public/parts/      GLB models
+e2e/               Playwright end-to-end UI tests (bun run e2e)
 docs/              SPECIFICATION.md, DATA_STORE.md, schema.sql, design-handoff/
 ```
 

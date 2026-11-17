@@ -2,7 +2,7 @@
 
 import { OrbitControls, useProgress } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Suspense, useRef } from "react";
+import { lazy, Suspense, useRef } from "react";
 import type { Vec3 } from "@/domain/schema";
 import { useDesigner } from "@/state/store";
 import { CrateModel } from "./CrateModel";
@@ -15,6 +15,12 @@ const MM_TO_M = 0.001;
 const CLICK_SLOP_PX = 5;
 /** Orbit limit in m, raised for crates large enough to need more room. */
 const MAX_DISTANCE_M = 60;
+
+/**
+ * Read-only `window.__crate` state hook for the Playwright suite (#34). The flag is inlined at
+ * build time, so normal builds drop this branch and never bundle the module.
+ */
+const E2EProbe = process.env.NEXT_PUBLIC_E2E === "1" ? lazy(() => import("./E2EProbe")) : null;
 
 /**
  * The 3D scene. three.js is Y-up in metres; the domain is Z-up in mm. One root
@@ -77,6 +83,11 @@ export default function CrateViewer() {
         </group>
 
         <Director />
+        {E2EProbe && (
+          <Suspense fallback={null}>
+            <E2EProbe />
+          </Suspense>
+        )}
         <OrbitControls makeDefault enableDamping={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.3} maxDistance={maxDistance} />
       </Canvas>
       <LoadingOverlay />

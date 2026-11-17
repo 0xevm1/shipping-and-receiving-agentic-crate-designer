@@ -12,7 +12,8 @@ export const labelElements: (HTMLDivElement | null)[] = [];
 export function SizeLabels() {
   const labels = useDesigner((s) => s.labels);
   return (
-    <div className="labels" aria-hidden="true">
+    // aria-hidden (the numbers repeat the Overview), so e2e tests find it by test id.
+    <div className="labels" aria-hidden="true" data-testid="size-labels">
       {labels.map((l, i) => (
         <div key={i} ref={(el) => void (labelElements[i] = el)} className={l.inner ? "dim inner" : "dim"}>
           {l.text}
