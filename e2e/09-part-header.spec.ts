@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, shot, triangleGlb } from "./helpers";
+import { fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot, triangleGlb } from "./helpers";
 
 /**
  * The part header (#40, #39): inline underlined fields that read as a sentence, the crate
@@ -39,6 +39,7 @@ async function loadTiny(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
 });
 
 test("a catalog part reads as the same sentence, with no fields", async ({ page }) => {
@@ -178,8 +179,7 @@ test("an edit that doesn't move the crate says so", async ({ page }) => {
 
 test("imperial: mass is shown and entered in lb, stored in kg", async ({ page }) => {
   await loadUnknown(page);
-  await page.getByRole("group", { name: "Units" }).getByRole("button", { name: "in lb" }).click();
-  await pollCrate(page, (s) => s.units).toBe("imperial");
+  await setUnits(page, "imperial");
 
   const mass = massField(page);
   await expect(mass).toHaveAccessibleName("Mass of one part in pounds");
@@ -197,7 +197,7 @@ test("imperial: mass is shown and entered in lb, stored in kg", async ({ page })
   await shotHeader(page, "09-header-imperial");
 
   // Stored in kg: 30.1 lb is 13.653 kg.
-  await page.getByRole("group", { name: "Units" }).getByRole("button", { name: "mm kg" }).click();
+  await setUnits(page, "metric");
   await expect(massField(page)).toHaveValue("13.653");
   await expect(massField(page)).toHaveAccessibleName("Mass of one part in kilograms");
 });

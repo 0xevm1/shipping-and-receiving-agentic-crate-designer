@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openTab, panel, pollCrate, shot } from "./helpers";
+import { openApp, openTab, panel, pollCrate, setUnits, shot } from "./helpers";
 
 const QTY_8_OUTSIDE = [938, 658, 823];
 
@@ -8,6 +8,7 @@ const plywood = (page: Page, name: string) =>
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
   await openTab(page, "Rules");
 });
 

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, shot } from "./helpers";
+import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot } from "./helpers";
 
 /** Design files (#28): download from the Cut list tab, reopen through Load a part. */
 
@@ -33,6 +33,7 @@ async function resetToBracket(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
 });
 
 test("the Cut list tab downloads the design as JSON with a summary", async ({ page }) => {
@@ -74,7 +75,8 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
   await resetToBracket(page);
   await fileInput(page).setInputFiles(designFile(saved.text));
   await expect(loadMessage(page, "Design loaded: 8 × Long steel shaft.")).toBeVisible();
-  await expect(page.getByRole("banner")).toContainText("PART-002 · 4140 steel · 27 kg each");
+  await expect(page.getByRole("banner")).toContainText("PART-002 · Long steel shaft");
+  await expect(page.getByRole("banner")).toContainText("4140 steel · 27 kg each");
   await pollCrate(page, (s) => s.quantity).toBe(8);
   await pollCrate(page, (s) => s.outside).toEqual(picked);
   await openTab(page, "Cut list");
@@ -98,9 +100,15 @@ test("a custom design needs its model: named when missing, restored when added",
   test.slow(); // three part loads and a download
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
-  await page.getByLabel("Part name").fill("Test widget");
-  await page.getByLabel("Part material").fill("6061-T6 aluminum");
-  await page.getByLabel("Mass of one part in kilograms").fill("12.5");
+  // The inline fields commit on Enter (spec §8.5).
+  for (const [label, value] of [
+    ["Part name", "Test widget"],
+    ["Part material", "6061-T6 aluminum"],
+    ["Mass of one part in kilograms", "12.5"],
+  ]) {
+    await page.getByLabel(label).fill(value);
+    await page.getByLabel(label).press("Enter");
+  }
   await pollCrate(page, (s) => s.massAssumed).toBe(false);
   const outside = (await crate(page)).outside;
   const saved = await downloadDesign(page);

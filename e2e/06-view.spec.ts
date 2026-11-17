@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Download, type Page } from "@playwright/test";
-import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, shot } from "./helpers";
+import { crate, fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot } from "./helpers";
 
 const modeButton = (page: Page) => page.getByRole("button", { name: /view\. Click for/ });
 const viewButton = (page: Page) => page.getByRole("button", { name: "View", exact: true });
@@ -129,6 +129,7 @@ test.describe("view controls", () => {
   });
 
   test("switches and Pull apart change the scene", async ({ page }) => {
+    await setUnits(page, "metric"); // the size labels are checked in mm
     const pop = await openViewPopover(page);
 
     await pop.getByLabel("Lid", { exact: true }).uncheck();

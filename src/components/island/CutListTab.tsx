@@ -39,7 +39,7 @@ export function CutListTab({ design }: { design: CrateDesign }) {
   const all = whole ? shipmentBom(plan) : null;
   const lines: BomLine[] = all ? all.lines : design.bom;
   const totals = all ?? design;
-  const csv = () => (whole ? shipmentToCsv(part, plan) : bomToCsv(part, design));
+  const csv = () => (whole ? shipmentToCsv(part, plan, units) : bomToCsv(part, design, units));
   const csvName = !plan.split
     ? `crate-${part.id}-x${quantity}.csv`
     : whole

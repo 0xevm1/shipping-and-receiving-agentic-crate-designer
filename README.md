@@ -116,7 +116,10 @@ tab at a time.
    - **Checks:** every rule of thumb, passed ones included (53' dry van door and length,
      tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
      cardboard box may be enough)
-6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
+6. **Switch units** between in / lb (the default, for a US shop floor) and mm / kg; the choice is
+   remembered in this browser. **Download or copy the cut list** as CSV, in the selected units. In
+   imperial, lumber goes by its nominal name (1x4, 2x4, 4x4, 4x6), plywood by the thickness it is
+   sold as (1/2″, 5/8″, 3/4″) and cuts by fractional inches to the nearest 1/16″.
 7. **Download the crate as a 3D model** (View → "Download 3D model (.glb)"): the assembled crate
    in metres, Z up, every board a named mesh grouped by assembly, with the parts in their slots
    unless "Include parts" is off.
@@ -162,8 +165,8 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **Persistence and accounts.** Only the shop standards are saved (in the browser's
-  `localStorage`); a design can be downloaded as a JSON file and reopened. The plan for the rest is in
+- **Persistence and accounts.** Only the shop standards and the display units are saved (in the
+  browser's `localStorage`); a design can be downloaded as a JSON file and reopened. The plan for the rest is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
@@ -172,7 +175,7 @@ tab at a time.
 
 | | |
 |---|---|
-| **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The mm / in toggle is display-only (`src/lib/units.ts`) |
+| **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The app shows inches and pounds by default, with a metric toggle; units are converted only at the UI and export edges (`src/lib/units.ts`, `src/lib/lumber.ts`) |
 | **Axes** | Right-handed, **Z up**: the same frame as the source GLBs. X is the crate's long axis (the skids run along X) |
 | **GLB files** | Metres, Z up, not centred on their origin. The viewer scales by ×1000 and re-centres each part on its bounding box. A loaded file more than 20 units across is read as millimetres, and the UI says so |
 | **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m. Nothing else converts |
@@ -186,13 +189,17 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
 - **Packing uses bounding boxes.** Each part is treated as its axis-aligned bounding box. This is
   exact for boxy parts and wastes space on irregular ones, such as the open housing. There's no
   nesting.
+- **Units:** a domestic US shop floor, so the app opens in inches and pounds and names stock the
+  way a crew does. Metric is one toggle away. The shop standards are still entered in mm and kg.
 - **Lumber sizes** are nominal US sizes, with actual dimensions in mm:
-  - 1×4 cleats are 19 × 89
-  - 4×4 skids are 89 × 89
-  - 4×6 skids are 89 × 140, used when the payload is over 700 kg
-  - blocking is 89 wide, cut to fit each gap
-- **Plywood:** the floor is always 19 mm. With Auto, walls and lid are 12 mm up to 150 kg of
-  payload, 15 mm up to 500 kg, and 19 mm above that.
+  - 1x4 cleats are 19 × 89
+  - 4x4 skids are 89 × 89
+  - 4x6 skids are 89 × 140, used when the payload is over 700 kg
+  - blocking is 89 wide (3 1/2″), cut to fit each gap, so in imperial it reads as its size and
+    the stock it is ripped from, e.g. "1 15/16″ × 3 1/2″ from 4x4"
+  - a custom size that isn't standard stock shows in fractional inches
+- **Plywood:** the floor is always 19 mm (3/4″). With Auto, walls and lid are 12 mm (1/2″) up to
+  150 kg of payload, 15 mm (5/8″) up to 500 kg, and 19 mm (3/4″) above that.
 - **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
   $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
   quoting.

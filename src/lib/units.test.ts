@@ -17,6 +17,26 @@ describe("units", () => {
     expect(cut(900, "metric")).toBe("900");
   });
 
+  it("handles 1/16″ edge cases and whole inches", () => {
+    expect(fraction(0)).toBe("0″");
+    expect(fraction(0.4)).toBe("0″"); // under 1/32″ rounds down
+    expect(fraction(25.4 / 32)).toBe("1/16″"); // exactly 1/32″ rounds up
+    expect(fraction(25.4 / 16)).toBe("1/16″");
+    expect(fraction(25.4 * (15 / 16))).toBe("15/16″");
+    expect(fraction(25.3)).toBe("1″"); // just under an inch rounds to the whole inch
+    expect(fraction(25.4 * 12)).toBe("12″");
+    expect(fraction(25.4 * (12 + 31 / 32))).toBe("13″"); // carries into the next inch
+    expect(fraction(25.4 * 2.5)).toBe("2 1/2″");
+    expect(fraction(25.4 * 2.25)).toBe("2 1/4″");
+    expect(fraction(25.4 * (2 + 3 / 8))).toBe("2 3/8″");
+  });
+
+  it("uses another inch mark when asked", () => {
+    expect(fraction(900, " in")).toBe("35 7/16 in");
+    expect(fraction(25.4, " in")).toBe("1 in");
+    expect(fraction(19, "")).toBe("3/4");
+  });
+
   it("converts weight and volume", () => {
     expect(weight(100, "metric")).toBe("100 kg");
     expect(weight(100, "imperial")).toBe("220 lb");

@@ -27,6 +27,17 @@ export async function openApp(page: Page) {
   await expect(page.getByRole("banner")).toContainText("model matches catalog", { timeout: 30_000 });
 }
 
+/**
+ * Picks the display units with the view bar toggle. The app opens in imperial (#15); a spec
+ * that asserts mm / kg text calls `setUnits(page, "metric")` so the units it reads are explicit.
+ */
+export async function setUnits(page: Page, units: "metric" | "imperial") {
+  const button = page.getByRole("group", { name: "Units" }).getByRole("button", { name: units === "metric" ? "mm kg" : "in lb" });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await pollCrate(page, (s) => s.units).toBe(units);
+}
+
 /** Saves a named full-page screenshot to `e2e/screenshots/` (uploaded by CI). */
 export async function shot(page: Page, name: string) {
   await page.screenshot({ path: `e2e/screenshots/${name}.png`, fullPage: true });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
 import { settingsAdjustments, type CrateSettings } from "@/domain/schema";
 import { clampNote } from "@/lib/clampNote";
+import { plywoodText } from "@/lib/lumber";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { ShopStandards } from "./ShopStandards";
@@ -26,6 +27,8 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const { setSettings, resetRules } = useDesigner.getState();
   const setQty = (q: number) => setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
   const mm = (v: number) => `${length(v, units)} ${lengthUnit(units)}`;
+  // Plywood by the thickness it is sold as: "1/2″" in imperial (#15), "12 mm" in metric.
+  const ply = (v: number) => (units === "imperial" ? plywoodText(v) : `${v} mm`);
   // A typed quantity goes to the store as typed; if it was clamped or rejected, say so by the field.
   const [note, setNote] = useState<{ id: number; text: string } | null>(null);
   useEffect(() => {
@@ -126,14 +129,14 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <div className="seg" role="group" aria-label="Wall and lid plywood">
           {PANELS.map((p) => (
             <button key={p} type="button" aria-pressed={settings.panelThickness === p} onClick={() => setSettings({ panelThickness: p })}>
-              {p === "auto" ? "Auto" : p}
+              {p === "auto" ? "Auto" : units === "imperial" ? plywoodText(p) : p}
             </button>
           ))}
         </div>
         <small>
           {settings.panelThickness === "auto"
-            ? `Auto picked ${design.construction.panelMm} mm for ${weight(design.payloadKg, units)} of parts. The floor is always ${floorMm} mm.`
-            : `Thickness in mm. The floor is always ${floorMm} mm.`}
+            ? `Auto picked ${ply(design.construction.panelMm)} for ${weight(design.payloadKg, units)} of parts. The floor is always ${ply(floorMm)}.`
+            : `${units === "imperial" ? "Nominal thickness" : "Thickness in mm"}. The floor is always ${ply(floorMm)}.`}
         </small>
       </div>
 
