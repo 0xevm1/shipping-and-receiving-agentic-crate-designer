@@ -5,6 +5,7 @@ import {
   openTab,
   panel,
   pollCrate,
+  setUnits,
   shot,
   tab,
 } from "./helpers";
@@ -55,6 +56,11 @@ test.describe("bounding-box blocking", () => {
     await expect(p).toContainText("It is on both centre lines");
     await expect(p).toContainText("Low centre of gravity");
     await expect(p).toContainText("Forklift fits from the ends");
+    // Imperial by default: shop measurements to the nearest 1/16″ (#62), then the same in metric.
+    await expect(p).toContainText(
+      "Forklift: fits from the ends, 3 1/2″ clear under the floor, needs 2 15/16″.",
+    );
+    await setUnits(page, "metric");
     await expect(p).toContainText(
       "Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm.",
     );
@@ -121,6 +127,8 @@ test.describe("with shaped blocking", () => {
     // Blocks fill each bracket's 38 mm −X recess only: the CoG moves toward −X (the left end).
     expect(s.cog!.mm[0]).toBeLessThan(L / 2);
     await openTab(page, "Checks");
+    await expect(panel(page)).toContainText("It is 1/16″ toward the left end");
+    await setUnits(page, "metric");
     await expect(panel(page)).toContainText("It is 2 mm toward the left end");
     await expect(panel(page)).toContainText(
       "Centre of gravity near the middle",

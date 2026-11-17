@@ -78,7 +78,13 @@ buildable crate design and cut list in under a minute, without needing CAD.
   metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
   changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
   and the shop standards stay in mm and kg; the mass field shows and accepts the selected unit
-  and stores kg; the CSV follows the selected units (§7.6). In imperial, stock uses shop names:
+  and stores kg; the CSV follows the selected units (§7.6). **One rule for a mass shown to
+  people (#62):** in the displayed unit, one decimal under 100 ("47.4 lb", "8 kg", a trailing
+  .0 dropped) and whole numbers from 100 ("297 lb"). It lives once in `weight` / `partWeight`
+  (`src/lib/units.ts`) and serves the header, Overview, Checks, print and PDF. The CSV and the
+  design JSON keep their own precision (they are data), and change notes ("Gross 16 → 20 kg")
+  stay whole units through `weightWhole`, because they say how far a value moved. In imperial,
+  stock uses shop names:
   - **Lumber** by nominal S4S name (`NOMINAL_LUMBER`, 1 mm tolerance): 19 × 89 → `1x4`,
     38 × 89 → `2x4`, 89 × 89 → `4x4`, 89 × 140 → `4x6`, and the other common sections
     (1x2 … 1x12, 2x2 … 2x12, 4x8, 6x6, 6x8).
@@ -152,6 +158,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/profile.ts` | Shaped blocking (#16, §7.5b): the `PartProfile` type, `usableProfile`, rotating a profile into the crate (`rotationMatrix`, `sideGrid`), post placement and shaped blocks (`planShapedBlocking`, `slotPlans`), and the restraint metric (`restraint`) |
+| `src/domain/message.ts` | `Message`: sentences with lengths and masses as data (`msg`, `mm`, `shopMm`, `kg`), so checks stay unit-free (#62, §7.7) |
 | `src/domain/handling.ts` | Centre of gravity, fork openings, tine placement and the handling checks (`analyseHandling`, `forkOpenings`, `placeTines`, `handlingChecks`; §7.14, #8). Read-only over the members |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
@@ -166,7 +173,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
-| `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
+| `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions, the one mass rule) |
+| `src/lib/message.ts` | `renderMessage`: check messages (typed quantities) rendered for the selected units (#62, §7.7) |
 | `src/lib/lumber.ts` | US shop names (#15): `NOMINAL_LUMBER` (`nominalLumber`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions; scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
@@ -951,6 +959,19 @@ Of the sample parts at their suggested quantities, only a single PART-003 trigge
 interior 545 × 535 × 354 mm). That is deliberate: one housing fits in a carton, while four or
 more (47 kg and up) and the steel parts justify a crate.
 
+**Check text and units (#62).** `Check.detail` is a `Message` (`src/domain/message.ts`), not a
+string: plain text interleaved with typed quantities, built with the `msg` tagged template
+(`msg\`Within the ${mm(2489)} door\``). `mm(v)` is an overall length, `shopMm(v)` a shop
+measurement (gap, clearance, floor, tine) and `kg(v)` a mass, all in mm and kg, so the domain
+stays unit-free and the numbers stay data. `renderMessage(message, units)`
+(`src/lib/message.ts`) is the one place they become text: metric reads "2,489 mm" and
+"1,240 kg" as before; imperial gives "98.0 in" for overall lengths, the nearest 1/16″ ("3 1/2″")
+for shop measurements, and lb by the one mass rule above. Every consumer renders at the edge:
+the Checks tab, the shipment note (`ShipmentPlan.unmet`), the print document and so the PDF
+(`buildPrintable` renders for its `units`), and the file-dependent checks below. The exported
+README.txt, CSV and design JSON quote no check text: the JSON stays metric and the CSV already
+follows the toggle. Tests render with `metricText`.
+
 The UI adds two checks that depend on the loaded file (`src/state/checks.ts`):
 
 - **`model`:** ok when the measured GLB is within ±1 mm of the catalog size; caution when it
@@ -1135,7 +1156,7 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
 
 **How the design reaches the page.** The Cut list's **Print / save PDF** serializes the design
 on screen as a design file (§6.5, `serializeDesign`) and opens
-`/print#d={base64url}&u={units}&print=1` in a new tab (`src/lib/printLink.ts`). The print tab
+`/print#design={base64url}&u={units}&print=1` in a new tab (`src/lib/printLink.ts`). The design parameter is the share link's (`design`, §9); the older `d` is still read, so links made before #62 open. The print tab
 reads the hash and rebuilds the plan with **this browser's saved shop standards** (the file holds
 none, as when reopening it). It renders the document, waits for the fonts and calls
 `window.print()`. The toolbar (screen only) has its own Print / save PDF button and says that
@@ -2205,8 +2226,7 @@ without a crate.
 **`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
 changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
 flag, invalid input changes nothing, and catalog parts are read-only. `loadDesign` keeps the
-given settings and layout pick (unlike `setPart`).
-flag, invalid input changes nothing, and catalog parts are read-only. It also checks
+given settings and layout pick (unlike `setPart`). It also checks
 `lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
 record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
@@ -2246,6 +2266,10 @@ lb → kg → lb round trips, ↑ / ↓ steps in either unit with a floor, the f
 change note text ("Gross 16 → 20 kg", lb and inch fractions, "+N more", and "No change to the
 crate" when the changes round away).
 
+**`src/lib/message.test.ts`** checks `renderMessage` (#62): metric reads "2,489 mm" and
+"1,240 kg", imperial gives "98.0 in", "3 1/2″" and "2,734 lb", messages merge and flatten, and no
+check of PART-001/002/003 at quantities 1, 8 and 40 leaves "mm" or "kg" in imperial.
+`src/lib/units.test.ts` also pins the one mass rule (one decimal under 100, whole from 100).
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions, including the edges (0, under
 and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into the next inch) and the
 CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
@@ -2342,7 +2366,7 @@ HTML report as `playwright-report`.
     bar toggle, in `helpers.ts`), since the app opens in imperial (#15).
   - `04-units`: opens in imperial (header in / lb, Overview 36.7 × 25.7 × 19.6 with
     932 × 652 × 497 mm under it, size labels in inches), then metric, then back.
-  - `14-imperial-default` (#15): first load is imperial (header "47 lb each", Overview "1/2″ ply",
+  - `14-imperial-default` (#15): first load is imperial (header "47.4 lb each", Overview "1/2″ ply",
     "stiffened with 1x4 cleats", "4x4 skids under a 3/4″ floor"); the Cut list has `Cut, in`,
     `3/4″ plywood`, `4x4`, `1/2″ plywood`, `1x4` and blocking "1 15/16″ × 3 1/2″ from 4x4";
     the downloaded CSV is imperial (`cut_in`, nominal stock). After switching to metric a reload
@@ -2479,6 +2503,12 @@ HTML report as `playwright-report`.
     check keeps the bounding-box text. Screenshots `26-shaped-checks`, `26-shaped-open`,
     `26-shaped-exploded`, `26-bbox-checks`, `26-bbox-open` and `26-bbox-exploded` (copies in
     `docs/screenshots/16-shaped-blocking/`).
+  - `28-ui-review-units` (#62): in imperial the Checks tab reads "98.0 in × 108.0 in door" and
+    "Base rated … lb" with no "mm" or "kg" in any check, and in metric "2,489 mm × 2,743 mm door"
+    and "… kg"; the header and Overview both say "47.4 lb"; the Cut list's Print / save PDF opens
+    `/print#design=…&u=imperial&print=1`, whose checks carry no metric unit, and the same page
+    still opens from an old `#d=…` link. Screenshots `28-checks-imperial`, `28-checks-metric`,
+    `28-mass-overview` and `28-print-spec-imperial` (copies in `docs/screenshots/62-units-text/`).
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one
@@ -2492,7 +2522,7 @@ HTML report as `playwright-report`.
     srcs that return PNGs; the HTML head has the title and the manifest, icon and
     apple-touch-icon links.
   - `16-export-bundle` (#26):
-    - Print / save PDF in the Cut list opens `/print#d=…&u=imperial&print=1` in a new tab,
+    - Print / save PDF in the Cut list opens `/print#design=…&u=imperial&print=1` in a new tab,
       which calls `window.print()` once (stubbed to a counter).
     - The crate spec has the part, 47.4 lb, 36.7 × 25.7 × 19.6 in with 932 × 652 × 497 mm, the
       dimensional weight, lb/ft³, no freight class, the layout reason, the runner-up and the

@@ -6,7 +6,7 @@
  */
 import type { DesignChange, DesignField } from "@/domain/diff";
 import { plywoodText, sectionText } from "./lumber";
-import { dims, lengthUnit, weight, type Units } from "./units";
+import { dims, lengthUnit, weightWhole, type Units } from "./units";
 
 export const NO_CHANGE = "No change to the crate";
 
@@ -40,9 +40,9 @@ function values(c: DesignChange, u: Units): { from: string; to: string; unit: st
     case "gross":
     case "payload":
     case "tare": {
-      // weight() gives "16 kg"; split off the unit so it is said once.
-      const [from, unit] = weight(num(c.from), u).split(" ");
-      return { from, to: weight(num(c.to), u).split(" ")[0], unit };
+      // weightWhole() gives "16 kg"; split off the unit so it is said once.
+      const [from, unit] = weightWhole(num(c.from), u).split(" ");
+      return { from, to: weightWhole(num(c.to), u).split(" ")[0], unit };
     }
     case "outside":
       return { from: dims(list(c.from), u), to: dims(list(c.to), u), unit: lengthUnit(u) };

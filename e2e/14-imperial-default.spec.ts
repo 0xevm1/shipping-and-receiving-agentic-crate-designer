@@ -12,7 +12,7 @@ test("first load is imperial, with nominal lumber in the Overview, Cut list and 
   await expect(units.getByRole("button", { name: "in lb" })).toHaveAttribute("aria-pressed", "true");
 
   const header = page.getByRole("banner");
-  await expect(header).toContainText(/4140 steel · 47 lb each · crate gross \d+ lb/);
+  await expect(header).toContainText(/4140 steel · 47.4 lb each · crate gross \d+ lb/);
   await expect(page.getByTestId("size-labels")).toContainText("36.7 in");
 
   // Overview: inches and pounds, plywood by its sold thickness, lumber by nominal size.

@@ -1,6 +1,7 @@
 "use client";
 
 import { describeShipment } from "@/domain/shipment";
+import { renderMessage } from "@/lib/message";
 import { volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import styles from "./Shipment.module.css";
@@ -47,7 +48,7 @@ export function ShipmentSummary() {
         <span className="mono">{weight(totals.grossKg, units)}</span> in all
       </div>
       {plan.unmet ? (
-        <p className={`${styles.note} ${styles.warn}`}>{plan.unmet}</p>
+        <p className={`${styles.note} ${styles.warn}`}>{renderMessage(plan.unmet, units)}</p>
       ) : (
         <p className={styles.note}>One crate would be over the per-crate limits in Shop standards, so the batch is split.</p>
       )}
