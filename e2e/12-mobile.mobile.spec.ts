@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { crate, openApp, panel, pollCrate, sampleFile, shot, tab } from "./helpers";
+import { crate, openApp, panel, pollCrate, sampleFile, setUnits, shot, tab } from "./helpers";
 
 // Phone projects (#42): mobile-390 (390 × 844) and mobile-360 (360 × 800), with touch. The scene
 // is full-bleed, the island is a right-side drawer behind a hamburger (spec §8.2).
@@ -64,6 +64,9 @@ test("the scene fills the screen with the answer on it, and the page doesn't scr
 
   // The answer without opening anything: outside size and gross weight, in amber.
   await expect(summary(page)).toBeVisible();
+  await expect(summary(page)).toContainText("36.7 × 25.7 × 19.6 in"); // imperial by default (#15)
+  await expect(summary(page)).toContainText(/Gross\s*\d+ lb/);
+  await setUnits(page, "metric");
   await expect(summary(page)).toContainText("932 × 652 × 497 mm");
   await expect(summary(page)).toContainText(/Gross\s*\d+ kg/);
   await expect(summary(page).locator(".summary-val").first()).toHaveCSS("color", "rgb(243, 160, 0)");

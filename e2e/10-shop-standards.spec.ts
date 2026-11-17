@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openTab, panel, shot } from "./helpers";
+import { openApp, openTab, panel, setUnits, shot } from "./helpers";
 
 /** The Overview cost line, e.g. "about $86 of wood". */
 const COST_LINE = /about \$\d+ of wood/;
@@ -22,6 +22,7 @@ async function openStandards(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
 });
 
 test("Shop standards is collapsed by default and lists every group", async ({ page }) => {

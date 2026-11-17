@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, shot, tab, triangleGlb } from "./helpers";
+import { fileInput, island, openApp, openTab, panel, pollCrate, sampleFile, setUnits, shot, tab, triangleGlb } from "./helpers";
 
 const SHAFT = "PART-002-long-steel-shaft.glb";
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await setUnits(page, "metric");
 });
 
 test("a catalog GLB fills in its mass and material", async ({ page }) => {
