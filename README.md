@@ -1,5 +1,13 @@
 # Crate Designer
 
+[![CI](https://github.com/0xevm1/shipping-ui/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/0xevm1/shipping-ui/actions/workflows/ci.yml)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org)
+[![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev)
+[![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![three.js r187](https://img.shields.io/badge/three.js-r187-049EF4?logo=threedotjs&logoColor=white)](https://threejs.org)
+[![Bun 1.3](https://img.shields.io/badge/Bun-1.3-F9F1E1?logo=bun&logoColor=black)](https://bun.sh)
+[![PostgreSQL 18](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+
 A browser app that designs **custom wooden shipping crates** for one or more identical machined
 parts. Load a part (a GLB, with an optional `parts.json` entry) and a quantity: it packs the parts,
 builds a crate around them from plywood, lumber and wood screws, shows it in 3D, checks it, prices
