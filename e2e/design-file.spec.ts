@@ -23,6 +23,7 @@ import {
   setUnits,
   SHAFT,
   shot,
+  waitForRecommended,
 } from "./helpers";
 
 /** Design files: download from the Cut list tab, reopen through Load a part. */
@@ -36,13 +37,14 @@ async function downloadDesign(page: Page) {
 }
 
 /**
- * Back to PART-001 at quantity 1 with default rules, by loading its GLB. Cheaper than reopening
- * the app, which waits for the scene and the model again.
+ * Back to PART-001 with default rules, by loading its GLB: a new part, so it opens at its
+ * recommended quantity (spec §7.16). Cheaper than reopening the app, which waits for the scene
+ * and the model again.
  */
 async function resetToBracket(page: Page) {
   await fileInput(page).setInputFiles(sampleFile(BRACKET));
   await expect(header(page)).toContainText("PART-001");
-  await pollCrate(page, (s) => s.quantity).toBe(1);
+  await waitForRecommended(page);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -77,7 +79,10 @@ test("a catalog design reopens with its rules, layout and cut list", async ({ pa
   await expect(header(page)).toContainText("PART-002");
   await setQuantity(page, 8);
   await openTab(page, "Layouts");
+  const before = (await crate(page)).outside;
   await otherLayout(page).first().click();
+  // The picked layout's design lands from the engine's worker a moment after the click.
+  await pollCrate(page, (s) => s.outside).not.toEqual(before);
   const picked = (await crate(page)).outside;
   await openTab(page, "Cut list");
   const cutList = await cutTable(page).innerText();
@@ -115,6 +120,8 @@ test("a custom design needs its model: named when missing, restored when added",
   test.slow(); // three part loads and a download
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await expect(island(page).getByRole("heading", { name: "Widget v2", exact: true })).toBeVisible();
+  // It opens at its recommended quantity, which the design keeps.
+  const { quantity } = await waitForRecommended(page);
   // The inline fields commit on Enter.
   for (const [field, value] of [
     [nameField(page), "Test widget"],
@@ -138,7 +145,8 @@ test("a custom design needs its model: named when missing, restored when added",
 
   // With the model picked at the same time: restored, entered details and all.
   await fileInput(page).setInputFiles([jsonFile(saved.text), sampleFile(SHAFT, "widget_v2.glb")]);
-  await expect(loadMessage(page, "Design loaded: 1 × Test widget.")).toBeVisible();
+  await expect(loadMessage(page, `Design loaded: ${quantity} × Test widget.`)).toBeVisible();
+  await pollCrate(page, (s) => s.quantity).toBe(quantity);
   await expect(island(page).getByRole("heading", { name: "Test widget", exact: true })).toBeVisible();
   await expect(header(page)).not.toContainText("stand-in");
   await pollCrate(page, (s) => s.partId).toBe("widget_v2");

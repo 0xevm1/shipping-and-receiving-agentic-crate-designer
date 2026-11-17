@@ -145,7 +145,9 @@ Saves a configuration designed in the browser (`SaveConfigurationRequestSchema`)
 material and the measured profile); `engineVersion`, `inputHash` and `summary` are its answer.
 The browser builds it with `configurationBody` (`src/state/jobSync.ts`).
 
-The server never trusts the result (`src/server/jobs/verify.ts`):
+The server never trusts the result: `src/server/jobs/verify.ts` sends the check to the engine's
+worker threads (the pool's `verify` task, [QUEUE.md](QUEUE.md#worker-threads)), which run the
+recompute and comparison in `src/server/jobs/check.ts` (`checkConfiguration`):
 
 1. `engineVersion` must be the server's, else `409 engine_version_mismatch`. The tab reloads.
 2. `request` must parse as a `DesignRequest`, else `400`.

@@ -19,6 +19,7 @@ import {
   SHAFT,
   BRACKET,
   shot,
+  waitForRecommended,
 } from "./helpers";
 
 /**
@@ -146,7 +147,8 @@ test("a loaded (custom) part exports, and its design reopens with the GLB", asyn
   await openApp(page);
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "widget_v2.glb"));
   await pollCrate(page, (s) => s.massAssumed).toBe(true);
-  const before = (await crate(page)).outside!.map(Math.round);
+  // A new part opens at its recommended quantity; read the crate once that has settled.
+  const before = (await waitForRecommended(page)).outside!.map(Math.round);
   const { name, files } = await exportZip(page);
   expect(name).toMatch(/^crate-[A-Za-z0-9._-]+-x\d+\.zip$/);
   const stem = name.replace(/\.zip$/, "");

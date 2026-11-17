@@ -41,7 +41,8 @@ export function ChangeNote({
     );
   }
   const show = last && sources.includes(last.source);
-  const text = show ? changeSummary(last.changes, units) : "";
+  // An applied recommendation says so ("Set to the recommended 34 per crate"); the diff is the detail.
+  const text = show ? (last.note ?? changeSummary(last.changes, units)) : "";
   // The full before → after: on hover (`title`) and for screen readers (visually hidden text).
   const detail = show ? changeNote(last.changes, units, Infinity) : "";
   const hasDetail = show && detail !== text;

@@ -18,7 +18,7 @@ in [SPECIFICATION.md §5.1](SPECIFICATION.md); the sweep it runs in §7.16.
 
 ## Worker threads
 
-All server-side engine work (a sweep, a design, a bundle) runs in a `worker_threads` pool
+All server-side engine work (a sweep, a design, a save's recompute, a bundle) runs in a `worker_threads` pool
 (`src/server/workers/`), never on the thread that serves requests and holds SSE streams. A full
 sweep is 30–400 ms of CPU; on the main thread it would stall every stream on the instance.
 
@@ -33,6 +33,12 @@ sweep is 30–400 ms of CPU; on the main thread it would stall every stream on t
   started on demand, FIFO queue in front. A thread that crashes fails only its own task and is
   replaced; a task over 120 s fails and its thread is terminated; idle threads don't keep a
   process alive.
+- **Tasks** (`tasks.ts`, run by `engineThread.ts`): `sweep` (`runSweep`), `designs`
+  (`rankConfigurations`: the queue's sweep job, `POST /designs`), `design` (`designShipment`),
+  `verify` (`checkConfiguration` in `src/server/jobs/check.ts`: a browser save's recompute and
+  comparison for `POST /jobs/:id/configs`, answering only the small check result, [API.md](API.md)),
+  `bundle` (`buildBundleZip`), `artifact` (`buildArtifact`: one GLB, PDF or CSV) and `multiBundle`
+  (`buildMultiBundleZip`).
 - **Proof:** `src/server/workers/pool.integration.test.ts` runs three full sweeps (PART-001 to
   003, 1–200 per crate, with a total) on the pool while sampling the main thread's event-loop
   delay: the worst lag must stay under **50 ms**, and the pool's

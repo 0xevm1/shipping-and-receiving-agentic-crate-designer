@@ -9,6 +9,7 @@ import {
   mmText,
   nameField,
   openApp,
+  openTab,
   panel,
   sampleFile,
   screenBox,
@@ -17,6 +18,7 @@ import {
   SHAFT,
   shot,
   triangleGlb,
+  waitForRecommended,
 } from "./helpers";
 
 /**
@@ -33,11 +35,17 @@ async function headerGross(page: Page) {
   return Number(/crate gross ([\d.]+)/.exec((await header(page).textContent()) ?? "")![1]);
 }
 
-/** A generated 1 mm part, as in the hardening tests: the crate is the fixed minimum size, so a mass edit moves only the weights. */
+/**
+ * A generated 1 mm part, as in the hardening tests: the crate is the fixed minimum size, so a mass
+ * edit moves only the weights. It opens at its recommended quantity; back to one part, on the Overview.
+ */
 async function loadTiny(page: Page) {
   await fileInput(page).setInputFiles({ name: "tiny-pin.glb", mimeType: "model/gltf-binary", buffer: triangleGlb([0.001, 0.001, 0.001]) });
   await expect(nameField(page)).toHaveValue("Tiny pin");
   await expect(header(page)).toContainText("1 × 1 × 1 mm");
+  await waitForRecommended(page);
+  await setQuantity(page, 1);
+  await openTab(page, "Overview");
 }
 
 test.beforeEach(async ({ page }) => {

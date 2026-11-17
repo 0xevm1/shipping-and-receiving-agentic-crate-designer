@@ -15,6 +15,7 @@ import {
   shot,
   triangleGlb,
   waitForLiveJob,
+  waitForRecommended,
 } from "./helpers";
 
 /**
@@ -45,6 +46,8 @@ async function loadPart(page: Page, file: ReturnType<typeof freshPart>) {
   await fileInput(page).setInputFiles(file);
   await expect(island(page).getByRole("heading", { name: "Shared job widget", exact: true })).toBeVisible();
   await pollCrate(page, (s) => s.outside).not.toBeNull();
+  // A new part opens at its recommended quantity (spec §7.16).
+  await waitForRecommended(page);
   await openTab(page, "Overview");
   await waitForLiveJob(page);
 }
@@ -69,13 +72,13 @@ test("a saved configuration reaches another browser live, and Download all bundl
     await loadPart(b, part);
     await expect(savedConfigs(b)).toHaveCount(0);
 
-    // The best quantity per crate is shown on loading, without choosing one.
+    // The part opened at the best quantity per crate, without choosing one: the hint says it is in use.
     await openTab(page, "Rules");
     const best = panel(page).getByTestId("best-quantity");
     await expect(best).toHaveAttribute("aria-busy", "false");
     const recommended = Number((await best.textContent())!.match(/Best: (\d+) per crate/)![1]);
-    await best.getByRole("button", { name: "Use" }).click();
     await pollCrate(page, (s) => s.quantity).toBe(recommended);
+    await expect(best.getByRole("button", { name: "In use" })).toBeDisabled();
     await shot(page, "shared-job-best-quantity");
 
     // Save it in A. B lists it without a reload (the save → event → SSE path; 5 s is generous).

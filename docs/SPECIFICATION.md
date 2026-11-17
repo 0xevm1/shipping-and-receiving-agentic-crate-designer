@@ -413,7 +413,7 @@ deploy runs `db:migrate` before the new version serves traffic.
 | `src/cli/` | `bun run crate`: argument parsing, the API call, the in-process `--offline` run |
 | `src/state/fakeEngineWorker.ts` | A stand-in worker for tests (answers on `flush()`) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
-| `src/state/bestQuantity.ts` | `useBestQuantity`: the quantity sweep (§7.16) for the part and rules on screen, derived from the store (nothing added to it), asked of the engine worker 250 ms after the last change |
+| `src/state/bestQuantity.ts` | `startSweeps`: the page's one quantity sweeper (§7.16) for the part and rules on screen, in the engine worker (a new part at once, a rule change 250 ms after the last), handing each current result to the store's `applyRecommendation` (recommended on load); `useSweep`, its small store; `useBestQuantity` for the hint |
 | `src/components/island/BestQuantity.tsx` | The best-quantity hint and its **Use** action on the Rules tab (§7.16) |
 | `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange`; designs through the engine client, `designedFrom` (§5.1) |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
@@ -513,8 +513,10 @@ and is never written to `parts.json`, design files or share links.
 | `wallClearanceMm` | 0–300 | 50 (`defaults.wallClearanceMm`) | Gap to the walls, floor and lid |
 | `panelThickness` | `"auto"` \| mm (6 to 50) | auto | Plywood for walls, lid and separators. The Rules tab offers the thicknesses in `stock.panelPlywoodMm` (12, 15, 19 by default); a design saved with another one still opens |
 
-The part is not a setting. It is passed to `computeDesign` separately, and loading a new part
-resets `quantity` to that part's first suggested quantity.
+The part is not a setting. It is passed to `computeDesign` separately. Loading a new part
+resets `quantity` to that part's first suggested quantity, and then opens it at the quantity
+sweep's recommended quantity and layout as soon as the sweep answers (§7.16, "Recommended on
+load").
 
 The defaults for gap, clearance and layers come from the shop standards
 (`settingsFromStandards`, §6.4): **Reset rules** goes back to them (keeping the quantity), and
@@ -1856,9 +1858,31 @@ the server in a worker thread ([QUEUE.md](QUEUE.md)). The test fails above 1.5 s
 a fixed CPU loop's time, whichever is larger (load-aware, #48).
 
 **In the UI:** the Rules tab shows the recommendation under "How many parts" (§8.3) with **Use**,
-which sets the quantity and the recommended layout. Loading a part does not change the quantity
-(it still starts at the first suggested quantity). The recommendation can move once the model's
-profile is measured (§7.5b), since shaped blocking changes the crate.
+which sets the quantity and the recommended layout; it reads **In use** while both are on screen.
+One sweeper runs for the page (`startSweeps` in `src/state/bestQuantity.ts`, started by
+`SavedStateLoader`), whatever the tab, so the hint and the recommendation on load share the
+engine's latest-wins sweep lane rather than replacing each other's requests. A rule or standards
+change is swept `SWEEP_DELAY_MS` (**250 ms**) after the last one; a new part, or its measured
+outline, at once.
+
+**Recommended on load.** Loading a part shows the recommended quantity and crate without the user
+choosing one. When a **new part** is loaded (a picked or dropped GLB, catalog or not: `setPart`),
+the store marks it `autoRecommend` and the part opens at its first suggested quantity until the
+sweep answers; the first result for that part (for the inputs still on screen) then sets the
+recommended quantity and layout (`applyRecommendation`), with the island's change note **"Set to
+the recommended 34 per crate"** (source `recommended`; the diff from the first suggested quantity is
+the note's detail, §8.5a). The recommendation can move once the model's outline is measured
+(§7.5b), since shaped blocking changes the crate: so the result for the **measured** part is
+applied **once more** (with the same note, only when it differs), and the part is then settled.
+A failed outline analysis settles it without a second result; so does a sweep where no quantity
+passes (nothing to apply). **Any edit before then stops it** and is kept: the quantity, a rule,
+the layout, the ranking, the shop standards or the part's name, material or mass (each clears
+`autoRecommend`), including an edit between the first result and the measured one. A design that
+is **opened** keeps its own settings: the last design restored at startup (`restoreDesign`), a
+saved design from the library, an imported design file and a share link (`loadDesign`) never set
+`autoRecommend`. The preloaded default part (PART-001 × 4, when there is nothing to restore) is
+not a load either and keeps its default quantity. The e2e hook reports it (`autoRecommend`:
+`waiting`, `measuring` or null, and `recommended`, §10).
 
 ### 7.17 Artifacts and the multi-configuration bundle (`src/engine/artifacts.ts`, #46)
 
@@ -2085,7 +2109,7 @@ The canvas fills the window. Four regions float above it:
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
-| **Rules** | Quantity (− / input / + and the part's suggested quantities), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen; dimmed while a rule change waits to be swept), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Rules** | Quantity (− / input / + and the part's suggested quantities), then the **best quantity** hint (#46, §7.16: "Best: 34 per crate", the rationale with the constraint that stopped a larger crate, and **Use**, which sets that quantity and layout; "In use" when they are on screen, as they are when a newly loaded part opens at the recommendation; dimmed while a rule change waits to be swept), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
@@ -2377,10 +2401,12 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
   new values in domain units: gross, tare and payload (kg, compared to the gram), outside size,
   wall plywood, floor, skid section and count, and the layout grid. It returns `[]` when either side
   has no design.
-- **`lastChange`** in the store: `{ id, at, source, changes }`, set when an input changes the design:
+- **`lastChange`** in the store: `{ id, at, source, changes, note? }`, set when an input changes the design:
   `setPartDetails` (source `name`, `material` or `mass`), `setSettings` / `resetRules` (`rules`)
-  and `setLayoutKey` (`layout`). Loading a part, a units change, or a design that became a problem
-  doesn't set one. It clears after `CHANGE_NOTE_MS` (5 s).
+  and `setLayoutKey` (`layout`), and the recommendation applied to a newly loaded part
+  (`recommended`, §7.16, whose `note` "Set to the recommended 34 per crate" is shown instead of the
+  summary below, with the diff as its detail). Loading a part, a units change, or a design that
+  became a problem doesn't set one. It clears after `CHANGE_NOTE_MS` (5 s).
 - **The note** (`ChangeNote`, `role="status"`) shows a short summary of the outcome
   (`changeSummary`, #62), in the selected units:
   - the outside size changed: "Crate grew: 2176 × 936 × 831 mm, 878 kg" (or "shrank"; a mix of
@@ -2396,7 +2422,7 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
   units are dropped (`visibleChanges`), so it never says "16 → 16 kg". The header's and the
   island's notes are one line with an ellipsis (`white-space: nowrap`); the header's stops short
   of the island on desktop. The note sits under the header for part edits and over the foot of
-  the island's part view for rules and layout edits (its pill takes the pointer so the title
+  the island's part view for rules and layout edits and an applied recommendation (its pill takes the pointer so the title
   shows). It fades over its last 1.5 s.
 - **Highlights** (`Flash`): changed values in the header gross and the Overview (outside size,
   gross, payload, layout grid, wall plywood, skids, floor, empty crate) flash gold for 1.2 s.
@@ -2967,6 +2993,14 @@ given settings and layout pick (unlike `setPart`). It also checks
 `lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
 payload with source `mass`; name and material edits record an empty diff; rules and layout edits
 record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
+**`src/state/recommendOnLoad.test.ts`** checks the recommendation on load (§7.16) with the sweeps
+held in a queue: a new part opens at the recommended quantity and layout with its change note, is
+swept at once, is applied once more for the measured outline (or settles unchanged, or on a
+failed analysis), ignores a result for another part or a second one before measurement; an edit
+before the result (quantity, a rule, the layout, the ranking, the mass, the standards, or after the
+first result) is kept; and `loadDesign` / `restoreDesign` keep their own quantity.
+**`src/state/partLoader.test.ts`** checks which loads wait for it: a picked GLB does, a design
+file or `openDesignFile` (saved designs, share links) doesn't.
 `setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
 a profile for another model or a failed analysis, drops a pin or hover on a cut-list line that is
 gone, survives a mass edit and is dropped with a new
@@ -3140,8 +3174,11 @@ copies chosen shots there on request.
   view targets, view switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play, `idle` (no
   deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity (and part id and stand-in mass, all
   from the inputs the shown design was made from, `designedFrom`, §5.1), crate types, frame count, pulses,
-  `shapedBlocking`, `profileMs` and the CoG and fork-arrow marks, and `canvasCoverage()` (share of canvas pixels
-  drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`; `next.config.ts` always inlines the flag (`"0"` when unset),
+  `shapedBlocking`, `profileMs`, the recommendation on load (`autoRecommend`: `waiting` for the first sweep result,
+  `measuring` until the measured outline's, null when settled or stopped by an edit; `recommended`, the current
+  sweep's quantity, §7.16) and the CoG and fork-arrow marks, and `canvasCoverage()` (share of canvas pixels
+  drawn). After loading a part, a spec calls `waitForRecommended(page)` (`e2e/helpers/probe.ts`) before reading
+  numbers, so the recommendation landing later can't move them. It is loaded only when built with `NEXT_PUBLIC_E2E=1`; `next.config.ts` always inlines the flag (`"0"` when unset),
   so normal builds drop the branch and don't bundle the module.
 
 - **Specs** (a `.narrow` or `.mobile` suffix means that project; the rest run on desktop):
@@ -3155,7 +3192,7 @@ copies chosen shots there on request.
     column is visible in both units; "4x4" keeps a plain x; piece names stay on one line; on a phone each row stacks.
   - `checks`: every check is listed and the default crate has no cautions; check text follows the units; the Overview verdict
     names a caution and links to Checks; the tab counts cautions and notes apart.
-  - `load-part`: a catalog GLB fills in its details; an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
+  - `load-part`: a catalog GLB fills in its details; a new part opens at the recommended quantity and layout ("Set to the recommended N per crate", **In use**); an unknown one uses a stand-in mass until entered; `.gltf` and over-20 m
     parts are refused with a message; dragging text doesn't raise the drop veil, a file does.
   - `load-messages`: the toast under the header: an error (alert) stays until dismissed, a note (status) goes by itself;
     both sit clear of the header, island and window edge at desktop and phone sizes.

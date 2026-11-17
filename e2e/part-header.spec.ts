@@ -14,6 +14,7 @@ import {
   setUnits,
   SHAFT,
   shot,
+  waitForRecommended,
 } from "./helpers";
 
 /**
@@ -25,6 +26,8 @@ import {
 async function loadUnknown(page: Page) {
   await fileInput(page).setInputFiles(sampleFile(SHAFT, "gearbox-cover.glb"));
   await expect(nameField(page)).toHaveValue("Gearbox cover");
+  // It opens at its recommended quantity; edit once that has settled.
+  await waitForRecommended(page);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -137,12 +140,13 @@ test("imperial: mass is shown and entered in lb, stored in kg", async ({ page })
   await expect(mass).toHaveAccessibleName("Mass of one part in pounds");
   // The 10 kg stand-in, as pounds to two decimals.
   await expect(mass).toHaveValue((10 * 2.20462).toFixed(2));
-  await expect(header(page)).toContainText(/lb each stand-in · crate gross \d+ lb/);
+  await expect(header(page)).toContainText(/lb each stand-in · crate gross [\d,]+ lb/);
 
   await mass.fill("30");
   await mass.press("Enter");
   await expect(mass).toHaveValue("30");
-  await expect(header(page).getByTestId("change-note")).toContainText(/Crate (heavier|lighter): \d+ lb/);
+  // At the recommended quantity a mass edit can also resize the crate; either way the note is in lb.
+  await expect(header(page).getByTestId("change-note")).toContainText(/^Crate (heavier|lighter|grew|shrank)\b.*[\d,]+ lb/);
   await openTab(page, "Overview");
   await expect(panel(page)).toContainText("30 lb, material not given");
   await mass.press("ArrowUp");

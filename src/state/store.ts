@@ -6,6 +6,7 @@ import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import type { PartProfile } from "@/domain/profile";
 import type { ShipmentPlan } from "@/domain/shipment";
+import type { QuantitySweep } from "@/domain/sweep";
 import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import type { DesignResponse, EngineStamp } from "@/engine/schemas";
@@ -57,7 +58,8 @@ interface Insets {
 /** How the load row shows its message: a note goes by itself, an error waits to be dismissed. */
 type LoadMessageKind = "note" | "error";
 
-export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
+/** `recommended`: the quantity sweep's recommendation, applied for a newly loaded part (spec §7.16). */
+export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout" | "recommended";
 
 /** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
 interface LastChange {
@@ -68,6 +70,20 @@ interface LastChange {
   source: ChangeSource;
   /** From `diffDesigns(previous, next)`; empty when nothing moved. */
   changes: DesignChange[];
+  /** What the screen says instead of the diff's summary ("Set to the recommended 34 per crate"); the diff stays the detail. */
+  note?: string;
+}
+
+/**
+ * A newly loaded part waiting to open at the quantity sweep's recommendation (spec §7.16).
+ * `measured` is false until the first sweep result has been applied; it then waits for the
+ * model's outline (shaped blocking), which can move the recommendation, and applies it once more.
+ */
+export interface AutoRecommend {
+  /** The part it is for: its model. */
+  modelUrl: string;
+  /** The first result has been applied; waiting for the measured outline's result. */
+  applied: boolean;
 }
 
 /** How long the change note stays (it fades over the end). Longer than the Overview flash (1.2 s) so it can be read. */
@@ -121,8 +137,22 @@ export interface DesignerState {
   designedInMs: number | null;
   /** True while the last-opened crate is being reopened after mount; the scene waits for it. */
   restoring: boolean;
+  /**
+   * Set when a new part is loaded (`setPart`), so the part opens at the sweep's recommended
+   * quantity and layout (`applyRecommendation`). Cleared by any edit to the design's inputs and
+   * by opening a design, which keeps its own settings. Null otherwise.
+   */
+  autoRecommend: AutoRecommend | null;
 
+  /** Loads a new part: its first suggested quantity until the sweep's recommendation arrives (`autoRecommend`). */
   setPart: (part: LoadedPart) => void;
+  /**
+   * Applies a sweep result (spec §7.16) for `part` when it is the newly loaded part still
+   * waiting for one (`autoRecommend`): sets the recommended quantity and layout, with a change
+   * note, the first time, and once more when the result is for the part's measured outline.
+   * Anything else (another part, an edit since, a settled part) is ignored.
+   */
+  applyRecommendation: (part: LoadedPart, sweep: QuantitySweep) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
   loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex?: number) => void;
   /**
@@ -238,7 +268,7 @@ export const reducedMotion = () => typeof window !== "undefined" && window.match
 export const useDesigner = create<DesignerState>()((set, get) => {
   let changeTimer: ReturnType<typeof setTimeout> | undefined;
   /** The `lastChange` for an edit from `source` that moves the design from `prev` to `next`. */
-  const change = (source: ChangeSource, prev: DesignResult, next: DesignResult): Pick<DesignerState, "lastChange"> => {
+  const change = (source: ChangeSource, prev: DesignResult, next: DesignResult, note?: string): Pick<DesignerState, "lastChange"> => {
     clearTimeout(changeTimer);
     // A problem on either side (no design) has its own message; there is nothing to compare.
     if (!prev.design || !next.design) return { lastChange: null };
@@ -246,7 +276,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     changeTimer = setTimeout(() => {
       if (get().lastChange?.id === id) set({ lastChange: null });
     }, CHANGE_NOTE_MS);
-    return { lastChange: { id, at: Date.now(), source, changes: diffDesigns(prev.design, next.design) } };
+    return { lastChange: { id, at: Date.now(), source, changes: diffDesigns(prev.design, next.design), ...(note ? { note } : {}) } };
   };
 
   /**
@@ -298,13 +328,13 @@ export const useDesigner = create<DesignerState>()((set, get) => {
    * Recompute the design after any input change, dropping a pin whose cut-list line is gone.
    * With a `source`, records what moved in `lastChange`; without one (a new part) clears it.
    */
-  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) =>
+  const recompute = (patch: Partial<DesignerState>, source?: ChangeSource, note?: string) =>
     redesign(patch, ({ result }, next, merged) => {
       // "Designed in" times the design that was exported; an edit makes it stale, so it goes.
       const staleClock = get().designedInMs !== null && !("designedInMs" in merged);
       const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || merged.part;
       return {
-        ...(source ? change(source, get().result, result) : { lastChange: null }),
+        ...(source ? change(source, get().result, result, note) : { lastChange: null }),
         ...(staleClock ? { designedInMs: null } : {}),
         hover: null,
         ...dropStaleLines({ pin: next.pin, hover: null }, result),
@@ -321,7 +351,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     }
     // A panel thickness the new stock no longer includes goes back to auto rather than lingering unselectable.
     if (next.panelThickness !== "auto" && !panelOptions(standards).includes(next.panelThickness)) next.panelThickness = "auto";
-    recompute({ standards, settings: normalizeSettings(next, settings), layoutKey: null });
+    recompute({ standards, settings: normalizeSettings(next, settings), layoutKey: null, autoRecommend: null });
     if (save) saveStandards(standards);
   };
 
@@ -351,6 +381,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     designStartedAt: null,
     designedInMs: null,
     restoring: false,
+    autoRecommend: null,
 
     setPart: (part) =>
       recompute({
@@ -360,9 +391,38 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         pin: null,
         layoutKey: null,
         settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
+        autoRecommend: { modelUrl: part.modelUrl, applied: false },
       }),
+    applyRecommendation: (part, sweep) => {
+      const { autoRecommend: waiting, settings, layoutKey } = get();
+      if (!waiting || part !== get().part || part.modelUrl !== waiting.modelUrl) return;
+      const measured = !!part.profile;
+      // Applied once already: only the measured outline's result is applied again.
+      if (waiting.applied && !measured) return;
+      const rec = sweep.recommendation;
+      // Settled after the measured outline's result, or when nothing passes (nothing to wait for).
+      const autoRecommend = measured || !rec ? null : { ...waiting, applied: true };
+      if (!rec || (settings.quantity === rec.quantity && layoutKey === rec.crate.layoutKey)) {
+        set({ autoRecommend });
+        return;
+      }
+      recompute(
+        { settings: normalizeSettings({ quantity: rec.quantity }, settings), layoutKey: rec.crate.layoutKey, autoRecommend },
+        "recommended",
+        `Set to the recommended ${rec.quantity} per crate`,
+      );
+    },
     loadDesign: (part, settings, layoutKey, crateIndex = 0) =>
-      recompute({ ...newDesignClock(), part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
+      recompute({
+        ...newDesignClock(),
+        part,
+        measured: null,
+        pin: null,
+        layoutKey,
+        crateIndex,
+        settings: normalizeSettings(settings, DEFAULT_SETTINGS),
+        autoRecommend: null,
+      }),
     restoreDesign: (part, settings, layoutKey, crateIndex, { tab, ranking }) =>
       recompute({
         designStartedAt: null,
@@ -375,6 +435,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         tab,
         ranking,
         settings: normalizeSettings(settings, DEFAULT_SETTINGS),
+        autoRecommend: null,
       }),
     setRestoring: (restoring) => {
       // While a reopened crate's design is on its way, the scene stays held until it lands.
@@ -389,7 +450,12 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     setMeasured: (measured) => set({ measured }),
     setPartProfile: (modelUrl, profile) => {
       const current = get().part;
-      if (!profile || current.modelUrl !== modelUrl || current.profile) return;
+      if (current.modelUrl !== modelUrl || current.profile) return;
+      if (!profile) {
+        // Analysis failed: blocking stays on the bounding box, so no second recommendation comes.
+        if (get().autoRecommend?.applied) set({ autoRecommend: null });
+        return;
+      }
       // Shaped blocks change the cut list, so a pin or hover may name a line that is gone.
       redesign({ part: { ...current, profile } }, ({ result }) => dropStaleLines(get(), result));
     },
@@ -400,6 +466,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (!r.ok) return r.error;
       const { mass_kg, ...meta } = r.details;
       const part: LoadedPart = { ...current, ...meta };
+      // An edit of the part's details is the person's own: the recommendation is no longer applied for them.
+      set({ autoRecommend: null });
       if (mass_kg !== undefined) {
         part.mass_kg = mass_kg;
         part.massAssumed = false;
@@ -416,9 +484,11 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
-    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings, panelOptions(get().standards)), layoutKey: null }, "rules"),
-    resetRules: () => recompute({ settings: settingsFromStandards(get().standards, get().settings.quantity), layoutKey: null }, "rules"),
-    setLayoutKey: (layoutKey) => recompute({ layoutKey }, "layout"),
+    // An edit of the quantity, rules, layout, ranking or standards stops a pending recommendation (`autoRecommend`).
+    setSettings: (patch) =>
+      recompute({ settings: normalizeSettings(patch, get().settings, panelOptions(get().standards)), layoutKey: null, autoRecommend: null }, "rules"),
+    resetRules: () => recompute({ settings: settingsFromStandards(get().standards, get().settings.quantity), layoutKey: null, autoRecommend: null }, "rules"),
+    setLayoutKey: (layoutKey) => recompute({ layoutKey, autoRecommend: null }, "layout"),
     setStandards: (patch) => {
       const r = parseStandards(mergeStandards(get().standards, patch));
       if (!r.ok) return r.error;
@@ -469,7 +539,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (get().drawerOpen !== drawerOpen) set({ drawerOpen });
     },
     setRanking: (ranking) => {
-      if (ranking !== get().ranking) recompute({ ranking, layoutKey: null }, "layout");
+      if (ranking !== get().ranking) recompute({ ranking, layoutKey: null, autoRecommend: null }, "layout");
     },
     startDesignClock: (now = Date.now()) => {
       if (get().designStartedAt === null) set({ designStartedAt: now, designedInMs: null });
