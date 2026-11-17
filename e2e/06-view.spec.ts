@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { expect, test, type Download, type Page } from "@playwright/test";
 import { crate, island, openApp, pollCrate, shot } from "./helpers";
 
 const modeButton = (page: Page) => page.getByRole("button", { name: /view\. Click for/ });
@@ -12,6 +13,16 @@ async function openViewPopover(page: Page) {
   const pop = page.locator(`[id="${id}"]`);
   await expect(pop).toBeVisible();
   return pop;
+}
+
+/** Reads a downloaded .glb: checks the "glTF" header and returns the node names from its JSON chunk. */
+async function glbNodeNames(download: Download): Promise<string[]> {
+  const bytes = readFileSync(await download.path());
+  expect(bytes.length).toBeGreaterThan(20);
+  expect(bytes.subarray(0, 4).toString("ascii")).toBe("glTF");
+  expect(bytes.readUInt32LE(8)).toBe(bytes.length);
+  const json = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString("utf8"));
+  return (json.nodes as { name?: string }[]).map((n) => n.name ?? "");
 }
 
 test.describe("view controls", () => {
@@ -126,6 +137,34 @@ test.describe("view controls", () => {
     await pop.getByLabel("Pull apart").fill("50");
     await pollCrate(page, (s) => s.anim.explode).toBe(0.5);
     expect((await crate(page)).mode).toBeNull();
+  });
+
+  test("Download 3D model saves the assembled crate as .glb, with or without parts", async ({ page }) => {
+    // Exploded view on screen: the file must still be the assembled crate (checked in exportGlb.test.ts).
+    await modeButton(page).click();
+    await modeButton(page).click();
+    await pollCrate(page, (s) => s.mode).toBe("exploded");
+
+    const pop = await openViewPopover(page);
+    const include = pop.getByLabel("Include parts", { exact: true });
+    await expect(include).toBeChecked();
+    const button = pop.getByRole("button", { name: "Download 3D model (.glb)" });
+    await shot(page, "06-view-glb-export");
+
+    const [withParts] = await Promise.all([page.waitForEvent("download"), button.click()]);
+    expect(withParts.suggestedFilename()).toBe("crate-PART-001-x4.glb");
+    const names = await glbNodeNames(withParts);
+    for (const n of ["Crate", "Base", "Side walls", "End walls", "Lid", "Side rail 1", "Parts", "Part 1", "Part 4"]) {
+      expect(names).toContain(n);
+    }
+    expect(names).not.toContain("Part 5");
+    await expect(pop.getByRole("status")).toHaveText("3D model downloaded.");
+
+    await include.uncheck();
+    const [withoutParts] = await Promise.all([page.waitForEvent("download"), button.click()]);
+    const bare = await glbNodeNames(withoutParts);
+    expect(bare).toContain("Side rail 1");
+    expect(bare).not.toContain("Parts");
   });
 
   test("Hide panels hides the island but keeps the credit", async ({ page }) => {
