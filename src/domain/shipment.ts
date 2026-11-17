@@ -1,4 +1,7 @@
-import { designCrate, type BomLine, type Check, type CrateDesign } from "./crate";
+import type { BomLine } from "./bom";
+import type { Check } from "./check";
+import { designCrate } from "./crate";
+import type { CrateDesign } from "./crateDesign";
 import { computeDesign, rankByObjective, rankLayouts, type DesignProblem, type DesignResult, type Ranking } from "./design";
 import { joinMessages, kg, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
@@ -6,7 +9,7 @@ import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
- * Shipment planning (#25, spec §7.10): how a batch ships when one crate would break a
+ * Shipment planning (spec §7.10): how a batch ships when one crate would break a
  * per-crate limit (gross weight, the trailer door and floor, or a part count).
  *
  * A batch that fits one crate is today's single design, unchanged. Otherwise it ships as
@@ -27,7 +30,7 @@ export interface CrateType {
   result: DesignResult;
 }
 
-export interface ShipmentTotals {
+interface ShipmentTotals {
   crates: number;
   parts: number;
   payloadKg: number;
@@ -36,7 +39,7 @@ export interface ShipmentTotals {
   /** Sum of every crate's outside volume. */
   volumeM3: number;
   materialCostUsd: number;
-  /** Every crate's total build cost: wood, screws and labour (#17). */
+  /** Every crate's total build cost: wood, screws and labour. */
   costUsd: number;
   /** Every crate's build time. */
   labourHours: number;
@@ -83,7 +86,7 @@ export function planShipment(
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
   const total = settings.quantity;
   const inside = (l: Layout) => withinOutsideLimits(l.external, standards);
-  // Gross within the smaller of the per-crate limit and the computed base rating (#7, as gross).
+  // Gross within the smaller of the per-crate limit and the computed base rating (as a gross weight).
   const fitsLimits = (d: CrateDesign, k: number) =>
     inside(d.layout) && d.grossKg <= crateGrossLimitKg(d, standards) && (maxParts === 0 || k <= maxParts);
   const layoutMemo = new Map<number, Layout[]>();
@@ -114,7 +117,7 @@ export function planShipment(
   };
 
   /**
-   * A crate type's layouts re-ranked by the ranking option (#17), with the per-crate limits as
+   * A crate type's layouts re-ranked by the ranking option, with the per-crate limits as
    * a hard constraint ahead of stability and blocking. The split itself is chosen by volume.
    */
   const ranked = (result: DesignResult, k: number): DesignResult => {
@@ -195,7 +198,7 @@ export function planShipment(
 }
 
 /**
- * The most a crate may weigh (#25 with #7): the smaller of `limits.perCrate.maxGrossKg` and the
+ * The most a crate may weigh: the smaller of `limits.perCrate.maxGrossKg` and the
  * base rating as a gross weight (`structure.ratedPayloadKg + tareKg`, so the payload is within
  * the rating).
  */
@@ -249,10 +252,11 @@ function plan(types: CrateType[], unmet: Message | null, standards: ShopStandard
 /** "1,000 kg gross, 40 parts and the trailer door": the limits in force, for messages. */
 function limitText(standards: ShopStandards): Message {
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
-  return joinMessages([msg`${kg(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []), parts("the trailer door and floor")], ", ");
+  const limits = [msg`${kg(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []), parts("the trailer door and floor")];
+  return joinMessages(limits, ", ");
 }
 
-function crateLimitCheck(text: string, unmet: Message | null, standards: ShopStandards): Check {
+function crateLimitCheck(text: string, unmet: Message | null, standards: ShopStandards): Check<"crate-limit"> {
   return unmet
     ? { id: "crate-limit", level: "caution", title: "Over the per-crate limit", detail: unmet }
     : {
@@ -270,7 +274,7 @@ export function describeShipment(plan: { crates: Pick<CrateType, "label" | "coun
     .join(" + ");
 }
 
-export interface ShipmentBom {
+interface ShipmentBom {
   /** Cut-list lines for every crate, each crate type's quantities × its count, equal pieces merged. */
   lines: BomLine[];
   plywoodM2: number;

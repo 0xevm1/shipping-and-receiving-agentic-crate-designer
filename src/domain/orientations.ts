@@ -1,4 +1,3 @@
-import { Box3, Euler, Matrix4, Vector3 } from "three";
 import type { Vec3 } from "./schema";
 
 const Q = Math.PI / 2;
@@ -25,17 +24,33 @@ export const ORIENTATIONS: Orientation[] = [
   { id: "on-end-y-turned", label: "On end, turned 90°", euler: [0, Q, Q], upright: false },
 ];
 
+export type Mat3 = [[number, number, number], [number, number, number], [number, number, number]];
+
 /**
- * Bounding-box size of a part after rotation. Uses the same three.js math as
- * the renderer, so the packing result and the 3D view can't disagree.
+ * The orientation as an integer rotation matrix. Euler angles are XYZ, composed as in three.js
+ * (R = Rx · Ry · Rz), which is what the viewer applies. Every angle is a multiple of 90°, so
+ * each sine and cosine rounds to -1, 0 or 1 and the matrix is exact.
+ */
+export function rotationMatrix(o: Pick<Orientation, "euler">): Mat3 {
+  const [a, b, c] = o.euler;
+  const r = (v: number) => Math.round(v);
+  const [ca, sa, cb, sb, cc, sc] = [r(Math.cos(a)), r(Math.sin(a)), r(Math.cos(b)), r(Math.sin(b)), r(Math.cos(c)), r(Math.sin(c))];
+  return [
+    [cb * cc, -cb * sc, sb],
+    [ca * sc + sa * sb * cc, ca * cc - sa * sb * sc, -sa * cb],
+    [sa * sc - ca * sb * cc, sa * cc + ca * sb * sc, ca * cb],
+  ];
+}
+
+/**
+ * Bounding-box size of a part after rotation. For a box rotated by an axis-aligned matrix, the
+ * new extent along each axis is the sum of the old extents weighted by |R|, so the packing
+ * result and the 3D view (which rotates by the same Euler angles) can't disagree.
  */
 export function rotatedSize(size: Vec3, orientation: Orientation): Vec3 {
-  const half = new Vector3(...size).multiplyScalar(0.5);
-  const box = new Box3(half.clone().negate(), half);
-  box.applyMatrix4(new Matrix4().makeRotationFromEuler(new Euler(...orientation.euler)));
-  const out = box.getSize(new Vector3());
-  // Round off floating-point noise from sin/cos of π/2.
-  return [round(out.x), round(out.y), round(out.z)];
+  const m = rotationMatrix(orientation);
+  const extent = (row: number) => Math.abs(m[row][0]) * size[0] + Math.abs(m[row][1]) * size[1] + Math.abs(m[row][2]) * size[2];
+  return [round(extent(0)), round(extent(1)), round(extent(2))];
 }
 
 function round(v: number) {

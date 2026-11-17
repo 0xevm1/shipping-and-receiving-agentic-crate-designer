@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { parts } from "./catalog";
-import { MIN_INTERIOR_MM, type CrateDesign } from "./crate";
+import type { CrateDesign } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, MAX_PART_MM, type DesignPart } from "./design";
 import { CrateSettingsSchema, normalizeSettings, settingsAdjustments, type CrateSettings, type Vec3 } from "./schema";
+import { DEFAULT_STANDARDS, minInteriorMm } from "./standards";
 
-/** Edge cases and bad input (#10): extremes must give a crate or a clear reason, never a crash. */
+const MIN_INTERIOR_MM = minInteriorMm(DEFAULT_STANDARDS);
+
+/** Edge cases and bad input: extremes must give a crate or a clear reason, never a crash. */
 
 const part = (dimensions_mm: Vec3, mass_kg = 5): DesignPart => ({ id: "edge", name: "Edge part", mass_kg, dimensions_mm });
 const run = (p: DesignPart, patch: Partial<CrateSettings> = {}) => computeDesign(p, { ...DEFAULT_SETTINGS, ...patch });
@@ -52,7 +55,7 @@ describe("quantity extremes", () => {
       expect(r.design!.layout.slots).toHaveLength(quantity);
       expectSound(r.design!);
       // Measured at 1–3 ms. A real regression is a 10× event, so the budget is generous, and
-      // the median of several runs ignores one run stalled by a busy machine (#48).
+      // the median of several runs ignores one run stalled by a busy machine.
       expect(medianMs(() => run(p, settings))).toBeLessThan(50);
     }
   });
@@ -157,7 +160,7 @@ describe("zero gaps and clearances", () => {
   });
 });
 
-describe("blocking check uses the gaps in the drawn crate (#36)", () => {
+describe("blocking check uses the gaps in the drawn crate", () => {
   const blocking = (d: CrateDesign) => d.checks.find((c) => c.id === "blocking")!;
 
   it("passes for a padded tiny part even with a 0 mm clearance setting", () => {

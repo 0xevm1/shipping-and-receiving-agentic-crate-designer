@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
-import { CARDBOARD_LIMITS, DRY_VAN_53FT_MM, LTL_EXCESSIVE_LENGTH_MM, MIN_INTERIOR_MM } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, settingsFromStandards, type DesignPart } from "./design";
 import type { CrateSettings } from "./schema";
 import {
   DEFAULT_STANDARDS,
   mergeStandards,
+  minInteriorMm,
   parseStandards,
   sameStandards,
   ShopStandardsSchema,
@@ -15,13 +15,8 @@ import {
   type DeepPartial,
   type ShopStandards,
 } from "./standards";
+import { custom } from "./testFixtures";
 
-/** Defaults with a patch applied; throws if the result is invalid. */
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
 
 const design = (partId: string, standards: ShopStandards, patch: Partial<CrateSettings> = {}) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
@@ -33,7 +28,7 @@ describe("ShopStandardsSchema", () => {
     expect(ShopStandardsSchema.safeParse(DEFAULT_STANDARDS).success).toBe(true);
   });
 
-  it("holds the values the domain used before #19", () => {
+  it("holds the shipped default values", () => {
     const s = DEFAULT_STANDARDS;
     expect(s.stock.cleatMm).toEqual({ thick: 19, wide: 89 });
     expect(s.stock.skidMm).toEqual({ standard: { wide: 89, tall: 89 }, heavy: { wide: 89, tall: 140 } });
@@ -55,9 +50,9 @@ describe("ShopStandardsSchema", () => {
       densityKgM3: { plywood: 600, lumber: 480 },
       costUsdPerM3: { plywood: 1100, lumber: 650 },
       screwSpacingMm: { cleat: 150, skid: 300, panelJoint: 200 },
-      screwCostUsdPer100: 8, // #17
+      screwCostUsdPer100: 8,
     });
-    // #17: labour and freight terms.
+    // Labour and freight terms.
     expect(s.labour).toEqual({
       rateUsdPerHour: 35,
       lumberCutMin: 0.75,
@@ -68,7 +63,7 @@ describe("ShopStandardsSchema", () => {
       handlingMin: 15,
     });
     expect(s.freight).toEqual({ dimDivisorIn3PerLb: 139 });
-    // #7: structural sizing, SPF No. 2 allowable stresses.
+    // Structural sizing, SPF No. 2 allowable stresses.
     expect(s.stock.joistMm).toEqual({ thick: 38, wide: 89 });
     expect(s.structure).toEqual({
       lumberBendingMPa: 7.8,
@@ -82,15 +77,12 @@ describe("ShopStandardsSchema", () => {
       maxJoistSpacingMm: 400,
       lidStackKg: 0,
     });
-    // The fixed 1,000 kg base rating is gone: the base is rated from its members (#7).
+    // The fixed 1,000 kg base rating is gone: the base is rated from its members.
     expect("baseRatingKg" in s.limits).toBe(false);
   });
 
-  it("keeps the old exports as views of the defaults", () => {
-    expect(MIN_INTERIOR_MM).toBe(178);
-    expect(DRY_VAN_53FT_MM).toBe(DEFAULT_STANDARDS.limits.trailerMm);
-    expect(LTL_EXCESSIVE_LENGTH_MM).toBe(DEFAULT_STANDARDS.limits.ltlExcessiveLengthMm);
-    expect(CARDBOARD_LIMITS).toBe(DEFAULT_STANDARDS.limits.cardboard);
+  it("derives the smallest interior and the default settings from the defaults", () => {
+    expect(minInteriorMm(DEFAULT_STANDARDS)).toBe(178);
     expect(DEFAULT_SETTINGS).toEqual(settingsFromStandards(DEFAULT_STANDARDS));
   });
 
@@ -173,7 +165,7 @@ describe("computeDesign with custom standards", () => {
     const d = design("PART-001", custom({ construction: { heavySkidOverKg: 50 } }));
     expect(d.construction.skid).toEqual({ wide: 89, tall: 140 });
     expect(check(d, "base-rating")!).toMatchObject({ level: "ok" });
-    expect(metric(d.checks.find((c) => c.id === "base-rating")!.detail)).toContain("4×6 skids");
+    expect(metric(d.checks.find((c) => c.id === "base-rating")!.detail)).toContain("4x6 skids");
   });
 
   it("a plywood rate change changes the cost and nothing else", () => {
@@ -194,7 +186,7 @@ describe("computeDesign with custom standards", () => {
     expect(d.tareKgByAssembly.inside).toBeCloseTo(base.tareKgByAssembly.inside * 2, 6); // all-lumber dunnage at 1 layer
   });
 
-  it("weaker lumber lowers the computed base rating, down to a caution (#7)", () => {
+  it("weaker lumber lowers the computed base rating, down to a caution", () => {
     const base = design("PART-001", DEFAULT_STANDARDS);
     expect(check(base, "base-rating")!.level).toBe("ok");
     const weaker = design("PART-001", custom({ structure: { plywoodBendingMPa: 3 } }));
@@ -288,7 +280,7 @@ describe("standards JSON", () => {
     expect(r.ok && r.standards.rates).toEqual(DEFAULT_STANDARDS.rates);
   });
 
-  it("still loads a file saved before #7: the old base rating is dropped, the structure filled in", () => {
+  it("still loads a file saved with the old fixed base rating: the old base rating is dropped, the structure filled in", () => {
     const r = standardsFromJson(JSON.stringify({ limits: { baseRatingKg: 1200, stackKg: 80 } }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;

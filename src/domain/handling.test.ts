@@ -15,13 +15,9 @@ import {
   type Handling,
 } from "./handling";
 import type { CrateSettings, Vec3 } from "./schema";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
+import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
+import { custom } from "./testFixtures";
 
-const custom = (patch: DeepPartial<ShopStandards>): ShopStandards => {
-  const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
-  if (!r.ok) throw new Error(r.error);
-  return r.standards;
-};
 const design = (partId: string, patch: Partial<CrateSettings> = {}, standards = DEFAULT_STANDARDS) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch }, null, standards).design!;
 const check = (checks: Check[], id: string) => checks.find((c) => c.id === id)!;
@@ -151,7 +147,7 @@ describe("handling checks", () => {
     ...patch,
   });
 
-  it("pass for the default crate, with the pallet jack as info (forklift only)", () => {
+  it("pass for the default crate, with the pallet jack as a pass (use a forklift)", () => {
     const checks = design("PART-001", { quantity: 4 }).checks;
     expect(check(checks, "cog-offset")).toMatchObject({ level: "ok", title: "Centre of gravity near the middle" });
     expect(metric(check(checks, "cog-offset").detail)).toContain("on both centre lines");
@@ -160,8 +156,10 @@ describe("handling checks", () => {
     expect(metric(check(checks, "forklift").detail)).toBe(
       "Forklift: fits from the ends, 89 mm clear under the floor, needs 75 mm. Room between the skids for 100 mm tines at a 250 mm–1,100 mm spread, either side of the centre of gravity.",
     );
-    expect(check(checks, "pallet-jack")).toMatchObject({ level: "info", title: "Forklift only: too narrow for a pallet jack" });
-    expect(metric(check(checks, "pallet-jack").detail)).toContain("the widest opening between the skids is 474 mm");
+    expect(check(checks, "pallet-jack")).toMatchObject({ level: "ok", title: "Pallet jack won't fit: use a forklift" });
+    expect(metric(check(checks, "pallet-jack").detail)).toBe(
+      "The widest gap between the skids is 474 mm. A pallet jack needs 520 mm–690 mm across its forks.",
+    );
   });
 
   it("come in a fixed order after the base rating", () => {

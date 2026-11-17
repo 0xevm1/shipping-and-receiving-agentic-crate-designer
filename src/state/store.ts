@@ -27,7 +27,7 @@ export interface LoadedPart extends DesignPart {
   massAssumed: boolean;
   /** The file was larger than 20 units across, so it was read as millimetres. */
   readAsMm: boolean;
-  // `profile` (from DesignPart, #16) is measured from the model after it renders (`setPartProfile`).
+  // `profile` (from DesignPart) is measured from the model after it renders (`setPartProfile`).
 }
 
 export type Tab = "overview" | "layouts" | "cut" | "rules" | "checks";
@@ -47,20 +47,20 @@ export interface ViewState {
 }
 
 /** A cut-list line or assembly that is lit up. `list` hovers also fade everything else. */
-export interface Hover {
+interface Hover {
   key?: string;
   assembly?: Assembly;
   source: "list" | "3d";
 }
 
 /** A size label drawn in the DOM over the canvas; the scene positions it each frame. */
-export interface SizeLabel {
+interface SizeLabel {
   text: string;
   /** Part dimension (ice blue) rather than crate dimension. */
   inner: boolean;
 }
 
-export interface Tooltip {
+interface Tooltip {
   x: number;
   y: number;
   title: string;
@@ -68,18 +68,18 @@ export interface Tooltip {
 }
 
 /** Screen space the overlays cover, in px; the crate is centred in what is left. */
-export interface Insets {
+interface Insets {
   left: number;
   top: number;
   right: number;
   bottom: number;
 }
 
-/** Which input an edit came from, so the change note can sit by it (#39). */
+/** Which input an edit came from, so the change note can sit by it. */
 export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
 
 /** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
-export interface LastChange {
+interface LastChange {
   /** Increments per change, so the UI can restart its highlight. */
   id: number;
   /** `Date.now()` when the change was made. */
@@ -89,8 +89,8 @@ export interface LastChange {
   changes: DesignChange[];
 }
 
-/** How long the change note stays (it fades over the end). The Overview flash is 1.2 s. */
-export const CHANGE_NOTE_MS = 5000;
+/** How long the change note stays (it fades over the end). Longer than the Overview flash (1.2 s) so it can be read. */
+const CHANGE_NOTE_MS = 5000;
 
 export interface DesignerState {
   part: LoadedPart;
@@ -98,7 +98,7 @@ export interface DesignerState {
   measured: Vec3 | null;
   settings: CrateSettings;
   layoutKey: string | null;
-  /** How the batch ships: one crate, or crate types with counts when it is split (#25). */
+  /** How the batch ships: one crate, or crate types with counts when it is split. */
   plan: ShipmentPlan;
   /** The crate type on screen (index into `plan.crates`); 3D, Layouts, Cut list and Checks follow it. */
   crateIndex: number;
@@ -106,7 +106,7 @@ export interface DesignerState {
   result: DesignResult;
   /** Extra catalog entries from a dropped parts.json. */
   extraParts: Part[];
-  /** The shop's house rules every design is built to (#19). Saved in localStorage. */
+  /** The shop's house rules every design is built to. Saved in localStorage. */
   standards: ShopStandards;
 
   units: Units;
@@ -121,25 +121,27 @@ export interface DesignerState {
   loadMessage: string;
   /** Bumped whenever the camera should re-frame the crate. */
   fit: { nonce: number; instant: boolean };
-  /** The last edit's effect on the design (#39). Units changes and loading a part don't set it. */
+  /** The last edit's effect on the design. Units changes and loading a part don't set it. */
   lastChange: LastChange | null;
-  /** Narrow screens (#42): the island is a right-side drawer; true while it is open. Separate from `panelsHidden`. */
+  /** Narrow screens: the island is a right-side drawer; true while it is open. Separate from `panelsHidden`. */
   drawerOpen: boolean;
-  /** How the recommended layout is chosen (#17): `volume` (the default), `cost` or `density`. Kept across edits. */
+  /** How the recommended layout is chosen: `volume` (the default), `cost` or `density`. Kept across edits. */
   ranking: Ranking;
-  /** Time to design (#17): `Date.now()` when the current part was loaded, or null before the app mounts. */
+  /** Time to design: `Date.now()` when the current part was loaded, or null before the app mounts. */
   designStartedAt: number | null;
   /** Milliseconds from loading the part to its first export (CSV, design JSON or GLB); null until then. */
   designedInMs: number | null;
-  /** True while the last-opened crate (#71) is being reopened after mount; the scene waits for it. */
+  /** True while the last-opened crate is being reopened after mount; the scene waits for it. */
   restoring: boolean;
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
   loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex?: number) => void;
   /**
-   * Reopens the last-opened crate after a reload (#71): like `loadDesign`, plus its tab and
-   * ranking. The time-to-design clock stays stopped (no "Designed in" note) until a new part loads.
+   * Reopens the last-opened crate after a reload: like `loadDesign`, plus its tab and ranking.
+   * Not the same thing as `restoreDesign` in `@/domain/designFile`, which rebuilds a part's
+   * settings from a design file; the loader runs that first and hands its result to this action.
+   * The time-to-design clock stays stopped (no "Designed in" note) until a new part loads.
    */
   restoreDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex: number, ui: { tab: Tab; ranking: Ranking }) => void;
   setRestoring: (restoring: boolean) => void;
@@ -147,7 +149,7 @@ export interface DesignerState {
   setCrateIndex: (index: number) => void;
   setMeasured: (size: Vec3) => void;
   /**
-   * Shapes blocking to the part (#16): stores the profile measured from the model at `modelUrl`
+   * Shapes blocking to the part: stores the profile measured from the model at `modelUrl`
    * and re-designs, keeping the layout pick and the camera. Ignored if another model has been
    * loaded since, or the part already has a profile. Null (analysis failed) changes nothing.
    */
@@ -188,7 +190,7 @@ export interface DesignerState {
   setLoadMessage: (m: string) => void;
   requestFit: (instant?: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
-  /** Re-ranks the layouts by volume, crate cost or freight (#17); resets the layout pick. */
+  /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
   setRanking: (ranking: Ranking) => void;
   /** Starts the time-to-design clock if it isn't running (called once after mount). */
   startDesignClock: (now?: number) => void;
@@ -196,7 +198,7 @@ export interface DesignerState {
   markExported: (now?: number) => void;
 }
 
-export const DEFAULT_PART_ID = "PART-001";
+const DEFAULT_PART_ID = "PART-001";
 
 export function catalogPart(p: Part, url = modelUrl(p)): LoadedPart {
   return {
@@ -230,8 +232,29 @@ function initialPlan(): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
   return { plan, crateIndex: 0, result: plan.crates[0].result };
 }
 
-/** A fresh time-to-design clock, for a newly loaded part or design (#17). */
+/** A fresh time-to-design clock, for a newly loaded part or design. */
 const newDesignClock = (): Pick<DesignerState, "designStartedAt" | "designedInMs"> => ({ designStartedAt: Date.now(), designedInMs: null });
+
+type PlanInput = Pick<DesignerState, "part" | "settings" | "layoutKey" | "standards" | "ranking" | "crateIndex">;
+
+/**
+ * Plans the shipment for these inputs and picks the crate type to show: the current one while
+ * the plan still has it, else the first.
+ */
+function replan(s: PlanInput): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
+  const plan = planShipment(s.part, s.settings, s.layoutKey, s.standards, s.ranking);
+  const crateIndex = s.crateIndex < plan.crates.length ? s.crateIndex : 0;
+  return { plan, crateIndex, result: plan.crates[crateIndex].result };
+}
+
+/** Clears a pin, and a hover, that name a cut-list line the new design no longer has. */
+function dropStaleLines(s: Pick<DesignerState, "pin" | "hover">, result: DesignResult): Partial<Pick<DesignerState, "pin" | "hover">> {
+  const has = (key: string) => result.design?.bom.some((l) => l.key === key);
+  return {
+    ...(s.pin && !has(s.pin) ? { pin: null } : {}),
+    ...(s.hover?.key && !has(s.hover.key) ? { hover: null } : {}),
+  };
+}
 
 export const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -256,11 +279,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
    */
   const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
     const next = { ...get(), ...patch };
-    const plan = planShipment(next.part, next.settings, next.layoutKey, next.standards, next.ranking);
-    // Stay on the crate type on screen while the plan still has it.
-    const crateIndex = next.crateIndex < plan.crates.length ? next.crateIndex : 0;
-    const result = plan.crates[crateIndex].result;
-    const pinGone = next.pin && !result.design?.bom.some((l) => l.key === next.pin);
+    const { plan, crateIndex, result } = replan(next);
     const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
     set({
       ...patch,
@@ -269,7 +288,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       result,
       ...(source ? change(source, get().result, result) : { lastChange: null }),
       hover: null,
-      ...(pinGone ? { pin: null } : {}),
+      ...dropStaleLines({ pin: next.pin, hover: null }, result),
       ...(sizeChanged ? { fit: { nonce: get().fit.nonce + 1, instant: false } } : {}),
     });
   };
@@ -349,9 +368,9 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       const { part: current, settings, layoutKey, standards, ranking, crateIndex } = get();
       if (!profile || current.modelUrl !== modelUrl || current.profile) return;
       const part: LoadedPart = { ...current, profile };
-      const plan = planShipment(part, settings, layoutKey, standards, ranking);
-      const index = crateIndex < plan.crates.length ? crateIndex : 0;
-      set({ part, plan, crateIndex: index, result: plan.crates[index].result });
+      const next = replan({ part, settings, layoutKey, standards, ranking, crateIndex });
+      // Shaped blocks change the cut list, so a pin or hover may name a line that is gone.
+      set({ part, ...next, ...dropStaleLines(get(), next.result) });
     },
     setPartDetails: (input) => {
       const current = get().part;
@@ -371,12 +390,9 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       }
       // Name and material don't move anything: refresh the result (checks may quote the
       // part) without re-framing the camera or dropping the user's layout pick.
-      const { settings, layoutKey, standards, crateIndex } = get();
-      const plan = planShipment(part, settings, layoutKey, standards, get().ranking);
-      const index = crateIndex < plan.crates.length ? crateIndex : 0;
-      const result = plan.crates[index].result;
+      const { plan, crateIndex, result } = replan({ ...get(), part });
       const source: ChangeSource = mass_kg !== undefined ? "mass" : "material" in meta ? "material" : "name";
-      set({ part, plan, crateIndex: index, result, ...change(source, get().result, result) });
+      set({ part, plan, crateIndex, result, ...change(source, get().result, result) });
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
