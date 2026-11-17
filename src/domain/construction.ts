@@ -1,3 +1,4 @@
+import type { ForkEntry } from "./forkEntry";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 import type { LaidSection, StructureMaterials, StructurePlan } from "./structure";
@@ -15,11 +16,15 @@ export interface Construction {
   /** Cleat section for the wall and lid frames. */
   cleat: { thick: number; wide: number };
   skidCount: number;
-  /** Floor joists across the skids: section as laid (`wide` along X, `tall`) and count; null when none. */
+  /** Where forks enter (#112): `sides` runs the skids across the width, `fourWay` stands them on lifting blocks. */
+  forkEntry: ForkEntry;
+  /** Four-way only: the lifting block under each end of every skid (`long` along the skid, `tall` vertical, as wide as the skid); else null. */
+  lift: { long: number; tall: number } | null;
+  /** Floor joists across the skids: section as laid (`wide` along the skids' run, `tall`) and count; null when none. */
   joist: { wide: number; tall: number; count: number } | null;
   /** Lid edge and cross members: section as laid, cross-member count, and whether they are joists on edge. */
   lid: { wide: number; tall: number; count: number; joists: boolean };
-  /** Bottom of the skids to the top of the floor, mm: skids + joists + floor. */
+  /** Ground to the top of the floor, mm: lifting blocks + skids + joists + floor. */
   baseMm: number;
 }
 
@@ -70,6 +75,8 @@ export function constructionFor(materials: ConstructionMaterials, structure: Str
     skid: base.skid,
     cleat: materials.cleat,
     skidCount: base.skidCount,
+    forkEntry: base.forkEntry,
+    lift: base.lift ? { long: base.lift.longMm, tall: base.lift.heightMm } : null,
     joist: base.joist ? { ...base.joist, count: base.joistCount } : null,
     lid: { ...lid.member, count: lid.count, joists: lid.joists },
     baseMm: structure.baseMm,

@@ -63,13 +63,13 @@ describe("PrintableDesign (#26)", () => {
     const d = plan.crates[0].result.design!;
     // The design's own CoG, on the end view from the outside bottom-left corner.
     const { panelMm, cleat, floorMm, skid } = d.construction;
-    expect(crate.label.cogEnd.y).toBeCloseTo(d.handling.cogMm[1] + panelMm + cleat.thick, 6);
-    expect(crate.label.cogEnd.z).toBeCloseTo(d.handling.cogMm[2] + floorMm + skid.tall, 6);
-    expect(crate.label.cogEnd.y).toBeCloseTo(d.layout.external[1] / 2, 6);
+    expect(crate.label.views[0].cog.y).toBeCloseTo(d.handling.cogMm[1] + panelMm + cleat.thick, 6);
+    expect(crate.label.views[0].cog.z).toBeCloseTo(d.handling.cogMm[2] + floorMm + skid.tall, 6);
+    expect(crate.label.views[0].cog.y).toBeCloseTo(d.layout.external[1] / 2, 6);
     Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, handling: { ...d.handling, cogMm: [400, 300, 150] } });
     const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: NOW });
     expect(withExtras.crates[0].spec.freight.find((r) => r.label === "Freight class")?.value).toBe("85");
-    expect(withExtras.crates[0].label.cogEnd.y).toBeCloseTo(300 - Math.min(...d.members.map((m) => m.min[1])), 6);
+    expect(withExtras.crates[0].label.views[0].cog.y).toBeCloseTo(300 - Math.min(...d.members.map((m) => m.min[1])), 6);
   });
 
   it("explains the chosen layout and names the runner-up", () => {
@@ -147,13 +147,20 @@ describe("PrintableDesign (#26)", () => {
   });
 
   it("gives the label fork entry at the skid ends", () => {
-    expect(crate.label.skids.length).toBe(planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!.construction.skidCount);
+    const [end] = crate.label.views;
+    expect(crate.label.views).toHaveLength(1);
+    expect(end.name).toBe("End");
+    expect(end.feet.length).toBe(planShipment(bracket, { ...DEFAULT_SETTINGS, quantity: 4 }).crates[0].result.design!.construction.skidCount);
     expect(crate.label.forkEntry).toBe("Fork entry from the ends");
     // The arrows go in the openings the handling checks measured (#8): between the two skids.
-    const [a, b] = crate.label.skids;
-    expect(crate.label.openings).toHaveLength(1);
-    expect(crate.label.openings[0].y).toBeCloseTo(a.y + a.w, 6);
-    expect(crate.label.openings[0].y + crate.label.openings[0].w).toBeCloseTo(b.y, 6);
+    const [a, b] = end.feet;
+    expect(end.openings).toHaveLength(1);
+    expect(end.openings[0].y).toBeCloseTo(a.y + a.w, 6);
+    expect(end.openings[0].y + end.openings[0].w).toBeCloseTo(b.y, 6);
+    // The skids stand on the ground, and the arrows point to the middle of their height.
+    expect(end.feet.every((f) => f.z === 0)).toBe(true);
+    expect(end.baseMm).toBe(a.h);
+    expect(end.tipMm).toBe(a.h / 2);
   });
 });
 

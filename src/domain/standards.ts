@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FORK_ENTRIES } from "./forkEntry";
 import { hasKind, isPlainObject, readEnvelopeJson, writeEnvelope, type EnvelopeFormat } from "./envelope";
 import { CrateSettingsFields, PLYWOOD_MM } from "./schema";
 
@@ -200,7 +201,13 @@ export const ShopStandardsSchema = z
     }),
     /** Centre of gravity and handling (spec §7.14). */
     handling: z.object({
-      /** Forklift tines, entering between the skids from the ends. */
+      /**
+       * Where forks must be able to enter (#112): the `ends`, the `sides`, or `fourWay`. It sets
+       * which way the skids run (or whether they stand on lifting blocks). Defaulted so standards
+       * saved before it existed (stored rows, saved designs, exported files) read as `ends`.
+       */
+      forkEntry: z.enum(FORK_ENTRIES).default("ends"),
+      /** Forklift tines, entering between the skids (or under them, on lifting blocks). */
       forklift: LiftDeviceSchema,
       /** Pallet-jack forks; the spread range covers narrow and standard jacks. */
       palletJack: LiftDeviceSchema,
@@ -381,6 +388,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
    *   conditions, the usual one-person cap; at or under it no device is needed.
    */
   handling: {
+    forkEntry: "ends",
     forklift: { minClearMm: 75, tineWidthMm: 100, spreadMm: { min: 250, max: 1100 } },
     palletJack: { minClearMm: 85, tineWidthMm: 180, spreadMm: { min: 520, max: 690 } },
     cogOffsetRatio: 0.1,

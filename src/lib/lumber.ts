@@ -61,7 +61,7 @@ export function lumberText(stockMm: readonly number[], kind: MemberKind, mark = 
   const name = nominalLumber(a, b);
   if (name) return name;
   const size = inches(...sorted(a, b), mark);
-  if (kind !== "blocking" && kind !== "bearer" && kind !== "cradle") return size;
+  if (kind !== "blocking" && kind !== "bearer" && kind !== "cradle" && kind !== "lift-block") return size;
   const from = sourceStock(a, b);
   return from ? `${size} from ${from}` : size;
 }

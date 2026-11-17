@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import type { PrintableCrate, PrintableDesign, PrintableLabel, Row } from "@/lib/printable";
+import type { LabelView, PrintableCrate, PrintableDesign, PrintableLabel, Row } from "@/lib/printable";
 import { DrawingSvg } from "./DrawingSvg";
 
 /**
@@ -253,7 +253,11 @@ function ShippingLabel({ label: l }: { label: PrintableLabel }) {
         </div>
       </div>
       <div className="this-side-up">THIS SIDE UP</div>
-      <EndMarks label={l} />
+      <div className="end-marks-row">
+        {l.views.map((v) => (
+          <ViewMarks key={v.name} view={v} caption={l.views.length > 1} />
+        ))}
+      </div>
       <div className="fork-note">{l.forkEntry.toUpperCase()}</div>
     </div>
   );
@@ -271,41 +275,49 @@ function UpArrows() {
   );
 }
 
-/** The crate's end, with the skids, fork-entry arrows between them and the centre of gravity when known. */
-function EndMarks({ label: l }: { label: PrintableLabel }) {
-  const s = 560 / Math.max(l.widthMm, l.heightMm * 1.6);
-  const W = l.widthMm * s;
-  const H = l.heightMm * s;
-  const skidH = l.skidTallMm * s;
+/**
+ * One view of the crate (its end, its side, or both for four-way entry) with what stands on the ground,
+ * the fork-entry arrows pointing up into the openings between, and the centre of gravity.
+ */
+function ViewMarks({ view: v, caption }: { view: LabelView; caption: boolean }) {
+  const s = 560 / Math.max(v.widthMm, v.heightMm * 1.6);
+  const W = v.widthMm * s;
+  const H = v.heightMm * s;
+  const baseH = v.baseMm * s;
   const pad = 30;
-  const cx = l.cogEnd.y * s;
-  const cy = H - l.cogEnd.z * s;
+  const cx = v.cog.y * s;
+  const cy = H - v.cog.z * s;
   // The openings the handling checks measured, so the arrows match them.
-  const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
+  const gaps = v.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   return (
     <svg
       className="end-marks"
       viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad + 40}`}
       width="100%"
       role="img"
-      aria-label="Crate end with fork entry marks"
+      aria-label={`Crate ${v.name.toLowerCase()} with fork entry marks`}
     >
-      <rect x="0" y="0" width={W} height={H - skidH} fill="#fff" stroke="#000" strokeWidth="2" />
-      {l.skids.map((k, i) => (
-        <rect key={i} x={k.y * s} y={H - skidH} width={k.w * s} height={skidH} fill="#000" />
+      <rect x="0" y="0" width={W} height={H - baseH} fill="#fff" stroke="#000" strokeWidth="2" />
+      {v.feet.map((f, i) => (
+        <rect key={i} x={f.y * s} y={H - (f.z + f.h) * s} width={f.w * s} height={f.h * s} fill="#000" />
       ))}
       {gaps.map((g, i) => {
         const cx = (g.from + g.to) / 2;
-        // An arrow pointing up into the opening between two skids.
+        // An arrow pointing up into the opening between two feet.
         return (
           <g key={i}>
-            <path d={`M${cx} ${H - skidH / 2} L${cx - 10} ${H + 6} H${cx - 4} V${H + 26} H${cx + 4} V${H + 6} H${cx + 10} Z`} fill="#000" />
+            <path d={`M${cx} ${H - v.tipMm * s} L${cx - 10} ${H + 6} H${cx - 4} V${H + 26} H${cx + 4} V${H + 6} H${cx + 10} Z`} fill="#000" />
             <text x={cx} y={H + 46} textAnchor="middle" fontSize="16" fontWeight="700" fontFamily="var(--sans)">
               FORKS
             </text>
           </g>
         );
       })}
+      {caption && (
+        <text x={W / 2} y={-8} textAnchor="middle" fontSize="16" fontWeight="700" fontFamily="var(--sans)">
+          {v.name.toUpperCase()} VIEW
+        </text>
+      )}
       <g aria-label="Centre of gravity">
         <circle cx={cx} cy={cy} r="14" fill="#fff" stroke="#000" strokeWidth="2" />
         <path d={`M${cx} ${cy - 14} A14 14 0 0 1 ${cx + 14} ${cy} H${cx} Z`} fill="#000" />

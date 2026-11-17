@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, sameStandards, standardsFromJson, standardsToJson, type ShopStandards } from "@/domain/standards";
 import { downloadText } from "@/lib/download";
+import { FORK_ENTRIES, type ForkEntry } from "@/domain/forkEntry";
 import { nominalLumber } from "@/domain/lumber";
 import { plywoodText } from "@/lib/lumber";
 import { editUnit, groupDigits, type Units } from "@/lib/units";
@@ -70,6 +71,7 @@ export function ShopStandards() {
         STANDARD_GROUPS.map((g) => (
           <section key={g.title} aria-label={g.title}>
             <h3 className={styles.group}>{g.title}</h3>
+            {g.title === "Handling" && <ForkEntryInput standards={standards} onChange={setStandards} />}
             {g.fields.map((f) => (
               <StandardInput key={`${f.path.join(".")}-${units}`} field={f} standards={standards} units={units} onChange={setStandards} />
             ))}
@@ -104,6 +106,55 @@ export function ShopStandards() {
         </span>
       </div>
     </details>
+  );
+}
+
+/** The names the fork-entry choice goes by in the Rules tab, and what each builds. */
+const FORK_ENTRY_CHOICES: Record<ForkEntry, { name: string; hint: string }> = {
+  ends: { name: "Ends", hint: "Skids run along the length; forks enter from the two ends." },
+  sides: { name: "Sides", hint: "Skids run across the width; forks enter from the two sides." },
+  fourWay: { name: "All four sides", hint: "Skids on lifting blocks, so forks enter from the ends and the sides." },
+};
+
+/** Where forks must be able to enter (spec: `handling.forkEntry`): the one choice among the standards that is not a number. */
+function ForkEntryInput({ standards, onChange }: { standards: ShopStandards; onChange: (patch: ReturnType<typeof standardPatch>) => string | null }) {
+  const [error, setError] = useState<string | null>(null);
+  const current = standards.handling.forkEntry;
+  const changed = current !== DEFAULT_STANDARDS.handling.forkEntry;
+  const id = "std-handling-forkEntry";
+  return (
+    <div className={changed ? `${rule.rule} ${rule.compact} ${styles.changed}` : `${rule.rule} ${rule.compact}`}>
+      <b>
+        <label htmlFor={id}>Fork entry</label>
+      </b>
+      <span className={styles.field}>
+        <select
+          id={id}
+          value={current}
+          onChange={(e) => {
+            const forkEntry = e.target.value as ForkEntry;
+            const patch: ReturnType<typeof standardPatch> = { handling: { forkEntry } };
+            const check = parseStandards(mergeStandards(standards, patch));
+            setError(check.ok ? onChange(patch) : (check.message ?? check.error));
+          }}
+        >
+          {FORK_ENTRIES.map((v) => (
+            <option key={v} value={v}>
+              {FORK_ENTRY_CHOICES[v].name}
+            </option>
+          ))}
+        </select>
+      </span>
+      {error ? (
+        <small className={rule.error} role="alert">
+          {error}
+        </small>
+      ) : (
+        <small>
+          {[FORK_ENTRY_CHOICES[current].hint, changed && `Default ${FORK_ENTRY_CHOICES[DEFAULT_STANDARDS.handling.forkEntry].name}.`].filter(Boolean).join(" ")}
+        </small>
+      )}
+    </div>
   );
 }
 

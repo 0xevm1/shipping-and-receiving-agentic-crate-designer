@@ -1,4 +1,5 @@
 import type { Construction } from "./construction";
+import { skidsRunAcross } from "./forkEntry";
 import type { Layout } from "./packing";
 import type { AddMember, Tag } from "./members";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -19,7 +20,7 @@ function spread(start: number, span: number, width: number, count: number): numb
 
 /** Adds the base, walls and lid of a crate with this interior and construction. */
 export function addShell(interior: Layout["interior"], c: Construction, add: AddMember, standards: ShopStandards = DEFAULT_STANDARDS): void {
-  const { panelMm: t, floorMm, cleat, skid, skidCount, joist, baseMm } = c;
+  const { panelMm: t, floorMm, cleat, skid, skidCount, joist, baseMm, lift } = c;
   const { thick: ct, wide: cw } = cleat;
   const [L, W, H] = interior;
   const extL = L + 2 * (t + ct);
@@ -31,12 +32,31 @@ export function addShell(interior: Layout["interior"], c: Construction, add: Add
   // Base: floor sheet over the full footprint, floor joists across the skids, skids underneath.
   const baseTag = (label: string): Tag => ({ assembly: "base", face: "base", label });
   add("floor", "plywood", baseTag("Floor"), [x0, y0, -floorMm], [extL, extW, floorMm]);
+  // Side entry (#112) turns the base a quarter turn: skids across the width, joists along the length.
+  const across = skidsRunAcross(c.forkEntry);
   if (joist) {
-    spread(x0, extL, joist.wide, joist.count).forEach((x) =>
-      add("joist", "lumber", baseTag("Floor joist"), [x, y0, -floorMm - joist.tall], [joist.wide, extW, joist.tall]),
-    );
+    if (across) {
+      spread(y0, extW, joist.wide, joist.count).forEach((y) =>
+        add("joist", "lumber", baseTag("Floor joist"), [x0, y, -floorMm - joist.tall], [extL, joist.wide, joist.tall]),
+      );
+    } else {
+      spread(x0, extL, joist.wide, joist.count).forEach((x) =>
+        add("joist", "lumber", baseTag("Floor joist"), [x, y0, -floorMm - joist.tall], [joist.wide, extW, joist.tall]),
+      );
+    }
   }
-  spread(y0, extW, skid.wide, skidCount).forEach((y) => add("skid", "lumber", baseTag("Skid"), [x0, y, -baseMm], [extL, skid.wide, skid.tall]));
+  // Four-way entry lifts the skids on a block under each end, so forks also go under them from the sides.
+  const liftMm = lift?.tall ?? 0;
+  if (across) {
+    spread(x0, extL, skid.wide, skidCount).forEach((x) => add("skid", "lumber", baseTag("Skid"), [x, y0, -baseMm], [skid.wide, extW, skid.tall]));
+  } else {
+    spread(y0, extW, skid.wide, skidCount).forEach((y) => {
+      add("skid", "lumber", baseTag("Skid"), [x0, y, -baseMm + liftMm], [extL, skid.wide, skid.tall]);
+      if (lift) {
+        for (const x of [x0, x0 + extL - lift.long]) add("lift-block", "lumber", baseTag("Lifting block"), [x, y, -baseMm], [lift.long, skid.wide, lift.tall]);
+      }
+    });
+  }
 
   // Long side walls (−Y and +Y). Panels run the full outside length of the end walls.
   for (const side of [-1, 1] as const) {

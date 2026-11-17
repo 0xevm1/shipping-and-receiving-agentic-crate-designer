@@ -286,9 +286,16 @@ body {
   justify-content: space-between;
   align-items: flex-start;
 }
-/* The end view takes what the page has left, scaled to fit, so the label never spills onto a second page. */
+/* The views take what the page has left, scaled to fit, so the label never spills onto a second page. Four-way entry puts the end and the side next to each other. */
+.print-doc .label .end-marks-row {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
 .print-doc .label .end-marks {
   flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   width: 100%;
 }

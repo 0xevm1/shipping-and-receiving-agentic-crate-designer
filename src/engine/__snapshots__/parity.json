@@ -2,7 +2,7 @@
   {
     "part": "PART-001",
     "quantity": 1,
-    "inputHash": "eaba46f52e5c8110cb0a4ccff752dd7dc68f47df43e89fb740e1da60b7a5f79d",
+    "inputHash": "5898cad8e2da5faf1eb121adab865b59ed70893755da1485a6188525f936c9a1",
     "summary": {
       "quantity": 1,
       "split": false,
@@ -33,7 +33,7 @@
       },
       "problem": null
     },
-    "planHash": "6c2688c6a60f2624f1820ea8604e1df0dd7a552e1e9cdf95ed2a26ceb0762919",
+    "planHash": "76c2316390266837a26b1c0eaac32e05e9baaf6d5a8a522be5b406f3d3615f46",
     "csv": {
       "imperial": "# Crate for 1 x PART-001 Machined steel bracket\n# Part 4140 steel, 47.4 lb each\n# External 20.6 x 15.0 x 19.6 in, gross 93.2 lb\n# Layout 1 x 1 x 1, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,20 9/16 in x 15 1/16 in,1\nBase: Skid,lumber,4x4,20 9/16 in,2\nSide walls: Side panel,plywood,1/2 in,19 1/16 in x 14 1/8 in,2\nSide walls: Side rail,lumber,1x4,19 1/16 in,4\nSide walls: Side upright,lumber,1x4,7 1/16 in,4\nEnd walls: End panel,plywood,1/2 in,14 1/8 in x 12 5/8 in,2\nEnd walls: End rail,lumber,1x4,15 1/16 in,4\nEnd walls: End upright,lumber,1x4,7 1/16 in,4\nLid: Lid panel,plywood,1/2 in,19 1/16 in x 13 9/16 in,1\nLid: Lid edge cleat,lumber,1x4,19 1/16 in,2\nLid: Lid cross cleat,lumber,1x4,6 9/16 in,2\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,2\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,12 1/8 in,4\nWood screws (approx),fastener,,,118\n",
       "metric": "# Crate for 1 x PART-001 Machined steel bracket\n# Part 4140 steel, 21.5 kg each\n# External 522 x 382 x 497 mm, gross 42.3 kg\n# Layout 1 x 1 x 1, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,522 x 382,1\nBase: Skid,lumber,89 × 89,522,2\nSide walls: Side panel,plywood,12 mm,484 x 358,2\nSide walls: Side rail,lumber,19 × 89,484,4\nSide walls: Side upright,lumber,19 × 89,180,4\nEnd walls: End panel,plywood,12 mm,358 x 320,2\nEnd walls: End rail,lumber,19 × 89,382,4\nEnd walls: End upright,lumber,19 × 89,180,4\nLid: Lid panel,plywood,12 mm,484 x 344,1\nLid: Lid edge cleat,lumber,19 × 89,484,2\nLid: Lid cross cleat,lumber,19 × 89,166,2\nInside the crate: Bearer,lumber,50 × 89,360,2\nInside the crate: Blocking post,lumber,50 × 89,308,4\nWood screws (approx),fastener,,,118\n"
@@ -42,7 +42,7 @@
   {
     "part": "PART-001",
     "quantity": 4,
-    "inputHash": "26711a6e67cec48ab5b90704e3c24871a9ca9531d55743526fda9205d3a09cfd",
+    "inputHash": "e7b1090fa039165b46c97f7c28ce8ae976d71fabd348c887f1bc885e597cb36a",
     "summary": {
       "quantity": 4,
       "split": false,
@@ -73,7 +73,7 @@
       },
       "problem": null
     },
-    "planHash": "45b5dc0f56052b9e091375026cc45299cd127aa9570104643f2444661f188feb",
+    "planHash": "6e688a07ac86c5554cae58c08cb0561d9cc84a17577652bb2758f9ac233b667b",
     "csv": {
       "imperial": "# Crate for 4 x PART-001 Machined steel bracket\n# Part 4140 steel, 47.4 lb each\n# External 36.7 x 25.7 x 19.6 in, gross 298 lb\n# Layout 2 x 2 x 1, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,36 11/16 in x 25 11/16 in,1\nBase: Skid,lumber,4x4,36 11/16 in,2\nSide walls: Side panel,plywood,1/2 in,35 3/16 in x 14 1/8 in,2\nSide walls: Side rail,lumber,1x4,35 3/16 in,4\nSide walls: Side upright,lumber,1x4,7 1/16 in,6\nEnd walls: End panel,plywood,1/2 in,23 1/4 in x 14 1/8 in,2\nEnd walls: End rail,lumber,1x4,25 11/16 in,4\nEnd walls: End upright,lumber,1x4,7 1/16 in,6\nLid: Lid panel,plywood,1/2 in,35 3/16 in x 24 3/16 in,1\nLid: Lid edge cleat,lumber,1x4,35 3/16 in,2\nLid: Lid cross cleat,lumber,1x4,17 3/16 in,3\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,12 1/8 in,12\nWood screws (approx),fastener,,,202\n",
       "metric": "# Crate for 4 x PART-001 Machined steel bracket\n# Part 4140 steel, 21.5 kg each\n# External 932 x 652 x 497 mm, gross 135 kg\n# Layout 2 x 2 x 1, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,932 x 652,1\nBase: Skid,lumber,89 × 89,932,2\nSide walls: Side panel,plywood,12 mm,894 x 358,2\nSide walls: Side rail,lumber,19 × 89,894,4\nSide walls: Side upright,lumber,19 × 89,180,6\nEnd walls: End panel,plywood,12 mm,590 x 358,2\nEnd walls: End rail,lumber,19 × 89,652,4\nEnd walls: End upright,lumber,19 × 89,180,6\nLid: Lid panel,plywood,12 mm,894 x 614,1\nLid: Lid edge cleat,lumber,19 × 89,894,2\nLid: Lid cross cleat,lumber,19 × 89,436,3\nInside the crate: Bearer,lumber,50 × 89,360,8\nInside the crate: Blocking post,lumber,50 × 89,308,12\nWood screws (approx),fastener,,,202\n"
@@ -82,7 +82,7 @@
   {
     "part": "PART-001",
     "quantity": 8,
-    "inputHash": "fd809d92005cced41588ad2d58eb07a32a8962942545afe772c911e1ba97aad8",
+    "inputHash": "56b8c96d92f2db2bc2aafd95ad4c18bc4f8fefef19c1eb5af481a1f28f6e45eb",
     "summary": {
       "quantity": 8,
       "split": false,
@@ -113,7 +113,7 @@
       },
       "problem": null
     },
-    "planHash": "0fb984e6ca3024a2af0018cb58f2b91f9bbeb13e9885bfaa73675df5ba3fd50a",
+    "planHash": "c1d949c6515dfa762476111edf2e26359e29ce0bb2902174f8a57bb4a3235b8e",
     "csv": {
       "imperial": "# Crate for 8 x PART-001 Machined steel bracket\n# Part 4140 steel, 47.4 lb each\n# External 36.9 x 25.9 x 32.4 in, gross 548 lb\n# Layout 2 x 2 x 2, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,36 15/16 in x 25 7/8 in,1\nBase: Skid,lumber,4x4,36 15/16 in,2\nSide walls: Side panel,plywood,5/8 in,35 7/16 in x 26 13/16 in,2\nSide walls: Side rail,lumber,1x4,35 7/16 in,4\nSide walls: Side upright,lumber,1x4,19 13/16 in,6\nEnd walls: End panel,plywood,5/8 in,26 13/16 in x 23 1/4 in,2\nEnd walls: End rail,lumber,1x4,25 7/8 in,4\nEnd walls: End upright,lumber,1x4,19 13/16 in,6\nLid: Lid panel,plywood,5/8 in,35 7/16 in x 24 7/16 in,1\nLid: Lid edge cleat,lumber,1x4,35 7/16 in,2\nLid: Lid cross cleat,lumber,1x4,17 3/8 in,3\nInside the crate: Layer separator,plywood,5/8 in,34 1/4 in x 23 1/4 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,14 1/8 in,12\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 3/16 in,12\nWood screws (approx),fastener,,,258\n",
       "metric": "# Crate for 8 x PART-001 Machined steel bracket\n# Part 4140 steel, 21.5 kg each\n# External 938 x 658 x 823 mm, gross 249 kg\n# Layout 2 x 2 x 2, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,938 x 658,1\nBase: Skid,lumber,89 × 89,938,2\nSide walls: Side panel,plywood,15 mm,900 x 681,2\nSide walls: Side rail,lumber,19 × 89,900,4\nSide walls: Side upright,lumber,19 × 89,503,6\nEnd walls: End panel,plywood,15 mm,681 x 590,2\nEnd walls: End rail,lumber,19 × 89,658,4\nEnd walls: End upright,lumber,19 × 89,503,6\nLid: Lid panel,plywood,15 mm,900 x 620,1\nLid: Lid edge cleat,lumber,19 × 89,900,2\nLid: Lid cross cleat,lumber,19 × 89,442,3\nInside the crate: Layer separator,plywood,15 mm,870 x 590,1\nInside the crate: Bearer,lumber,50 × 89,360,8\nInside the crate: Blocking post,lumber,50 × 89,358,12\nInside the crate: Blocking post,lumber,50 × 89,258,12\nWood screws (approx),fastener,,,258\n"
@@ -122,7 +122,7 @@
   {
     "part": "PART-002",
     "quantity": 1,
-    "inputHash": "eb9ab749d02b81e3cd78cb07a7c554805ea41b09c30f84910d88b10ad133fabd",
+    "inputHash": "45683bea8f6d92ea3d2988afcfae6258713d024b59e2c9827102e8f7e7ac7a85",
     "summary": {
       "quantity": 1,
       "split": false,
@@ -153,7 +153,7 @@
       },
       "problem": null
     },
-    "planHash": "b7e5dc240986e8c084b1f45a6f588301e46db31b4b3c56b99055e37bf5456a7c",
+    "planHash": "930f17e734ad8a4f17f53c32c5badd87c2d127c0d9785aeeea3196557a534184",
     "csv": {
       "imperial": "# Crate for 1 x PART-002 Long steel shaft\n# Part 4140 steel, 59.52 lb each\n# External 66.6 x 13.1 x 16.2 in, gross 156 lb\n# Layout 1 x 1 x 1, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,66 5/8 in x 13 1/8 in,1\nBase: Skid,lumber,4x4,66 5/8 in,2\nSide walls: Side panel,plywood,1/2 in,65 1/8 in x 10 11/16 in,2\nSide walls: Side rail,lumber,1x4,65 1/8 in,4\nSide walls: Side upright,lumber,1x4,3 11/16 in,8\nEnd walls: End panel,plywood,1/2 in,10 11/16 in x 10 11/16 in,2\nEnd walls: End rail,lumber,1x4,13 1/8 in,4\nEnd walls: End upright,lumber,1x4,3 11/16 in,4\nLid: Lid panel,plywood,1/2 in,65 1/8 in x 11 5/8 in,1\nLid: Lid edge cleat,lumber,1x4,65 1/8 in,2\nLid: Lid cross cleat,lumber,1x4,4 5/8 in,4\nInside the crate: Cradle,lumber,1 1/2 in x 3 11/16 in from 2x6,10 11/16 in,4\nInside the crate: End stop,lumber,1 15/16 in x 3 1/2 in from 4x4,8 3/4 in,2\nWood screws (approx),fastener,,,208\n",
       "metric": "# Crate for 1 x PART-002 Long steel shaft\n# Part 4140 steel, 27 kg each\n# External 1692 x 334 x 411 mm, gross 70.6 kg\n# Layout 1 x 1 x 1, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1692 x 334,1\nBase: Skid,lumber,89 × 89,1692,2\nSide walls: Side panel,plywood,12 mm,1654 x 272,2\nSide walls: Side rail,lumber,19 × 89,1654,4\nSide walls: Side upright,lumber,19 × 89,94,8\nEnd walls: End panel,plywood,12 mm,272 x 272,2\nEnd walls: End rail,lumber,19 × 89,334,4\nEnd walls: End upright,lumber,19 × 89,94,4\nLid: Lid panel,plywood,12 mm,1654 x 296,1\nLid: Lid edge cleat,lumber,19 × 89,1654,2\nLid: Lid cross cleat,lumber,19 × 89,118,4\nInside the crate: Cradle,lumber,38 × 93,272,4\nInside the crate: End stop,lumber,50 × 89,222,2\nWood screws (approx),fastener,,,208\n"
@@ -162,7 +162,7 @@
   {
     "part": "PART-002",
     "quantity": 2,
-    "inputHash": "312efebb1847ac8199700c5050ce1531a42587dfaea5aa124769f19b987773e2",
+    "inputHash": "42e9d90bb0ee7d3e96e5795bf8f6b3d98dfccc589a5e7b2ffe396eb64ad91b80",
     "summary": {
       "quantity": 2,
       "split": false,
@@ -193,7 +193,7 @@
       },
       "problem": null
     },
-    "planHash": "a44c439418418d9ee37a8b6f44ffbad696eb7c9ca9530d57e573a6f5b1ca9927",
+    "planHash": "df5444487019b2eb940cf5a738629cea3f7fd955c223e856ad0fcd1748df8dcf",
     "csv": {
       "imperial": "# Crate for 2 x PART-002 Long steel shaft\n# Part 4140 steel, 59.52 lb each\n# External 66.6 x 21.9 x 16.2 in, gross 241 lb\n# Layout 1 x 2 x 1, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,66 5/8 in x 21 7/8 in,1\nBase: Skid,lumber,4x4,66 5/8 in,2\nSide walls: Side panel,plywood,1/2 in,65 1/8 in x 10 11/16 in,2\nSide walls: Side rail,lumber,1x4,65 1/8 in,4\nSide walls: Side upright,lumber,1x4,3 11/16 in,8\nEnd walls: End panel,plywood,1/2 in,19 7/16 in x 10 11/16 in,2\nEnd walls: End rail,lumber,1x4,21 7/8 in,4\nEnd walls: End upright,lumber,1x4,3 11/16 in,4\nLid: Lid panel,plywood,1/2 in,65 1/8 in x 20 3/8 in,1\nLid: Lid edge cleat,lumber,1x4,65 1/8 in,2\nLid: Lid cross cleat,lumber,1x4,13 3/8 in,4\nInside the crate: Cradle,lumber,1 1/2 in x 3 11/16 in from 2x6,19 7/16 in,4\nInside the crate: End stop,lumber,1 15/16 in x 3 1/2 in from 4x4,8 3/4 in,4\nWood screws (approx),fastener,,,228\n",
       "metric": "# Crate for 2 x PART-002 Long steel shaft\n# Part 4140 steel, 27 kg each\n# External 1692 x 556 x 411 mm, gross 109 kg\n# Layout 1 x 2 x 1, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1692 x 556,1\nBase: Skid,lumber,89 × 89,1692,2\nSide walls: Side panel,plywood,12 mm,1654 x 272,2\nSide walls: Side rail,lumber,19 × 89,1654,4\nSide walls: Side upright,lumber,19 × 89,94,8\nEnd walls: End panel,plywood,12 mm,494 x 272,2\nEnd walls: End rail,lumber,19 × 89,556,4\nEnd walls: End upright,lumber,19 × 89,94,4\nLid: Lid panel,plywood,12 mm,1654 x 518,1\nLid: Lid edge cleat,lumber,19 × 89,1654,2\nLid: Lid cross cleat,lumber,19 × 89,340,4\nInside the crate: Cradle,lumber,38 × 93,494,4\nInside the crate: End stop,lumber,50 × 89,222,4\nWood screws (approx),fastener,,,228\n"
@@ -202,7 +202,7 @@
   {
     "part": "PART-002",
     "quantity": 4,
-    "inputHash": "12c8ae523e7fe138806dc6ea1f3ef64e231e41c7684f7df397c16ba5ac6d698b",
+    "inputHash": "c158d9f5151985a0046c51aa3b174441d96fea59eb4989fda42cba80cfaba3cb",
     "summary": {
       "quantity": 4,
       "split": false,
@@ -233,7 +233,7 @@
       },
       "problem": null
     },
-    "planHash": "6b6af60588e832149567dc82a7898e6c0aa0007f40e8687d30b57b32eb563d30",
+    "planHash": "3753ac836d047c0d02c6e67848eb5c216f0fc6b23b7d36afedde6a2a5e5b6499",
     "csv": {
       "imperial": "# Crate for 4 x PART-002 Long steel shaft\n# Part 4140 steel, 59.52 lb each\n# External 66.6 x 21.9 x 25.4 in, gross 397 lb\n# Layout 1 x 2 x 2, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,66 5/8 in x 21 7/8 in,1\nBase: Skid,lumber,4x4,66 5/8 in,2\nSide walls: Side panel,plywood,1/2 in,65 1/8 in x 19 15/16 in,2\nSide walls: Side rail,lumber,1x4,65 1/8 in,4\nSide walls: Side upright,lumber,1x4,12 15/16 in,8\nEnd walls: End panel,plywood,1/2 in,19 15/16 in x 19 7/16 in,2\nEnd walls: End rail,lumber,1x4,21 7/8 in,4\nEnd walls: End upright,lumber,1x4,12 15/16 in,4\nLid: Lid panel,plywood,1/2 in,65 1/8 in x 20 3/8 in,1\nLid: Lid edge cleat,lumber,1x4,65 1/8 in,2\nLid: Lid cross cleat,lumber,1x4,13 3/8 in,4\nInside the crate: Cradle,lumber,1 1/2 in x 3 11/16 in from 2x6,19 7/16 in,4\nInside the crate: Stacking cradle,lumber,1 1/2 in x 5 13/16 in from 2x8,19 7/16 in,4\nInside the crate: End stop,lumber,1 15/16 in x 3 1/2 in from 4x4,17 15/16 in,4\nWood screws (approx),fastener,,,272\n",
       "metric": "# Crate for 4 x PART-002 Long steel shaft\n# Part 4140 steel, 27 kg each\n# External 1692 x 556 x 645 mm, gross 180 kg\n# Layout 1 x 2 x 2, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1692 x 556,1\nBase: Skid,lumber,89 × 89,1692,2\nSide walls: Side panel,plywood,12 mm,1654 x 506,2\nSide walls: Side rail,lumber,19 × 89,1654,4\nSide walls: Side upright,lumber,19 × 89,328,8\nEnd walls: End panel,plywood,12 mm,506 x 494,2\nEnd walls: End rail,lumber,19 × 89,556,4\nEnd walls: End upright,lumber,19 × 89,328,4\nLid: Lid panel,plywood,12 mm,1654 x 518,1\nLid: Lid edge cleat,lumber,19 × 89,1654,2\nLid: Lid cross cleat,lumber,19 × 89,340,4\nInside the crate: Cradle,lumber,38 × 93,494,4\nInside the crate: Stacking cradle,lumber,38 × 148,494,4\nInside the crate: End stop,lumber,50 × 89,456,4\nWood screws (approx),fastener,,,272\n"
@@ -242,7 +242,7 @@
   {
     "part": "PART-003",
     "quantity": 1,
-    "inputHash": "7ce5c24f2628c5f95f729bdea6414ec8376e3f6abe55b2d85197b0c27a346070",
+    "inputHash": "0e124a404533661b838d5ee65d2d51b4d6efd4f67d3b97cd1b6d875120958235",
     "summary": {
       "quantity": 1,
       "split": false,
@@ -273,7 +273,7 @@
       },
       "problem": null
     },
-    "planHash": "225c260f8339057aa0ffe1de6ee1b7af1af6e1c0d8d08e4893a0e08b6322a389",
+    "planHash": "591e58da3f346d7c6559e1bedb790828414790c4c00ec5c39c1cb31650fac805",
     "csv": {
       "imperial": "# Crate for 1 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 23.9 x 23.5 x 19.4 in, gross 86.9 lb\n# Layout 1 x 1 x 1, Turned 90°\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,23 7/8 in x 23 1/2 in,1\nBase: Skid,lumber,4x4,23 7/8 in,2\nSide walls: Side panel,plywood,1/2 in,22 3/8 in x 13 15/16 in,2\nSide walls: Side rail,lumber,1x4,22 3/8 in,4\nSide walls: Side upright,lumber,1x4,6 15/16 in,4\nEnd walls: End panel,plywood,1/2 in,21 1/16 in x 13 15/16 in,2\nEnd walls: End rail,lumber,1x4,23 1/2 in,4\nEnd walls: End upright,lumber,1x4,6 15/16 in,4\nLid: Lid panel,plywood,1/2 in,22 3/8 in x 22 in,1\nLid: Lid edge cleat,lumber,1x4,22 3/8 in,2\nLid: Lid cross cleat,lumber,1x4,15 in,2\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,2\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,11 15/16 in,4\nWood screws (approx),fastener,,,132\n",
       "metric": "# Crate for 1 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 607 x 597 x 493 mm, gross 39.4 kg\n# Layout 1 x 1 x 1, Turned 90°\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,607 x 597,1\nBase: Skid,lumber,89 × 89,607,2\nSide walls: Side panel,plywood,12 mm,569 x 354,2\nSide walls: Side rail,lumber,19 × 89,569,4\nSide walls: Side upright,lumber,19 × 89,176,4\nEnd walls: End panel,plywood,12 mm,535 x 354,2\nEnd walls: End rail,lumber,19 × 89,597,4\nEnd walls: End upright,lumber,19 × 89,176,4\nLid: Lid panel,plywood,12 mm,569 x 559,1\nLid: Lid edge cleat,lumber,19 × 89,569,2\nLid: Lid cross cleat,lumber,19 × 89,381,2\nInside the crate: Bearer,lumber,50 × 89,445,2\nInside the crate: Blocking post,lumber,50 × 89,304,4\nWood screws (approx),fastener,,,132\n"
@@ -282,7 +282,7 @@
   {
     "part": "PART-003",
     "quantity": 4,
-    "inputHash": "a572a059f8fee437a1082ad8a491435f06dc9aa02d4e1d4f55383a6d2b4034dc",
+    "inputHash": "8dc2f56bba580aae334715d93f23b6339518aeee89c37eda563defb0eea2a6d7",
     "summary": {
       "quantity": 4,
       "split": false,
@@ -313,7 +313,7 @@
       },
       "problem": null
     },
-    "planHash": "98ee84a5b3694fe698aab28fc6dc063d6db3c2dd068972888372b27d62bf2298",
+    "planHash": "8a8ae6d28a245958825be33bebf403476c0be58cba78ca418c5833018c9ccb2c",
     "csv": {
       "imperial": "# Crate for 4 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 42.6 x 23.9 x 31.9 in, gross 247 lb\n# Layout 2 x 1 x 2, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,42 5/8 in x 23 7/8 in,1\nBase: Skid,lumber,4x4,42 5/8 in,2\nSide walls: Side panel,plywood,1/2 in,41 1/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 1/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,26 3/8 in x 21 7/16 in,2\nEnd walls: End rail,lumber,1x4,23 7/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 1/8 in x 22 3/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 1/8 in,2\nLid: Lid cross cleat,lumber,1x4,15 3/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 3/16 in x 21 7/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/8 in,4\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,7\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,7\nWood screws (approx),fastener,,,238\n",
       "metric": "# Crate for 4 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1082 x 607 x 809 mm, gross 112 kg\n# Layout 2 x 1 x 2, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1082 x 607,1\nBase: Skid,lumber,89 × 89,1082,2\nSide walls: Side panel,plywood,12 mm,1044 x 670,2\nSide walls: Side rail,lumber,19 × 89,1044,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,670 x 545,2\nEnd walls: End rail,lumber,19 × 89,607,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1044 x 569,1\nLid: Lid edge cleat,lumber,19 × 89,1044,2\nLid: Lid cross cleat,lumber,19 × 89,391,3\nInside the crate: Layer separator,plywood,12 mm,1020 x 545,1\nInside the crate: Bearer,lumber,50 × 89,435,4\nInside the crate: Blocking post,lumber,50 × 89,354,7\nInside the crate: Blocking post,lumber,50 × 89,254,7\nWood screws (approx),fastener,,,238\n"
@@ -322,7 +322,7 @@
   {
     "part": "PART-003",
     "quantity": 8,
-    "inputHash": "f26bae7fd71005314f480de09dc288ba516a56ed42cf4acd28972ad8eb589105",
+    "inputHash": "5b6d893a92a0c8a980ccebdb0ef5ff1b8d5cbdd8b91766d0705c7275622c7945",
     "summary": {
       "quantity": 8,
       "split": false,
@@ -353,7 +353,7 @@
       },
       "problem": null
     },
-    "planHash": "2823e75a0b6beb3d70ada3d11600d5518b3bfd22461571a218dadadd470d879d",
+    "planHash": "8df92e05c0a60fdbdceba6570fa95adff0079144f3ab0a00f0b757a9799a6879",
     "csv": {
       "imperial": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 43.4 x 42.6 x 31.9 in, gross 430 lb\n# Layout 2 x 2 x 2, Turned 90°\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1\nBase: Skid,lumber,4x4,43 3/8 in,3\nSide walls: Side panel,plywood,1/2 in,41 7/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 7/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,40 3/16 in x 26 3/8 in,2\nEnd walls: End rail,lumber,1x4,42 5/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 7/8 in x 41 1/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 7/8 in,2\nLid: Lid cross cleat,lumber,1x4,34 1/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 15/16 in x 40 3/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,12\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,12\nWood screws (approx),fastener,,,308\n",
       "metric": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1102 x 1082 x 809 mm, gross 195 kg\n# Layout 2 x 2 x 2, Turned 90°\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1102 x 1082,1\nBase: Skid,lumber,89 × 89,1102,3\nSide walls: Side panel,plywood,12 mm,1064 x 670,2\nSide walls: Side rail,lumber,19 × 89,1064,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,1020 x 670,2\nEnd walls: End rail,lumber,19 × 89,1082,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1064 x 1044,1\nLid: Lid edge cleat,lumber,19 × 89,1064,2\nLid: Lid cross cleat,lumber,19 × 89,866,3\nInside the crate: Layer separator,plywood,12 mm,1040 x 1020,1\nInside the crate: Bearer,lumber,50 × 89,445,8\nInside the crate: Blocking post,lumber,50 × 89,354,12\nInside the crate: Blocking post,lumber,50 × 89,254,12\nWood screws (approx),fastener,,,308\n"
@@ -367,7 +367,7 @@
       "height": 1000
     },
     "quantity": 8,
-    "inputHash": "d07b8daede4c297499253c907ecfd7301887af71df53e931a01628e8e48dc9ea",
+    "inputHash": "b5e9baf57f11a2479e7fcba9df5abcc7b14e4dde2a7929e3df2320189a7ac37e",
     "summary": {
       "quantity": 8,
       "split": true,
@@ -398,11 +398,175 @@
       },
       "problem": null
     },
-    "planHash": "d3908f47e3ec0ed726a369bb1b25edc2fbbc7e9ef2cd72d9919af694611110cb",
+    "planHash": "eddedaeeae1938be650532c391d07fb0621effe6fd6274b1b226514da2816b2d",
     "csv": {
       "imperial": "# Crate for 4 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 42.6 x 23.9 x 31.9 in, gross 247 lb\n# Layout 2 x 1 x 2, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,42 5/8 in x 23 7/8 in,1\nBase: Skid,lumber,4x4,42 5/8 in,2\nSide walls: Side panel,plywood,1/2 in,41 1/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 1/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,26 3/8 in x 21 7/16 in,2\nEnd walls: End rail,lumber,1x4,23 7/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 1/8 in x 22 3/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 1/8 in,2\nLid: Lid cross cleat,lumber,1x4,15 3/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 3/16 in x 21 7/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/8 in,4\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,7\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,7\nWood screws (approx),fastener,,,238\n",
       "metric": "# Crate for 4 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1082 x 607 x 809 mm, gross 112 kg\n# Layout 2 x 1 x 2, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1082 x 607,1\nBase: Skid,lumber,89 × 89,1082,2\nSide walls: Side panel,plywood,12 mm,1044 x 670,2\nSide walls: Side rail,lumber,19 × 89,1044,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,670 x 545,2\nEnd walls: End rail,lumber,19 × 89,607,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1044 x 569,1\nLid: Lid edge cleat,lumber,19 × 89,1044,2\nLid: Lid cross cleat,lumber,19 × 89,391,3\nInside the crate: Layer separator,plywood,12 mm,1020 x 545,1\nInside the crate: Bearer,lumber,50 × 89,435,4\nInside the crate: Blocking post,lumber,50 × 89,354,7\nInside the crate: Blocking post,lumber,50 × 89,254,7\nWood screws (approx),fastener,,,238\n",
       "shipment": "# Shipment of 8 x PART-003 Irregular aluminum housing: 2 x crate A (4 each)\n# Part 6061-T6 aluminum, 26.01 lb each\n# 2 crates, gross 494 lb in all; quantities are for every crate\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,42 5/8 in x 23 7/8 in,2\nBase: Skid,lumber,4x4,42 5/8 in,4\nSide walls: Side panel,plywood,1/2 in,41 1/8 in x 26 3/8 in,4\nSide walls: Side rail,lumber,1x4,41 1/8 in,8\nSide walls: Side upright,lumber,1x4,19 3/8 in,12\nEnd walls: End panel,plywood,1/2 in,26 3/8 in x 21 7/16 in,4\nEnd walls: End rail,lumber,1x4,23 7/8 in,8\nEnd walls: End upright,lumber,1x4,19 3/8 in,12\nLid: Lid panel,plywood,1/2 in,41 1/8 in x 22 3/8 in,2\nLid: Lid edge cleat,lumber,1x4,41 1/8 in,4\nLid: Lid cross cleat,lumber,1x4,15 3/8 in,6\nInside the crate: Layer separator,plywood,1/2 in,40 3/16 in x 21 7/16 in,2\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/8 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,14\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,14\nWood screws (approx),fastener,,,476\n"
+    }
+  },
+  {
+    "part": "PART-003",
+    "forkEntry": "sides",
+    "quantity": 8,
+    "inputHash": "15890453a76b0f1b23df85c64c1709fb851d99b68e4d8fdf72bcc9739352772c",
+    "summary": {
+      "quantity": 8,
+      "split": false,
+      "crates": [
+        {
+          "label": "A",
+          "count": 1,
+          "quantity": 8,
+          "layoutKey": "u:1040x1020x670:222",
+          "outsideMm": [
+            1102,
+            1082,
+            809
+          ],
+          "grossKg": 194.86060400000005,
+          "tareKg": 100.46060400000005,
+          "screws": 308,
+          "costUsd": 301.6867634666667
+        }
+      ],
+      "totals": {
+        "crates": 1,
+        "parts": 8,
+        "grossKg": 194.86060400000005,
+        "tareKg": 100.46060400000005,
+        "volumeM3": 0.964622476,
+        "costUsd": 301.6867634666667
+      },
+      "problem": null
+    },
+    "planHash": "e331f1b041b85f28ead382d24b09c0494f099be6194db9e07b153055de92ec3a",
+    "csv": {
+      "imperial": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 43.4 x 42.6 x 31.9 in, gross 430 lb\n# Layout 2 x 2 x 2, Turned 90°\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1\nBase: Skid,lumber,4x4,42 5/8 in,3\nSide walls: Side panel,plywood,1/2 in,41 7/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 7/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,40 3/16 in x 26 3/8 in,2\nEnd walls: End rail,lumber,1x4,42 5/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 7/8 in x 41 1/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 7/8 in,2\nLid: Lid cross cleat,lumber,1x4,34 1/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 15/16 in x 40 3/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,12\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,12\nWood screws (approx),fastener,,,308\n",
+      "metric": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1102 x 1082 x 809 mm, gross 195 kg\n# Layout 2 x 2 x 2, Turned 90°\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1102 x 1082,1\nBase: Skid,lumber,89 × 89,1082,3\nSide walls: Side panel,plywood,12 mm,1064 x 670,2\nSide walls: Side rail,lumber,19 × 89,1064,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,1020 x 670,2\nEnd walls: End rail,lumber,19 × 89,1082,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1064 x 1044,1\nLid: Lid edge cleat,lumber,19 × 89,1064,2\nLid: Lid cross cleat,lumber,19 × 89,866,3\nInside the crate: Layer separator,plywood,12 mm,1040 x 1020,1\nInside the crate: Bearer,lumber,50 × 89,445,8\nInside the crate: Blocking post,lumber,50 × 89,354,12\nInside the crate: Blocking post,lumber,50 × 89,254,12\nWood screws (approx),fastener,,,308\n"
+    }
+  },
+  {
+    "part": "PART-003",
+    "forkEntry": "fourWay",
+    "quantity": 8,
+    "inputHash": "9f01c1383663b54e6f1c77cfaf7043f9d33122ee48916bae58b49302fe10b98b",
+    "summary": {
+      "quantity": 8,
+      "split": false,
+      "crates": [
+        {
+          "label": "A",
+          "count": 1,
+          "quantity": 8,
+          "layoutKey": "u:1040x1020x670:222",
+          "outsideMm": [
+            1102,
+            1082,
+            894
+          ],
+          "grossKg": 197.02778960000003,
+          "tareKg": 102.62778960000003,
+          "screws": 320,
+          "costUsd": 310.4231606333334
+        }
+      ],
+      "totals": {
+        "crates": 1,
+        "parts": 8,
+        "grossKg": 197.02778960000003,
+        "tareKg": 102.62778960000003,
+        "volumeM3": 1.065973416,
+        "costUsd": 310.4231606333334
+      },
+      "problem": null
+    },
+    "planHash": "1f762c8c0db188fe6ebba02dbe3ceb948540dc5879432d681f4131bcec52a1ab",
+    "csv": {
+      "imperial": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 26.01 lb each\n# External 43.4 x 42.6 x 35.2 in, gross 434 lb\n# Layout 2 x 2 x 2, Turned 90°\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1\nBase: Skid,lumber,4x4,43 3/8 in,3\nBase: Lifting block,lumber,3 3/8 in x 3 1/2 in from 4x4,3 1/2 in,6\nSide walls: Side panel,plywood,1/2 in,41 7/8 in x 26 3/8 in,2\nSide walls: Side rail,lumber,1x4,41 7/8 in,4\nSide walls: Side upright,lumber,1x4,19 3/8 in,6\nEnd walls: End panel,plywood,1/2 in,40 3/16 in x 26 3/8 in,2\nEnd walls: End rail,lumber,1x4,42 5/8 in,4\nEnd walls: End upright,lumber,1x4,19 3/8 in,6\nLid: Lid panel,plywood,1/2 in,41 7/8 in x 41 1/8 in,1\nLid: Lid edge cleat,lumber,1x4,41 7/8 in,2\nLid: Lid cross cleat,lumber,1x4,34 1/8 in,3\nInside the crate: Layer separator,plywood,1/2 in,40 15/16 in x 40 3/16 in,1\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,17 1/2 in,8\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,13 15/16 in,12\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,10 in,12\nWood screws (approx),fastener,,,320\n",
+      "metric": "# Crate for 8 x PART-003 Irregular aluminum housing\n# Part 6061-T6 aluminum, 11.8 kg each\n# External 1102 x 1082 x 894 mm, gross 197 kg\n# Layout 2 x 2 x 2, Turned 90°\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,1102 x 1082,1\nBase: Skid,lumber,89 × 89,1102,3\nBase: Lifting block,lumber,85 × 89,89,6\nSide walls: Side panel,plywood,12 mm,1064 x 670,2\nSide walls: Side rail,lumber,19 × 89,1064,4\nSide walls: Side upright,lumber,19 × 89,492,6\nEnd walls: End panel,plywood,12 mm,1020 x 670,2\nEnd walls: End rail,lumber,19 × 89,1082,4\nEnd walls: End upright,lumber,19 × 89,492,6\nLid: Lid panel,plywood,12 mm,1064 x 1044,1\nLid: Lid edge cleat,lumber,19 × 89,1064,2\nLid: Lid cross cleat,lumber,19 × 89,866,3\nInside the crate: Layer separator,plywood,12 mm,1040 x 1020,1\nInside the crate: Bearer,lumber,50 × 89,445,8\nInside the crate: Blocking post,lumber,50 × 89,354,12\nInside the crate: Blocking post,lumber,50 × 89,254,12\nWood screws (approx),fastener,,,320\n"
+    }
+  },
+  {
+    "part": "PART-001",
+    "forkEntry": "sides",
+    "quantity": 1,
+    "inputHash": "81cd0f95f619854537b64b37774447de81d7da405804a0c3fafb56ef2c846aa0",
+    "summary": {
+      "quantity": 1,
+      "split": false,
+      "crates": [
+        {
+          "label": "A",
+          "count": 1,
+          "quantity": 1,
+          "layoutKey": "u:460x320x358:111",
+          "outsideMm": [
+            522,
+            382,
+            497
+          ],
+          "grossKg": 41.22668143999999,
+          "tareKg": 19.726681439999997,
+          "screws": 118,
+          "costUsd": 118.96124413333331
+        }
+      ],
+      "totals": {
+        "crates": 1,
+        "parts": 1,
+        "grossKg": 41.22668143999999,
+        "tareKg": 19.726681439999997,
+        "volumeM3": 0.099103788,
+        "costUsd": 118.96124413333331
+      },
+      "problem": null
+    },
+    "planHash": "c023f583eb73b0423e752ebf80fed709802bf8f11e134ef1d0307bdb38a207a6",
+    "csv": {
+      "imperial": "# Crate for 1 x PART-001 Machined steel bracket\n# Part 4140 steel, 47.4 lb each\n# External 20.6 x 15.0 x 19.6 in, gross 90.9 lb\n# Layout 1 x 1 x 1, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,20 9/16 in x 15 1/16 in,1\nBase: Skid,lumber,4x4,15 1/16 in,2\nSide walls: Side panel,plywood,1/2 in,19 1/16 in x 14 1/8 in,2\nSide walls: Side rail,lumber,1x4,19 1/16 in,4\nSide walls: Side upright,lumber,1x4,7 1/16 in,4\nEnd walls: End panel,plywood,1/2 in,14 1/8 in x 12 5/8 in,2\nEnd walls: End rail,lumber,1x4,15 1/16 in,4\nEnd walls: End upright,lumber,1x4,7 1/16 in,4\nLid: Lid panel,plywood,1/2 in,19 1/16 in x 13 9/16 in,1\nLid: Lid edge cleat,lumber,1x4,19 1/16 in,2\nLid: Lid cross cleat,lumber,1x4,6 9/16 in,2\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,2\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,12 1/8 in,4\nWood screws (approx),fastener,,,118\n",
+      "metric": "# Crate for 1 x PART-001 Machined steel bracket\n# Part 4140 steel, 21.5 kg each\n# External 522 x 382 x 497 mm, gross 41.2 kg\n# Layout 1 x 1 x 1, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,522 x 382,1\nBase: Skid,lumber,89 × 89,382,2\nSide walls: Side panel,plywood,12 mm,484 x 358,2\nSide walls: Side rail,lumber,19 × 89,484,4\nSide walls: Side upright,lumber,19 × 89,180,4\nEnd walls: End panel,plywood,12 mm,358 x 320,2\nEnd walls: End rail,lumber,19 × 89,382,4\nEnd walls: End upright,lumber,19 × 89,180,4\nLid: Lid panel,plywood,12 mm,484 x 344,1\nLid: Lid edge cleat,lumber,19 × 89,484,2\nLid: Lid cross cleat,lumber,19 × 89,166,2\nInside the crate: Bearer,lumber,50 × 89,360,2\nInside the crate: Blocking post,lumber,50 × 89,308,4\nWood screws (approx),fastener,,,118\n"
+    }
+  },
+  {
+    "part": "PART-001",
+    "forkEntry": "fourWay",
+    "quantity": 1,
+    "inputHash": "116bb2e746f168a4742f5abff8f75da34be97ca8cbeb33e603dcaee0d196078f",
+    "summary": {
+      "quantity": 1,
+      "split": false,
+      "crates": [
+        {
+          "label": "A",
+          "count": 1,
+          "quantity": 1,
+          "layoutKey": "u:460x320x358:111",
+          "outsideMm": [
+            522,
+            382,
+            582
+          ],
+          "grossKg": 43.583971039999994,
+          "tareKg": 22.083971039999998,
+          "screws": 126,
+          "costUsd": 126.41007379999999
+        }
+      ],
+      "totals": {
+        "crates": 1,
+        "parts": 1,
+        "grossKg": 43.583971039999994,
+        "tareKg": 22.083971039999998,
+        "volumeM3": 0.116053128,
+        "costUsd": 126.41007379999999
+      },
+      "problem": null
+    },
+    "planHash": "9a35349af8bc8c5cbe03b8ad0d93ca1952911d6bf567986fe2adac953bfcda0c",
+    "csv": {
+      "imperial": "# Crate for 1 x PART-001 Machined steel bracket\n# Part 4140 steel, 47.4 lb each\n# External 20.6 x 15.0 x 22.9 in, gross 96.1 lb\n# Layout 1 x 1 x 1, As modeled\n# Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size\ncomponent,material,stock,cut_in,qty\nBase: Floor,plywood,3/4 in,20 9/16 in x 15 1/16 in,1\nBase: Skid,lumber,4x4,20 9/16 in,2\nBase: Lifting block,lumber,3 3/8 in x 3 1/2 in from 4x4,3 1/2 in,4\nSide walls: Side panel,plywood,1/2 in,19 1/16 in x 14 1/8 in,2\nSide walls: Side rail,lumber,1x4,19 1/16 in,4\nSide walls: Side upright,lumber,1x4,7 1/16 in,4\nEnd walls: End panel,plywood,1/2 in,14 1/8 in x 12 5/8 in,2\nEnd walls: End rail,lumber,1x4,15 1/16 in,4\nEnd walls: End upright,lumber,1x4,7 1/16 in,4\nLid: Lid panel,plywood,1/2 in,19 1/16 in x 13 9/16 in,1\nLid: Lid edge cleat,lumber,1x4,19 1/16 in,2\nLid: Lid cross cleat,lumber,1x4,6 9/16 in,2\nInside the crate: Bearer,lumber,1 15/16 in x 3 1/2 in from 4x4,14 3/16 in,2\nInside the crate: Blocking post,lumber,1 15/16 in x 3 1/2 in from 4x4,12 1/8 in,4\nWood screws (approx),fastener,,,126\n",
+      "metric": "# Crate for 1 x PART-001 Machined steel bracket\n# Part 4140 steel, 21.5 kg each\n# External 522 x 382 x 582 mm, gross 43.6 kg\n# Layout 1 x 1 x 1, As modeled\n# Units: mm and kg\ncomponent,material,stock,cut_mm,qty\nBase: Floor,plywood,19 mm,522 x 382,1\nBase: Skid,lumber,89 × 89,522,2\nBase: Lifting block,lumber,85 × 89,89,4\nSide walls: Side panel,plywood,12 mm,484 x 358,2\nSide walls: Side rail,lumber,19 × 89,484,4\nSide walls: Side upright,lumber,19 × 89,180,4\nEnd walls: End panel,plywood,12 mm,358 x 320,2\nEnd walls: End rail,lumber,19 × 89,382,4\nEnd walls: End upright,lumber,19 × 89,180,4\nLid: Lid panel,plywood,12 mm,484 x 344,1\nLid: Lid edge cleat,lumber,19 × 89,484,2\nLid: Lid cross cleat,lumber,19 × 89,166,2\nInside the crate: Bearer,lumber,50 × 89,360,2\nInside the crate: Blocking post,lumber,50 × 89,308,4\nWood screws (approx),fastener,,,126\n"
     }
   }
 ]

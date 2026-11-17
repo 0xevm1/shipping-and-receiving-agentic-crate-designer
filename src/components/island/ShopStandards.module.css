@@ -64,6 +64,18 @@
   align-items: center;
   gap: 6px;
 }
+.field select {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 7px;
+  color: inherit;
+  font: 400 13px/1.4 var(--mono);
+}
+.changed .field select {
+  border-color: rgba(243, 160, 0, 0.6);
+  background: rgba(243, 160, 0, 0.08);
+}
 .field input {
   width: 80px;
   border: 1px solid rgba(255, 255, 255, 0.25);

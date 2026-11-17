@@ -17,6 +17,9 @@ import { Scorecard } from "./Scorecard";
 import styles from "./OverviewTab.module.css";
 import { ShipmentSummary } from "./Shipment";
 
+/** Where forks enter, for the Base step. */
+const FORK_ENTRY_PLACES = { ends: "the ends", sides: "the sides", fourWay: "all four sides" } as const;
+
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
 export function OverviewTab({ design, checks }: { design: CrateDesign; checks: readonly CheckItem[] }) {
   const part = useDesigner((s) => s.part);
@@ -76,7 +79,8 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
           <Flash on={["skid"]} className="nominal">
             {section(c.skid.wide, c.skid.tall)}
           </Flash>{" "}
-          skids under a{" "}
+          skids{c.forkEntry === "sides" ? " across the width" : ""}
+          {c.lift ? `, on lifting blocks,` : ""} under a{" "}
           {c.joist && (
             <>
               <span className="nominal">
@@ -85,7 +89,8 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
               joists and a{" "}
             </>
           )}
-          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
+          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines from {FORK_ENTRY_PLACES[c.forkEntry]}. Rated{" "}
+          {weight(design.structure.ratedPayloadKg, units)} of parts
         </Step>
         {cradles > 0 ? (
           <Step name="Cradles" value={`${cradles} cradles`}>
