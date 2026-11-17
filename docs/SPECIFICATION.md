@@ -156,7 +156,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design |
 | `src/components/shell/StandardsLoader.tsx` | Applies the saved shop standards once the app has mounted |
 | `src/components/island/*.tsx` | The island and its five tabs |
-| `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`shopStandards.css`) |
+| `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
 | `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
 | `src/components/viewer/CrateModel.tsx` | One box per `Member`; explode, fades, highlight, ghosting, picking |
@@ -224,9 +224,9 @@ accepts:
   then cleared; with reduced motion it appears and goes without animation. Quantity is the only
   typed rule; the sliders and buttons can't leave their ranges.
 
-`setPartMass` likewise ignores a mass that isn't a finite number above zero. As a second line of
-defence, `computeDesign` re-checks its input and returns a `problem` rather than throwing
-(§7.9).
+`setPartDetails` (§6.2a) likewise ignores a mass that isn't a finite number above zero. As a
+second line of defence, `computeDesign` re-checks its input and returns a `problem` rather than
+throwing (§7.9).
 
 ### 6.2a The part being designed
 
@@ -482,7 +482,7 @@ for nz in 1..min(maxLayers, n):
   which has `a ≥ b` and so `L ≥ W`. The `no-layout` problem (§7.9) is only a safety net.
 - **Speed:** at quantity 200 (the maximum), `computeDesign` takes 1–2 ms for each sample part
   with `keepUpright` on or off and `maxLayers` 1–4, and about 5 ms for a 20 m part (measured on
-  an M-series Mac). The hardening tests fail above 50 ms.
+  an M-series Mac). The hardening tests fail when the median of 5 runs is over 50 ms.
 - **Key format:** `"{u|s}:{L}x{W}x{H}:{nx}{ny}{nz}"`. `u`/`s` means upright or not, and the
   dimensions are rounded mm. Keys are only used to select a layout in the UI; they aren't stored.
 
@@ -960,7 +960,8 @@ standards could move there (one row per shop) when accounts exist.
 **`src/domain/hardening.test.ts`** checks edge cases and bad input (#10):
 
 - Quantity 1 and 200 for every part, `keepUpright` on and off, `maxLayers` 1–4: every part is
-  packed, the crate is sound, and each design takes under 50 ms.
+  packed, the crate is sound, and the median of 5 runs of each design is under 50 ms (a median,
+  so one run stalled by a busy machine doesn't fail it; #48).
 - Parts of 1 mm, 0.001 mm, a 1 mm × 10 m rod and a 10 m cube, at gaps of 0 and 50: a sound crate
   with an interior of at least 178 mm. A tiny part is centred in the padded crate.
 - "Sound" means: the boards' bounds equal `layout.external`, no board has zero size, dunnage stays
@@ -1211,9 +1212,14 @@ Other known gaps:
 - Inside the 3D scene, read the store with `useDesigner.getState()` in `useFrame` and write
   three.js objects directly. Subscribe with hooks only for things that change rarely.
 - Don't use drei `<Html>`; use the `SizeLabels` pattern for DOM over the canvas.
-- **Dev server gotcha:** the scaffold's `@tailwindcss/turbopack` loader rule in `next.config.ts`
-  doesn't always pick up edits to `globals.css`. If a style change doesn't show, restart
-  `bun run dev` (and delete `.next/` if needed). Production builds are unaffected.
+- **Styles:** Tailwind v4 runs through Next's built-in PostCSS support (`postcss.config.mjs`,
+  `@tailwindcss/postcss`), and only `src/app/globals.css` imports it. The scaffold's
+  `@tailwindcss/turbopack` loader rule is gone (#54): it ran on every `*.css` file, turned
+  `*.module.css` into global CSS (empty class names), and hot-reloaded `globals.css` one edit
+  late. Don't add a `turbopack.rules` entry for CSS.
+- **CSS modules work.** Give a component its own `Name.module.css` and import it as `styles`
+  (see `ShopStandards.module.css`). Wrap the shared classes from `globals.css` in `:global()`
+  (`:global(.rule)`), and use the design tokens (`var(--…)`) from `globals.css`.
 - Before you push, run `bun run test`, `bun run lint` and `bun run build`. For UI changes, also
   run `bun run e2e` and update the specs in `e2e/` (§10); CI's `e2e` job runs them on every PR.
 - Prefer roles and accessible names for anything the e2e tests need to find. Add a
