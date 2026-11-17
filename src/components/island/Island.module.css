@@ -83,7 +83,8 @@
   min-height: 0;
   overflow: hidden;
 }
-.parthead[data-folded] .thumb {
+.parthead[data-folded] .thumb,
+.parthead[data-empty] .thumb {
   grid-template-rows: 0fr;
   opacity: 0;
   visibility: hidden;
@@ -110,7 +111,8 @@
   pointer-events: none;
 }
 /* With the thumbnail folded the note has no part view to sit on: it floats just under the tabs instead. */
-.parthead[data-folded] .note {
+.parthead[data-folded] .note,
+.parthead[data-empty] .note {
   bottom: auto;
   top: calc(100% + 8px);
   z-index: 1;
@@ -272,6 +274,7 @@
 @media (prefers-reduced-motion: reduce) {
   .thumb,
   .parthead[data-folded] .thumb,
+  .parthead[data-empty] .thumb,
   .island,
   .island[data-open],
   :global([data-panels-hidden]) .island {

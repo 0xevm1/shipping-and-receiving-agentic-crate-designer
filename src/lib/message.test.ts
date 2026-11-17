@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { getPart } from "@/domain/catalog";
-import { dimsMessage, kg, mm, msg, parts, shopMm } from "@/domain/message";
+import { dimsMessage, kg, longMm, mm, msg, parts, shopMm } from "@/domain/message";
 import { renderMessage } from "./message";
 
 describe("renderMessage (#62)", () => {
@@ -13,6 +13,20 @@ describe("renderMessage (#62)", () => {
 
   it("converts every length and mass in imperial", () => {
     expect(renderMessage(m, "imperial")).toBe("A 98.0 in × 108.0 in door, a 3/4″ floor, 3 1/2″ clear, 2,734 lb and 47.4 lb.");
+  });
+
+  it("says a long distance in metres or feet", () => {
+    expect(renderMessage(msg`${longMm(30000)} and ${longMm(20000)}`, "metric")).toBe("30 m and 20 m");
+    expect(renderMessage(msg`${longMm(30000)} and ${longMm(20000)}`, "imperial")).toBe("98.4 ft and 65.6 ft");
+  });
+
+  it("states the limit and the size in the selected units when a part is too large to crate", () => {
+    const part = { ...getPart("PART-001")!, dimensions_mm: [30000, 100, 100] as [number, number, number] };
+    const { problem } = computeDesign(part, DEFAULT_SETTINGS);
+    expect(problem?.id).toBe("part-too-large");
+    expect(renderMessage(problem!.detail, "metric")).toContain("longest side is 30 m and the limit is 20 m");
+    expect(renderMessage(problem!.detail, "imperial")).toContain("longest side is 98.4 ft and the limit is 65.6 ft");
+    expect(renderMessage(problem!.detail, "imperial")).not.toMatch(/\bmm\b/);
   });
 
   it("merges strings, flattens nested messages and joins dimensions", () => {

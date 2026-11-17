@@ -11,6 +11,7 @@ import { ChecksTab } from "./ChecksTab";
 import { CutListTab } from "./CutListTab";
 import { LayoutsTab } from "./LayoutsTab";
 import { OverviewTab } from "./OverviewTab";
+import { ProblemCard } from "./ProblemCard";
 import { RulesTab } from "./RulesTab";
 import styles from "./Island.module.css";
 
@@ -50,7 +51,7 @@ export interface DrawerProps {
  */
 export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?: DrawerProps; footer?: ReactNode }) {
   const part = useDesigner((s) => s.part);
-  const tab = useDesigner((s) => s.tab);
+  const selected = useDesigner((s) => s.tab);
   const design = useDesigner((s) => s.result.design);
   const problem = useDesigner((s) => s.result.problem);
   const measured = useDesigner((s) => s.measured);
@@ -61,6 +62,8 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
   const checks = useMemo(() => (design ? allChecks(design.checks, part, measured) : []), [design, part, measured]);
   const cautions = cautionCount(checks);
   const notes = checks.filter((c) => c.level === "info").length;
+  // No crate: the problem is the whole panel (Overview's slot) and the other tabs have nothing to show.
+  const tab: Tab = design ? selected : "overview";
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const headRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
@@ -82,6 +85,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
 
   // WAI-ARIA tabs with automatic activation: one tab stop, arrows move and select.
   const onTabKey = (e: KeyboardEvent) => {
+    if (!design) return;
     const i = TABS.findIndex((t) => t.id === tab);
     const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
     if (next === undefined) return;
@@ -98,7 +102,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
       ref={ref}
       {...(drawer && { role: "dialog", "aria-modal": true, "aria-label": "Crate details", inert: !drawer.open, "data-open": drawer.open || undefined })}
     >
-      <div className={styles.parthead} ref={headRef}>
+      <div className={styles.parthead} ref={headRef} data-empty={!design || undefined}>
         <div className={styles.partbar}>
           <h2>{part.name}</h2>
           <button type="button" className={`pillbtn small ${styles.load}`} onClick={() => fileInput.current?.click()}>
@@ -143,6 +147,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
               id={tabId(t.id)}
               aria-selected={tab === t.id}
               aria-controls={PANEL_ID}
+              disabled={!design && t.id !== "overview"}
               tabIndex={tab === t.id ? 0 : -1}
               onClick={() => setTab(t.id)}
             >
@@ -172,17 +177,7 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         onScroll={onPanelScroll}
       >
         {!design ? (
-          <div role="alert">
-            <h2>{problem?.title ?? "No crate to show"}</h2>
-            <p className="lede">{problem?.detail}</p>
-            {(problem?.id === "settings" || problem?.id === "no-layout") && (
-              <div className="actions spaced">
-                <button type="button" className="btn" onClick={() => useDesigner.getState().resetRules()}>
-                  Reset rules
-                </button>
-              </div>
-            )}
-          </div>
+          problem && <ProblemCard problem={problem} onLoad={() => fileInput.current?.click()} />
         ) : tab === "overview" ? (
           <OverviewTab design={design} checks={checks} />
         ) : tab === "layouts" ? (

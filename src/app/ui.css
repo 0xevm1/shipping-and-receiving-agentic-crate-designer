@@ -58,6 +58,14 @@
   .seg button:hover {
     color: var(--text);
   }
+  /* A tab or option with nothing to show: dimmed, no hover. */
+  .seg button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .seg button:disabled:hover {
+    color: var(--soft);
+  }
   .seg button[aria-pressed="true"],
   .seg button[aria-selected="true"] {
     color: #fff;

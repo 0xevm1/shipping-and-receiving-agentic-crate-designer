@@ -3,6 +3,29 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--muted);
   pointer-events: none;
+}
+.plain {
+  color: var(--soft);
+  font-size: 15px;
+}
+/* No crate: readable over the floor grid and the page gradient (white on near-black navy, well over 4.5:1). */
+.problem {
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 16px 24px 18px;
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  background: rgba(0, 22, 44, 0.82);
+  text-align: center;
+}
+.title {
+  margin: 0;
+  color: var(--text);
+  font: 400 22px/1.2 var(--sans);
+  letter-spacing: -0.02em;
+}
+.hint {
+  margin: 6px 0 0;
+  color: var(--soft);
+  font-size: 14px;
 }

@@ -1,0 +1,21 @@
+/* The island's whole panel when there is no crate: what is wrong, once, and the way out. */
+
+.card {
+  padding-top: 4px;
+}
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.card h2 {
+  margin: 0 0 10px;
+}
+/* The action that gets out of the problem is the gold one. */
+.primary {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.primary:hover {
+  background: var(--gold-glow);
+}

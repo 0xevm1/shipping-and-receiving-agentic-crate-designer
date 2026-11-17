@@ -26,6 +26,7 @@ import { type LoadedPart } from "./part";
 import { APP } from "./appInfo";
 import { bomToCsv, shipmentToCsv } from "./csv";
 import { documentDate } from "./format";
+import { renderMessage } from "./message";
 import { designFilePart } from "./loadPart";
 import { buildPrintable, type PrintableDesign } from "./printable";
 import type { Units } from "./units";
@@ -94,7 +95,8 @@ const encode = (s: string) => new TextEncoder().encode(s);
 export async function buildBundle(input: BundleInput, make: BundleMakers): Promise<Bundle> {
   const { part, settings, plan, crateIndex, standards, units, ranking, generatedAt, timeZone } = input;
   const shown = plan.crates[crateIndex]?.result.design ?? plan.crates[0]?.result.design;
-  if (!shown || plan.problem) throw new NoCrateError(plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : "There is no crate to export.");
+  if (!shown || plan.problem)
+    throw new NoCrateError(plan.problem ? `${plan.problem.title}. ${renderMessage(plan.problem.detail, units)}` : "There is no crate to export.");
   const designs = plan.crates.map((t) => {
     if (!t.result.design) throw new NoCrateError(`Crate ${t.label} has no design.`);
     return { label: t.label, design: t.result.design };

@@ -272,7 +272,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
-| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…", why there is no crate); shared by the shell and the viewer |
+| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…"), or with `problem` the no-crate message on a dark pill with a next-step line; shared by the shell and the viewer |
+| `src/components/island/ProblemCard.tsx` | The island's panel when there is no crate (§7.9): the problem once, in the selected units, with the action for its kind |
 | `src/components/shell/Tooltip.tsx` | The hover tooltip over the 3D view |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
 | `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), keeping a panned crate in the free area (`keepCrateInFreeArea`) |
@@ -433,7 +434,7 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
     same layout, and the number of shaped blocks
 - **`LayoutExplanation`** (from `explainLayout`, §7.8).
 - **`DesignResult`:** `{ layouts, design, problem }`. `problem` (`DesignProblem`:
-  `{ id, title, detail }`) is set exactly when `design` is null (§7.9).
+  `{ id, title, detail }`, with `detail` a unit-free `Message` like a check's, §7.16) is set exactly when `design` is null (§7.9).
 
 ### 6.4 Shop standards (`ShopStandardsSchema`, #19)
 
@@ -1115,14 +1116,20 @@ the first `problem` that applies:
 | id | When | What the user is told |
 |---|---|---|
 | `part-size` | A dimension is 0, negative, NaN or infinite (e.g. a flat model) | Every side must be longer than zero |
-| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | The size, and to check the file's units |
-| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero |
+| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | "This part is too large to crate": the size and the limit, in metres or feet (`longMm`), and to check the file's units |
+| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero, in the part header |
 | `settings` | Settings fail `CrateSettingsSchema` (only if the store boundary was bypassed) | Which field, and to reset the rules |
 | `standards` | Custom standards fail `ShopStandardsSchema` (only if `setStandards` was bypassed; the shipped defaults are not re-parsed) | Which field, and to reset the shop standards |
 | `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or turning off upright |
 
-The island shows the title and detail in place of the tabs' content (with Reset rules for
-`settings` and `no-layout`), and the canvas shows the title.
+The problem is shown once (#62). The island's panel is a `ProblemCard`: the title, the detail in the
+selected units and the way out for the kind of problem: **Load another part** for `part-size`,
+`part-too-large` and `part-mass` (gold for the first two; the mass is entered in the header),
+**Reset rules** for `settings` and `no-layout`, **Reset shop standards** for `standards`. The
+tabs other than Overview are disabled, since they have nothing to show, so the message is not
+repeated on all five. The canvas shows the title on its own dark pill at 22 px with one line
+saying what to do next (`StageMessage` with `problem`); on a phone the summary chip says "No crate"
+and opens the drawer on the card.
 
 Very small parts (down to sub-millimetre) get the minimum 178 mm interior (§7.2). Very large ones
 up to 20 m get a normal design, with the `oversize` and `door` checks as they apply. The 3D view

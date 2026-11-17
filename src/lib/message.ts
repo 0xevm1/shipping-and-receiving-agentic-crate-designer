@@ -1,4 +1,5 @@
 import type { Message, Quantity } from "@/domain/message";
+import { MM_PER_FT, MM_PER_M } from "@/domain/units";
 import { fraction, length, weight, type Units } from "./units";
 
 /**
@@ -11,6 +12,7 @@ import { fraction, length, weight, type Units } from "./units";
  */
 function renderQuantity(q: Quantity, u: Units): string {
   if (q.kind === "mass") return weight(q.kg, u, true);
+  if (q.long) return u === "metric" ? `${Number((q.mm / MM_PER_M).toFixed(1)).toLocaleString("en-US")} m` : `${(q.mm / MM_PER_FT).toFixed(1)} ft`;
   if (u === "metric") return `${Math.round(q.mm).toLocaleString("en-US")} mm`;
   return q.fine ? fraction(q.mm) : `${Number(length(q.mm, u)).toLocaleString("en-US", { minimumFractionDigits: 1 })} in`;
 }

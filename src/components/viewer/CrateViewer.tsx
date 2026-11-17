@@ -3,6 +3,7 @@
 import { OrbitControls, useGLTF, useProgress } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import type { DesignProblem } from "@/domain/design";
 import { pointer } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { CrateModel } from "./CrateModel";
@@ -128,7 +129,11 @@ export default function CrateViewer() {
         )}
         <OrbitControls makeDefault enableDamping={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.3} maxDistance={maxDistance} />
       </Canvas>
-      {!restoring && !design && <StageMessage>{problem?.title ?? "No crate to show."}</StageMessage>}
+      {!restoring && !design && (
+        <StageMessage problem hint={problem ? STAGE_HINT[problem.id] : undefined}>
+          {problem?.title ?? "No crate to show."}
+        </StageMessage>
+      )}
       <LoadingOverlay />
       {lost && (
         <div className={styles.lost} role="alert">
@@ -142,6 +147,16 @@ export default function CrateViewer() {
     </>
   );
 }
+
+/** The line under the no-crate title: what to do next (the reason, and the button, are in the island). */
+const STAGE_HINT: Record<DesignProblem["id"], string> = {
+  "part-size": "Load another part to continue.",
+  "part-too-large": "Load another part to continue.",
+  "part-mass": "Enter its mass in the part header.",
+  settings: "Reset the rules in the panel.",
+  "no-layout": "Reset the rules in the panel.",
+  standards: "Reset the shop standards in the panel.",
+};
 
 /**
  * Drops a part model from drei's GLTF cache once the part changes, so models loaded earlier in
