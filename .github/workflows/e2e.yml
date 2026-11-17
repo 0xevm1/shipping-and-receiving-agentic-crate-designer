@@ -1,0 +1,99 @@
+# The Playwright end-to-end UI suite, run only when someone asks for it:
+# Actions → "E2E" → Run workflow (pick a branch), or `gh workflow run e2e.yml --ref <branch>`.
+# It is deliberately not part of pull-request CI or the pre-commit hook: the suite takes many
+# minutes. Optional input: a spec path or Playwright filter to run part of it.
+
+name: E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Spec files or a Playwright filter (empty runs the whole suite), e.g. e2e/cut-list.spec.ts or --project=desktop"
+        required: false
+        default: ""
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+        env:
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: "1"
+
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # On a cache hit the browser is restored; its system libraries are installed either way.
+      - name: Install Chromium
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Chromium system dependencies
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      # Production build with the read-only test hook (window.__crate) compiled in.
+      - name: Build (e2e)
+        run: bun run build
+        env:
+          NEXT_PUBLIC_E2E: "1"
+
+      - name: E2E tests
+        run: bun run e2e ${{ inputs.filter }}
+        env:
+          E2E_SKIP_BUILD: "1"
+
+      - name: Upload screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-screenshots
+          path: e2e/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload HTML report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 14

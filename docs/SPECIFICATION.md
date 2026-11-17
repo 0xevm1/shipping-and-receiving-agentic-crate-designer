@@ -2602,8 +2602,9 @@ deliberately changes an expected value, update the test and this spec in the sam
 
 ### End-to-end UI tests
 
-`bun run e2e` runs Playwright (`playwright.config.ts`, specs in `e2e/`, excluded from vitest). It builds the
-production app with `NEXT_PUBLIC_E2E=1`, serves it on port 3320 (`E2E_PORT` changes it; a local run reuses
+The suite is opt-in (slow, so not in the pre-commit hook or PR CI): run it locally with `bun run e2e`, or from the manually
+triggered `E2E` workflow (`.github/workflows/e2e.yml`, with an optional `filter` input passed to `bun run e2e`).
+`bun run e2e` runs Playwright (`playwright.config.ts`, specs in `e2e/`, excluded from vitest). It builds the production app with `NEXT_PUBLIC_E2E=1`, serves it on port 3320 (`E2E_PORT` changes it; a local run reuses
 whatever already listens there) and drives headless Chromium with SwiftShader WebGL, so the canvas really
 renders. `E2E_SKIP_BUILD=1` serves an existing e2e build. Four projects: desktop 1440 × 900 runs every spec
 except `*.narrow.spec.ts` and `*.mobile.spec.ts`; narrow 900 × 900 (the drawer layout with a mouse) runs only
@@ -2613,12 +2614,12 @@ transitions are instant (§8.4); the specs that test motion (`idle-autoplay`, `d
 `drawer.mobile`, `export-zip`, `change-note`) turn it back on for the test that needs it.
 
 **Running:** software WebGL is CPU-heavy, so locally the suite uses a third of the cores (1 to 3 workers; set
-`E2E_WORKERS` to change it) with a 60 s test timeout (`test.slow()` triples it for long flows); CI runs one worker
+`E2E_WORKERS` to change it) with a 60 s test timeout (`test.slow()` triples it for long flows); the E2E workflow (where `CI` is set) runs one worker
 with a 120 s timeout. There are no retries: a test that needs one is flaky and gets fixed. Several worktrees can run at
 once if each has its own `E2E_PORT`. `bun run typecheck` and `bun run lint` cover `e2e/` too.
 
-**Screenshots** go only to `e2e/screenshots/` (git-ignored; CI uploads it as `e2e-screenshots`, with the HTML report as
-`playwright-report`), through one helper, `shot(page | locator, name)`: a page is shot full-page, a locator is cropped.
+**Screenshots** go only to `e2e/screenshots/` (git-ignored; the E2E workflow uploads it as `e2e-screenshots`, with the HTML
+report as `playwright-report`), through one helper, `shot(page | locator, name)`: a page is shot full-page, a locator is cropped.
 Names start with the spec's topic (`part-header-standin`), and a run in a project other than desktop adds the project
 (`layout-closed-summary-mobile-390`). Generated files (the print PDFs) are attached to the report, not written to disk. No
 spec writes into `docs/screenshots/`, so a run never dirties the repo; `bun run e2e:docs-shots` (`scripts/docs-shots.mjs`)
@@ -2695,8 +2696,8 @@ copies chosen shots there on request.
     shaped blocking reach the cut list, Checks, the 3D view and the build sheet. Their figures are the domain's.
   - `app-icons` (HTTP only): the icons, the manifest and the head links.
 
-- **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use its screenshots in the PR.
-  Tests have no retries, so a flaky test is a bug to fix.
+- **When the UI changes,** put a screenshot of the change in the PR, and update the affected spec when you next run the
+  suite. Tests have no retries, so a flaky test is a bug to fix.
 
 ## 11. Decision log
 
@@ -2825,8 +2826,8 @@ Other known gaps:
 - **CSS modules work.** Give a component its own `Name.module.css` and import it as `styles`
   (see `ShopStandards.module.css`). Wrap the shared classes from `globals.css` in `:global()`
   (`:global(.rule)`), and use the design tokens (`var(--…)`) from `globals.css`.
-- Before you push, run `bun run test`, `bun run lint`, `bun run format:check` and `bun run build`. For UI changes, also
-  run `bun run e2e` and update the specs in `e2e/` (§10); CI's `e2e` job runs them on every PR.
+- Before you push, run `bun run test`, `bun run lint`, `bun run format:check` and `bun run build`. The e2e suite (§10)
+  is opt-in: it runs from the manually triggered `E2E` workflow or `bun run e2e`, not in CI.
 - Prefer roles and accessible names for anything the e2e tests need to find. Add a
   `data-testid` only where there is no accessible handle, and read 3D state through the
   `window.__crate` hook (`E2EProbe`) rather than adding DOM for tests.

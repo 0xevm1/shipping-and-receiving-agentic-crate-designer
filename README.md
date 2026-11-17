@@ -65,22 +65,25 @@ bun run dev          # → http://localhost:3000
 ## Pull requests
 
 Every pull request to `main`, and every push to `main`, runs
-[CI](.github/workflows/ci.yml) as two jobs:
+[CI](.github/workflows/ci.yml): one job, **`checks`**, which does
+`bun install --frozen-lockfile`, Prettier check, lint, typecheck, unit tests and build.
 
-- **`checks`:** `bun install --frozen-lockfile`, Prettier check, lint, typecheck, unit tests and build.
-- **`e2e`:** the Playwright suite (`bun run e2e`) in headless Chromium against a production
-  build. It uploads the screenshots (`e2e-screenshots`) and the HTML report
-  (`playwright-report`) as artifacts, even when a test fails.
+**A green `checks` run is required before merging.** GitHub can't enforce this on a private
+repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api` command
+that adds a ruleset requiring the job on `main` once the repo is upgraded or made public.
 
-**A green CI run (both jobs) is required before merging.** GitHub can't enforce this on a
-private repo without GitHub Pro, so it's a team rule for now. The workflow file has the `gh api`
-command that adds a ruleset requiring both jobs on `main` once the repo is upgraded or made
-public.
+**End-to-end tests run on demand.** The Playwright suite is slow, so it is not part of the
+pre-commit hook or of pull-request CI. Run it when you want it:
 
-**UI changes:** run `bun run e2e` before you push, update the specs in `e2e/` when the
-behaviour changes, and attach screenshots from `e2e/screenshots/` (or the CI artifact) to the
-PR instead of hand-captured ones. Specs are named by topic (`design-library.spec.ts`, with
-`.narrow` and `.mobile` suffixes for the other viewports), find things by role, label or test
+- on GitHub: **Actions → E2E → Run workflow** and pick the branch
+  ([`e2e.yml`](.github/workflows/e2e.yml)), or `gh workflow run e2e.yml --ref <branch>`. An
+  optional `filter` input runs part of the suite (a spec path or a Playwright option). The run
+  uploads the screenshots (`e2e-screenshots`) and the HTML report (`playwright-report`) as
+  artifacts, even when a test fails;
+- locally: `bun run e2e`, or `bun run e2e e2e/<spec>` for one spec.
+
+**UI changes:** put a screenshot of the change in the PR (`e2e/screenshots/` has them after a run). Specs are named by topic
+(`design-library.spec.ts`, with `.narrow` and `.mobile` suffixes for the other viewports), find things by role, label or test
 id, never by CSS class, and share their helpers in `e2e/helpers/` (spec §10).
 
 ## Who it's for
