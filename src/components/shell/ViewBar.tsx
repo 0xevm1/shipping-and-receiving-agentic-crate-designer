@@ -183,6 +183,7 @@ function GlbDownload() {
         : null;
       downloadBytes(glbFileName(part.id, settings.quantity), await exportCrateGlb(result.design, model));
       setStatus("3D model downloaded.");
+      useDesigner.getState().markExported();
     } catch {
       setStatus("The 3D model could not be made here.");
     } finally {

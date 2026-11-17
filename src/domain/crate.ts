@@ -1,3 +1,4 @@
+import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTerms, type LabourEstimate } from "./cost";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, type ShopStandards } from "./standards";
@@ -105,7 +106,20 @@ export interface CrateDesign {
   plywoodM2: number;
   lumberM: number;
   screws: number;
+  /** Plywood and lumber only (`rates.costUsdPerM3`); `cost` adds screws and labour. */
   materialCostUsd: number;
+  /** Build time and labour cost (#17, spec §7.11). */
+  labour: LabourEstimate;
+  /** Wood + screws + labour (#17). */
+  cost: CrateCost;
+  /** Domestic LTL terms: gross lb, volume, dimensional weight, density and estimated class (#17). */
+  freight: FreightTerms;
+  /** `freight.freightClass`, at the top level for exports and the build sheet (#26). */
+  freightClass: number;
+  /** `freight.densityLbFt3`. */
+  densityLbFt3: number;
+  /** `freight.dimWeightLb`. */
+  dimWeightLb: number;
   /** Every rule, passed or not, in a fixed order. */
   checks: Check[];
 }
@@ -224,6 +238,10 @@ export function designCrate(
   const tareKg = volumes.plywood * density.plywood + volumes.lumber * density.lumber;
   const cost = standards.rates.costUsdPerM3;
   const materialCostUsd = volumes.plywood * cost.plywood + volumes.lumber * cost.lumber;
+  const screws = estimateScrews(members, layout.interior, standards);
+  const grossKg = payloadKg + tareKg;
+  const labour = estimateLabour(bom, screws, layout.counts[2], standards);
+  const freight = freightTerms(grossKg, layout.external, standards);
 
   const design: CrateDesign = {
     layout,
@@ -233,11 +251,17 @@ export function designCrate(
     payloadKg,
     tareKg,
     tareKgByAssembly,
-    grossKg: payloadKg + tareKg,
+    grossKg,
     plywoodM2,
     lumberM,
-    screws: estimateScrews(members, layout.interior, standards),
+    screws,
     materialCostUsd,
+    labour,
+    cost: crateCost(materialCostUsd, screws, labour.costUsd, standards),
+    freight,
+    freightClass: freight.freightClass,
+    densityLbFt3: freight.densityLbFt3,
+    dimWeightLb: freight.dimWeightLb,
     checks: [],
   };
   design.checks = evaluateChecks(design, part, settings, standards);

@@ -54,7 +54,19 @@ describe("ShopStandardsSchema", () => {
       densityKgM3: { plywood: 600, lumber: 480 },
       costUsdPerM3: { plywood: 1100, lumber: 650 },
       screwSpacingMm: { cleat: 150, skid: 300, panelJoint: 200 },
+      screwCostUsdPer100: 8, // #17
     });
+    // #17: labour and freight terms.
+    expect(s.labour).toEqual({
+      rateUsdPerHour: 35,
+      lumberCutMin: 0.75,
+      plywoodCutMin: 3,
+      setupMin: 2,
+      screwMin: 0.15,
+      assemblyStepMin: 6,
+      handlingMin: 15,
+    });
+    expect(s.freight).toEqual({ dimDivisorIn3PerLb: 139 });
   });
 
   it("keeps the old exports as views of the defaults", () => {
@@ -85,6 +97,14 @@ describe("ShopStandardsSchema", () => {
     ["a zero max gross per crate", { limits: { perCrate: { maxGrossKg: 0 } } }],
     ["a fractional part limit", { limits: { perCrate: { maxParts: 2.5 } } }],
     ["a negative part limit", { limits: { perCrate: { maxParts: -1 } } }],
+    ["a negative labour rate", { labour: { rateUsdPerHour: -1 } }],
+    ["a labour rate over $1,000/h", { labour: { rateUsdPerHour: 1001 } }],
+    ["NaN minutes per screw", { labour: { screwMin: NaN } }],
+    ["a negative cut time", { labour: { lumberCutMin: -0.5 } }],
+    ["an hour per screw", { labour: { screwMin: 60 } }],
+    ["a negative screw cost", { rates: { screwCostUsdPer100: -1 } }],
+    ["a dim divisor of 0", { freight: { dimDivisorIn3PerLb: 0 } }],
+    ["a dim divisor over 500", { freight: { dimDivisorIn3PerLb: 501 } }],
   ])("rejects %s", (_, patch) => {
     const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
     expect(r.ok).toBe(false);

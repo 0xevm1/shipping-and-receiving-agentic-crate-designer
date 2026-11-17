@@ -39,15 +39,88 @@ export function computeDesign(
   settings: CrateSettings,
   layoutKey?: string | null,
   standards: ShopStandards = DEFAULT_STANDARDS,
+  ranking: Ranking = "volume",
 ): DesignResult {
   const problem = inputProblem(part, settings, standards);
   if (problem) return { layouts: [], design: null, problem };
 
-  const layouts = rankLayouts(part, settings, standards);
+  const ranked = rankByObjective(part, settings, rankLayouts(part, settings, standards), ranking, standards);
+  const layouts = ranked.layouts;
   const layout = layouts.find((l) => l.key === layoutKey) ?? layouts[0];
   // Unreachable for valid input (spec §7.2), but never leave the screen blank.
   if (!layout) return { layouts, design: null, problem: NO_LAYOUT };
-  return { layouts, design: designCrate(part, settings, layout, standards), problem: null };
+  return { layouts, design: ranked.designs.get(layout.key) ?? designCrate(part, settings, layout, standards), problem: null };
+}
+
+/**
+ * How the recommended layout is chosen (#17, spec §7.2). `volume` is the default ranking
+ * (stable, then least outside volume, then lowest). `cost` and `density` re-rank by total
+ * crate cost (lowest first) or by freight (lowest estimated freight class, then lightest gross).
+ */
+export const RANKINGS = ["volume", "cost", "density"] as const;
+export type Ranking = (typeof RANKINGS)[number];
+
+/**
+ * Re-ranks `layouts` (already in the default order) by `ranking`, designing each crate to
+ * cost it. Hard constraints come first and are never traded for cost or density: `fits`
+ * (shipment planning's per-crate limits, when given), then stable, then every part blocked
+ * in (the `blocking` check passes); for `density`, also no LTL excessive-length charge (the
+ * `oversize` check), so a long single row can't win on class alone. Within a freight class the
+ * lighter crate wins, since LTL charges by class and weight. Ties keep the default order. With `volume` the layouts
+ * are returned as they are and nothing is designed. `designs` holds the crates it designed,
+ * by layout key, so the caller can reuse the winner's.
+ */
+export function rankByObjective(
+  part: DesignPart,
+  settings: CrateSettings,
+  layouts: Layout[],
+  ranking: Ranking,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+  fits?: (d: CrateDesign) => boolean,
+): { layouts: Layout[]; designs: Map<string, CrateDesign> } {
+  const designs = new Map<string, CrateDesign>();
+  if (ranking === "volume" || layouts.length < 2) return { layouts, designs };
+  const scored = layouts.map((layout, index) => {
+    const d = designCrate(part, settings, layout, standards);
+    designs.set(layout.key, d);
+    const blocked = d.checks.find((c) => c.id === "blocking")?.level !== "caution";
+    const surcharge = ranking === "density" && d.checks.some((c) => c.id === "oversize");
+    return { layout, index, d, hard: [fits && !fits(d) ? 1 : 0, layout.stable ? 0 : 1, blocked ? 0 : 1, surcharge ? 1 : 0] };
+  });
+  // Whole cents and whole lb: smaller differences are rounding, not a better crate.
+  const objective = (d: CrateDesign) =>
+    ranking === "cost" ? [Math.round(d.cost.totalUsd * 100)] : [d.freightClass, Math.round(d.freight.grossLb)];
+  scored.sort((x, y) => {
+    for (let i = 0; i < x.hard.length; i++) if (x.hard[i] !== y.hard[i]) return x.hard[i] - y.hard[i];
+    const [ox, oy] = [objective(x.d), objective(y.d)];
+    for (let i = 0; i < ox.length; i++) if (ox[i] !== oy[i]) return ox[i] - oy[i];
+    return x.index - y.index;
+  });
+  return { layouts: scored.map((s) => s.layout), designs };
+}
+
+/** The scorecard numbers for one layout of the batch, for comparing layouts (#17). */
+export interface LayoutScore {
+  costUsd: number;
+  labourHours: number;
+  freightClass: number;
+  densityLbFt3: number;
+}
+
+/** Scores each layout by designing its crate. For the few cards on screen, not the whole list. */
+export function scoreLayouts(
+  part: DesignPart,
+  settings: CrateSettings,
+  layouts: readonly Layout[],
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): Map<string, LayoutScore> {
+  const out = new Map<string, LayoutScore>();
+  for (const l of layouts) {
+    if (out.has(l.key)) continue;
+    const d = designCrate(part, settings, l, standards);
+    out.set(l.key, { costUsd: d.cost.totalUsd, labourHours: d.labour.hours, freightClass: d.freightClass, densityLbFt3: d.densityLbFt3 });
+  }
+  return out;
 }
 
 /**
@@ -133,17 +206,21 @@ export type LayoutExplanation =
   /** Recommended: the volumes tie, so the lower crate won. */
   | { kind: "tie" }
   /** The user picked a different layout, which ships `morePct`% more than the recommendation. */
-  | { kind: "picked"; morePct: number };
+  | { kind: "picked"; morePct: number }
+  /** Recommended under a cost or freight-density ranking (#17). */
+  | { kind: "ranked"; by: Exclude<Ranking, "volume"> };
 
 export function explainLayout(
   layouts: Layout[],
   shown: Layout,
   standards: ShopStandards = DEFAULT_STANDARDS,
+  ranking: Ranking = "volume",
 ): LayoutExplanation {
   const [best, next] = layouts;
   if (layouts.length <= 1) return { kind: "only" };
   const pctMore = (l: Layout) => Math.round((l.externalVolumeM3 / best.externalVolumeM3 - 1) * 100);
   if (shown.key !== best.key) return { kind: "picked", morePct: pctMore(shown) };
+  if (ranking !== "volume") return { kind: "ranked", by: ranking };
   if (best.stable && !next.stable) return { kind: "stable" };
   const nextMorePct = pctMore(next);
   // Rounded, because 0.03 × 100 is 3.0000000000000004 in floating point.
