@@ -2,18 +2,22 @@
  * `POST /api/v1/designs` (#46 slice 7): a stateless, headless calculation. A GLB and the part's
  * facts in, the ranked configurations out; nothing is saved. The upload gets the same checks and
  * messages as `POST /api/v1/parts` (`checkedGlb`), and the engine work (sweep plus the shortlist's
- * designs) runs on the worker pool, never on the request thread.
+ * designs) runs on the worker pool, never on the request thread. `standards` are the caller's org's
+ * (`readOrgStandards`), the shipped defaults when not given.
  */
 import { createHash } from "node:crypto";
 import { GLB_MESSAGES, glbSizeUnits, idFromFile, nameFromFile, unitsToMm } from "@/domain/glb";
-import { DEFAULT_STANDARDS } from "@/domain/standards";
+import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
 import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
 import { type DesignsApiResponse, DesignsFieldsSchema } from "@/lib/api/designs";
 import { ApiFailure } from "../http";
 import { checkedGlb, readForm } from "../parts/create";
 import type { EnginePool } from "../workers/pool";
 
-export async function calculateDesigns(request: Request, { pool }: { pool: Pick<EnginePool, "run"> }): Promise<DesignsApiResponse> {
+export async function calculateDesigns(
+  request: Request,
+  { pool, standards = DEFAULT_STANDARDS }: { pool: Pick<EnginePool, "run">; standards?: ShopStandards },
+): Promise<DesignsApiResponse> {
   const form = await readForm(request);
   const fields = DesignsFieldsSchema.safeParse({
     mass: form.get("mass"),
@@ -37,7 +41,7 @@ export async function calculateDesigns(request: Request, { pool }: { pool: Pick<
   const req: SweepRequest = {
     part: { id: idFromFile(fileName), name: name ?? nameFromFile(fileName), mass_kg: mass, dimensions_mm: sizeMm, material },
     rules: DEFAULT_SWEEP_RULES,
-    standards: DEFAULT_STANDARDS,
+    standards,
     freightRates: freightRates ?? null,
     total: total ?? null,
   };

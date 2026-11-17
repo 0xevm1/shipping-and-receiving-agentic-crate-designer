@@ -2,19 +2,20 @@
  * The job kinds (#46 slice 7, docs/QUEUE.md "Job kinds"): what `enqueueSweep` / `enqueueBundle`
  * put on the queue, and the handlers `bun run worker` runs them with.
  *
- * - `sweep`: for a design job, run the quantity sweep on the engine pool, save the shortlist as
+ * - `sweep`: for a design job, run the quantity sweep on the engine pool with the org's shop
+ *   standards (`shop_standard`, the defaults when it has none), save the shortlist as
  *   `precomputed` configurations, select the recommendation, and emit `configs.ready`, all in one
  *   transaction. Dead-lettered: the job goes to `error` and `job.error` is emitted.
  * - `bundle`: the server-built `bundle.zip` (slice 6). Its handler is `createBundleHandler` in
  *   src/server/artifacts, passed in as `createJobHandlers({ …, bundle })` (it needs blob storage).
  */
 import { z } from "zod";
-import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { DEFAULT_SWEEP_RULES, sweepDesignRequest, type SweepRequest } from "@/engine/sweep";
 import { emitEvent } from "../events/emit";
 import { type OrgContext, orgContext } from "../db/org";
 import type { QueueJob } from "../db/queue";
 import { createRepository, type Database, inTransaction, type Repository } from "../db/repository";
+import { readOrgStandards } from "../standards";
 import type { EnginePool } from "../workers/pool";
 import { type JobHandler, PermanentJobError } from "./runner";
 
@@ -97,7 +98,7 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
         material: part.material ?? undefined,
       },
       rules: DEFAULT_SWEEP_RULES,
-      standards: DEFAULT_STANDARDS,
+      standards: (await readOrgStandards(repo, org)).standards,
       total: job.totalQuantity,
     };
     const report = await pool.run("designs", req);

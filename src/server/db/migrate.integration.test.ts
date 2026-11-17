@@ -9,6 +9,7 @@ const TABLES = [
   "artifact",
   "configuration",
   "design_job",
+  "engine_release",
   "event",
   "idempotency_key",
   "job_configuration",

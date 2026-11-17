@@ -236,6 +236,39 @@ describe("startJobSync", () => {
     expect(es.readyState).toBe(2);
   });
 
+  it("on engine.updated, ignores its own engine version and asks for a reload on another before saving again", async () => {
+    let snapshots = 0;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/v1/jobs" && init?.method === "POST") return json(200, { job, created: false });
+      if (url === `/api/v1/jobs/${JOB}`) return (snapshots++, json(200, snapshot([])));
+      return json(404, { error: { code: "not_found", message: "?" } });
+    });
+    const stop = startJobSync({
+      api: { fetch: fetch as unknown as typeof globalThis.fetch },
+      EventSourceImpl: FakeEventSource as unknown as typeof EventSource,
+      refreshDelayMs: 0,
+    });
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    const es = FakeEventSource.instances[0]!;
+    es.onopen?.();
+    const reads = snapshots;
+
+    // Another instance started on the engine this tab already runs: nothing to do, not even a re-read.
+    es.emit(43, "engine.updated", { engineVersion: ENGINE_VERSION });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(useJobSync.getState().reloadNeeded).toBe(false);
+    expect(snapshots).toBe(reads);
+
+    // A new engine: the reload prompt, and saving waits for the reload rather than going out.
+    es.emit(44, "engine.updated", { engineVersion: `${ENGINE_VERSION}.next` });
+    expect(useJobSync.getState().reloadNeeded).toBe(true);
+    const sent = fetch.mock.calls.length;
+    useDesigner.getState().setSettings({ quantity: 3 });
+    expect(saveCurrentDesign().kind).toBe("reload");
+    expect(fetch.mock.calls.length).toBe(sent);
+    stop();
+  });
+
   it("goes offline without throwing when the server can't be reached, and probes its health until it answers", async () => {
     vi.useFakeTimers();
     try {
