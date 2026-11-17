@@ -102,7 +102,7 @@ identity are serialised with an advisory lock. Otherwise a new job is created: `
 `Location` header, `created: true`, and a `job.created` event.
 
 `designPart` (optional) is the part as the client's engine designs it, the engine's `DesignPart`
-(`id`, `name`, `mass_kg`, `dimensions_mm`, `material`, `profile`), checked with `DesignPartSchema`
+(`id`, `name`, `mass_kg`, `dimensions_mm`, `material`, `profile`, `suggested_quantities`, `cog`), checked with `DesignPartSchema`
 (a bad one is `400` with `field` like `designPart.mass_kg`). A new job is designed from it when it
 differs from the part's own facts; a reused job takes it as `PUT /jobs/:id/part` would. See
 [The job's part](#the-jobs-part).
@@ -210,8 +210,20 @@ one request builder (`sweepRequestFor`, `src/engine/request.ts`; spec §5.1 "Sam
 
 ```json
 PUT /api/v1/jobs/:id/part
-{ "part": { "id": "PART-001", "name": "Machined steel bracket", "mass_kg": 12.4, "dimensions_mm": [360, 220, 258], "material": "6061-T6 aluminum", "profile": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 4, "faces": { … } } } }
+{ "part": { "id": "PART-001", "name": "Machined steel bracket", "mass_kg": 12.4, "dimensions_mm": [360, 220, 258], "material": "6061-T6 aluminum", "profile": { "version": 1, "sizeMm": [360, 220, 258], "cellMm": 4, "faces": { … } }, "suggested_quantities": [1, 4, 8], "cog": { "offsetMm": [-38.3, 0, -48.6], "source": "estimated" } } }
 ```
+
+The part's design fields are:
+
+| Field | Required | Description |
+|---|---|---|
+| `id`, `name` | Yes | Text |
+| `mass_kg` | Yes | Mass of one part, above 0 |
+| `dimensions_mm` | Yes | `[x, y, z]` bounding box in mm, Z up, each above 0 |
+| `material` | No | Text |
+| `profile` | No | The measured outline (shaped blocking, spec §7.5b) |
+| `suggested_quantities` | No | Whole numbers above 0: the quantities the part is usually shipped in. The sweep's recommendation chooses only among these (spec §7.16). Without them it chooses among 1, 4 and 8 |
+| `cog` | No | The part's own centre of gravity: `offsetMm` `[x, y, z]` from the middle of the bounding box, in mm in the part's design frame (Z up), and `source` (`"supplied"` or `"estimated"`). It must lie inside the box (`400` otherwise). Without it the centre is assumed at the middle of the box, and the crate's centre-of-gravity checks say so (spec §7.14) |
 
 `PutJobPartRequestSchema`; `part` is checked with `DesignPartSchema` (`400` with `field` like
 `part.mass_kg` otherwise). No `version`: it is the part's facts, not an edit, and it never
@@ -220,6 +232,12 @@ conflicts with a client's pending change. The answer is `200 { job, changed }`:
 - **Content-addressed.** A part version is its `designPartHash` (SHA-256 of the canonical design
   fields). The same part again, or one equal to the part row's facts on a job that has none, is
   `changed: false` and does nothing.
+- **`suggested_quantities` and `cog` are part of the version.** Both are in the `designPartHash`
+  (`PART_HASH_SCHEMA` 2), so changing either is a new part version. A job with no client part
+  falls back to the part row's facts: for a catalog part, the catalog's suggested quantities and
+  no `cog`. The server does not parse the GLB, so it never estimates a centre itself: the browser
+  sends its estimate here, and a job made only through the API designs with the assumed centre
+  until a caller sends `cog`.
 - **An outline is never dropped.** A part sent without `profile` (a client that hasn't measured it
   yet, or couldn't) doesn't replace the same part with one; with another mass, name or material it
   keeps the stored outline when the size is the same.

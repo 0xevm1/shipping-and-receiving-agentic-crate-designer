@@ -156,7 +156,8 @@ The answer: `engineVersion`, `inputHash` (of the sweep's inputs), `part`, `basis
 `explanation`: the Rules tab's "Why this crate?" in metric text, spec §7.16),
 `configurations` (the shortlist, best first; each with its own design `inputHash`, `settings`,
 cost per part, crate and freight cost, gross, outside size, screws and `crates`), `total`,
-`curve` (every quantity 1–200: `ok`, the binding rule, the score) and `problem`, plus `model`
+`candidates` (the quantities the recommendation chose among: the part's suggested quantities, 1, 4 and 8 for an uploaded part, #133),
+`curve` (every quantity 1–200: `ok`, the binding rule, the score, and whether it was a candidate) and `problem`, plus `model`
 (sha256, size, `units`, `up`, `unitsGuessed`, `readAsMm`). Errors use the `/parts` shape: `{ error: { code, message, field? } }`.
 
 ## API keys
