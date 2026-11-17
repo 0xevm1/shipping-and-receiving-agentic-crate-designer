@@ -23,6 +23,8 @@
     "db:psql": "bun scripts/infra.ts psql",
     "db:generate": "drizzle-kit generate",
     "blob:gc": "bun scripts/blob-gc.ts",
+    "load": "node scripts/load/run.mjs",
+    "load:lock": "bun scripts/load/lock.ts",
     "preinstall": "node scripts/require-bun.mjs",
     "prepare": "simple-git-hooks",
     "format": "prettier --write .",
