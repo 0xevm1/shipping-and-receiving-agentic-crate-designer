@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { dims, lengthUnit, weight } from "@/lib/units";
-import { markInput } from "@/state/motion";
+import { INPUT_EVENTS, onInputEvent } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { Island, ISLAND_ID } from "../island/Island";
 import { SizeLabels } from "../viewer/SizeLabels";
@@ -78,11 +78,11 @@ export function DesignerShell() {
   }, []);
   const closeDrawer = useCallback(() => useDesigner.getState().setDrawerOpen(false), []);
 
-  // Any input anywhere stops idle auto-play. Escape closes the drawer, or else clears a pinned row.
+  // Deliberate input anywhere (click or tap, drag, wheel, key) stops idle auto-play; hovering
+  // doesn't (#64). Escape closes the drawer, or else clears a pinned row.
   useEffect(() => {
-    const events = ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"] as const;
     const opts = { passive: true, capture: true };
-    events.forEach((e) => window.addEventListener(e, markInput, opts));
+    INPUT_EVENTS.forEach((e) => window.addEventListener(e, onInputEvent, opts));
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const s = useDesigner.getState();
@@ -91,7 +91,7 @@ export function DesignerShell() {
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      events.forEach((e) => window.removeEventListener(e, markInput, opts));
+      INPUT_EVENTS.forEach((e) => window.removeEventListener(e, onInputEvent, opts));
       window.removeEventListener("keydown", onKey);
     };
   }, []);

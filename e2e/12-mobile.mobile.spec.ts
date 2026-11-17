@@ -251,7 +251,7 @@ test.describe("with motion", () => {
     test.setTimeout(90_000);
     await openApp(page);
     await openDrawer(page);
-    // Longer than the 6 s idle delay, with no input.
+    // Longer than the 5 s idle delay, with no input.
     await page.waitForTimeout(7500);
     expect((await crate(page)).autoplay).toBe(false);
     await closeBtn(page).tap();

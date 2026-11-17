@@ -15,7 +15,7 @@ import { useFrame, useThree, type RootState } from "@react-three/fiber";
 import { useEffect } from "react";
 import { Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { anim, autoplay, pulse } from "@/state/motion";
+import { anim, autoplay, isIdle, pulse } from "@/state/motion";
 import { currentMode, useDesigner } from "@/state/store";
 
 export interface CrateSnapshot {
@@ -33,6 +33,8 @@ export interface CrateSnapshot {
   hoverAssembly: string | null;
   anim: { explode: number; lidAlpha: number; frontAlpha: number };
   autoplay: boolean;
+  /** No deliberate input for `IDLE_MS` (hovering doesn't count, #64). */
+  idle: boolean;
   /** `result.design.layout.external`, mm; null when there is a problem instead of a design. */
   outside: [number, number, number] | null;
   problem: string | null;
@@ -93,6 +95,7 @@ function snapshot(): CrateSnapshot {
     hoverAssembly: s.hover?.assembly ?? null,
     anim: { ...anim },
     autoplay: autoplay.on,
+    idle: isIdle(),
     outside: external ? [external[0], external[1], external[2]] : null,
     problem: s.result.problem?.id ?? null,
     tab: s.tab,

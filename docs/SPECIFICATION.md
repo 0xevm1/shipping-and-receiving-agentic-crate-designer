@@ -173,6 +173,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url, plus the units (`printHash`, `readPrintHash`) |
 | `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles |
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
+| `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
+| `src/lib/exportPdf.ts` | `printableToPdf`: the `PrintableDesign` as a vector PDF with jsPDF (#51); loaded only with `import()` |
+| `src/components/shell/ExportPill.tsx` | The green Export pill under the part header and its idle / busy / done / error states (#51) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
@@ -431,7 +434,8 @@ standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUti
 ### 6.5 Design file (`DesignFileSchema`, #28)
 
 A saved design is a JSON file, downloaded from the Cut list tab with **Download design
-(.json)** as `crate-design-{part id}-x{quantity}.json`, and opened again through **Load a part**
+(.json)** as `crate-design-{part id}-x{quantity}.json` (and packed as `design.json` in the
+Export pill's .zip, §7.13), and opened again through **Load a part**
 or a drop (§8.5). `src/domain/designFile.ts` writes it (`serializeDesign`) and reads it
 (`parseDesignFile`); both are pure and unit-tested. The design library and share links (#14,
 §9) store and carry this same format.
@@ -997,8 +1001,67 @@ Labour 2.709 h × $35 = **$94.82**; wood $75.16 + screws 202 / 100 × $8 = $16.1
 part (unless the last-opened crate is reopened, which leaves the clock stopped, §9) and again on
 every `setPart` / `loadDesign`, and `designedInMs` at the first export or
 download after that (Download or Copy cut list, Download design (.json), Download 3D model
-(.glb)); later exports don't move it. The Overview shows "Designed in 1 m 12 s". The manual
+(.glb), the Export pill's .zip); later exports don't move it. The Overview shows "Designed in 1 m 12 s". The manual
 baseline it compares with is an assumption in the README.
+
+### 7.13 Export package (the Export pill, #51)
+
+One click gives the PM everything a crate needs to leave the building: the shop, logistics and
+engineering each get their file. Everything is made in the browser; nothing is uploaded.
+
+**`crate-{part}-x{quantity}.zip`** (`{part}` is the part id with anything but letters, digits,
+`.`, `_` and `-` turned into `-`, since a custom id comes from a file name):
+
+| File | What | From |
+|---|---|---|
+| `crate-PART-001-x4.glb` | The assembled crate with the parts in place (metres, Z up) | `exportCrateGlb` (#27) |
+| `crate-PART-001-x4.pdf` | Crate spec, build sheet and shipping label, every crate type | `printableToPdf(buildPrintable(…))` |
+| `cut-list.csv` | The cut list in the selected units (§7.6) | `bomToCsv` |
+| `design.json` | The design file (§6.5), re-importable with Load a part | `serializeDesign`, as Download design (.json) |
+| `README.txt` | What each file is for, the part, the quantity (and the split), the date, the app name and version, and the units | `readme` |
+
+**A split batch** (§7.10) packs every crate type: `…-crate-A.glb` and `…-crate-B.glb` (one GLB
+per type), one PDF with a spec section, build sheet and label per type, `cut-list-crate-A.csv`
+and `cut-list-crate-B.csv` (one crate of each type) plus `shipment-cut-list.csv`
+(`shipmentToCsv`, every piece for all crates). `design.json` records the crate type on screen,
+as Download design (.json) does. The zip entries are stamped with the export time.
+
+**The PDF** (`src/lib/exportPdf.ts`) lays out the same `PrintableDesign` the `/print` route
+renders, in the same order and with the same text: the crate spec (part; the shipment plan;
+per crate type size and weight, freight, the layout, why it won, the runner-up, every check),
+then per crate type the build sheet (the five drawings; the cut list by stock with totals,
+the fastener schedule and its total, the five assembly steps with their pieces and screws) and
+the shipping label (part number and name, quantity, gross in both units, outside size, the
+crate-type bar for a split, THIS SIDE UP with the ISO 780 arrows, the end with skids and fork
+arrows, the centre of gravity once #8 adds it). Letter pages with 0.5″ margins; a sheet's
+header repeats when it runs onto another page, and every page has "page i of n".
+
+- **Vector throughout.** Text uses the PDF's built-in Helvetica; the drawings are drawn from
+  `crateDrawings` as rectangles, hatching lines, dashed part outlines and dimension lines,
+  rather than through an SVG converter. That keeps the PDF code DOM-free, so it is unit-tested
+  in Node, and adds one dependency (`jspdf`) instead of two.
+- **Characters.** The built-in fonts are WinAnsi, so `pdfSafe` spells the few characters outside
+  it (`″` → ` in`, `–` → `-`, `≥` → `>=`, `→` → `->`); Latin-1 (`×`, `·`, `³`) is kept.
+- **Differences from `/print`:** the page layout is the PDF's own, not the browser's (pixel
+  parity is not a goal). Fasteners and assembly order stack instead of sitting side by side, so
+  the assembly order can run onto another page. No section is left out.
+- It is written uncompressed (the zip compresses it), so its text can be checked in tests.
+
+**Loading.** `jspdf` (about 125 KB gzipped) and the bundle code load with `import()` on the first
+click, never with the page. `fflate` (`zipSync`) zips.
+
+**The pill** (§8.2): idle "Export"; busy "Exporting…" with a spinner, held for at least
+`MIN_BUSY_MS` (1.5 s) even when the work is faster, so the action registers; with
+`prefers-reduced-motion`, no spin and no hold. On success the file downloads,
+`markExported()` stops the design clock (§7.12) and a `role="status"` note says "Downloaded
+crate-PART-001-x4.zip" for 8 s. On failure the note says so in one sentence and the pill is idle
+again. It is disabled when there is no crate (§7.9). The design is read at the click, so an
+edit during the busy state doesn't change the package.
+
+**The separate downloads stay** (Cut list CSV and Copy, Download design (.json), View →
+Download 3D model (.glb), Print / save PDF): someone who wants one file gets it in one click, the
+print route is still the quickest way to paper, and the GLB download has its "Include parts"
+switch.
 
 ## 8. UI
 
@@ -1020,7 +1083,9 @@ hadrian.co**, read from its live CSS:
   - **Gold `#F3A000`** marks the answer, warnings, the tagline and the cut-list group headers.
   - **Sky blue `#70B8FD`** marks selection (highlighted boards, pinned rows, part dimension
     lines). It is also the floor grid colour, echoing Hadrian's blueprint line art.
-  - **Green `#7BD88F`** marks passed checks.
+  - **Green `#7BD88F`** marks passed checks. The Export pill (#51) is filled with it deepened
+    to `#1E7B45` (`--green-fill`; hover `#1A6B3C`), so its white label passes AA (5.3:1), with
+    a `--green` border.
 - **Glass:** the island, pills and popover use a navy-tinted translucent gradient,
   `blur(16px) saturate(170%)`, a 1 px border, an inset highlight and a drop shadow. Islands
   have a 30 px radius; pills are fully round. The translucency is deliberate; don't make it more
@@ -1060,7 +1125,7 @@ The canvas fills the window. Four regions float above it:
 
 | Region | Contents |
 |---|---|
-| Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a). Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
+| Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a), then the green **Export** pill (#51, §7.13), left-aligned with the lines, with its status note beside it. Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
 | Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
 | Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads). Above it, any load message (shown only when there is one) |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
@@ -1080,8 +1145,10 @@ The canvas fills the window. Four regions float above it:
   - **Header** (top left): the title at 24 px without the tagline, and the part sentence at
     11.5 px. Lines wrap between phrases, not inside a value. The header's change note floats
     under it on one line with an ellipsis (full text in its `title`), so it doesn't move the
-    framing. A row under the part lines is free for the coming Export pill (#51); the top inset
-    is measured, so the crate moves down to make room.
+    framing. The **Export pill** (#51) stays in the header under the part lines, 44 px tall,
+    rather than moving into the drawer: it is one tap away without opening anything, it belongs
+    to the part and crate the header describes, and the top inset is measured, so the crate
+    moves down to make room. Its status note sits beside it, or wraps under it.
   - **Hamburger** (top right, 48 px, "Crate details"): opens the drawer. It has `aria-expanded`
     and `aria-controls="island"`.
   - **Drawer:** the island, full height at the right edge, `min(88vw, 440px)` wide, over a
@@ -1167,11 +1234,22 @@ open question for the user (see #20).
 - **Opacity:** `setOpacity` (`scene.ts`) moves a material between the opaque and transparent
   passes and recompiles it, because three bakes an `OPAQUE` define into opaque shaders.
 - **Idle auto-play:**
-  - After **6 s** with no pointer, wheel, key or touch input anywhere, the camera turns at
+  - After **5 s** (6 s until #64, shortened at the user's request) with no deliberate input
+    anywhere, the camera turns at
     **0.18 rad/s** (slowed from the handoff's 0.3 at the user's request) and steps closed → exploded → open → exploded → …, half a turn per mode. The
     next mode starts 0.12 turn early so it lands as the half-turn completes.
-  - Any input stops it at once. It holds while a row is pinned, anything is hovered or the
-    narrow-screen drawer is open (#42), and resumes from the mode on screen. It runs on first load.
+  - **Deliberate input** (#64) stops it at once and restarts the idle timer: `pointerdown` (a
+    click or tap), a drag (`pointermove` with a button held, so orbiting the crate or grabbing
+    the part view), `wheel`, `keydown` and `touchstart`, listened for on `window` in
+    `DesignerShell` and classified by `isDeliberateInput` (`src/state/motion.ts`).
+  - **Hovering is not input:** a `pointermove` with no button held, over empty canvas, a board
+    or the island (cut-list rows, weight bars), neither stops nor delays it. It still holds
+    while a row is pinned (pinning is a click), during an orbit drag, or while the narrow-screen
+    drawer is open (#42), and resumes from the mode on screen. It runs on first load.
+  - **Hover while turning:** r3f only picks on pointer events, so while auto-play turns the
+    crate under a still pointer `Director` re-picks about 10 times a second
+    (`events.update()`, only while the pointer is over the canvas). The board tooltip and
+    highlight follow the board under the pointer.
   - With `prefers-reduced-motion` it never runs, and mode changes and camera moves are instant.
 - **Size lines:**
   - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
@@ -1235,7 +1313,7 @@ open question for the user (see #20).
   the handoff's 0.45 and reversed, at the user's request). The turn is driven from frame time in
   `useFrame`, not OrbitControls' `autoRotate`, which steps per frame and runs double speed at
   120 Hz. Dragging stops
-  it; it resumes from the same angle after the shared 6 s idle. Double-click resets tilt and
+  it (hovering doesn't, #64); it resumes from the same angle after the shared 5 s idle. Double-click resets tilt and
   zoom.
 - **Floor:** a line grid of 500 mm squares (1 ft in imperial) reaching at least 5 m (or 3× the
   crate's longest side) from the crate, fading with distance from the crate rather than the
@@ -1698,6 +1776,18 @@ other JSON still read as a catalog, and plain messages for a bad design or bad J
 - The print hash round-trips the file and the units URL-safely and refuses a missing or damaged
   hash. The document rebuilt from the file equals the one built from the plan.
 
+**`src/lib/exportBundle.test.ts`** checks the Export pill's package (#51, §7.13) with stand-in
+GLB and PDF makers: the stem and zip name (a custom id made file-safe); the file list and names
+for one crate, a split batch (200: a GLB and a cut list per type, the shipment cut list, one PDF
+with both types) and a custom part; the CSV in imperial and metric; `design.json` parses with
+`parseDesignFile` to the same part, quantity and outside size (and the split's shipment, and the
+crate type on screen); README.txt names every file, the app version, the date and the units; no
+crate is refused; and the zip unzips byte for byte. **`src/lib/exportPdf.test.ts`** makes real
+PDFs in Node: they start `%PDF-` and end `%%EOF`, have 5 pages for PART-001 × 4 and 10 for
+× 200, carry every section's text (spec headings, freight, layout reason, every check, the
+drawing captions, each stock group, the fastener total, the five steps, the label), follow the
+units, and `pdfSafe` spells non-WinAnsi characters.
+
 **`src/lib/exportGlb.test.ts`** round-trips the GLB export (#27) for each sample part: export
 with `GLTFExporter`, re-load with `GLTFLoader`, and check that the boards' bounds (parts
 excluded) equal `layout.external` within 1 mm in metres with X, Y, Z = L, W, H (Z up, no
@@ -1719,14 +1809,15 @@ headless Chromium with SwiftShader WebGL, so the canvas really renders. Four pro
 (the drawer layout with a mouse) runs only `*.narrow.spec.ts`; mobile-390 (390 × 844) and
 mobile-360 (360 × 800), both with touch, `isMobile` and 2× pixels, run only `*.mobile.spec.ts`
 (#42). Tests run with `prefers-reduced-motion: reduce`, so idle auto-play is off and
-transitions are instant (§8.4); one test turns motion back on. Each flow saves named full-page
+transitions are instant (§8.4); the idle tests (`06-view`, `12-mobile`, `21-idle-hover`)
+turn motion back on. Each flow saves named full-page
 screenshots to `e2e/screenshots/` (git-ignored); CI uploads them as `e2e-screenshots` with the
 HTML report as `playwright-report`.
 
 - **Test hook:** the 3D scene isn't in the DOM, so `E2EProbe` (`src/components/viewer/`)
   exposes a read-only `window.__crate` with `getState()` (mode from the view targets, view
   switches, camera distance, angles and target, pin and hover keys, `anim` values, auto-play,
-  the outside size, problem id, tab, units, quantity, frame count) and `canvasCoverage()` (share
+  `idle` (no deliberate input for `IDLE_MS`), the outside size, problem id, tab, units, quantity, frame count) and `canvasCoverage()` (share
   of canvas pixels drawn). It is loaded only when built with `NEXT_PUBLIC_E2E=1`.
   `next.config.ts` always inlines the flag (`"0"` when unset), so normal builds drop the branch
   and don't bundle the module. Everything else is found by role, label or text; the only test
@@ -1754,7 +1845,7 @@ HTML report as `playwright-report`.
     "Showing N × piece", Escape clears it.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
     View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
-    Hide panels keeps the credit; idle auto-play starts after 6 s without input; from the
+    Hide panels keeps the credit; idle auto-play starts after 5 s without input; from the
     exploded view, "Download 3D model (.glb)" saves `crate-PART-001-x4.glb` with the `glTF`
     header, a matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1`
     … `Part 4`), and with "Include parts" off the file has no `Parts` node; the first framing
@@ -1844,6 +1935,13 @@ HTML report as `playwright-report`.
     every crate; a max gross of 500 kg in Shop standards gives more crates, and Reset to
     defaults restores the split. `13-batch-split.mobile` (both phone projects): the closed
     summary chip reads "Crate A outside" and "Gross, N crates".
+  - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
+    the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
+    and `idle` on and the camera turning, while it hovers at least one board and one bar; one
+    click on empty canvas turns both off at once, and auto-play resumes 4–15 s later with the
+    pointer still hovering. A wheel, a key and a drag each stop it. A pointer held still on
+    the turning crate keeps a tooltip, and its hover key changes as boards pass under it; the
+    PR screenshot `docs/screenshots/64-idle-hover/hover-while-turning.png` is saved there.
   - `15-app-icons` (#58, HTTP only): `/favicon.ico`, `/icon.svg`, `/icon1.png` and
     `/apple-icon.png` return 200 with their image types; `/icon.svg` is the crate mark;
     `/site.webmanifest` has name "Crate Designer", start URL `/`, theme `#002548` and two icon
@@ -1866,6 +1964,18 @@ HTML report as `playwright-report`.
     - One screenshot per page: `26-spec`, `26-build-drawings`, `26-build-cutlist`, `26-label`,
       `26-spec-metric`, `26-split-spec` and `26-split-build-b`, plus the PDFs, in
       `e2e/screenshots/`.
+  - `19-export-pill` (#51): the pill sits under the part lines, left-aligned; Export downloads
+    `crate-PART-001-x4.zip`, the note says "Downloaded crate-PART-001-x4.zip", and the test
+    unzips it with `fflate`: exactly the five entries, the GLB has the glTF magic, version 2 and
+    its length, the PDF starts `%PDF-` with at least 4 pages and imperial cuts, the CSV and
+    README are imperial, `design.json` has the on-screen outside size and the Overview shows
+    "Designed in". Re-importing `design.json` (in metric) gives the same outside size. Metric
+    gives mm / kg CSV, PDF and README. 200 brackets give both crate GLBs, both cut lists, the
+    shipment cut list and a PDF with both build sheets. A loaded custom GLB exports, its README
+    names the GLB to load, and the design reopens with it to the same size. With motion on, the
+    busy state ("Exporting…", `aria-busy`) lasts at least 1.4 s. Hide panels hides it. At
+    390 × 844 it stays under the part lines at 44 px and exports. Screenshots `19-export-idle`,
+    `-loading`, `-success`, `-narrow` and the PDF `19-export.pdf`.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 
@@ -1903,6 +2013,8 @@ HTML report as `playwright-report`.
 | Ranking option re-ranks with hard constraints first; volume stays the default | Cost or freight must never buy a crate that tips or leaves parts loose; the default keeps every existing result | Re-ranking designs every layout (5–15 ms); the density ranking also avoids the LTL length charge, a judgement call |
 | `materialCostUsd` stays wood only; `cost` holds the full breakdown | Existing callers, tests and the "$ of wood" line keep their meaning | Two cost fields to read correctly |
 | The export document is a print route plus the browser's "Save as PDF", rendered from a pure `PrintableDesign` (#26) | No server and no PDF library; vector output for free; the model is tested once, and a programmatic PDF (#51) can reuse it | Page breaks are the browser's; the user picks "Save as PDF" in the dialog |
+| The Export pill's PDF is drawn with jsPDF from `PrintableDesign`, drawings included, without svg2pdf (#51) | One model for print and PDF; the drawings are only rectangles and lines, so drawing them directly keeps the code DOM-free and unit-testable in Node, with one dependency | Built-in Helvetica only (non-WinAnsi characters are spelled out); the PDF's page layout is its own, not `/print`'s |
+| The Export pill keeps the separate downloads (#51) | Someone who wants one file (an engineer wanting only the GLB) and the print-to-paper path stay one click away | Two ways to get each file |
 | The print route gets the design as a design file in the URL hash, not through `sessionStorage` | Works on reload and when opened directly, never leaves the browser, and reuses the #28 format a share link can use | It uses the printing browser's saved shop standards, not the opener's in-memory ones (in the same browser these are the same) |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
 
@@ -1922,6 +2034,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #8 | Centre of gravity and forklift handling |
 | #9 | Printable shop-floor build sheet (superseded by #26) |
 | #26 | Export bundle: the crate spec, build sheet and shipping label as a printable PDF (§7.11). A one-click PDF file is #51 |
+| #51 | Export pill: one-click .zip with the GLB(s), a PDF file, the cut list(s), the design file and a README (§7.13) |
 | #10 | Edge-case and input hardening |
 | #11 | Explain why a layout was chosen (closed; `explainLayout` landed with #20) |
 | #12 | Flag when a wooden crate is overkill (for example, light aluminum that a carton would do) |

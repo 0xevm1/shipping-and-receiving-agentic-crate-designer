@@ -20,7 +20,7 @@ const HOME_PHI = Math.PI / 2 - 0.42;
 
 /**
  * The part on its own in the island: transparent background, slowly turning.
- * Grabbing it stops the turn; after the page has been idle for 6 s it turns
+ * Grabbing it stops the turn; after the page has been idle for 5 s it turns
  * again from wherever it was left. Double-click resets tilt and zoom.
  */
 export default function PartView() {
@@ -76,7 +76,7 @@ function Turntable({ part }: { part: LoadedPart }) {
   useFrame((_, dt) => {
     const c = controls.current;
     if (!c || grabbed.current || reducedMotion()) return;
-    // Resume after the shared 6 s idle, from wherever it was left.
+    // Resume after the shared 5 s idle (hovering doesn't count as input, #64), from wherever it was left.
     if (!turning.current && isIdle()) turning.current = true;
     if (!turning.current) return;
     const s = new Spherical().setFromVector3(camera.position);

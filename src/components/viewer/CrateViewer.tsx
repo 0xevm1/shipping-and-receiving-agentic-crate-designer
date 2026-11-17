@@ -3,6 +3,7 @@
 import { OrbitControls, useProgress } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { lazy, Suspense, useRef } from "react";
+import { pointer } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { CrateModel } from "./CrateModel";
 import { DimensionLines } from "./DimensionLines";
@@ -57,7 +58,11 @@ export default function CrateViewer() {
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true }}
         onPointerDown={(e) => void (down.current = [e.clientX, e.clientY])}
-        onPointerLeave={clearHover}
+        onPointerMove={() => void (pointer.inCanvas = true)}
+        onPointerLeave={() => {
+          pointer.inCanvas = false;
+          clearHover();
+        }}
         onPointerMissed={(e) => {
           const d = down.current;
           if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) > CLICK_SLOP_PX) return;
