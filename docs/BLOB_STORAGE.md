@@ -6,8 +6,8 @@ metadata and the object key (`part_model.object_key`, `artifact.object_key`). Lo
 the SeaweedFS emulator from `docker-compose.yml` ([POSTGRES.md](POSTGRES.md#blob-emulator)).
 
 **Status (slice 1a):** the `BlobStore` client, object keys, GLB upload through the API, presigned
-downloads and orphan cleanup are in. Generated artifacts are written by later slices; their keys
-and lifecycle are settled below. Nothing in the UI uses the API yet.
+downloads and orphan cleanup are in. Server-built artifacts and bundles (docs/API.md "Artifacts")
+use the keys and lifecycle below.
 
 ## One API: S3
 
@@ -62,8 +62,8 @@ bare hash can't be stored or fetched by mistake.
 | Object | Key |
 |---|---|
 | Part GLB | `org/<orgId>/models/<sha256>.glb` |
-| Generated file | `org/<orgId>/artifacts/<inputHash>/<engineVersion>/{crate.glb,spec.pdf,cutlist.csv}` |
-| Bundle | `org/<orgId>/bundles/<id>.zip` |
+| Generated file | `org/<orgId>/artifacts/<inputHash>/<engineVersion>/{crate.glb,spec.pdf,cutlist.csv}` (the engine version's `+` written as `_`, which S3 treats specially) |
+| Bundle | `org/<orgId>/bundles/<id>.zip` (`<id>` = `<bundleHash>-<engineVersion>`) |
 
 Keys are content-addressed (sha256 or the engine's `inputHash`), so the same bytes are stored once
 per org. They are per org, never global, and nothing is looked up by hash alone: the API finds a
@@ -135,8 +135,9 @@ bun run blob:gc                           # delete orphans older than 24 h
 bun run blob:gc -- --older-than-hours=48  # at least 1
 ```
 
-Run it daily (cron, a scheduled CI job, or the job queue once it exists). Bundles must have an
-`artifact` row (kind `zip`) naming their key, or cleanup will treat them as orphans.
+Run it daily (cron, a scheduled CI job, or the job queue once it exists). Bundles have an
+`artifact` row (kind `zip`) naming their key, so cleanup keeps them (checked by
+`artifacts.integration.test.ts`).
 
 ## Lifecycle of generated files
 
@@ -152,10 +153,12 @@ when artifacts are written:
   artifacts, so they are kept. The artifact's row stays; a missing object is rebuilt on the next
   request ("built and cached on first request"), so expiry never breaks a link.
 
-**Not applied yet.** SeaweedFS 4.51 accepts and returns a tag-filtered lifecycle configuration
-(checked), but whether it enforces tag filters (its expiry is TTL-based) wasn't verified, and no
-artifacts are written yet. Apply the rule in `infra/blob-init.sh` and on the real bucket in the
-slice that writes artifacts, with a test that checks the tag.
+**Tags are written; the rule is not applied yet.** Server-built artifacts and bundles (#46 slice
+6, docs/API.md "Artifacts") are written with `retention=ephemeral` (`EPHEMERAL_TAGS`;
+`artifacts.integration.test.ts` reads the tag back from the emulator), and a request for a file
+whose object has gone rebuilds it. The bucket lifecycle rule itself is still to be applied, in
+`infra/blob-init.sh` and on the real bucket: SeaweedFS 4.51 accepts a tag-filtered lifecycle
+configuration, but whether it enforces tag filters (its expiry is TTL-based) wasn't verified.
 
 ## Emulator quirks
 

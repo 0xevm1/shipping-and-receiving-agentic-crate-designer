@@ -50,7 +50,7 @@ Every error has the same shape (`ApiErrorSchema`):
 | 422 | `result_mismatch` | The server recomputed a configuration and got another `inputHash` (`field: "inputHash"`) or summary (`field: "summary"`) | Don't retry as is; reload (a tampered or corrupt result) |
 | 422 | `invalid_request` | A selection that isn't one of the job's configurations; a design with no crate | Show the message |
 | 422 | `idempotency_conflict` | The `Idempotency-Key` was used for a different request | Use a new key per change |
-| 503 | `unavailable` | The engine's worker threads aren't available on this server (`/designs`) | Try later |
+| 503 | `unavailable` | The engine's worker threads aren't available on this server (`/designs`, artifacts) | Try later |
 | 500 | `internal` | Anything else, database unreachable included. The message is generic; details go to the server log | Treat as offline and try later |
 
 The browser treats network errors, timeouts and every 5xx as *offline*: it keeps designing, keeps
@@ -71,8 +71,8 @@ saves on the device and sends them later, without showing an error (`src/state/j
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
 | `GET` | `/health` | Database and event-listener liveness |
 
-Coming in other slices of #46: artifact downloads
-(`/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`) and `GET /jobs/:id/bundle.zip`.
+| `GET` | `/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}` | One file of a saved configuration, built by the server on the first request and kept in blob storage; a presigned URL (`?redirect=1`: a 302 to it) ([Artifacts](#artifacts)) |
+| `GET` | `/jobs/:id/bundle.zip?configs=…` | The job's configurations in one ZIP: a folder each, `manifest.json`, `comparison.pdf` (spec §7.17); 200 with a presigned URL, or 202 while the queue builds a large one ([Artifacts](#artifacts)) |
 
 ### `POST /api/v1/jobs`
 
@@ -173,6 +173,82 @@ there. The job row is locked, then:
 - otherwise the job is updated, `version` goes up by one, and `200 { job }` comes back. When the
   selection changed, `recommendation.changed` is emitted with the new `configurationId`.
 
+## Artifacts
+
+Files built **by the server** from saved configurations (#46 slice 6; code in `src/server/artifacts/`,
+shapes in `src/lib/api/artifacts.ts`). The engine builders are the browser's
+(`buildArtifact`, `buildMultiBundleZip`, spec §7.17), so the bytes match what the page would make
+for the same request, units and date.
+
+### `GET /api/v1/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}`
+
+- **Access:** the job must be the caller's org's and the configuration linked to that job. Another
+  org's job, a configuration of another job, a malformed id or another file name: `404`.
+- **What is built:** the configuration's stored `DesignRequest` (the one the server verified when
+  it was saved, or the sweep job stored), by the **running** engine, with the job's part model
+  read from blob storage (`part_model`; a catalog part's bundled GLB is stored there as a
+  `part_model` of the org on first use, then read like an upload). Imperial units (the app's
+  default), dated with the configuration's `createdAt` in UTC, so the same inputs and engine always
+  give the same bytes.
+- **First request:** built on the engine's worker threads (never the request thread), stored at
+  `artifactKey(org, inputHash, engineVersion, file)` (`org/<orgId>/artifacts/<inputHash>/<engineVersion with + as _>/<file>`,
+  tagged `retention=ephemeral`), recorded as an `artifact` row (`built_by = server`, unique per
+  object key), and `artifact.ready` is emitted on the job (`{ artifactId, configurationId, kind, file }`).
+- **Later requests:** the row and the object are there, so nothing is built (`cached: true`). A row
+  whose object has gone (a lifecycle rule) is rebuilt, never served as a dead link.
+- **Concurrent first requests** build once: they share one build in the process, and processes
+  serialise on a transaction-level advisory lock on the key (`artifacts.lock`); the second finds
+  the first one's row and object. Because the bytes are deterministic, even a race past both guards
+  would write the same object.
+- **Answer** (`ArtifactUrlResponseSchema`), the same choice as `GET /parts/:id/model`: JSON
+  `{ url, expiresAt, artifactId, kind, fileName, contentType, sha256, sizeBytes, engineVersion,
+  inputHash, builtBy, cached }`, where `url` is a ~5 min presigned GET that downloads as
+  `fileName`; or with `?redirect=1` a `302` to it, so an `<a href>` downloads straight from blob
+  storage. No blob credentials are ever in a response.
+- A GLB or CSV of a configuration with no crate: `422 invalid_request` (the PDF says why). The
+  engine's thread bundle missing: `503 unavailable`.
+
+### `GET /api/v1/jobs/:id/bundle.zip?configs=<id>,<id>,…`
+
+The one-click download from the server: a folder per configuration (GLB per crate type, PDF,
+CSV), `manifest.json` and `comparison.pdf`, exactly `buildMultiBundleZip` (spec §7.17).
+
+- `configs`: configuration ids of the job, comma-separated or repeated, in the order wanted
+  (duplicates and equal inputs once; at most 50). Absent: every configuration of the job, in the
+  order they joined it. An id that isn't one of the job's: `404`. A job with none: `422`.
+- **Key:** `bundleKey(org, "<bundleHash>-<engineVersion>")`, where `bundleHash` is the manifest's
+  (SHA-256 of the input hashes joined by newlines). An `artifact` row of kind `zip` names it (its
+  `configuration_id` is the first configuration), so orphan cleanup keeps the object and the job's
+  snapshot lists it. Dated with the newest configuration's `createdAt`.
+- **Built during the request or queued (the choice):** up to **8** configurations
+  (`BUNDLE_SYNC_MAX_CONFIGS`) are built during the request on the worker threads, which keeps the
+  event loop free, so the request simply waits (a few seconds at most) and gets `200`. Larger
+  bundles are **queued** (`enqueueBundle`, deduplicated by bundle id): `202`
+  `{ status: "queued", bundleId, configurationIds, queueJobId }` with `Location` (the same URL)
+  and `Retry-After: 5`; the queue's `bundle` job (`bun run worker`) builds and stores it and emits
+  `artifact.ready` (`kind: "zip"`, `bundleId`). Ask the same URL again then. Without a running
+  worker a queued bundle waits, like a sweep.
+- **Ready:** `200` `{ status: "ready", bundleId, configurationIds, …the artifact fields above }`, or
+  with `?redirect=1` a `302` to the presigned URL (a queued bundle still answers `202` JSON).
+
+### Files built in the browser
+
+The browser builds the same files itself (Export, Download all) and doesn't upload them.
+**Caching browser-built files on the server (`built_by = browser`) is deferred:** the server
+would have to rebuild anything that goes on a released record anyway (#46: files from a client
+can't be trusted), and its own builds are cheap and content-addressed, so uploads would add a
+trust path for little gain. The `built_by` column keeps the door open.
+
+### In the UI
+
+The Overview's *Shared job* section (`SharedJob.tsx`, `SharedJobFiles.tsx`): while the server is
+live, each saved configuration links **GLB · PDF · CSV** from the server (`artifactHref`, a
+redirect to the presigned URL), and **ZIP from the server** links `bundle.zip` (`bundleHref`).
+**Download all saved** bundles the job's configurations in the page (`savedConfigRequests`, no
+server needed, from the list as last seen); the Export pill's **Download all** bundles the design
+on screen plus the job's saved configurations when there are any (`defaultConfigs`), else the
+sweep's shortlist as before.
+
 ## Events
 
 Writes emit events in the same transaction, as its last statements (POSTGRES.md "Writing"):
@@ -185,7 +261,7 @@ Writes emit events in the same transaction, as its last statements (POSTGRES.md 
 | `PATCH /jobs/:id` moving the selection | `recommendation.changed` | the job | `configurationId` (null when cleared) |
 | The queue's sweep job (QUEUE.md) | `configs.ready` | the job | `count`, `recommendedConfigurationId`, `inputHash` |
 | The queue, when a sweep is dead-lettered | `job.error` | the job | `message` (generic; the cause is in `queue_job.last_error`) |
-| Artifacts (later slice) | `artifact.ready` | the job | see POSTGRES.md |
+| A server-built file or bundle stored (first request, or the queue's bundle job) | `artifact.ready` | the job | `artifactId`, `configurationId` (a bundle's first), `kind` (`glb`, `pdf`, `csv`, `zip`), plus `file` or `bundleId` |
 | A deploy with a new engine (later slice) | `engine.updated` | none (org-wide) | `engineVersion` |
 
 The browser re-reads the snapshot when a job event arrives (several at once cause one read), and
@@ -286,3 +362,13 @@ once, and a recommendation replayed after a lost response are each applied once.
 conflict and engine-version flows, the cache and the liveness backoff with fake timers.
 `src/server/jobs/verify.test.ts`, `src/state/jobApi.test.ts` and `src/state/jobSync.test.ts` are
 unit tests.
+
+`src/app/api/v1/jobs/artifacts.integration.test.ts` covers the artifact and bundle routes: built
+on the first request and then served from storage (one object, one row, one `artifact.ready`),
+concurrent first requests (and the database lock alone, without the in-process single flight),
+the GLB from the part model in blob storage reloading at the crate's outside size within 1 mm,
+404s for another org's job, another job's configuration, bad ids and file names, the bundle's
+folders, manifest and comparison PDF, the queued (202) path through the queue's bundle job,
+precomputed configurations, orphan cleanup keeping bundle objects, the `retention` tag, and no
+blob secret in any response. `src/lib/api/artifacts.test.ts` and `src/state/downloadAll.test.ts`
+are the client's unit tests.

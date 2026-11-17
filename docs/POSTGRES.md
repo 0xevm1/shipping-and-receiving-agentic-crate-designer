@@ -227,7 +227,7 @@ receives every org's notifications and filters them in memory.
 | `configs.ready` | yes | `count`: the sweep finished; shortlist and curve are saved |
 | `config.added` | yes | `configurationId`, `inputHash`: a user saved a configuration |
 | `recommendation.changed` | yes | `configurationId` (null when cleared) |
-| `artifact.ready` | yes | `artifactId`, `configurationId`, `kind` |
+| `artifact.ready` | yes | `artifactId`, `configurationId`, `kind`, plus `file` or `bundleId`: a server-built file is stored (docs/API.md "Artifacts") |
 | `job.error` | yes | `message` (safe to show) |
 | `engine.updated` | no (org-wide) | `engineVersion`: open tabs should reload |
 
