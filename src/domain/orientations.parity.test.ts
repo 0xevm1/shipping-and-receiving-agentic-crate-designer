@@ -1,6 +1,6 @@
 import { Box3, Euler, Matrix4, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { ORIENTATIONS, rotatedSize, rotationMatrix } from "./orientations";
+import { ORIENTATIONS, restingFace, rotatedSize, rotationMatrix } from "./orientations";
 import type { Vec3 } from "./schema";
 
 /**
@@ -30,6 +30,17 @@ describe("orientations match three.js", () => {
       const e = new Matrix4().makeRotationFromEuler(new Euler(...o.euler)).elements; // column-major
       const m = rotationMatrix(o);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) expect(m[r][c]).toBeCloseTo(e[c * 4 + r], 9);
+    }
+  });
+
+  it("restingFace is the part face three.js turns to look down, for every orientation", () => {
+    const normals = { "-x": [-1, 0, 0], "+x": [1, 0, 0], "-y": [0, -1, 0], "+y": [0, 1, 0], "-z": [0, 0, -1], "+z": [0, 0, 1] } as const;
+    for (const o of ORIENTATIONS) {
+      const down = Object.entries(normals).filter(([, n]) => {
+        const v = new Vector3(...n).applyEuler(new Euler(...o.euler));
+        return Math.abs(v.x) < 1e-9 && Math.abs(v.y) < 1e-9 && Math.abs(v.z + 1) < 1e-9;
+      });
+      expect(down.map(([face]) => face)).toEqual([restingFace(o)]);
     }
   });
 });

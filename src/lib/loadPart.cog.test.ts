@@ -89,11 +89,11 @@ describe("parts.json cog_mm into the part", () => {
 describe("the design file carries the centre of gravity", () => {
   const cog = { offsetMm: [-85, 0.1, 0] as [number, number, number], source: "supplied" as const };
 
-  it("writes it with the part, keeps the format at 3, and reads it back", () => {
+  it("writes it with the part as an optional field (no format bump of its own), and reads it back", () => {
     const text = json(withCog(cog));
     expect(JSON.parse(text).part.cog).toEqual(cog);
     expect(JSON.parse(text).schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
-    expect(DESIGN_SCHEMA_VERSION).toBe(3);
+    expect(DESIGN_SCHEMA_VERSION).toBe(4);
     const parsed = parseDesignFile(text);
     expect(parsed.ok && parsed.file.part.cog).toEqual(cog);
     // A part without one writes none.

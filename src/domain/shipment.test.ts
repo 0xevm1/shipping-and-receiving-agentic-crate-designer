@@ -1,3 +1,4 @@
+import { AS_MODELLED_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { catalog, getPart } from "./catalog";
 import { computeDesign } from "./design";
@@ -5,7 +6,7 @@ import { describeShipment, planShipment, shipmentBom, withinOutsideLimits, type 
 import type { DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 import { sweepQuantities } from "./sweep";
-import { custom, settings, metricText as metric } from "./testFixtures";
+import { custom, settings, metricText as metric, facesFor } from "./testFixtures";
 
 /**
  * A wall-clock budget that follows machine load. A fixed CPU loop takes about 3.5 ms on an idle
@@ -43,7 +44,7 @@ describe("planShipment: one crate when it fits", () => {
     for (const p of catalog.parts) {
       for (const quantity of p.suggested_quantities) {
         for (const keepUpright of [true, false]) {
-          const s = settings({ quantity, keepUpright });
+          const s = settings({ quantity, restingFaces: facesFor(keepUpright) });
           const plan = planShipment(p, s);
           expect(plan.split).toBe(false);
           expect(plan.crates).toHaveLength(1);
@@ -193,7 +194,7 @@ describe("planShipment: splitting a batch", () => {
     // PART-001 upright at the sweep's 34: the volume-best crate is over the base rating, the
     // sweep's layout is not. Without the pick the batch splits; with it, it ships as one crate.
     const p = getPart("PART-001");
-    const s = settings({ keepUpright: true });
+    const s = settings({ restingFaces: AS_MODELLED_FACES });
     const rec = sweepQuantities(p, s).recommendation!;
     const q = { ...s, quantity: rec.quantity };
     expect(planShipment(p, q).split).toBe(true);
@@ -243,7 +244,7 @@ describe("planShipment: splitting a batch", () => {
     for (const p of catalog.parts) {
       for (const keepUpright of [true, false]) {
         const t = performance.now();
-        const plan = planShipment(p, settings({ quantity: 200, keepUpright }));
+        const plan = planShipment(p, settings({ quantity: 200, restingFaces: facesFor(keepUpright) }));
         expect(performance.now() - t).toBeLessThan(budget);
         expect(partsIn(plan)).toBe(200);
       }

@@ -1,4 +1,5 @@
 import { joinMessages, kg, mm, msg, parts, shopMm, type Message } from "./message";
+import { describeFaces } from "./restingFaces";
 import type { CrateSettings } from "./schema";
 import { sizeLimitText } from "./shipment";
 import { costsArePlaceholder, DEFAULT_STANDARDS, PLACEHOLDER_COST_NOTE, type ShopStandards } from "./standards";
@@ -132,7 +133,7 @@ export function quantityRuns(qs: readonly number[]): string {
 export function explainRecommendation(
   sweep: QuantitySweep,
   standards: ShopStandards = DEFAULT_STANDARDS,
-  rules: Pick<CrateSettings, "keepUpright" | "maxLayers" | "partGapMm" | "wallClearanceMm">,
+  rules: Pick<CrateSettings, "restingFaces" | "maxLayers" | "partGapMm" | "wallClearanceMm">,
   options: ExplainOptions = {},
 ): RecommendationExplanation | null {
   const rec = sweep.recommendation;
@@ -343,11 +344,11 @@ function considerationsOf(standards: ShopStandards, rules: ExplainParams, option
     parts(
       "One part number per crate (identical parts only). Wood and basic fasteners only: plywood, lumber and screws, no packing materials. Domestic truck freight (LTL or a 53' dry van).",
     ),
-    msg`Packing rules: ${rules.keepUpright ? "parts kept upright" : "parts may lie on any side (Keep upright is off)"}, at most ${plural(rules.maxLayers, "layer")}, ${shopMm(rules.partGapMm)} between parts and ${shopMm(rules.wallClearanceMm)} to the walls.`,
+    msg`Packing rules: ${describeFaces(rules.restingFaces)}, at most ${plural(rules.maxLayers, "layer")}, ${shopMm(rules.partGapMm)} between parts and ${shopMm(rules.wallClearanceMm)} to the walls.`,
     options.measured
       ? parts("Blocking follows the part's measured outline.")
       : parts("Blocking is sized to the part's box until its model's outline is measured; the measured outline can change the crate and the recommendation."),
   ];
 }
 
-type ExplainParams = Pick<CrateSettings, "keepUpright" | "maxLayers" | "partGapMm" | "wallClearanceMm">;
+type ExplainParams = Pick<CrateSettings, "restingFaces" | "maxLayers" | "partGapMm" | "wallClearanceMm">;

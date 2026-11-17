@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { getPart, parts } from "./catalog";
 import { ASSEMBLIES } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from "./design";
-import { ORIENTATIONS, rotatedSize } from "./orientations";
+import { ANY_FACES, AS_MODELLED_FACES, ORIENTATIONS, rotatedSize } from "./orientations";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
-import { custom as customStandards, metricText as metric } from "./testFixtures";
+import { custom as customStandards, metricText as metric, facesFor } from "./testFixtures";
 
 const { trailerMm: DRY_VAN_53FT_MM, ltlExcessiveLengthMm: LTL_EXCESSIVE_LENGTH_MM, cardboard: CARDBOARD_LIMITS } = DEFAULT_STANDARDS.limits;
 
@@ -59,7 +59,7 @@ describe("computeDesign", () => {
   });
 
   it("lays the long shaft flat with X as the crate length", () => {
-    const { design: d } = design("PART-002", { quantity: 4, keepUpright: false });
+    const { design: d } = design("PART-002", { quantity: 4, restingFaces: ANY_FACES });
     const [L, W] = d!.layout.external;
     expect(d!.layout.cellSize[0]).toBe(1530);
     expect(L).toBeGreaterThanOrEqual(W);
@@ -124,7 +124,7 @@ const BASELINE: [string, number, boolean, Vec3, number, number, number, number, 
 
 describe("regression baseline", () => {
   it.each(BASELINE)("%s × %i (upright %s) is unchanged", (partId, quantity, keepUpright, ext, gross, screws, members, layouts, bomQty) => {
-    const r = design(partId, { quantity, keepUpright });
+    const r = design(partId, { quantity, restingFaces: facesFor(keepUpright) });
     const d = r.design!;
     expect(d.layout.external.map((v) => Math.round(v))).toEqual(ext);
     expect(d.grossKg).toBeCloseTo(gross, 2);
@@ -206,9 +206,9 @@ describe("checks", () => {
 
   it("flags tight gaps and tall crates", () => {
     expect(level(design("PART-001", { partGapMm: 10 }), "blocking")).toBe("caution");
-    const tall = design("PART-002", { quantity: 1, keepUpright: false });
+    const tall = design("PART-002", { quantity: 1, restingFaces: ANY_FACES });
     const standing = tall.layouts.find((l) => !l.stable)!;
-    const r = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: false }, standing.key);
+    const r = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 1, restingFaces: ANY_FACES }, standing.key);
     expect(level(r, "stable")).toBe("caution");
   });
 
@@ -219,7 +219,7 @@ describe("checks", () => {
 });
 
 describe("trailer limits", () => {
-  const settings = { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: true };
+  const settings = { ...DEFAULT_SETTINGS, quantity: 1, restingFaces: AS_MODELLED_FACES };
   const probe: Vec3 = [3000, 800, 400];
   const run = (dims: Vec3) => computeDesign({ id: "custom", name: "Big part", mass_kg: 50, dimensions_mm: dims }, settings).design!;
   /** A single part sized so the crate's external size on `axis` is exactly `target` mm. */

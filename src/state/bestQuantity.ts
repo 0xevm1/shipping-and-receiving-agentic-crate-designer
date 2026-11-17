@@ -31,8 +31,8 @@ export const useSweep = create<SweepState>()(() => ({ inputs: null, done: null }
 
 /** The sweep inputs of `s`, or `prev` itself when none of them changed. */
 function sweepInputs(s: DesignerState, prev: SweepInputs | null): SweepInputs {
-  const { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s.settings;
-  const rules = { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness };
+  const { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s.settings;
+  const rules = { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness };
   const same =
     prev && prev.part === s.part && prev.standards === s.standards && (Object.keys(rules) as (keyof typeof rules)[]).every((k) => prev.rules[k] === rules[k]);
   return same ? prev : { part: s.part, standards: s.standards, rules };

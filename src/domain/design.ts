@@ -2,6 +2,7 @@ import { resolveConstruction, structureAllowance, structureMaterials } from "./c
 import { designCrate } from "./crate";
 import type { CrateDesign } from "./crateDesign";
 import { longMm, msg, parts, type Message } from "./message";
+import { AS_MODELLED_FACES } from "./orientations";
 import { enumerateLayouts, type Layout } from "./packing";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, ShopStandardsSchema, type ShopStandards } from "./standards";
@@ -138,7 +139,7 @@ export function rankLayouts(part: DesignPart, settings: CrateSettings, standards
     {
       partSize: part.dimensions_mm,
       quantity: settings.quantity,
-      keepUpright: settings.keepUpright,
+      restingFaces: settings.restingFaces,
       maxLayers: settings.maxLayers,
       partGapMm: settings.partGapMm,
       wallClearanceMm: settings.wallClearanceMm,
@@ -154,7 +155,7 @@ export function rankLayouts(part: DesignPart, settings: CrateSettings, standards
 const NO_LAYOUT: DesignProblem = {
   id: "no-layout",
   title: "No layout fits these packing rules",
-  detail: parts("Try more layers, smaller gaps or turning off Keep parts upright."),
+  detail: parts("Try more layers, smaller gaps or letting parts rest on more faces."),
 };
 
 /** The first reason the part or settings can't be designed for, or null when they can. */
@@ -232,7 +233,7 @@ export function explainLayout(layouts: Layout[], shown: Layout, standards: ShopS
 /** A new crate's settings under the given standards (gap, clearance and layers come from `defaults`). */
 export function settingsFromStandards(standards: ShopStandards, quantity = 4): CrateSettings {
   const { partGapMm, wallClearanceMm, maxLayers } = standards.defaults;
-  return { quantity, keepUpright: true, maxLayers, partGapMm, wallClearanceMm, panelThickness: "auto" };
+  return { quantity, restingFaces: AS_MODELLED_FACES, maxLayers, partGapMm, wallClearanceMm, panelThickness: "auto" };
 }
 
 export const DEFAULT_SETTINGS: CrateSettings = settingsFromStandards(DEFAULT_STANDARDS);

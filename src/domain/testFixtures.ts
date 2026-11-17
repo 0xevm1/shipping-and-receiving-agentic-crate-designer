@@ -1,6 +1,7 @@
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
 import type { CrateDesign } from "./crate";
 import type { Message } from "./message";
+import { ANY_FACES, AS_MODELLED_FACES, type RestingFace } from "./orientations";
 import type { CrateSettings } from "./schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "./standards";
 
@@ -56,3 +57,6 @@ export function loadAwareBudget(ms: number, ratio: number): number {
   }
   return Math.max(ms, ratio * times.sort((a, b) => a - b)[2]);
 }
+
+/** The faces a part may rest on for the old "Keep parts upright" switch: on is the model's own base, off is any face. */
+export const facesFor = (keepUpright: boolean): readonly RestingFace[] => (keepUpright ? AS_MODELLED_FACES : ANY_FACES);

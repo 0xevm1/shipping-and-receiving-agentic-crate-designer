@@ -13,6 +13,7 @@ import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
 import { ChangeNote } from "../shell/ChangeFeedback";
 import { BestQuantity } from "./BestQuantity";
+import { RestingFaces } from "./RestingFaces";
 import rule from "./rule.module.css";
 import styles from "./RulesTab.module.css";
 import { ShopStandards } from "./ShopStandards";
@@ -102,17 +103,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 
-      <div className={rule.rule}>
-        <b>Keep parts upright</b>
-        <input
-          type="checkbox"
-          className={`switch ${rule.switch}`}
-          aria-label="Keep parts upright"
-          checked={settings.keepUpright}
-          onChange={(e) => setSettings({ keepUpright: e.target.checked })}
-        />
-        <small>Turn off to let parts lie on their side or stand on end.</small>
-      </div>
+      <RestingFaces />
 
       <div className={rule.rule}>
         <b>Most layers allowed</b>

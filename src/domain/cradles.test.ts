@@ -1,3 +1,4 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { getPart, parts } from "./catalog";
 import { cradleProfile, cradleSolidAt, cradleStations, isSlender, notchFor, usesCradles, CRADLE_LABEL, END_STOP_LABEL, STACKING_CRADLE_LABEL } from "./cradles";
@@ -230,9 +231,9 @@ describe("cradles in the shaft crate", () => {
   });
 
   it("leaves a shaft stood on end with the general blocking", () => {
-    const r = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: false });
+    const r = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 1, restingFaces: ANY_FACES });
     const standing = r.layouts.find((l) => l.cellSize[2] === 1530)!;
-    const d = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: false }, standing.key).design!;
+    const d = computeDesign(getPart("PART-002"), { ...DEFAULT_SETTINGS, quantity: 1, restingFaces: ANY_FACES }, standing.key).design!;
     expect(d.members.some((m) => m.kind === "cradle")).toBe(false);
     expect(d.members.some((m) => m.label === "Blocking post")).toBe(true);
   });

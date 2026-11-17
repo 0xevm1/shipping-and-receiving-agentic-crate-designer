@@ -1,3 +1,4 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "./design";
@@ -14,7 +15,7 @@ import {
 import type { CrateSettings } from "./schema";
 import { planShipment } from "./shipment";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards } from "./standards";
-import { metricText, TEST_APP } from "./testFixtures";
+import { metricText, TEST_APP, facesFor } from "./testFixtures";
 
 const SAVED_AT = "2026-11-16T12:00:00.000Z";
 
@@ -74,7 +75,7 @@ describe("serializeDesign", () => {
   });
 
   it("round-trips through parseDesignFile", () => {
-    const { text } = save(widget, { ...DEFAULT_SETTINGS, quantity: 6, keepUpright: false, panelThickness: 15 });
+    const { text } = save(widget, { ...DEFAULT_SETTINGS, quantity: 6, restingFaces: ANY_FACES, panelThickness: 15 });
     const r = parseDesignFile(text);
     expect(r.ok).toBe(true);
     if (r.ok) expect(serializeDesign(fromFile(r.file))).toBe(text);
@@ -162,7 +163,7 @@ describe("restoreDesign", () => {
     for (const p of parts) {
       for (const quantity of p.suggested_quantities) {
         for (const keepUpright of [true, false]) {
-          const settings = { ...DEFAULT_SETTINGS, quantity, keepUpright };
+          const settings = { ...DEFAULT_SETTINGS, quantity, restingFaces: facesFor(keepUpright) };
           const original = computeDesign(p, settings).design!;
           // Save the runner-up layout when there is one, so the pick matters.
           const layouts = computeDesign(p, settings).layouts;
@@ -287,7 +288,7 @@ describe("format 3: the part's file units and up axis (#105)", () => {
   it("saves the units, the axis and whether the units were a guess, and reads them back", () => {
     const { text } = save(inchesYUp, DEFAULT_SETTINGS);
     const json = JSON.parse(text);
-    expect(json.schemaVersion).toBe(3);
+    expect(json.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(json.part).toMatchObject({ units: "in", up: "y", unitsGuessed: true });
     const r = parseDesignFile(text);
     if (!r.ok) throw new Error(r.error);
@@ -315,7 +316,7 @@ describe("format 3: the part's file units and up axis (#105)", () => {
   it("migrates format 2: Z up, a catalog part in metres, a custom part's units left for the reader to find", () => {
     const custom = parseDesignFile(JSON.stringify(asFormat2(widget)));
     if (!custom.ok) throw new Error(custom.error);
-    expect(custom.file.schemaVersion).toBe(3);
+    expect(custom.file.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(custom.file.part.up).toBe("z");
     expect(custom.file.part.units).toBeUndefined();
     const catalog = parseDesignFile(JSON.stringify(asFormat2(catalogFilePart("PART-001"))));
@@ -329,7 +330,7 @@ describe("format 3: the part's file units and up axis (#105)", () => {
     delete doc.ranking;
     const r = parseDesignFile(JSON.stringify(doc));
     if (!r.ok) throw new Error(r.error);
-    expect(r.file).toMatchObject({ schemaVersion: 3, ranking: "volume", part: { up: "z" } });
+    expect(r.file).toMatchObject({ schemaVersion: DESIGN_SCHEMA_VERSION, ranking: "volume", part: { up: "z" } });
   });
 
   it("keeps the rest of a migrated file as it was", () => {
@@ -345,6 +346,6 @@ describe("format 3: the part's file units and up axis (#105)", () => {
     const engine = { version: "0.1.0+engine.3", inputHash: "f".repeat(64) };
     const r = parseDesignFile(JSON.stringify({ ...asFormat2(widget), engine }));
     if (!r.ok) throw new Error(r.error);
-    expect(r.file).toMatchObject({ schemaVersion: 3, engine });
+    expect(r.file).toMatchObject({ schemaVersion: DESIGN_SCHEMA_VERSION, engine });
   });
 });

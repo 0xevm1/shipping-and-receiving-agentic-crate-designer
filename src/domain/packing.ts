@@ -1,4 +1,4 @@
-import { ORIENTATIONS, rotatedSize, type Orientation } from "./orientations";
+import { isFlipped, orientationsFor, rotatedSize, type Orientation, type RestingFace } from "./orientations";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
@@ -14,7 +14,8 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 interface PackingInput {
   partSize: Vec3;
   quantity: number;
-  keepUpright: boolean;
+  /** The part faces it may rest on; every layout rests the part on one of them. */
+  restingFaces: readonly RestingFace[];
   maxLayers: number;
   partGapMm: number;
   wallClearanceMm: number;
@@ -64,7 +65,7 @@ export interface Layout {
 export function enumerateLayouts(input: PackingInput, standards: ShopStandards = DEFAULT_STANDARDS): Layout[] {
   const ratio = standards.limits.stableHeightRatio;
   const { quantity: n, partGapMm: gap, wallClearanceMm: clear, separatorMm: sep } = input;
-  const orientations = ORIENTATIONS.filter((o) => !input.keepUpright || o.upright);
+  const orientations = orientationsFor(input.restingFaces);
   const seen = new Set<string>();
   const layouts: Layout[] = [];
 
@@ -95,7 +96,7 @@ export function enumerateLayouts(input: PackingInput, standards: ShopStandards =
         if (seen.has(shapeKey)) continue;
         seen.add(shapeKey);
         // The id saved designs refer to; its counts run together ("123"), so it is not used to dedupe.
-        const key = `${orientation.upright ? "u" : "s"}:${interior.map(Math.round).join("x")}:${nx}${ny}${nz}`;
+        const key = `${isFlipped(orientation) ? "f" : ""}${orientation.upright ? "u" : "s"}:${interior.map(Math.round).join("x")}:${nx}${ny}${nz}`;
 
         const counts: [number, number, number] = [nx, ny, nz];
         const allowance =

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { hasKind, isPlainObject, readEnvelopeJson, writeEnvelope, type EnvelopeFormat } from "./envelope";
-import { CrateSettingsSchema, PLYWOOD_MM } from "./schema";
+import { CrateSettingsFields, PLYWOOD_MM } from "./schema";
 
 /**
  * Shop standards: the house rules every crate is designed to.
@@ -79,9 +79,9 @@ export const ShopStandardsSchema = z
     }),
     /** What a new crate starts with, and what Reset rules goes back to. */
     defaults: z.object({
-      partGapMm: CrateSettingsSchema.shape.partGapMm,
-      wallClearanceMm: CrateSettingsSchema.shape.wallClearanceMm,
-      maxLayers: CrateSettingsSchema.shape.maxLayers,
+      partGapMm: CrateSettingsFields.shape.partGapMm,
+      wallClearanceMm: CrateSettingsFields.shape.wallClearanceMm,
+      maxLayers: CrateSettingsFields.shape.maxLayers,
       /** Layout volumes within this fraction count as equal, so the lower crate wins. */
       volumeTolerance: z.number().finite().min(0).max(0.5),
     }),

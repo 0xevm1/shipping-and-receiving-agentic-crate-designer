@@ -1,3 +1,4 @@
+import { ANY_FACES } from "@/domain/orientations";
 import { describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { DEFAULT_SETTINGS } from "@/domain/design";
@@ -37,12 +38,7 @@ describe("the sweep as an engine call", () => {
     expect(sweepInputHash(request())).toBe(base);
     // Fields of a loaded part that aren't design inputs (its URL) don't count.
     expect(sweepInputHash(request({ part: { ...getPart("PART-001"), modelUrl: "/x.glb" } as SweepRequest["part"] }))).toBe(base);
-    for (const over of [
-      { rules: { ...DEFAULT_SWEEP_RULES, keepUpright: !DEFAULT_SWEEP_RULES.keepUpright } },
-      { total: 12 },
-      { maxQuantity: 50 },
-      { freightRates: RATES },
-    ]) {
+    for (const over of [{ rules: { ...DEFAULT_SWEEP_RULES, restingFaces: ANY_FACES } }, { total: 12 }, { maxQuantity: 50 }, { freightRates: RATES }]) {
       expect(sweepInputHash(request(over))).not.toBe(base);
     }
   });

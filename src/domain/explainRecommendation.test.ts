@@ -1,9 +1,10 @@
+import { ANY_FACES, AS_MODELLED_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { getPart, parts } from "./catalog";
 import { explainRecommendation, quantityRuns, type RecommendationExplanation } from "./explainRecommendation";
 import { PLACEHOLDER_COST_NOTE } from "./standards";
 import { sweepQuantities, type FreightRates, type QuantitySweep } from "./sweep";
-import { custom, metricText, settings } from "./testFixtures";
+import { custom, metricText, settings, facesFor } from "./testFixtures";
 
 const RATES: FreightRates = { usdPerCwtByClass: { "50": 20, "65": 30, "85": 40, "125": 60, "400": 150 }, minimumUsd: 90 };
 
@@ -11,7 +12,7 @@ const RATES: FreightRates = { usdPerCwtByClass: { "50": 20, "65": 30, "85": 40, 
 const cases = parts.flatMap((p) =>
   [true, false].flatMap((keepUpright) =>
     [null, RATES].map((rates) => {
-      const s = settings({ keepUpright });
+      const s = settings({ restingFaces: facesFor(keepUpright) });
       const sweep = sweepQuantities(p, s, undefined, { freightRates: rates });
       return { id: p.id, keepUpright, rates: !!rates, s, sweep, e: explainRecommendation(sweep, undefined, s)! };
     }),
@@ -117,7 +118,7 @@ describe("explainRecommendation: what stopped a larger crate", () => {
   });
 
   it("nothing stops it when every quantity up to the maximum passes", () => {
-    const s = settings({ keepUpright: true });
+    const s = settings({ restingFaces: AS_MODELLED_FACES });
     const sweep = sweepQuantities(getPart("PART-001"), s, undefined, { maxQuantity: 10 });
     const e = explainRecommendation(sweep, undefined, s)!;
     expect(sweep.recommendation!.stoppedBy).toBeNull();
@@ -147,12 +148,12 @@ describe("explainRecommendation: considerations", () => {
     }
   });
 
-  it("follows the upright rule, a part limit and a measured outline", () => {
-    const s = settings({ keepUpright: false });
+  it("follows the resting faces rule, a part limit and a measured outline", () => {
+    const s = settings({ restingFaces: ANY_FACES });
     const standards = custom({ limits: { perCrate: { maxParts: 12 } } });
     const sweep = sweepQuantities(getPart("PART-002"), s, standards);
     const t = text(explainRecommendation(sweep, standards, s, { measured: true })!, "considerations");
-    expect(t).toContain("Keep upright is off");
+    expect(t).toContain("parts may rest on any face");
     expect(t).toContain("at most 12 parts per crate");
     expect(t).toContain("measured outline");
   });

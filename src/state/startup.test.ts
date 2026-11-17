@@ -115,8 +115,8 @@ describe("startup source", () => {
 
   it("applies a sweep result for the default part that arrived before startup decided", async () => {
     const part = s().part;
-    const { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s().settings;
-    const inputs = { part, standards: s().standards, rules: { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } };
+    const { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s().settings;
+    const inputs = { part, standards: s().standards, rules: { restingFaces, maxLayers, partGapMm, wallClearanceMm, panelThickness } };
     const { sweep } = runSweep({ ...inputs, standards: inputs.standards });
     useSweep.setState({ inputs, done: { inputs, sweep } });
     await createStartup(deps())();
