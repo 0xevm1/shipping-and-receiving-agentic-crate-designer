@@ -14,6 +14,7 @@ This file is the reference for every endpoint and event type. The other server d
 | [POSTGRES.md](POSTGRES.md) | Tables, org scoping, scripts, environment and ports, the event outbox, LISTEN/NOTIFY and the SSE route |
 | [BLOB_STORAGE.md](BLOB_STORAGE.md) | The S3 API and providers, object keys, part uploads and their checks, presigned downloads, orphan cleanup, lifecycle |
 | [QUEUE.md](QUEUE.md) | The engine's worker threads, the Postgres job queue and its job kinds, `POST /designs`, API keys, the command line |
+| [LOAD_TEST.md](LOAD_TEST.md) | The load test (`bun run load`): measured limits of saves and live events, and when to move to a broker |
 | [SPECIFICATION.md §5.2](SPECIFICATION.md#52-the-server-46) | How the pieces fit: the architecture diagram and the rules that hold across them |
 | [SPECIFICATION.md §5.1](SPECIFICATION.md#51-the-crate-engine-srcengine-46) | The engine that designs and verifies crates, its stamps (`engineVersion`, `inputHash`) |
 
@@ -76,7 +77,7 @@ saves on the device and sends them later, without showing an error (`src/state/j
 | `PATCH` | `/jobs/:id` | Change the selection (recommendation), status, notes or total quantity, at a `version` |
 | `POST` | `/designs` | Stateless headless calculation: a GLB and the part's facts in, the ranked configurations, recommendation, 1–200 curve and (with `total`) the even split out. Nothing saved; needs an API key from scripts. Runs on the engine's worker threads ([QUEUE.md](QUEUE.md#post-apiv1designs)) |
 | `GET` | `/events?job=:id` | The job's events as Server-Sent Events, resumable with `Last-Event-ID` (POSTGRES.md "Events") |
-| `GET` | `/health` | Database and event-listener liveness |
+| `GET` | `/health` | Database and event-listener liveness, NOTIFY queue usage, event-loop lag |
 | `GET` | `/jobs/:id/configs/:cid/{crate.glb,spec.pdf,cutlist.csv}` | One file of a saved configuration, built by the server on the first request and kept in blob storage; a presigned URL (`?redirect=1`: a 302 to it) ([Artifacts](#artifacts)) |
 | `GET` | `/jobs/:id/bundle.zip?configs=…` | The job's configurations in one ZIP: a folder each, `manifest.json`, `comparison.pdf` (spec §7.17); 200 with a presigned URL, or 202 while the queue builds a large one ([Artifacts](#artifacts)) |
 
