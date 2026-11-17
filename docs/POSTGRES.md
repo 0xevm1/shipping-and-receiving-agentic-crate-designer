@@ -185,7 +185,7 @@ browsers watching the job over Server-Sent Events.
 ```
 route handler ── inTransaction: change + emitEvent ──▶ event row ──trigger──▶ pg_notify('crate_events')
                                                                                    │ (on commit)
-browser ◀── SSE /api/v1/events?job=… ◀── hub (job id → subscribers) ◀── one LISTEN connection per process
+browser ◀── SSE /api/v1/events?job=… ◀── job feed (one read per job) ◀── hub ◀── one LISTEN connection per process
 ```
 
 ### Writing: `emitEvent`
@@ -204,10 +204,15 @@ await inTransaction(getDb(), async (tx) => {
   `pg_notify`, which Postgres delivers only when the transaction commits: a rollback sends
   nothing, a commit always sends.
 - **One event per user action**, written **last** in the transaction. `events.append` takes a
-  transaction-level advisory lock (`EVENT_ORDER_LOCK`) before the insert, so event-writing
-  transactions commit in id order. Without it, a transaction holding id 10 could commit after
-  one holding id 11, and a client already past 11 would never see 10. The lock is held until
-  commit, which is why the event goes last.
+  transaction-level advisory lock (`EVENT_ORDER_LOCK`) in the same statement as the insert
+  (`with ordered as (select pg_advisory_xact_lock(…)) insert … select … from ordered`, so the
+  lock comes before `nextval`), and event-writing transactions commit in id order. Without it, a
+  transaction holding id 10 could commit after one holding id 11, and a client already past 11
+  would never see 10. The lock is held until commit, which is why the event goes last; one
+  statement rather than lock, then insert, saves round trips while it is held.
+- **Expensive work before the transaction.** A save's engine recompute runs in the engine
+  worker pool before its transaction opens (`saveConfiguration`), so no pool connection, and no
+  ordering lock, waits on CPU work.
 - **Validated.** The payload is checked against its type's Zod schema and a 4 KB cap
   (`src/lib/events.ts`); job-scoped types need a `jobId`. A bad event fails the transaction.
 
@@ -244,12 +249,23 @@ started on first use.
   client of its own, `application_name = crate-events-listener` in `pg_stat_activity`.
 - **Reconnects.** postgres.js re-issues `LISTEN` once when the connection drops, but gives up
   silently if that attempt fails (Postgres still restarting). So the bus probes itself: every
-  15 s it NOTIFYs a probe token through the pool and expects it back within 5 s. A missing
-  probe or a failed NOTIFY means the listener is dead or half-open; the bus opens a new one,
-  retrying with exponential backoff (250 ms doubling to 10 s, with jitter).
+  15 s it NOTIFYs a probe token through the pool and expects it back within 5 s of that NOTIFY
+  committing. Two misses in a row (`probeMisses`; a failed NOTIFY counts as one) mean the
+  listener is dead or half-open; the bus opens a new one, retrying with exponential backoff
+  (250 ms doubling to 10 s, with jitter). A failed attempt is logged with the error's code and
+  nested errors (a refused connect to `localhost` is an `AggregateError` with an empty message).
+- **The probe tolerates overload.** Time spent waiting for a pool connection doesn't count (the
+  5 s starts at commit), the verdict waits for pending I/O (`setImmediate`) so a probe already
+  on the socket of a lagging event loop is read first, and one miss alone never reconnects.
+  Before this, a saturated process tore down a healthy listener and made every stream resync
+  (LOAD_TEST.md).
 - **No gaps after a drop.** Each LISTEN after the first tells every subscriber to resync: SSE
   streams re-read the table from their cursor, picking up anything committed while nobody was
   listening.
+- **One subscriber per job, not per stream.** The SSE streams of a job share a feed
+  (`src/server/events/feed.ts`): on a notification it reads the new rows once, encodes each
+  message once and hands the batch to every stream of the job (an org-wide event: one read per
+  job). One save to a job with 50 open tabs is one query, not 50.
 - **Slow subscribers are dropped**, never waited for. Each subscriber has its own queue
   (256 by default); one that falls that far behind is removed. The listener itself only
   pushes to queues, so it keeps reading and the NOTIFY queue keeps draining.
@@ -263,9 +279,12 @@ A Server-Sent Events stream (`text/event-stream`, Node.js runtime, never cached)
 2. **Subscribe, then replay.** The stream subscribes to the bus, then sends every event with
    `id > Last-Event-ID` from the table (`events.listForStream`: the job's events and the org's
    job-less ones), in pages of 500.
-3. **Live.** A notification with an id past the cursor (or a resync) reads the table again from
-   the cursor. Notifications only wake the stream; rows always come from the table, so replay
-   and live are one path, in id order, with nothing sent twice.
+3. **Live.** The job's feed reads each notification's new rows once and hands every stream the
+   batch with the id it starts after. A stream whose cursor is at or past that id writes the
+   events it hasn't sent; one that is behind (still replaying, or joined after the feed read
+   past it), or any stream after a resync or a failed shared read, reads the table again from
+   its own cursor. Rows always come from the table, in id order, with nothing sent twice and
+   each stream keeping its own `Last-Event-ID`.
 
 Every message has `id: <event id>` and `data: {"id", "jobId", "type", "payload", "createdAt"}`
 (`JobEventMessageSchema`). The browser resends the last id as `Last-Event-ID` when it
@@ -307,10 +326,8 @@ The offline queue (slice 7a) uses the endpoint as its liveness check.
   notifications catches up by id.
 - **Long-lived connections.** SSE needs a long-running Node server (no serverless or edge) and a
   proxy that doesn't buffer and has an idle timeout above the 15 s heartbeat.
-- **Measured capacity.** One process carried ~60 saves/s and ~1000 delivered events/s with the
-  default pool of 10 (p95 under 1 s, nothing lost); the event-ordering lock caps event commits at
-  ~220–330/s per database. Method, numbers and the threshold for swapping the `EventBus` for a
-  broker: [LOAD_TEST.md](LOAD_TEST.md), spec §9.1.
+- **Measured capacity.** Method, numbers before and after the fixes above, and the threshold
+  for swapping the `EventBus` for a broker: [LOAD_TEST.md](LOAD_TEST.md), spec §9.1.
 
 ### Tests
 
@@ -318,9 +335,13 @@ The offline queue (slice 7a) uses the endpoint as its liveness check.
 commit and none on rollback, one listen connection outside the pool, a slow subscriber dropped
 while others keep up, SSE replay after a reconnect with `Last-Event-ID` (small pages and writes
 racing the replay) giving every missed event exactly once, `?lastEventId=`, org-wide events,
-the org check, recovery after `pg_terminate_backend`, and recovery after the listener is locked
-out for a while (postgres.js's own retry fails; the probe and backoff bring it back). The hub,
-the event schemas and the browser helper have unit tests.
+the org check, one read per commit for 20 streams of a job, recovery after
+`pg_terminate_backend`, recovery after the listener is locked out for a while (postgres.js's own
+retry fails; the probe and backoff bring it back), and the probe under overload (a pool too slow
+to send it, an event loop blocked past its deadline: no reconnect; probes that never come back:
+a reconnect after two). `repository.integration.test.ts` checks that a second event writer waits
+on the ordering lock until the first commits. The hub, the job feed and SSE fan-out
+(`feed.test.ts`, in memory), the event schemas and the browser helper have unit tests.
 
 ## Changing the schema
 

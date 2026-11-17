@@ -11,10 +11,10 @@
 //
 //   none     insert into event (… trigger → pg_notify)                  no ordering lock
 //   lock     select pg_advisory_xact_lock(…); insert                    the lock, then the insert
-//   app      savepoint; lock; insert; release savepoint                 what events.append does today
-//                                                                      (drizzle nests it in a savepoint)
-//   single   one statement: lock and insert together                    a fix to measure: fewer round
-//                                                                      trips while the lock is held
+//   app      savepoint; lock; insert; release savepoint                 what events.append did first
+//                                                                      (drizzle nested it in a savepoint)
+//   single   one statement: lock and insert together                    what events.append does now:
+//                                                                      fewer round trips while the lock is held
 //
 // N connections loop for `--seconds` each; it reports event commits per second and the
 // transaction latency. The events go to one throwaway job, deleted at the end.
