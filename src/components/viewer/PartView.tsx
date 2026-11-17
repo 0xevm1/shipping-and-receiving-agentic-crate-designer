@@ -9,6 +9,7 @@ import { isIdle } from "@/state/motion";
 import { reducedMotion, useDesigner } from "@/state/store";
 import { cloneWithMaterial, FOV_DEG, MM_TO_M, partMaterial } from "./scene";
 import { type LoadedPart } from "@/lib/part";
+import { framedScene } from "@/lib/partFrame";
 import { partViewClass } from "./PartViewSlot";
 
 /**
@@ -40,7 +41,8 @@ export default function PartView() {
 }
 
 function Turntable({ part }: { part: LoadedPart }) {
-  const { scene } = useGLTF(part.modelUrl);
+  const { scene: loaded } = useGLTF(part.modelUrl);
+  const scene = useMemo(() => framedScene(loaded, part.upAxis), [loaded, part.upAxis]);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const controls = useRef<OrbitControlsImpl>(null);

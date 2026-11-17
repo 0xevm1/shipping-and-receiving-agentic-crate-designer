@@ -4,7 +4,7 @@ import type { Vec3 } from "@/domain/schema";
 import { allChecks, cautionCount, modelMatchesCatalog, MODEL_TOLERANCE_MM } from "./checks";
 
 const catalogDims: Vec3 = [360, 220, 258];
-const catalog = { catalogDims, readAsMm: false, massAssumed: false };
+const catalog = { catalogDims, massAssumed: false };
 const domain = (id: Check["id"], level: Check["level"]): Check => ({ id, level, title: id, detail: [] });
 const ids = (items: { id: string }[]) => items.map((c) => c.id);
 
@@ -40,13 +40,14 @@ describe("allChecks", () => {
     expect(items[0]).toMatchObject({ id: "model", level: "caution", title: "3D model does not match the catalog" });
   });
 
-  it("adds an info note for a file with no catalog size, mentioning millimetres only when read as such", () => {
-    const unknown = { catalogDims: undefined, readAsMm: false, massAssumed: false };
+  it("adds an info note for a file with no catalog size, naming the units and axis it was read in", () => {
+    const unknown = { catalogDims: undefined, massAssumed: false };
     const metres = allChecks([], unknown, [300, 200, 100])[0];
     expect(metres).toMatchObject({ id: "model", level: "info", title: "Size comes from the model file" });
-    expect(JSON.stringify(metres.detail)).not.toContain("millimetres");
-    const mm = allChecks([], { ...unknown, readAsMm: true }, [300, 200, 100])[0];
-    expect(JSON.stringify(mm.detail)).toContain("reading the file as millimetres");
+    expect(JSON.stringify(metres.detail)).toContain("reading the file as metres, Z up");
+    expect(JSON.stringify(metres.detail)).not.toContain("guess");
+    const inches = allChecks([], { ...unknown, modelUnits: "in" as const, upAxis: "y" as const, unitsGuessed: true }, [300, 200, 100])[0];
+    expect(JSON.stringify(inches.detail)).toContain("reading the file as inches, Y up (the units are a guess from its size)");
   });
 
   it("adds a caution for a stand-in mass", () => {

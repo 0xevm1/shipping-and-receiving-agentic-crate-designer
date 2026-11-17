@@ -88,6 +88,16 @@
   border-bottom-style: dashed;
   border-bottom-color: rgba(255, 255, 255, 0.32);
 }
+/* The file's units and up axis: the same underlined look, as native selects. */
+.partMeta select.field {
+  appearance: none;
+  cursor: pointer;
+  field-sizing: content;
+}
+.partMeta select.field option {
+  color: initial;
+  background: initial;
+}
 /* Material suggestions without the datalist arrow. */
 .partMeta .field::-webkit-calendar-picker-indicator {
   display: none !important;

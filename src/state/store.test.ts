@@ -12,9 +12,12 @@ const unknownPart: LoadedPart = {
   dimensions_mm: [300, 200, 100],
   suggested_quantities: [1, 4, 8],
   modelUrl: "blob:widget",
+  modelUnits: "m",
+  upAxis: "z",
+  unitsGuessed: true,
   mmPerUnit: 1000,
+  rawSize: [0.3, 0.2, 0.1],
   massAssumed: true,
-  readAsMm: false,
 };
 
 const initial = useDesigner.getState();

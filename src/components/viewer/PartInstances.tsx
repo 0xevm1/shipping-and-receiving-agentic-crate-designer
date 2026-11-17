@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Box3, Vector3 } from "three";
 import type { Layout } from "@/domain/packing";
 import type { Vec3 } from "@/domain/schema";
+import { framedScene } from "@/lib/partFrame";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -15,12 +16,13 @@ import { type LoadedPart } from "@/lib/part";
 /**
  * Loads the part GLB once and places a copy in every filled slot.
  *
- * GLBs are Z-up like the crate frame, so only a scale (model units → mm) and a
- * re-centre on the bounding box are needed — the source models are not
- * centred on their origin.
+ * The model is turned to Z up (the part's up axis, `framedScene`), scaled (model units → mm) and
+ * re-centred on its bounding box: the source models are not centred on their origin, however far
+ * from it they sit.
  */
 export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layout }) {
-  const { scene } = useGLTF(part.modelUrl);
+  const { scene: loaded } = useGLTF(part.modelUrl);
+  const scene = useMemo(() => framedScene(loaded, part.upAxis), [loaded, part.upAxis]);
   const setMeasured = useDesigner((s) => s.setMeasured);
 
   const { center, sizeMm } = useMemo(() => {
@@ -38,8 +40,8 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
   const analysed = !!part.profile;
   useEffect(() => {
     if (analysed) return;
-    return scheduleProfile(part.modelUrl, scene, part.mmPerUnit, setPartProfile);
-  }, [analysed, part.modelUrl, scene, part.mmPerUnit, setPartProfile]);
+    return scheduleProfile(part.modelUrl, scene, part.mmPerUnit, setPartProfile, `${part.modelUnits}/${part.upAxis}`);
+  }, [analysed, part.modelUrl, part.modelUnits, part.upAxis, scene, part.mmPerUnit, setPartProfile]);
 
   const material = useMemo(() => partMaterial(part.material), [part.material]);
   // useFrame updates the material in place through a ref (three.js objects are mutable by design).

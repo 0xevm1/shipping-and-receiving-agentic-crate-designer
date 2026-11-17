@@ -109,10 +109,10 @@ export function densityDelta(lbFt3: number, u: Units): string {
  * The header's model note after the measured size. `matches` is whether the file's size agrees
  * with the catalog (null when there is nothing to compare: a part without catalog data).
  */
-export function modelNote(matches: boolean | null, readAsMm: boolean | undefined): string {
+export function modelNote(matches: boolean | null, unitsGuessed: boolean | undefined): string {
   if (matches === true) return "model matches catalog";
   if (matches === false) return "model does not match catalog";
-  return readAsMm ? "file read as millimetres" : "size measured from the file";
+  return unitsGuessed ? "units guessed from the size" : "size measured from the file";
 }
 
 /** "1 caution, see Checks": what the Export pill says when the design has cautions; "" for none. */

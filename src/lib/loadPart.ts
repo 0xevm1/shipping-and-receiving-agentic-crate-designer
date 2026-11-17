@@ -8,18 +8,13 @@ import { usableProfile, type PartProfile } from "@/domain/profile";
 import { encodeProfile } from "@/domain/profileCodec";
 import { PartSchema, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
-import { catalogPart, type LoadedPart } from "./part";
+import { catalogPart, framePart, type LoadedPart } from "./part";
+import { fitFrame, framedSizeMm, guessUnits, type PartFrame } from "./partFrame";
 import { renderMessage } from "./message";
 import type { Units } from "./units";
 
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
 const STAND_IN_MASS_KG = 10;
-/**
- * Files are expected in metres (spec §4). A part more than this many units
- * across was almost certainly modelled in millimetres, so it is read that way
- * and the UI says so.
- */
-const MM_FILE_THRESHOLD = 20;
 const DEFAULT_QUANTITIES = [1, 4, 8];
 const GLB_MAGIC = 0x46546c67; // "glTF"
 
@@ -83,22 +78,21 @@ async function measure(buffer: ArrayBuffer): Promise<Vec3> {
 
 interface ReadGlb {
   url: string;
-  sizeMm: Vec3;
-  mmPerUnit: number;
-  readAsMm: boolean;
+  /** The model's size as the file has it (file units, file axes). */
+  raw: Vec3;
 }
+
+/** The frame a file is first read in when nothing says otherwise: Z up, units guessed from its size (spec §4). */
+const guessedFrame = (raw: Vec3): PartFrame => ({ units: guessUnits(Math.max(...raw)), up: "z" });
 
 /** Validates and measures a GLB, then makes an object URL for it. A string is a problem message. */
 async function readGlb(glb: File): Promise<ReadGlb | string> {
   const buffer = await glb.arrayBuffer();
   const problem = glbProblem(buffer);
   if (problem) return problem;
-  const sizeUnits = await measure(buffer);
-  const readAsMm = Math.max(...sizeUnits) > MM_FILE_THRESHOLD;
-  const mmPerUnit = readAsMm ? 1 : 1000;
-  const sizeMm = sizeUnits.map((v) => v * mmPerUnit) as Vec3;
+  const raw = await measure(buffer);
   const url = URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" }));
-  return { url, sizeMm, mmPerUnit, readAsMm };
+  return { url, raw };
 }
 
 export interface LoadOutcome {
@@ -158,27 +152,39 @@ export async function loadPartFiles(
 
   const read = await readGlb(glb);
   if (typeof read === "string") return { catalogAdditions, message: read };
-  const { url, sizeMm, mmPerUnit, readAsMm } = read;
+  const { url, raw } = read;
 
   const match = [...known, ...catalogAdditions].find((p) => p.model === glb.name);
   if (match) {
-    return { catalogAdditions, message: "", part: { ...catalogPart(match, url), mmPerUnit, readAsMm } };
+    // A file with a catalog part's name is read in the frame that gives the catalog size; when none
+    // does, it is guessed like any file, and the model check says it does not match.
+    const fit = fitFrame(raw, match.dimensions_mm);
+    const base: LoadedPart = { ...catalogPart(match, url), rawSize: raw };
+    return { catalogAdditions, message: "", part: { ...framePart(base, fit ?? guessedFrame(raw), !fit), dimensions_mm: match.dimensions_mm } };
   }
+  const frame = guessedFrame(raw);
   return {
     catalogAdditions,
     message: "",
-    part: {
-      id: idFromFile(glb.name),
-      name: nameFromFile(glb.name),
-      model: glb.name,
-      mass_kg: STAND_IN_MASS_KG,
-      dimensions_mm: sizeMm,
-      suggested_quantities: DEFAULT_QUANTITIES,
-      modelUrl: url,
-      mmPerUnit,
-      massAssumed: true,
-      readAsMm,
-    },
+    part: framePart(
+      {
+        id: idFromFile(glb.name),
+        name: nameFromFile(glb.name),
+        model: glb.name,
+        mass_kg: STAND_IN_MASS_KG,
+        dimensions_mm: framedSizeMm(raw, frame),
+        suggested_quantities: DEFAULT_QUANTITIES,
+        modelUrl: url,
+        modelUnits: frame.units,
+        upAxis: frame.up,
+        unitsGuessed: true,
+        mmPerUnit: 1,
+        rawSize: raw,
+        massAssumed: true,
+      },
+      frame,
+      true,
+    ),
   };
 }
 
@@ -222,21 +228,35 @@ export async function loadDesign(
     const read = await readGlb(glb);
     if (typeof read === "string") return { message: `${glb.name}: ${read}` };
     if (glb.name !== saved.model) notes.push(`Used ${glb.name} in place of ${saved.model}.`);
-    const same = read.sizeMm.every((v, i) => Math.abs(v - saved.dimensions_mm[i]) < SAME_MODEL_SIZE_MM);
+    // The saved units and axis are applied before measuring. A file from before they were saved
+    // is read in the frame that gives its saved size, else guessed as a new file is.
+    const fitted = saved.units === undefined ? fitFrame(read.raw, saved.dimensions_mm) : null;
+    const frame: PartFrame = { up: saved.up ?? "z", units: saved.units ?? fitted?.units ?? guessedFrame(read.raw).units };
+    const size = framedSizeMm(read.raw, frame);
+    const same = size.every((v, i) => Math.abs(v - saved.dimensions_mm[i]) < SAME_MODEL_SIZE_MM);
     if (!same) notes.push(`${glb.name} is a different size from the saved part, so the crate follows the file.`);
-    part = {
-      id: saved.id,
-      name: saved.name,
-      material: saved.material,
-      model: glb.name,
-      mass_kg: saved.mass_kg,
-      dimensions_mm: same ? saved.dimensions_mm : read.sizeMm,
-      suggested_quantities: DEFAULT_QUANTITIES,
-      modelUrl: read.url,
-      mmPerUnit: read.mmPerUnit,
-      massAssumed: saved.massAssumed ?? false,
-      readAsMm: read.readAsMm,
-    };
+    part = framePart(
+      {
+        id: saved.id,
+        name: saved.name,
+        material: saved.material,
+        model: glb.name,
+        mass_kg: saved.mass_kg,
+        // The saved size is kept exactly when it is the same model, so the crate matches the file to the mm.
+        dimensions_mm: same ? saved.dimensions_mm : size,
+        suggested_quantities: DEFAULT_QUANTITIES,
+        modelUrl: read.url,
+        modelUnits: frame.units,
+        upAxis: frame.up,
+        unitsGuessed: false,
+        mmPerUnit: 1,
+        rawSize: read.raw,
+        massAssumed: saved.massAssumed ?? false,
+      },
+      frame,
+      saved.unitsGuessed === true || (saved.units === undefined && !fitted),
+    );
+    if (same) part = { ...part, dimensions_mm: saved.dimensions_mm };
   }
 
   // The saved outline is only for the model it was measured on. When it fits, the part has it
@@ -267,6 +287,9 @@ export function designFilePart(part: LoadedPart, bundled: Part[] = catalog.parts
     mass_kg: part.mass_kg,
     ...(part.massAssumed ? { massAssumed: true } : {}),
     dimensions_mm: part.dimensions_mm,
+    units: part.modelUnits,
+    up: part.upAxis,
+    ...(part.unitsGuessed ? { unitsGuessed: true } : {}),
     model,
     ...(outline ? { outline } : {}),
   };
