@@ -5,6 +5,7 @@ import type { CrateDesign } from "@/domain/crate";
 import type { CrateSettings } from "@/domain/schema";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { ShopStandards } from "./ShopStandards";
 
 const MAX_QTY = 200;
 const GAP_MAX_MM = 150;
@@ -15,6 +16,9 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const settings = useDesigner((s) => s.settings);
   const suggested = useDesigner((s) => s.part.suggested_quantities);
   const units = useDesigner((s) => s.units);
+  const standards = useDesigner((s) => s.standards);
+  const minGap = standards.construction.minBlockingGapMm;
+  const floorMm = design.construction.floorMm;
   const { setSettings, resetRules } = useDesigner.getState();
   const setQty = (q: number) => setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
   const mm = (v: number) => `${length(v, units)} ${lengthUnit(units)}`;
@@ -80,7 +84,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           value={settings.partGapMm}
           onChange={(e) => setSettings({ partGapMm: Number(e.target.value) })}
         />
-        <small>Filled with wood blocking. Under 19 mm leaves no room for it.</small>
+        <small>Filled with wood blocking. Under {mm(minGap)} leaves no room for it.</small>
       </div>
 
       <div className="rule">
@@ -109,8 +113,8 @@ export function RulesTab({ design }: { design: CrateDesign }) {
         </div>
         <small>
           {settings.panelThickness === "auto"
-            ? `Auto picked ${design.construction.panelMm} mm for ${weight(design.payloadKg, units)} of parts. The floor is always 19 mm.`
-            : "Thickness in mm. The floor is always 19 mm."}
+            ? `Auto picked ${design.construction.panelMm} mm for ${weight(design.payloadKg, units)} of parts. The floor is always ${floorMm} mm.`
+            : `Thickness in mm. The floor is always ${floorMm} mm.`}
         </small>
       </div>
 
@@ -119,6 +123,8 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           Reset rules
         </button>
       </div>
+
+      <ShopStandards />
     </>
   );
 }

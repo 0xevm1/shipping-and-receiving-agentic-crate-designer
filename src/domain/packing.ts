@@ -1,5 +1,6 @@
 import { ORIENTATIONS, rotatedSize, type Orientation } from "./orientations";
 import type { Vec3 } from "./schema";
+import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
  * Grid packing of N identical parts, using each part's bounding box.
@@ -51,17 +52,14 @@ export interface Layout {
   externalVolumeM3: number;
   /** Fraction of interior volume occupied by part bounding boxes. */
   utilization: number;
-  /** External height at most 1.5× the narrowest base side (low tip-over risk). */
+  /** External height at most `limits.stableHeightRatio` (1.5) × the narrowest base side (low tip-over risk). */
   stable: boolean;
   /** Filled slots, bottom layer first. */
   slots: Slot[];
 }
 
-export const STABLE_HEIGHT_RATIO = 1.5;
-/** Volumes within this fraction are treated as equal, so the lower crate wins. */
-const VOLUME_TOLERANCE = 0.03;
-
-export function enumerateLayouts(input: PackingInput): Layout[] {
+export function enumerateLayouts(input: PackingInput, standards: ShopStandards = DEFAULT_STANDARDS): Layout[] {
+  const ratio = standards.limits.stableHeightRatio;
   const { quantity: n, partGapMm: gap, wallClearanceMm: clear, separatorMm: sep } = input;
   const orientations = ORIENTATIONS.filter((o) => !input.keepUpright || o.upright);
   const seen = new Set<string>();
@@ -123,20 +121,24 @@ export function enumerateLayouts(input: PackingInput): Layout[] {
           external,
           externalVolumeM3: (external[0] * external[1] * external[2]) / 1e9,
           utilization: (n * a * b * c) / (interior[0] * interior[1] * interior[2]),
-          stable: external[2] <= STABLE_HEIGHT_RATIO * Math.min(external[0], external[1]),
+          stable: external[2] <= ratio * Math.min(external[0], external[1]),
           slots,
         });
       }
     }
   }
 
-  return layouts.sort(compareLayouts);
+  const tolerance = standards.defaults.volumeTolerance;
+  return layouts.sort((x, y) => compareLayouts(x, y, tolerance));
 }
 
-/** Stable crates first, then smallest external volume, then lowest height. */
-export function compareLayouts(x: Layout, y: Layout): number {
+/**
+ * Stable crates first, then smallest external volume, then lowest height. Volumes within
+ * `tolerance` (`defaults.volumeTolerance`, 3%) count as equal, so the lower crate wins.
+ */
+export function compareLayouts(x: Layout, y: Layout, tolerance = DEFAULT_STANDARDS.defaults.volumeTolerance): number {
   if (x.stable !== y.stable) return x.stable ? -1 : 1;
   const dv = x.externalVolumeM3 - y.externalVolumeM3;
-  if (Math.abs(dv) > VOLUME_TOLERANCE * Math.min(x.externalVolumeM3, y.externalVolumeM3)) return dv;
+  if (Math.abs(dv) > tolerance * Math.min(x.externalVolumeM3, y.externalVolumeM3)) return dv;
   return x.external[2] - y.external[2];
 }

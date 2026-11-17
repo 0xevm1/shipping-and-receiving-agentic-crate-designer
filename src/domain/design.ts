@@ -1,6 +1,7 @@
-import { designCrate, MIN_INTERIOR_MM, resolveConstruction, structureAllowance, type CrateDesign } from "./crate";
+import { designCrate, resolveConstruction, structureAllowance, type CrateDesign } from "./crate";
 import { enumerateLayouts, type Layout } from "./packing";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
+import { DEFAULT_STANDARDS, minInteriorMm, ShopStandardsSchema, type ShopStandards } from "./standards";
 
 export type { DesignPart } from "./schema";
 
@@ -12,7 +13,7 @@ export const MAX_PART_MM = 20000;
 
 /** Why there is no crate to show. The domain owns the wording, as it does for checks. */
 export interface DesignProblem {
-  id: "part-size" | "part-too-large" | "part-mass" | "settings" | "no-layout";
+  id: "part-size" | "part-too-large" | "part-mass" | "settings" | "standards" | "no-layout";
   title: string;
   detail: string;
 }
@@ -29,13 +30,22 @@ export interface DesignResult {
  * Part + settings → ranked layouts → crate design. Pure and synchronous, so the
  * UI can recompute it on every change with `useMemo`. Never throws: input it
  * can't design for comes back as a `problem` instead of a design.
+ *
+ * `standards` are the shop's house rules (stock, thresholds, limits, rates); the
+ * defaults reproduce every design from before they were configurable.
  */
-export function computeDesign(part: DesignPart, settings: CrateSettings, layoutKey?: string | null): DesignResult {
-  const problem = inputProblem(part, settings);
+export function computeDesign(
+  part: DesignPart,
+  settings: CrateSettings,
+  layoutKey?: string | null,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): DesignResult {
+  const problem = inputProblem(part, settings, standards);
   if (problem) return { layouts: [], design: null, problem };
 
-  const construction = resolveConstruction(settings, part.mass_kg * settings.quantity);
-  const layouts = enumerateLayouts({
+  const construction = resolveConstruction(settings, part.mass_kg * settings.quantity, standards);
+  const layouts = enumerateLayouts(
+    {
     partSize: part.dimensions_mm,
     quantity: settings.quantity,
     keepUpright: settings.keepUpright,
@@ -44,12 +54,14 @@ export function computeDesign(part: DesignPart, settings: CrateSettings, layoutK
     wallClearanceMm: settings.wallClearanceMm,
     separatorMm: construction.panelMm,
     structureAllowance: structureAllowance(construction),
-    minInteriorMm: MIN_INTERIOR_MM,
-  });
+    minInteriorMm: minInteriorMm(standards),
+    },
+    standards,
+  );
   const layout = layouts.find((l) => l.key === layoutKey) ?? layouts[0];
   // Unreachable for valid input (spec §7.2), but never leave the screen blank.
   if (!layout) return { layouts, design: null, problem: NO_LAYOUT };
-  return { layouts, design: designCrate(part, settings, layout), problem: null };
+  return { layouts, design: designCrate(part, settings, layout, standards), problem: null };
 }
 
 const NO_LAYOUT: DesignProblem = {
@@ -59,7 +71,7 @@ const NO_LAYOUT: DesignProblem = {
 };
 
 /** The first reason the part or settings can't be designed for, or null when they can. */
-function inputProblem(part: DesignPart, settings: CrateSettings): DesignProblem | null {
+function inputProblem(part: DesignPart, settings: CrateSettings, standards: ShopStandards): DesignProblem | null {
   const dims = part.dimensions_mm;
   if (!Array.isArray(dims) || dims.length !== 3 || !dims.every((v) => Number.isFinite(v) && v > 0)) {
     return {
@@ -88,6 +100,18 @@ function inputProblem(part: DesignPart, settings: CrateSettings): DesignProblem 
       detail: `${issue.path.join(".") || "Settings"}: ${issue.message}. Reset the rules to continue.`,
     };
   }
+  // Skip the parse for the shipped defaults: they are checked by a test, and this runs on every keystroke.
+  if (standards !== DEFAULT_STANDARDS) {
+    const std = ShopStandardsSchema.safeParse(standards);
+    if (!std.success) {
+      const issue = std.error.issues[0];
+      return {
+        id: "standards",
+        title: "A shop standard is out of range",
+        detail: `${issue.path.join(".") || "Standards"}: ${issue.message}. Reset the shop standards to continue.`,
+      };
+    }
+  }
   return null;
 }
 
@@ -103,21 +127,26 @@ export type LayoutExplanation =
   /** The user picked a different layout, which ships `morePct`% more than the recommendation. */
   | { kind: "picked"; morePct: number };
 
-export function explainLayout(layouts: Layout[], shown: Layout): LayoutExplanation {
+export function explainLayout(
+  layouts: Layout[],
+  shown: Layout,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): LayoutExplanation {
   const [best, next] = layouts;
   if (layouts.length <= 1) return { kind: "only" };
   const pctMore = (l: Layout) => Math.round((l.externalVolumeM3 / best.externalVolumeM3 - 1) * 100);
   if (shown.key !== best.key) return { kind: "picked", morePct: pctMore(shown) };
   if (best.stable && !next.stable) return { kind: "stable" };
   const nextMorePct = pctMore(next);
-  return nextMorePct >= 3 ? { kind: "smaller", nextMorePct } : { kind: "tie" };
+  // Rounded, because 0.03 × 100 is 3.0000000000000004 in floating point.
+  const tiePct = Math.round(standards.defaults.volumeTolerance * 1e4) / 100;
+  return nextMorePct >= tiePct ? { kind: "smaller", nextMorePct } : { kind: "tie" };
 }
 
-export const DEFAULT_SETTINGS: CrateSettings = {
-  quantity: 4,
-  keepUpright: true,
-  maxLayers: 2,
-  partGapMm: 50,
-  wallClearanceMm: 50,
-  panelThickness: "auto",
-};
+/** A new crate's settings under the given standards (gap, clearance and layers come from `defaults`). */
+export function settingsFromStandards(standards: ShopStandards, quantity = 4): CrateSettings {
+  const { partGapMm, wallClearanceMm, maxLayers } = standards.defaults;
+  return { quantity, keepUpright: true, maxLayers, partGapMm, wallClearanceMm, panelThickness: "auto" };
+}
+
+export const DEFAULT_SETTINGS: CrateSettings = settingsFromStandards(DEFAULT_STANDARDS);

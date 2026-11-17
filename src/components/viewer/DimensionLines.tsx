@@ -12,7 +12,6 @@ import { useDesigner } from "@/state/store";
 import { EXPLODE_WALL_MM } from "./scene";
 import { labelElements } from "./SizeLabels";
 
-const CLEAT_MM = 19;
 const LINE = "#e6eef7";
 const PART_LINE = "#70b8fd";
 
@@ -104,7 +103,7 @@ export function crateLabelAnchors(design: CrateDesign, e: number): Vec3[] {
 function buildLines(design: CrateDesign, withPart: boolean) {
   const { layout, construction } = design;
   const ext = layout.external;
-  const o = construction.panelMm + CLEAT_MM;
+  const o = construction.panelMm + construction.cleat.thick;
   const mn: Vec3 = [-o, -o, -construction.floorMm - construction.skid.tall];
   const mx: Vec3 = [mn[0] + ext[0], mn[1] + ext[1], mn[2] + ext[2]];
   const longest = Math.max(...ext);

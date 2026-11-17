@@ -120,6 +120,14 @@ tab at a time.
 7. **Download the crate as a 3D model** (View → "Download 3D model (.glb)"): the assembled crate
    in metres, Z up, every board a named mesh grouped by assembly, with the parts in their slots
    unless "Include parts" is off.
+8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
+   **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
+   and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
+   stack and base-rating limits, and densities, material costs and screw spacing. A change
+   re-designs the crate at once (for example, a higher plywood cost raises the Overview's
+   "$ of wood"). Changes are saved in this browser, a **Customised** tag shows when any value
+   differs from the shipped defaults, and **Reset to defaults** puts them back. **Download
+   standards** / **Load standards** move them between machines as a JSON file.
 
 ### The crate it designs
 
@@ -143,7 +151,8 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **Persistence and accounts.** Nothing is saved yet. The plan is in
+- **Persistence and accounts.** Only the shop standards are saved (in the browser's
+  `localStorage`); designs are not. The plan for the rest is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.
@@ -159,6 +168,9 @@ tab at a time.
 | **Crate origin** | The interior min corner, on the top face of the floor |
 
 ## Key assumptions
+
+The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
+`src/domain/standards.ts`). A PM can change any of them in the app (Rules → Shop standards).
 
 - **Packing uses bounding boxes.** Each part is treated as its axis-aligned bounding box. This is
   exact for boxy parts and wastes space on irregular ones, such as the open housing. There's no
@@ -184,8 +196,9 @@ tab at a time.
   - skids: one every 300 mm
   - blocking: 2 per block
 
-All of these are named constants at the top of `src/domain/crate.ts` and
-`src/domain/packing.ts`.
+All of these live in one zod-validated object, `ShopStandards` (`src/domain/standards.ts`, spec
+§6.4), which `computeDesign` takes as its last argument. There are no rule constants left in
+`crate.ts` or `packing.ts`.
 
 ## Project layout
 

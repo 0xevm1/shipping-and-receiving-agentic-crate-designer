@@ -86,11 +86,11 @@ buildable crate design and cut list in under a minute, without needing CAD.
 parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPart.ts (validate, measure, match catalog)
                          │                              │
                          ▼                              ▼
-                 state/store.ts (zustand): part, settings, layoutKey, view, hover, pin, …
-                         │  recompute() on every input change
+   localStorage ◀──▶ state/store.ts (zustand): part, settings, standards, layoutKey, view, hover, pin, …
+   (standards only)      │  recompute() on every input change
                          ▼
-          domain/design.ts: computeDesign(part, settings, layoutKey?)
-                         │
+          domain/design.ts: computeDesign(part, settings, layoutKey?, standards?)
+                         │        (standards = ShopStandards, domain/standards.ts, §6.4)
            ┌─────────────┼───────────────────┐
            ▼             ▼                   ▼
    resolveConstruction  enumerateLayouts     designCrate
@@ -111,9 +111,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
   store re-runs it on every input change.
 - **One store, two kinds of state.**
   - `src/state/store.ts` (zustand) holds everything the UI renders from: the part, settings,
-    the design result, units, tab, view targets, hover / pin, tooltip, size labels, panel
+    the shop standards (§6.4), the design result, units, tab, view targets, hover / pin, tooltip, size labels, panel
     visibility, the free-area insets, and a `fit` request counter for the camera. Any change to
-    the part, settings or layout key goes through `recompute()`, which also drops a pin whose
+    the part, settings, standards or layout key goes through `recompute()`, which also drops a pin whose
     cut-list line no longer exists.
   - `src/state/motion.ts` holds values that change every frame (eased explode distance, lid and
     front-wall opacity, idle auto-play bookkeeping, last-input time). They live outside React on
@@ -128,14 +128,16 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/schema.ts` | zod schemas and types: `Part`, `PartsCatalog`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
 | `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart` and `modelUrl` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotatedSize()` |
-| `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()`, `STABLE_HEIGHT_RATIO` |
-| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`, `MIN_INTERIOR_MM` |
-| `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `DEFAULT_SETTINGS` |
+| `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
+| `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
+| `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
+| `src/domain/design.ts` | `computeDesign()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()`, `downloadText()`, `ASSEMBLY_NAMES` |
 | `src/domain/diff.ts` | `diffDesigns()`: which design values an edit changed, old → new (§8.5a) |
 | `src/domain/partDetails.ts` | Validation of user-entered name, material and mass (`cleanPartDetails`), material suggestions, `partFinish()` (aluminum or steel look) |
 | `src/domain/domain.test.ts` | Invariant, regression-baseline and feature tests (§10) |
 | `src/domain/hardening.test.ts` | Edge-case and bad-input tests (§10) |
+| `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
 | `src/lib/partFields.ts` | The header's mass field: kg / lb text ↔ kg (`formatMass`, `parseMass`), ↑ / ↓ steps, fallback field widths |
@@ -143,6 +145,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
+| `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
@@ -150,7 +153,9 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
+| `src/components/shell/StandardsLoader.tsx` | Applies the saved shop standards once the app has mounted |
 | `src/components/island/*.tsx` | The island and its five tabs |
+| `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`shopStandards.css`) |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
 | `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
 | `src/components/viewer/CrateModel.tsx` | One box per `Member`; explode, fades, highlight, ghosting, picking |
@@ -188,13 +193,19 @@ The catalog-level field `model_units` must be the literal `"meters"`.
 |---|---|---|---|
 | `quantity` | int 1–200 | 4 | Number of parts |
 | `keepUpright` | bool | true | Allow only the 2 orientations that keep model Z vertical |
-| `maxLayers` | int 1–6 (UI offers 1–4) | 2 | Upper limit on `nz` |
-| `partGapMm` | 0–300 | 50 | Clear gap between adjacent parts, filled by blocking |
-| `wallClearanceMm` | 0–300 | 50 | Gap to the walls, floor and lid |
+| `maxLayers` | int 1–6 (UI offers 1–4) | 2 (`defaults.maxLayers`) | Upper limit on `nz` |
+| `partGapMm` | 0–300 | 50 (`defaults.partGapMm`) | Clear gap between adjacent parts, filled by blocking |
+| `wallClearanceMm` | 0–300 | 50 (`defaults.wallClearanceMm`) | Gap to the walls, floor and lid |
 | `panelThickness` | `"auto"` \| 12 \| 15 \| 19 | auto | Plywood for walls, lid and separators |
 
 The part is not a setting. It is passed to `computeDesign` separately, and loading a new part
 resets `quantity` to that part's first suggested quantity.
+
+The defaults for gap, clearance and layers come from the shop standards
+(`settingsFromStandards`, §6.4): **Reset rules** goes back to them (keeping the quantity), and
+changing one of those three standards also applies it to the current rules. `DEFAULT_SETTINGS`
+is `settingsFromStandards(DEFAULT_STANDARDS)`. The setting ranges above are input validation,
+not house rules, so they are not standards.
 
 **Validation at the store boundary.** Every settings change goes through `normalizeSettings`
 (`schema.ts`) in the store's `setSettings`, so the domain only ever sees values the schema
@@ -261,7 +272,7 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
   `stockMm` and `cutMm` are numbers so the UI can format them in either unit system.
 - **`Check`:** `{ id, level: "ok" | "caution" | "info", title, detail }` (§7.7).
 - **`CrateDesign`:**
-  - `layout` and `construction` (`panelMm`, `floorMm`, `skid {wide, tall}`, `skidCount`)
+  - `layout` and `construction` (`panelMm`, `floorMm`, `skid {wide, tall}`, `cleat {thick, wide}`, `skidCount`)
   - `members[]` and `bom[]`
   - `payloadKg`, `tareKg`, `tareKgByAssembly`, `grossKg`
   - `plywoodM2`, `lumberM`, `screws`, `materialCostUsd`
@@ -269,6 +280,86 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
 - **`LayoutExplanation`** (from `explainLayout`, §7.8).
 - **`DesignResult`:** `{ layouts, design, problem }`. `problem` (`DesignProblem`:
   `{ id, title, detail }`) is set exactly when `design` is null (§7.9).
+
+### 6.4 Shop standards (`ShopStandardsSchema`, #19)
+
+The house rules every crate is designed to: what lumber and plywood the shop has, the defaults,
+the thresholds for choosing stock, the limits the checks test, and material rates. Before #19
+they were constants in `crate.ts` and `packing.ts`, known in full only to the PM. Now they are
+one zod-validated object in `src/domain/standards.ts`, and `computeDesign(part, settings,
+layoutKey?, standards = DEFAULT_STANDARDS)` passes it down to `resolveConstruction`,
+`enumerateLayouts`, `designCrate`, the dunnage, the screw estimate and the checks. Nothing in
+the domain reads a rule from a module constant. **With `DEFAULT_STANDARDS`, every design is
+exactly what it was before** (the 18-case baseline in §10 is unchanged).
+
+Units are fixed per field (mm, kg, kg/m³, USD/m³), whatever the display units.
+
+| Group / field | Default | Used by |
+|---|---|---|
+| **`stock`** — what the shop keeps on hand | | |
+| `cleatMm {thick, wide}` | 19 × 89 (1×4) | Wall and lid frames; wall allowance; minimum interior = 2 × `wide` (§7.2) |
+| `skidMm.standard {wide, tall}` | 89 × 89 (4×4) | Skids up to `construction.heavySkidOverKg` |
+| `skidMm.heavy {wide, tall}` | 89 × 140 (4×6) | Skids above it |
+| `floorPlywoodMm` | 19 | The floor |
+| `panelPlywoodMm {light, medium, heavy}` | 12 / 15 / 19 | Auto wall, lid and separator plywood (§7.3) |
+| `blockWidthMm` | 89 | Blocking posts and bearers (§7.5) |
+| **`defaults`** — what a new crate starts with | | |
+| `partGapMm`, `wallClearanceMm`, `maxLayers` | 50, 50, 2 | Settings defaults (§6.2); same ranges as the settings |
+| `volumeTolerance` | 0.03 | Layout volumes within 3% tie, and the lower crate wins (§7.2, §7.8) |
+| **`construction`** — when to use which stock | | |
+| `panelLightMaxKg`, `panelMediumMaxKg` | 150, 500 | Auto panel thresholds by payload (§7.3) |
+| `heavySkidOverKg` | 700 | Heavy skids above this payload |
+| `skidSpacingMm` | 800 | Skid count = `max(2, ceil(extW / spacing) + 1)` |
+| `maxCleatSpacingMm` | 600 | Wall uprights and lid cross cleats (§7.4) |
+| `minBlockingGapMm` | 19 | Smallest gap that gets a blocking post; the `blocking` check |
+| **`limits`** — what the checks test (§7.7) | | |
+| `trailerMm {interiorLength, interiorWidth, interiorHeight, doorWidth, doorHeight}` | 16000, 2565, 2794, 2489, 2743 | `door` |
+| `ltlExcessiveLengthMm` | 2438 (8 ft) | `oversize` |
+| `cardboard {partKg, payloadKg, boxDimSumMm}` | 15, 25, 1905 | `cardboard` |
+| `stackKg` | 100 | `stack` |
+| `baseRatingKg` | 1000 | `base-rating` |
+| `stableHeightRatio` | 1.5 | `Layout.stable`, ranking and the `stable` check |
+| `lowUtilization` | 0.25 | `utilization` |
+| **`rates`** — material properties, prices and fastening (§7.6) | | |
+| `densityKgM3 {plywood, lumber}` | 600, 480 | Tare weight |
+| `costUsdPerM3 {plywood, lumber}` | 1100, 650 | `materialCostUsd` (placeholders) |
+| `screwSpacingMm {cleat, skid, panelJoint}` | 150, 300, 200 | Screw estimate |
+
+**Validation.** Every number is finite and inside a sane range (for example cleat spacing
+100–5000 mm, so a typo can't make thousands of boards). Across fields: panel plywood must go
+`light ≤ medium ≤ heavy`, `panelLightMaxKg ≤ panelMediumMaxKg`, the trailer door can't be
+bigger than the trailer inside, and blocking can't be wider than the minimum interior (two
+cleats), or a bearer would poke through a wall. `parseStandards` returns the first problem as
+`"path: message"`.
+
+**What is deliberately not a standard:** geometry that keeps the model consistent rather than a
+shop choice — the 0.5 mm smallest board, bearers at 20% and 80% of the part width, at least two
+skids and two uprights per wall, the six orientations — plus input validation: the settings
+ranges (§6.2), `MAX_PART_MM` (20 m, a units-mistake guard, §7.9) and the manual panel choices
+12 / 15 / 19 mm in the Rules tab (`CrateSettingsSchema`). Auto picks from `panelPlywoodMm`;
+choosing by hand still offers the three standard sheets. The 29.5 kg carton rating quoted in the
+`cardboard` check's text is a fact about 32 ECT board, not a setting.
+
+**In the store.** `standards` starts as `DEFAULT_STANDARDS` (frozen). `setStandards(patch)`
+deep-merges a partial patch onto the current standards (`mergeStandards`, which ignores
+`__proto__`-style keys), validates the result, and either re-designs and saves it or returns the
+error and changes nothing. Changed `defaults.partGapMm`, `wallClearanceMm` or `maxLayers` are
+carried into the current settings. `resetStandards()` goes back to the defaults. Both reset the
+layout pick, like any other input.
+
+**JSON file.** `standardsToJson` writes
+`{ "kind": "crate-designer/shop-standards", "version": 1, "standards": {…} }`.
+`standardsFromJson` accepts that envelope or a bare standards object, fills missing fields from
+the defaults (so a file can hold only the house's differences), and rejects invalid JSON, a
+different `version`, or an invalid value.
+
+**In the UI.** Rules → **Shop standards · house rules for every crate**, a `<details>` section
+collapsed by default. Five groups (Stock on hand, Defaults, Construction, Limits, Rates) of
+number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
+text is a valid standard; invalid text is outlined in gold with the reason and reverts on blur.
+A changed field is tinted and says its default. A **Customised** tag shows when anything
+differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
+standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUtilization`).
 
 ## 7. Algorithms
 
@@ -292,8 +383,9 @@ rounded to 0.001 mm.
 ### 7.2 Packing (`enumerateLayouts`)
 
 Inputs: `partSize`, `n`, `keepUpright`, `maxLayers`, gap `g`, clearance `c`, separator thickness
-`s` (= panel thickness), `structureAllowance`, and `minInteriorMm` (`MIN_INTERIOR_MM` = 178, two
-cleat widths, from `crate.ts`).
+`s` (= panel thickness), `structureAllowance`, and `minInteriorMm` (`minInteriorMm(standards)` =
+2 × `stock.cleatMm.wide` = 178 by default), plus the standards for the stability ratio and
+volume tolerance.
 
 For each allowed orientation, with rotated cell `[a, b, h]`:
 
@@ -328,9 +420,9 @@ for nz in 1..min(maxLayers, n):
 **Ranking (`compareLayouts`):**
 
 1. `stable` first. Stable means `external.H ≤ 1.5 × min(external.L, external.W)`
-   (`STABLE_HEIGHT_RATIO`).
-2. Smaller `externalVolumeM3`. Volumes within **3%** of each other (`VOLUME_TOLERANCE`) count as
-   equal.
+   (`limits.stableHeightRatio`).
+2. Smaller `externalVolumeM3`. Volumes within **3%** of each other (`defaults.volumeTolerance`)
+   count as equal.
 3. Lower external height.
 
 Element `[0]` is the recommended layout.
@@ -339,16 +431,18 @@ Element `[0]` is the recommended layout.
 
 ### 7.3 Construction sizing (`resolveConstruction`)
 
+Values are the defaults; the standards field is in brackets (§6.4).
+
 | Item | Rule |
 |---|---|
-| Panel plywood (walls, lid, separators) | Auto: payload ≤ 150 kg → **12 mm**; ≤ 500 kg → **15 mm**; otherwise **19 mm**. Overridable |
-| Floor plywood | Always **19 mm** |
-| Skids | Payload ≤ 700 kg → **89 × 89** (4×4); otherwise **89 × 140** (4×6, tall) |
-| Skid count | `max(2, ceil(externalWidth / 800) + 1)`, evenly spread across the width |
-| Cleats | **19 × 89** (1×4) |
+| Panel plywood (walls, lid, separators) | Auto: payload ≤ 150 kg [`construction.panelLightMaxKg`] → **12 mm** [`stock.panelPlywoodMm.light`]; ≤ 500 kg [`panelMediumMaxKg`] → **15 mm** [`medium`]; otherwise **19 mm** [`heavy`]. Overridable by hand with 12 / 15 / 19 |
+| Floor plywood | Always **19 mm** [`stock.floorPlywoodMm`] |
+| Skids | Payload ≤ 700 kg [`construction.heavySkidOverKg`] → **89 × 89** (4×4) [`stock.skidMm.standard`]; otherwise **89 × 140** (4×6, tall) [`stock.skidMm.heavy`] |
+| Skid count | `max(2, ceil(externalWidth / 800) + 1)` [`construction.skidSpacingMm`], evenly spread across the width |
+| Cleats | **19 × 89** (1×4) [`stock.cleatMm`], returned as `construction.cleat` |
 
 **`structureAllowance`** is what the structure adds to the interior. Here `t` is the panel
-thickness and `ct` is the cleat thickness (19):
+thickness and `ct` is the cleat thickness (19, `construction.cleat.thick`):
 
 ```
 [ 2(t + ct),  2(t + ct),  skid.tall + floor + t + ct ]
@@ -356,14 +450,15 @@ thickness and `ct` is the cleat thickness (19):
 
 ### 7.4 Crate geometry (`designCrate`)
 
-All coordinates are relative to the interior origin, with `cw = 89` (cleat width).
+All coordinates are relative to the interior origin, with `cw = 89` (cleat width,
+`stock.cleatMm.wide`).
 
 | Member | Min corner → size |
 |---|---|
 | Floor | x, y from `−t−ct`, spanning the full external footprint; z ∈ [−floor, 0] |
 | Skids | Under the floor, full external length along X; z ∈ [−floor−skid.tall, −floor] |
 | Side walls (±Y) | Panel x ∈ [−t, L+t], thickness t, outside y ∈ [0, W], height H |
-| Side cleats | Outside each side panel. Top and bottom horizontals, plus verticals at ≤ 600 mm spacing (`MAX_CLEAT_SPACING`) |
+| Side cleats | Outside each side panel. Top and bottom horizontals, plus verticals at ≤ 600 mm spacing (`construction.maxCleatSpacingMm`) |
 | End walls (±X) | Panel spans y ∈ [0, W], fitted between the side panels |
 | End cleats | Outside each end panel. They span the full external width, so they wrap the corners over the side cleats |
 | Lid | Panel over x ∈ [−t, L+t], y ∈ [−t, W+t] at z = H. Two long edge cleats on top, plus cross-cleats at ≤ 600 mm |
@@ -382,7 +477,7 @@ Each member is tagged where it is created:
 
 ### 7.5 Dunnage (inside the crate)
 
-- **Bearers:** under each bottom-layer part, two 89-wide strips running along X, at 20% and 80%
+- **Bearers:** under each bottom-layer part, two 89-wide (`stock.blockWidthMm`) strips running along X, at 20% and 80%
   of the part's width. Their height equals the floor clearance (`layout.clearance[2]`), and there
   are none when it is 0. A strip that would poke into a side wall (a narrow part with little
   side clearance) is moved inward to touch the wall instead.
@@ -393,12 +488,12 @@ Each member is tagged where it is created:
 - **Separators:** one plywood sheet across the whole interior between each pair of layers, of
   thickness `t`.
 - **Blocking posts:** one per side (±X, ±Y) of every part, centred on that side:
-  - **Width:** 89, or the part's side length if that is shorter.
+  - **Width:** 89 (`stock.blockWidthMm`), or the part's side length if that is shorter.
   - **Thickness:** equal to the gap on that side (the clearance at a wall, or `partGap` next to
     another part).
   - **Height:** from the layer's floor (the crate floor or a separator) up to the next separator,
     or for the top layer, to the part's top. This means the posts also carry the layer above.
-  - Posts are only made when the gap is ≥ 19 mm (`MIN_BLOCKING_GAP`).
+  - Posts are only made when the gap is ≥ 19 mm (`construction.minBlockingGapMm`).
   - Posts shared by two neighbouring parts are de-duplicated by rounded position and size.
 
 ### 7.6 Outputs
@@ -406,13 +501,15 @@ Each member is tagged where it is created:
 - **Mass:**
   - `payloadKg = mass_kg × quantity`
   - `tareKg = Σ volume × density`, with plywood at 600 kg/m³ and lumber at 480 kg/m³
+    (`rates.densityKgM3`)
   - `grossKg = payloadKg + tareKg`
   - `tareKgByAssembly` splits `tareKg` by assembly (for the Overview's weight bars)
 - **Material totals:** plywood area is the sum of each sheet's two largest dimensions multiplied
   together. Lumber length is the sum of each board's longest dimension.
-- **Cost:** `Σ volume × rate`, with plywood at $1,100/m³ and lumber at $650/m³. These are
-  **placeholders**, good only for comparing designs.
-- **Screws:**
+- **Cost:** `Σ volume × rate`, with plywood at $1,100/m³ and lumber at $650/m³
+  (`rates.costUsdPerM3`). The shipped values are **placeholders**, good only for comparing
+  designs; a shop can enter its own prices.
+- **Screws** (spacings from `rates.screwSpacingMm`: `cleat` 150, `skid` 300, `panelJoint` 200):
   - each cleat: `ceil(len/150)+1`
   - each skid: `ceil(len/300)+1`
   - each block or bearer: 2
@@ -438,14 +535,18 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 
 | id | Pass (`ok`) | Problem | Rule |
 |---|---|---|---|
-| `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`DRY_VAN_53FT_MM`) |
-| `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side) |
-| `blocking` | Every part is blocked in | caution: Parts are not restrained | min(partGap, wallClearance) ≥ 19 mm |
-| `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg; only reported when nz > 1 |
-| `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg |
-| `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `LTL_EXCESSIVE_LENGTH_MM`) |
-| `utilization` | — | info: Mostly empty space | utilization < 25% |
-| `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`CARDBOARD_LIMITS`) |
+| `door` | Fits a 53' dry van | caution: Too big for a 53' dry van | external L ≤ 16000 mm, W ≤ 2489 mm, H ≤ 2743 mm (`limits.trailerMm`) |
+| `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
+| `blocking` | Every part is blocked in | caution: Parts are not restrained | min(partGap, wallClearance) ≥ 19 mm (`construction.minBlockingGapMm`) |
+| `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
+| `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg (`limits.baseRatingKg`; the title quotes the limit). The pass text names the skids ("4×4", "4×6", or the size in mm for non-standard stock) |
+| `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
+| `utilization` | — | info: Mostly empty space | utilization < 25% (`limits.lowUtilization`) |
+| `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`) |
+
+The figures in this table are the defaults. `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and
+`CARDBOARD_LIMITS` in `crate.ts` are read-only views of them, kept for tests; the checks read
+the standards passed in.
 
 **Trailer limits.** Typical published dimensions for a 53' × 102" dry van are an interior of
 about 52'6" × 101" × 110" and a rear door opening of about 98–100" × 108–110". The door, not the
@@ -485,8 +586,11 @@ This compares the layout on screen with the recommendation (`layouts[0]`) and th
 | `only` | One layout fits |
 | `picked` | The user chose a non-recommended layout. Carries `morePct`, its extra volume over the recommendation |
 | `stable` | Recommended, and the runner-up would tip |
-| `smaller` | Recommended, and the runner-up ships `nextMorePct` ≥ 3% more volume |
+| `smaller` | Recommended, and the runner-up ships `nextMorePct` ≥ 3% more volume (`defaults.volumeTolerance`) |
 | `tie` | Recommended, and the volumes are within 3%, so the lower crate won |
+
+`explainLayout(layouts, shown, standards?)` takes the same standards as the design, so its
+"tie" matches the ranking's tolerance.
 
 ### 7.9 When there is no crate (`DesignProblem`)
 
@@ -499,6 +603,7 @@ the first `problem` that applies:
 | `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | The size, and to check the file's units |
 | `part-mass` | Mass is not a finite number above zero | Enter a mass above zero |
 | `settings` | Settings fail `CrateSettingsSchema` (only if the store boundary was bypassed) | Which field, and to reset the rules |
+| `standards` | Custom standards fail `ShopStandardsSchema` (only if `setStandards` was bypassed; the shipped defaults are not re-parsed) | Which field, and to reset the shop standards |
 | `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or turning off upright |
 
 The island shows the title and detail in place of the tabs' content (with Reset rules for
@@ -729,8 +834,19 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
 
 ## 9. Persistence
 
-Not implemented in v1. State lives in memory. The plan is SQLite WASM with the `opfs-sahpool`
-VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema.sql`.
+**Shop standards** (§6.4) are saved in `localStorage` under `crate-designer.shop-standards.v1`
+(`src/state/standardsStorage.ts`), as the same JSON envelope as the download. Every
+`setStandards` / `resetStandards` saves; the defaults are saved as no entry, so a later change
+to the shipped defaults reaches users who never customised them. `StandardsLoader` applies the
+saved standards in an effect after the first render, so the server render and the first client
+render match; the design then re-computes once. Loading is safe: unreadable JSON, another
+version or an invalid value falls back to the defaults with a `console.warn`, and storage that
+is missing or throws (server, private mode, quota) is treated as empty. The version is in the
+key, so an incompatible future format starts fresh rather than misreading old data.
+
+Everything else lives in memory. The plan for designs is SQLite WASM with the `opfs-sahpool`
+VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema.sql`; shop
+standards could move there (one row per shop) when accounts exist.
 
 ## 10. Invariants and tests
 
@@ -785,6 +901,33 @@ VFS, in a Web Worker, behind a typed repository. See `DATA_STORE.md` and `schema
   return a `settings` problem.
 - Across a grid of extreme sizes and settings there is always a layout, and `design` is null
   exactly when `problem` is set.
+
+**`src/domain/standards.test.ts`** checks the shop standards (#19):
+
+- `DEFAULT_STANDARDS` passes the schema, holds the pre-#19 values field by field, is frozen, and
+  the old exports (`MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, …, `DEFAULT_SETTINGS`) are views of it.
+- The schema rejects negative, NaN and wrong-type values, a default gap outside the settings
+  range, a fractional layer count, panels or thresholds out of order, a door bigger than the
+  trailer, blocking wider than two cleats and a tiny cleat spacing. Deep merge leaves the base
+  untouched and ignores `__proto__`.
+- `computeDesign` with custom standards: passing the defaults equals passing nothing; a lower
+  light-panel threshold gives 15 mm panels; plywood on hand (18 mm) shows in the cut list; a
+  lower heavy-skid threshold gives 4×6 skids; a plywood rate change changes only the cost, by
+  exactly the plywood volume × the rate change; a density change changes the weights; a lower
+  base rating, stack limit, trailer length or LTL length flips `base-rating`, `stack`, `door`
+  and `oversize`; a wider minimum blocking gap removes the posts; tighter cleat and screw
+  spacing add uprights and screws; a wider skid spacing uses fewer skids; a bigger cleat grows
+  the wall allowance and the minimum interior; the stability ratio and volume tolerance change
+  the `stable` check, the ranking and `explainLayout`; invalid standards passed straight in
+  return a `standards` problem.
+- The JSON file round-trips, a partial file is filled from the defaults, and bad JSON, an array,
+  another version and an invalid value are rejected with a message.
+
+**`src/state/standards.store.test.ts`** checks persistence (round-trip under the versioned key,
+nothing stored for the defaults, fallback with one warning for bad JSON, an invalid value or
+another version, throwing storage, no `window`) and the store actions (a rate re-designs the
+cost, a threshold changes the panel, an invalid patch changes nothing, a changed default gap
+reaches the current rules and Reset rules, `resetStandards`, standards kept across other input).
 
 **`src/domain/partDetails.test.ts`** checks the entered-details path: names and materials are
 tidied, a blank material clears it, a blank or overlong name, an overlong material and a mass
@@ -879,6 +1022,11 @@ HTML report as `playwright-report`.
     +0.1 kg and a material edit say "No change to the crate", and the note goes; imperial mass
     shows 22.05 lb, takes 30 lb and ↑, and reads back as 13.653 kg. Header crops are saved as
     `09-header-*`.
+  - `10-shop-standards`: the section is collapsed by default and shows all five groups when
+    opened; changing the plywood cost to 2200 shows "Customised" and raises the Overview's
+    "$ of wood", which survives a reload; Reset to defaults restores the cost (also after a
+    reload); a light-panel threshold of 50 kg switches the Overview to 15 mm ply; a negative
+    density is flagged and reverts on blur.
 - **When the UI changes,** update the affected spec in the same PR, run `bun run e2e`, and use
   its screenshots in the PR. Tests have no retries, so a flaky test is a bug to fix.
 
@@ -903,6 +1051,10 @@ HTML report as `playwright-report`.
 | Settings are clamped at the store, bad values rejected per field | A slider or typed value just past a limit should still do something useful; NaN or a wrong type has no sensible nearest value, so the last good one stays | The user isn't told a typed value was clamped (the input shows the clamped value) |
 | `computeDesign` returns a `problem` instead of throwing | The UI can always explain an empty screen, in domain wording | One more field to check alongside `design` |
 | Tiny parts get a 178 mm minimum interior, padded as clearance | Keeps the cleat frame buildable and the board-bounds invariant true without special-casing the geometry | A 1 mm part ships in a crate far bigger than it needs |
+| House rules are one zod-validated `ShopStandards` object passed into `computeDesign`, defaulting to `DEFAULT_STANDARDS` (#19) | Makes the PM's tribal knowledge explicit and editable; the domain stays pure (no store or storage access), and every existing call and test works unchanged with the defaults | Every domain function takes one more argument; a few exports remain as views of the defaults for tests |
+| Shop standards persist in `localStorage` under a versioned key, loaded after mount | No backend yet; a PM's house rules should survive reloads. Loading after mount avoids a hydration mismatch, and invalid data falls back to the defaults with a warning | Per browser, not per shop: share them with Download / Load standards until there are accounts (§9) |
+| Standards are edited in fixed units (mm, kg, $/m³), not the display units | They are shop configuration, entered once from stock and price lists that are usually metric here | An imperial user converts by hand |
+| Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
 
 ## 12. Known limitations and roadmap
 
@@ -926,6 +1078,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #14 | Shareable design via URL |
 | #15 | Imperial / metric units toggle (landed with #20) |
 | #16 | Geometry-aware blocking for irregular parts |
+| #19 | Shop standards configuration (§6.4). Stock, defaults, thresholds, limits and material rates landed; labour rates need a labour-time model first |
 | #20 | UX redesign: full-bleed scene, glass island, tabbed detail |
 
 Other known gaps:
@@ -941,8 +1094,13 @@ Other known gaps:
 - Read `AGENTS.md` first. Next.js 16 has breaking changes, and its docs are in
   `node_modules/next/dist/docs/`.
 - Business rules belong in `src/domain/` (pure, tested), not in components.
-- Add a new rule as a named constant at the top of `crate.ts` or `packing.ts`, and add it to
-  §7 of this spec.
+- **Add a rule by adding it to the shop standards**, not as a module constant: add the field
+  to `ShopStandardsSchema` with a range, its value to `DEFAULT_STANDARDS`, read it from the
+  `standards` argument where it applies, add a row to the editor's `GROUPS` in
+  `ShopStandards.tsx`, and document it in §6.4 and §7 (citing the field). Old saved standards
+  without the field still load, because stored and imported standards are merged onto the
+  defaults. If a field changes meaning, bump `STANDARDS_VERSION`. Keep pure geometry (§6.4
+  "deliberately not a standard") in the code.
 - Adding a catalog part means:
   1. put the GLB in `public/parts/`
   2. add an entry to `src/data/parts.json`
