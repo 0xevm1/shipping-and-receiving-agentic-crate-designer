@@ -5,12 +5,11 @@ import { parts } from "./catalog";
 import { isSlender, usesCradles } from "./cradles";
 import { designCrate, SHAPED_BLOCK, type Member } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, type DesignPart } from "./design";
-import { ORIENTATIONS } from "./orientations";
+import { ORIENTATIONS, rotationMatrix } from "./orientations";
 import {
   FACE_AXES,
   FACE_IDS,
   MAX_SHAPED_BLOCK_DEPTH_MM,
-  rotationMatrix,
   sideGrid,
   usableProfile,
   type FaceId,

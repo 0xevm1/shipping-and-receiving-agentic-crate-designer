@@ -1,4 +1,4 @@
-import type { Orientation } from "./orientations";
+import { rotationMatrix, type Mat3 } from "./orientations";
 import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 
@@ -74,20 +74,6 @@ export function usableProfile(part: { dimensions_mm: Vec3; profile?: PartProfile
 
 // ---------------------------------------------------------------------------------------------
 // Rotating the profile into the crate
-
-type Mat3 = [[number, number, number], [number, number, number], [number, number, number]];
-
-/** The orientation as an integer rotation matrix (XYZ Euler, as three.js: R = Rx · Ry · Rz). */
-export function rotationMatrix(o: Pick<Orientation, "euler">): Mat3 {
-  const [a, b, c] = o.euler;
-  const r = (v: number) => Math.round(v);
-  const [ca, sa, cb, sb, cc, sc] = [r(Math.cos(a)), r(Math.sin(a)), r(Math.cos(b)), r(Math.sin(b)), r(Math.cos(c)), r(Math.sin(c))];
-  return [
-    [cb * cc, -cb * sc, sb],
-    [ca * sc + sa * sb * cc, ca * cc - sa * sb * sc, -sa * cb],
-    [sa * sc - ca * sb * cc, sa * cc + ca * sb * sc, ca * cb],
-  ];
-}
 
 /** Rᵀ · v: a crate-frame vector in the part's frame. */
 function toPart(m: Mat3, v: Vec3): Vec3 {

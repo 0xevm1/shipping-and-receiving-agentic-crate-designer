@@ -1,6 +1,7 @@
 import type { BomLine } from "./crate";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
+import { IN3_PER_FT3, LB_PER_KG, MM_PER_IN } from "./units";
 
 /**
  * What a crate costs to build and what it looks like to a freight booker (#17, spec §7.12).
@@ -14,10 +15,6 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  *
  * Pure: everything is computed from the design's cut list, screws and outside size.
  */
-
-const LB_PER_KG = 2.20462;
-const MM_PER_IN = 25.4;
-const IN3_PER_FT3 = 1728;
 
 /** Assembly steps that don't depend on the layout: the base, four walls and the lid. */
 export const FIXED_ASSEMBLY_STEPS = 6;
