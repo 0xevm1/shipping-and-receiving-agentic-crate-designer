@@ -33,6 +33,8 @@ starts. `bun run dev:app` starts Next.js alone, without touching Docker.
 | `bun run db:psql` | `psql` inside the `db` container, on the configured database |
 | `bun run db:generate` | After editing `src/server/db/schema.ts`: writes the next migration (`drizzle-kit generate`). Commit it with the schema change |
 | `bun run test:integration` | The `*.integration.test.ts` files, against the Docker Postgres and blob emulator. Run `infra:up` first |
+| `bun run worker` | The job queue worker (`queue_job`, SKIP LOCKED, NOTIFY `crate_jobs`). See [QUEUE.md](QUEUE.md) |
+| `bun run apikey:create -- --name x` | Creates an API key (`api_key`, hashed) for scripts; `apikey:list`, `apikey:revoke -- --id …`. See [QUEUE.md](QUEUE.md#api-keys) |
 | `bun run blob:gc` | Deletes blob objects no row names, older than 24 h (`-- --dry-run` lists them). See [BLOB_STORAGE.md](BLOB_STORAGE.md#orphan-cleanup-bun-run-blobgc) |
 
 `bun run build`, `bun run test` and the pre-commit hook never need Docker.

@@ -194,6 +194,7 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 | `engine.ts` `designShipment(request)` | `planShipment` on a `DesignRequest`; returns `{ plan, summary, engineVersion, inputHash }`. Pure and synchronous; never throws for valid input |
 | `engine.ts` `cutList(request)` | The Cut list tab's CSV and file name (crate type or, for a split batch, the shipment), stamped |
 | `engine.ts` `inputHash(request)`, `summarize(plan)` | The stamp's hash; the headline numbers (outside size, gross, tare, screws, cost per crate type, totals, problem) |
+| `sweep.ts` `runSweep(request)`, `rankConfigurations(request)` | The quantity sweep (§7.16) as an engine call: `SweepRequestSchema` (part, rules = settings without the quantity, standards, optional freight rates, `maxQuantity`, `total`), stamped with `engineVersion` and `sweepInputHash` (canonical `{ v: 1, kind: "sweep", part, rules, standards, freightRates, maxQuantity, total }`). `rankConfigurations` adds every shortlisted quantity designed in full, ranked best first: the headless answer of `POST /api/v1/designs`, the queue's sweep job and the CLI ([QUEUE.md](QUEUE.md)) |
 | `files.ts` `buildBundleZip(input, reader)` | The Export package (§7.13) as a ZIP, stamped. Loads the bundle, PDF (jsPDF), ZIP (fflate) and GLB code with `import()` on first use |
 | `glb.ts` | Runtime adapters for GLBs: `urlModelReader` (browser, `GLTFLoader` on the model URL, cached), `bytesModelReader` / `parseGlb` (any runtime, `GLTFLoader.parse` on bytes), `crateGlb` (`GLTFExporter`, adding a minimal `FileReader` where the runtime has none, as Node) |
 | `schemas.ts` | zod schemas for every call: `DesignRequestSchema` (part, settings, standards, layoutKey, ranking), `DesignResponseSchema`, `DesignSummarySchema`, `EngineStampSchema`, `CutListRequestSchema` / `CutListResponseSchema`, and the worker messages. The browser, server and CLI validate the same types; the page's own calls are typed and skip parsing |
@@ -228,6 +229,8 @@ Node (a server or CLI, later). It is a facade over `src/domain` plus the file bu
 (`src/state/engine.worker.ts`, bundled by Next.js from `new Worker(new URL(…, import.meta.url))`),
 started on the first edit. It is latest-wins: one request in flight; a newer one replaces one
 still waiting, so a burst of edits (a held arrow key on a slider) costs at most two designs.
+The quantity sweep (`engine.sweep`, behind `useBestQuantity`) runs in the same worker on a lane of
+its own, latest-wins too, so a sweep never delays a design.
 Where there is no worker (server rendering, vitest in Node or jsdom) or it fails (an error, a
 request that can't be cloned), it designs in the page instead, before returning, so the store
 and its tests stay synchronous there. The first design (the preloaded part) is made in the page.
@@ -236,6 +239,13 @@ The store applies an edit at once, so its control never lags, and lands the desi
 inputs it was made from (`designedFrom`, with the stamp) when the worker answers; the crate type
 to show and the `restoring` hold wait for the design. The e2e probe reports `quantity`, `partId`
 and `massAssumed` from `designedFrom`, so a spec that waits on them waits for the design too.
+
+**On the server.** Engine work never runs on the thread that serves requests and SSE streams: a
+`worker_threads` pool (`src/server/workers/`) runs it from one bundled file
+(`bun run engine:build`), in Next.js, the queue worker (`bun run worker`) and tests alike; a test
+holds the main thread's event-loop lag under 50 ms during full sweeps. Background sweeps go
+through a Postgres job queue (`queue_job`, `FOR UPDATE SKIP LOCKED`, `NOTIFY crate_jobs` plus
+polling, leases, retries, dead letter). See [QUEUE.md](QUEUE.md).
 
 **Downloads.** The Export pill builds its ZIP through `buildBundleZip` with `urlModelReader`; the
 PDF, ZIP and GLB code is loaded only then, and nothing goes to a server. The same call in Node
@@ -328,10 +338,17 @@ bump `ENGINE_REVISION`.
 | `src/engine/files.ts` | `buildBundleZip`: the Export package in any runtime, PDF / ZIP / GLB code loaded on first use |
 | `src/engine/parityCases.ts` | The browser / Node parity cases and the baseline text (`__snapshots__/parity.json`) |
 | `src/state/engineClient.ts` | `engine`: the page's engine client, a Web Worker with an in-thread fallback, latest-wins (`createEngineClient`) |
-| `src/state/engine.worker.ts` | The engine's Web Worker entry |
+| `src/state/engine.worker.ts` | The engine's Web Worker entry (designs and sweeps, `engine/run.ts`) |
+| `src/engine/sweep.ts` | `runSweep`, `rankConfigurations`, `SweepRequestSchema`, `sweepInputHash`, `DEFAULT_SWEEP_RULES` (§5.1, §7.16) |
+| `src/engine/run.ts` | `runWorkerRequest`: one worker message's call, shared by the worker and its test stand-in |
+| `src/lib/api/designs.ts` | `POST /api/v1/designs` fields and response schemas, client-safe ([QUEUE.md](QUEUE.md)) |
+| `src/server/workers/` | The engine's `worker_threads` pool (`pool.ts`, `engine.ts` `getEnginePool`) and thread entry (`engineThread.ts`, bundled by `bun run engine:build`) |
+| `src/server/queue/`, `src/server/db/queue.ts` | The Postgres job queue: enqueue / claim / lease / retry / dead letter, the runner, LISTEN, job kinds (`enqueueSweep`, `enqueueBundle`) |
+| `src/server/auth/authenticate.ts`, `src/server/db/apiKeys.ts` | `authenticate(request)` → `OrgContext` (API key, or the UI's same-origin marker); hashed API keys |
+| `src/cli/` | `bun run crate`: argument parsing, the API call, the in-process `--offline` run |
 | `src/state/fakeEngineWorker.ts` | A stand-in worker for tests (answers on `flush()`) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading (`loadPartScene`). Runtime-neutral apart from that loader; the engine's `glb.ts` wraps it for Node |
-| `src/state/bestQuantity.ts` | `useBestQuantity`: the quantity sweep (§7.16) for the part and rules on screen, derived from the store (nothing added to it), run 250 ms after the last change |
+| `src/state/bestQuantity.ts` | `useBestQuantity`: the quantity sweep (§7.16) for the part and rules on screen, derived from the store (nothing added to it), asked of the engine worker 250 ms after the last change |
 | `src/components/island/BestQuantity.tsx` | The best-quantity hint and its **Use** action on the Rules tab (§7.16) |
 | `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange`; designs through the engine client, `designedFrom` (§5.1) |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
@@ -1743,7 +1760,8 @@ alone fails a hard check). `planShipment` (§7.10) is unchanged: it plans the qu
 the largest crate that fits; `planTotal` plans a total by cost.
 
 **Speed:** 30–125 ms per sample part on an M-series Mac (the gross-limit cut-off skips most of
-1–200). Built to run off the render thread in a Web Worker. The test fails above 1.5 s or 400 ×
+1–200). It runs off the render thread in the engine's Web Worker (`engine.sweep`, §5.1), and on
+the server in a worker thread ([QUEUE.md](QUEUE.md)). The test fails above 1.5 s or 400 ×
 a fixed CPU loop's time, whichever is larger (load-aware, #48).
 
 **In the UI:** the Rules tab shows the recommendation under "How many parts" (§8.3) with **Use**,
