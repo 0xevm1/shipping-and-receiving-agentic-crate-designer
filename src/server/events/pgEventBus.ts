@@ -8,9 +8,16 @@
  * Reconnecting: postgres.js re-issues LISTEN once when that connection closes, and calls
  * `onlisten` again when it succeeds. If that one attempt fails (Postgres still restarting), it
  * gives up silently. So the bus also probes itself: every `probeIntervalMs` it NOTIFYs a probe
- * token through the pool and expects it back on the listen connection within `probeTimeoutMs`.
- * A missing probe (or a failed NOTIFY) means the listener is dead or half-open: the bus closes
- * that client and opens a new one, retrying with capped exponential backoff and jitter.
+ * token through the pool and expects it back on the listen connection. `probeMisses` probes in a
+ * row that don't come back (or whose NOTIFY fails) mean the listener is dead or half-open: the
+ * bus closes that client and opens a new one, retrying with capped exponential backoff and jitter.
+ *
+ * The probe must not misfire when the process is merely overloaded (docs/LOAD_TEST.md): tearing
+ * down a healthy listener makes every stream resync, at the worst moment. So the `probeTimeoutMs`
+ * clock starts only once the NOTIFY has committed (time spent waiting for a pool connection says
+ * nothing about the listener); the verdict is taken in a `setImmediate` after the timer, so a
+ * notification already waiting on the socket of a lagging event loop is read first; and one miss
+ * alone never reconnects.
  *
  * Every LISTEN after the first tells all subscribers to resync, because NOTIFYs sent while
  * nobody was listening are gone; subscribers re-read the `event` table from their cursor.
@@ -28,7 +35,10 @@ export type PgEventBusOptions = {
   /** Pooled queries for the probe NOTIFY and the queue gauge. */
   system: Pick<SystemQueries, "notify" | "notificationQueueUsage">;
   probeIntervalMs?: number;
+  /** How long a committed probe NOTIFY may take to come back before it counts as a miss. */
   probeTimeoutMs?: number;
+  /** Misses in a row that mean the listener is gone (default 2). */
+  probeMisses?: number;
   backoffInitialMs?: number;
   backoffMaxMs?: number;
   /** Shown in `pg_stat_activity.application_name`, to find (or kill) the listen connection. */
@@ -38,7 +48,19 @@ export type PgEventBusOptions = {
 
 export const LISTENER_APPLICATION_NAME = "crate-events-listener";
 
-type Probe = { token: string; timer: ReturnType<typeof setTimeout> };
+/** A probe in flight. `timer` (the deadline) is set once its NOTIFY has committed. */
+type Probe = { token: string; startedAt: number; received: boolean; timer?: ReturnType<typeof setTimeout> };
+
+/** A readable reason for any thrown value: `message`, else `code`, else the nested errors' (an `AggregateError` from a refused dual-stack connect has an empty message). */
+export function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const parts: string[] = [];
+  if (err.message) parts.push(err.message);
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === "string" && !err.message.includes(code)) parts.push(code);
+  if (err instanceof AggregateError && err.errors.length) parts.push(err.errors.map(describeError).join("; "));
+  return parts.join(": ") || err.name || "unknown error";
+}
 
 /** Full-jitter exponential backoff: `initial · 2^attempt`, capped, times a random 0.5–1. */
 export function backoffDelay(attempt: number, initialMs: number, maxMs: number, random = Math.random): number {
@@ -51,6 +73,7 @@ export function createPgEventBus(options: PgEventBusOptions): EventBus {
     system,
     probeIntervalMs = 15_000,
     probeTimeoutMs = 5_000,
+    probeMisses = 2,
     backoffInitialMs = 250,
     backoffMaxMs = 10_000,
     applicationName = LISTENER_APPLICATION_NAME,
@@ -68,6 +91,7 @@ export function createPgEventBus(options: PgEventBusOptions): EventBus {
   let queueUsage: number | null = null;
   let probeSeq = 0;
   let probe: Probe | undefined;
+  let misses = 0;
   let probeTimer: ReturnType<typeof setInterval> | undefined;
   let wake: (() => void) | undefined;
 
@@ -94,8 +118,13 @@ export function createPgEventBus(options: PgEventBusOptions): EventBus {
     }
     if (json && typeof json === "object" && "probe" in json) {
       if (probe && (json as { probe: unknown }).probe === probe.token) {
-        clearTimeout(probe.timer);
-        probe = undefined;
+        // Possibly before the NOTIFY's own promise resolves: `sendProbe` checks `received`.
+        probe.received = true;
+        misses = 0;
+        if (probe.timer) {
+          clearTimeout(probe.timer);
+          probe = undefined;
+        }
       }
       return; // Another instance's probe, or a late one of ours.
     }
@@ -148,7 +177,7 @@ export function createPgEventBus(options: PgEventBusOptions): EventBus {
         } catch (err) {
           await next.end({ timeout: 0 }).catch(() => {});
           const delay = backoffDelay(attempt, backoffInitialMs, backoffMaxMs);
-          log.warn(`[events] LISTEN failed (${(err as Error).message}); retrying in ${Math.round(delay)} ms`);
+          log.warn(`[events] LISTEN failed (${describeError(err)}); retrying in ${Math.round(delay)} ms`);
           await sleep(delay);
         }
       }
@@ -161,26 +190,51 @@ export function createPgEventBus(options: PgEventBusOptions): EventBus {
   async function restart(reason: string): Promise<void> {
     if (!running || connecting) return;
     log.warn(`[events] listener lost (${reason}); reconnecting`);
+    if (probe?.timer) clearTimeout(probe.timer);
+    probe = undefined;
+    misses = 0;
     await closeClient();
     await connect();
   }
 
+  /** A probe that didn't come back (or couldn't be sent). Reconnects after `probeMisses` in a row. */
+  function missed(reason: string): void {
+    probe = undefined;
+    if (++misses < probeMisses) {
+      log.warn(`[events] liveness probe missed (${reason}); ${misses} of ${probeMisses} before reconnecting`);
+      return;
+    }
+    void restart(`${misses} liveness probes missed in a row; last: ${reason}`);
+  }
+
   function sendProbe(): void {
-    if (!running || connecting || !client || probe) return;
+    if (!running || connecting || !client) return;
+    // A NOTIFY still waiting for a pool connection is no evidence either way; a very old one is
+    // abandoned (not counted) so probing doesn't stop for good.
+    if (probe && (probe.timer || performance.now() - probe.startedAt < 4 * probeIntervalMs)) return;
     const token = `${busId}:${++probeSeq}`;
-    const timer = setTimeout(() => {
-      if (probe?.token !== token) return;
-      probe = undefined;
-      void restart("probe timed out");
-    }, probeTimeoutMs);
-    timer.unref?.();
-    probe = { token, timer };
-    system.notify(CRATE_EVENTS_CHANNEL, JSON.stringify({ probe: token })).catch((err: Error) => {
-      if (probe?.token !== token) return;
-      clearTimeout(timer);
-      probe = undefined;
-      void restart(`probe NOTIFY failed: ${err.message}`);
-    });
+    const current: Probe = { token, startedAt: performance.now(), received: false };
+    probe = current;
+    system.notify(CRATE_EVENTS_CHANNEL, JSON.stringify({ probe: token })).then(
+      () => {
+        if (probe !== current) return;
+        if (current.received) {
+          probe = undefined;
+          return;
+        }
+        // The deadline runs from the commit, not from when the NOTIFY was queued for the pool.
+        current.timer = setTimeout(() => {
+          // After pending I/O: a notification already on the socket of a busy loop is read first.
+          setImmediate(() => {
+            if (probe === current && !current.received) missed(`no probe back within ${probeTimeoutMs} ms of its NOTIFY`);
+          });
+        }, probeTimeoutMs);
+        current.timer.unref?.();
+      },
+      (err: unknown) => {
+        if (probe === current) missed(`probe NOTIFY failed: ${describeError(err)}`);
+      },
+    );
     readNotificationQueueUsage(system, log).then(
       (r) => (queueUsage = r.usage),
       () => {},
@@ -199,7 +253,7 @@ export function createPgEventBus(options: PgEventBusOptions): EventBus {
     async stop() {
       running = false;
       clearInterval(probeTimer);
-      if (probe) clearTimeout(probe.timer);
+      if (probe?.timer) clearTimeout(probe.timer);
       probe = undefined;
       wake?.();
       await connecting;

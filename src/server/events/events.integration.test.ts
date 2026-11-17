@@ -8,7 +8,7 @@ import { type CrateEvent, type DesignJob, inTransaction } from "@/server/db/repo
 import { createTestDatabase, type TestDatabase } from "@/server/db/testing";
 import type { EventBus } from "./bus";
 import { emitEvent } from "./emit";
-import { createPgEventBus } from "./pgEventBus";
+import { createPgEventBus, type PgEventBusOptions } from "./pgEventBus";
 import { handleJobEventsRequest } from "./sse";
 
 const quiet = { info: () => {}, warn: () => {}, error: () => {} };
@@ -19,7 +19,7 @@ let bus: EventBus;
 let job: DesignJob;
 const appName = `crate-events-it-${randomBytes(3).toString("hex")}`;
 
-function newBus(url = t.url, applicationName = appName) {
+function newBus(url = t.url, applicationName = appName, overrides: Partial<PgEventBusOptions> = {}) {
   return createPgEventBus({
     url,
     system: t.system,
@@ -29,8 +29,20 @@ function newBus(url = t.url, applicationName = appName) {
     backoffMaxMs: 300,
     applicationName,
     log: quiet,
+    ...overrides,
   });
 }
+
+/** A log that keeps the bus's warnings. */
+function warnings() {
+  const seen: string[] = [];
+  return { seen, log: { ...quiet, warn: (m: string) => void seen.push(m) } };
+}
+
+const busyWait = (ms: number) => {
+  const end = performance.now() + ms;
+  while (performance.now() < end);
+};
 
 async function newJob(ctx: OrgContext = DEFAULT_ORG): Promise<DesignJob> {
   const part = await t.repo.parts.create(ctx, { name: "Bracket", massKg: 2, sizeXMm: 100, sizeYMm: 100, sizeZMm: 100, source: "upload" });
@@ -286,6 +298,70 @@ describe("listener recovery", () => {
       await admin`select pg_terminate_backend(pid) from pg_stat_activity where usename = ${role}`;
       await admin.unsafe(`drop role if exists ${role}`);
       await admin.end({ timeout: 5 });
+    }
+  });
+});
+
+describe("liveness probe under overload", () => {
+  it("doesn't count time spent waiting for a pool connection: a slow pool never reconnects a healthy listener", async () => {
+    const { seen, log } = warnings();
+    // Every probe NOTIFY waits 1.2 s for "a pool connection", three times the probe timeout.
+    const slowPool = {
+      ...t.system,
+      notify: (channel: string, payload: string) => new Promise((r) => setTimeout(r, 1200)).then(() => t.system.notify(channel, payload)),
+    };
+    const slow = newBus(t.url, `${appName}-slow`, { system: slowPool, log });
+    await slow.start();
+    try {
+      const own = await newJob();
+      const s = track(await openStream({ jobId: own.id, bus: slow }));
+      await new Promise((r) => setTimeout(r, 3000));
+      expect(slow.status()).toMatchObject({ listening: true, reconnects: 0 });
+      expect(seen.filter((m) => m.includes("probe"))).toEqual([]);
+      const live = await emit("still live", own.id);
+      await waitFor(() => expect(s.ids()).toEqual([live.id]));
+    } finally {
+      await slow.stop();
+    }
+  });
+
+  it("reads a probe already on the socket before judging it, when the event loop was blocked past the deadline", async () => {
+    const { seen, log } = warnings();
+    let blocked = 0;
+    const blocking = {
+      ...t.system,
+      notify: async (channel: string, payload: string) => {
+        await t.system.notify(channel, payload);
+        // The loop is stuck (CPU work) for longer than the probe timeout right after the NOTIFY:
+        // the deadline and the notification are both pending when it frees up.
+        if (blocked++ < 3) setImmediate(() => busyWait(700));
+      },
+    };
+    const lagging = newBus(t.url, `${appName}-lag`, { system: blocking, log, probeIntervalMs: 1000 });
+    await lagging.start();
+    try {
+      await waitFor(() => expect(blocked).toBeGreaterThanOrEqual(3), 10_000);
+      await new Promise((r) => setTimeout(r, 1000));
+      expect(seen.filter((m) => m.includes("probe"))).toEqual([]);
+      expect(lagging.status()).toMatchObject({ listening: true, reconnects: 0 });
+    } finally {
+      await lagging.stop();
+    }
+  });
+
+  it("reconnects once probeMisses probes in a row don't come back, and not after one", async () => {
+    const { seen, log } = warnings();
+    // NOTIFYs that commit but never reach the listener: what a half-open listen connection looks like.
+    const lost = { ...t.system, notify: async () => {} };
+    const deaf = newBus(t.url, `${appName}-deaf`, { system: lost, log, probeMisses: 2 });
+    await deaf.start();
+    try {
+      await waitFor(() => expect(deaf.status().reconnects).toBeGreaterThan(0), 10_000);
+      const lostAt = seen.findIndex((m) => m.includes("listener lost"));
+      expect(seen.slice(0, lostAt)).toEqual([expect.stringMatching(/liveness probe missed .*1 of 2/)]);
+      expect(seen[lostAt]).toMatch(/2 liveness probes missed in a row/);
+    } finally {
+      await deaf.stop();
     }
   });
 });
