@@ -11,6 +11,7 @@ import {
   type ShopStandards,
 } from "@/domain/standards";
 import { downloadText } from "@/lib/download";
+import { groupDigits } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { STANDARD_GROUPS, readStandard, standardPatch, type Field } from "./standardsFields";
 import styles from "./ShopStandards.module.css";
@@ -169,7 +170,7 @@ function StandardInput({
           <small>
             {f.hint}
             {f.hint && changed && " "}
-            {changed && `Default ${fallback}${withUnit(f.unit)}.`}
+            {changed && `Default ${groupDigits(fallback)}${withUnit(f.unit)}.`}
           </small>
         )
       )}
