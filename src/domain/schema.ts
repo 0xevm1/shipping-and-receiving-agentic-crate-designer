@@ -49,6 +49,9 @@ export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm">
 };
 
 /** User-editable inputs that drive a crate design. The part itself is passed separately. */
+/** The plywood thicknesses the app accepts, in mm (shop standards and the Rules tab stay inside it). */
+export const PLYWOOD_MM = { min: 6, max: 50 } as const;
+
 export const CrateSettingsSchema = z.object({
   quantity: z.number().int().min(1).max(200),
   /** Restrict to rotations about Z, so the part's modeled "up" stays up. */
@@ -59,8 +62,12 @@ export const CrateSettingsSchema = z.object({
   partGapMm: z.number().min(0).max(300),
   /** Clear space between parts and the crate walls/floor/lid, filled with blocking. */
   wallClearanceMm: z.number().min(0).max(300),
-  /** Plywood panel thickness, or "auto" to choose from payload mass. */
-  panelThickness: z.union([z.literal("auto"), z.literal(12), z.literal(15), z.literal(19)]),
+  /**
+   * Plywood panel thickness in mm, or "auto" to choose from payload mass. Any buildable thickness
+   * is valid here, so a saved design keeps opening; which ones the shop stocks is checked at the
+   * edge (`normalizeSettings`, `panelOptions` in standards.ts).
+   */
+  panelThickness: z.union([z.literal("auto"), z.number().finite().min(PLYWOOD_MM.min).max(PLYWOOD_MM.max)]),
 });
 export type CrateSettings = z.infer<typeof CrateSettingsSchema>;
 
@@ -70,11 +77,13 @@ const NUMERIC_SETTINGS = ["quantity", "maxLayers", "partGapMm", "wallClearanceMm
  * The store boundary for settings: merges a patch from the UI onto the current
  * settings so the domain only ever sees values the schema accepts.
  * - Finite numbers are clamped into the schema's range (counts are rounded).
- * - Anything else (NaN, ±Infinity, a wrong type, an unknown panel size) is
- *   rejected field by field: the current value is kept.
+ * - Anything else (NaN, ±Infinity, a wrong type, a panel thickness outside the
+ *   plywood range) is rejected field by field: the current value is kept.
+ * - With `stocked` (the shop's plywood thicknesses), a panel thickness that is not one of them is
+ *   rejected too. Loading a saved design passes none, so old designs open as saved.
  * - Unknown keys are dropped.
  */
-export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateSettings): CrateSettings {
+export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateSettings, stocked?: readonly number[]): CrateSettings {
   const next: CrateSettings = { ...current };
   const shape = CrateSettingsSchema.shape;
   for (const key of NUMERIC_SETTINGS) {
@@ -85,7 +94,10 @@ export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateS
     next[key] = Math.min(field.maxValue ?? n, Math.max(field.minValue ?? n, n));
   }
   if (typeof patch.keepUpright === "boolean") next.keepUpright = patch.keepUpright;
-  if (shape.panelThickness.safeParse(patch.panelThickness).success) next.panelThickness = patch.panelThickness!;
+  const panel = patch.panelThickness;
+  if (shape.panelThickness.safeParse(panel).success && (stocked === undefined || panel === "auto" || stocked.includes(panel as number))) {
+    next.panelThickness = panel!;
+  }
   return CrateSettingsSchema.parse(next);
 }
 

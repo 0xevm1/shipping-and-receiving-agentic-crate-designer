@@ -301,7 +301,7 @@ and is never written to `parts.json`, design files or share links.
 | `maxLayers` | int 1–6 (UI offers 1–4) | 2 (`defaults.maxLayers`) | Upper limit on `nz` |
 | `partGapMm` | 0–300 | 50 (`defaults.partGapMm`) | Clear gap between adjacent parts, filled by blocking |
 | `wallClearanceMm` | 0–300 | 50 (`defaults.wallClearanceMm`) | Gap to the walls, floor and lid |
-| `panelThickness` | `"auto"` \| 12 \| 15 \| 19 | auto | Plywood for walls, lid and separators |
+| `panelThickness` | `"auto"` \| mm (6 to 50) | auto | Plywood for walls, lid and separators. The Rules tab offers the thicknesses in `stock.panelPlywoodMm` (12, 15, 19 by default); a design saved with another one still opens |
 
 The part is not a setting. It is passed to `computeDesign` separately, and loading a new part
 resets `quantity` to that part's first suggested quantity.
@@ -1231,7 +1231,7 @@ is testable). The same date is in the PDF header and the zip's README.txt.
      ("FORK ENTRY FROM THE ENDS"). The openings are `design.handling.openings` (§7.14), the
      same ones the forklift and pallet-jack checks measure (`PrintableLabel.openings`);
    - the **centre-of-gravity** mark (ISO 7000-0627, the quartered circle) at the design's
-     `centerOfGravityMm`, projected onto the end view (`cogEnd`: Y and Z from the outside
+     `handling.cogMm`, projected onto the end view (`cogEnd`: Y and Z from the outside
      bottom-left corner). Every design has a CoG, so the mark is always drawn.
 
 **How the design reaches the page.** The Cut list's **Print / save PDF** serializes the design

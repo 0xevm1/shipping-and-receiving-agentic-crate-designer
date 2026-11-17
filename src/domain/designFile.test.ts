@@ -139,7 +139,7 @@ describe("parseDesignFile", () => {
     bad.settings.quantity = 500;
     expect(parseDesignFile(JSON.stringify(bad)).ok).toBe(false);
     const nan = valid();
-    nan.settings.panelThickness = 13;
+    nan.settings.panelThickness = 3;
     expect(parseDesignFile(JSON.stringify(nan)).ok).toBe(false);
   });
 

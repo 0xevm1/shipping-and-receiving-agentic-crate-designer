@@ -7,7 +7,7 @@ import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import type { PartProfile } from "@/domain/profile";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
-import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
+import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import { catalogPart, type LoadedPart } from "@/lib/part";
 import type { Units } from "@/lib/units";
 import { anim } from "./motion";
@@ -278,6 +278,8 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     for (const key of ["partGapMm", "wallClearanceMm", "maxLayers"] as const) {
       if (standards.defaults[key] !== old.defaults[key]) next[key] = standards.defaults[key];
     }
+    // A panel thickness the new stock no longer includes goes back to auto rather than lingering unselectable.
+    if (next.panelThickness !== "auto" && !panelOptions(standards).includes(next.panelThickness)) next.panelThickness = "auto";
     recompute({ standards, settings: normalizeSettings(next, settings), layoutKey: null });
     if (save) saveStandards(standards);
   };
@@ -375,7 +377,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.
-    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings), layoutKey: null }, "rules"),
+    setSettings: (patch) => recompute({ settings: normalizeSettings(patch, get().settings, panelOptions(get().standards)), layoutKey: null }, "rules"),
     resetRules: () => recompute({ settings: settingsFromStandards(get().standards, get().settings.quantity), layoutKey: null }, "rules"),
     setLayoutKey: (layoutKey) => recompute({ layoutKey }, "layout"),
     setStandards: (patch) => {

@@ -211,7 +211,7 @@ describe("settings at the boundary", () => {
       partGapMm: Infinity,
       maxLayers: "3",
       keepUpright: "no",
-      panelThickness: 13,
+      panelThickness: 3,
       wallClearanceMm: undefined,
     } as unknown as Partial<CrateSettings>;
     expect(normalizeSettings(bad, prev)).toEqual(prev);
@@ -222,6 +222,14 @@ describe("settings at the boundary", () => {
     const next = normalizeSettings(patch, base);
     expect(next).toEqual({ ...base, keepUpright: false, panelThickness: 15, quantity: 12 });
     expect(CrateSettingsSchema.safeParse(next).success).toBe(true);
+  });
+
+  it("takes any plywood thickness in range, or only the stocked ones when it is told which", () => {
+    expect(normalizeSettings({ panelThickness: 13 }, base).panelThickness).toBe(13);
+    expect(normalizeSettings({ panelThickness: 13 }, base, [12, 15, 19])).toEqual(base);
+    expect(normalizeSettings({ panelThickness: 15 }, base, [12, 15, 19]).panelThickness).toBe(15);
+    expect(normalizeSettings({ panelThickness: "auto" }, { ...base, panelThickness: 15 }, [12]).panelThickness).toBe("auto");
+    expect(normalizeSettings({ panelThickness: 51 }, base).panelThickness).toBe(base.panelThickness);
   });
 
   it("reports what it clamped, rounded or rejected", () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { hasKind, isPlainObject, readEnvelopeJson, writeEnvelope, type EnvelopeFormat } from "./envelope";
-import { CrateSettingsSchema } from "./schema";
+import { CrateSettingsSchema, PLYWOOD_MM } from "./schema";
 
 /**
  * Shop standards: the house rules every crate is designed to.
@@ -53,7 +53,7 @@ export const ShopStandardsSchema = z
       /** Floor plywood, always this thickness. */
       floorPlywoodMm: mm(6, 50),
       /** Wall, lid and separator plywood that Auto picks from, by payload. */
-      panelPlywoodMm: z.object({ light: mm(6, 50), medium: mm(6, 50), heavy: mm(6, 50) }),
+      panelPlywoodMm: z.object({ light: mm(PLYWOOD_MM.min, PLYWOOD_MM.max), medium: mm(PLYWOOD_MM.min, PLYWOOD_MM.max), heavy: mm(PLYWOOD_MM.min, PLYWOOD_MM.max) }),
       /** Width of blocking posts and bearers. */
       blockWidthMm: mm(19, 300),
       /**
@@ -400,6 +400,11 @@ export function parseStandards(input: unknown): StandardsResult {
   const issue = r.error.issues[0];
   const path = issue.path.join(".");
   return { ok: false, error: `${path || "Standards"}: ${issue.message}`, path, message: issue.message };
+}
+
+/** The panel plywood thicknesses the shop stocks, smallest first (what the Rules tab offers besides auto). */
+export function panelOptions(s: ShopStandards): number[] {
+  return [...new Set(Object.values(s.stock.panelPlywoodMm))].sort((a, b) => a - b);
 }
 
 /** File and storage format version. Bump it when a field changes meaning. */
