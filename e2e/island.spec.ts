@@ -22,7 +22,7 @@ test("Overview shows the build chain and weight by assembly", async ({ page }) =
   await shot(page, "island-overview");
 });
 
-test("Layouts says the crate on screen is the recommendation, and a layout picked by hand says so", async ({ page }) => {
+test("Layouts shows the crate on screen as the top-ranked layout, and a layout picked by hand says so", async ({ page }) => {
   await openTab(page, "Layouts");
   await expect(panel(page).getByRole("heading", { name: "Ways to pack it" })).toBeVisible();
   // Layout cards only: the Rank by toggle has pressed buttons too.
@@ -30,15 +30,13 @@ test("Layouts says the crate on screen is the recommendation, and a layout picke
   await expect(pickedLayout(page)).toContainText(mmText((await crate(page)).outside!));
   expect(await layoutCards(page).count()).toBeGreaterThan(1);
 
-  // The app opens at the sweep's crate, cheapest per part, which for the sample part isn't the top of
-  // the volume ranking (src/lib/shapedRoundTrip.test.ts): the tab says it is the recommendation.
-  await expect.poll(async () => (await crate(page)).layoutPick).toBe("recommendation");
-  const note = panel(page).getByTestId("layout-recommended");
-  await expect(note).toContainText("Recommended: cheapest per part");
-  await expect(note).toContainText("ranked by volume");
+  // The app opens at the sweep's crate (spec §7.16). For the sample part that is also the top of the volume
+  // ranking, so the tab has nothing to explain: no "Recommended: cheapest per part" note and no "Your pick".
+  // (The note for a recommendation that isn't the list's top is covered by unit tests.)
+  await expect.poll(async () => (await crate(page)).layoutPick).toBe("ranking");
+  await expect(pickedLayout(page)).toContainText("top by volume");
+  await expect(panel(page).getByTestId("layout-recommended")).toHaveCount(0);
   await expect(panel(page)).not.toContainText("Your pick");
-  await note.getByRole("button", { name: "why?" }).click();
-  await expect(panel(page).getByTestId("recommendation-why")).toBeVisible();
   await shot(panel(page), "island-layouts-recommended");
 
   // A layout picked by hand (neither the list's top nor the recommendation's) says so.
@@ -65,7 +63,8 @@ test("Cut list groups boards by assembly", async ({ page }) => {
 test("Rules shows the packing controls", async ({ page }) => {
   await openTab(page, "Rules");
   await expect(panel(page).getByLabel("Quantity")).toHaveValue(String((await crate(page)).quantity));
-  await expect(panel(page).getByLabel("Keep parts upright")).toBeVisible();
+  await expect(panel(page).getByTestId("resting-faces")).toContainText("Faces a part may rest on");
+  await expect(panel(page).getByTestId("resting-faces").getByRole("button", { name: "As modelled" })).toHaveAttribute("aria-pressed", "true");
   await expect(panel(page).getByRole("group", { name: "Most layers allowed" })).toBeVisible();
   await expect(panel(page).getByLabel("Gap between parts")).toBeVisible();
   await expect(panel(page).getByLabel("Clearance to walls")).toBeVisible();

@@ -22,7 +22,8 @@ test("Why this crate? explains the recommendation: compared, scored, picked, sto
   for (const title of ["What was compared", "How it is scored", `Why ${quantity} per crate`, "What stopped a larger crate", "What it takes into account"]) {
     await expect(why.getByRole("heading", { name: title })).toBeVisible();
   }
-  await expect(why).toContainText("from 1 to 200");
+  // The pick is among the part's suggested quantities, not every quantity from 1 to 200.
+  await expect(why).toContainText("suggested quantities");
   // The app has no freight rates: freight is never priced in dollars.
   const cost = why.getByRole("table", { name: `Cost of ${quantity} per crate` });
   await expect(cost.getByRole("row", { name: /Freight/ })).toContainText("Not priced");

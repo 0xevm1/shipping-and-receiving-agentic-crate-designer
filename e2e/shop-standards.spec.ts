@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openStandards, openTab, panel, reloadApp, setUnits, shot, standards } from "./helpers";
+import { openApp, openStandards, openTab, panel, reloadApp, setQuantity, setUnits, shot, standards } from "./helpers";
 
 /** The Overview cost line, e.g. "about $86 of wood". */
 const COST_LINE = /about \$(\d+) of wood/;
@@ -79,6 +79,8 @@ test("a plywood rate change shows in the Overview cost, survives a reload and re
 });
 
 test("a lower light-panel threshold switches the plywood; bad input is flagged and changes nothing", async ({ page }) => {
+  // Four brackets (the app opens at the recommendation, a heavier load that is medium already).
+  await setQuantity(page, 4);
   await openTab(page, "Overview");
   const lightPly = await plyMm(page);
 
