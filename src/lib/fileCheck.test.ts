@@ -63,6 +63,17 @@ describe("parts.json: the file", () => {
     expect(c.entries).toEqual([]);
   });
 
+  it("the fixtures for an empty list and for entries that aren't objects", () => {
+    const empty = checkFiles([fixture("parts-empty.json")]);
+    expect(one(empty, "shape")).toMatchObject({ severity: "error", file: "parts-empty.json", where: "parts" });
+    const notObjects = checkFiles([fixture("parts-entry-not-object.json"), glb("heavy-1500kg.glb")]);
+    expect(notObjects.findings.map((f) => [f.code, f.where])).toEqual([
+      ["entry-shape", "parts[0]"],
+      ["entry-shape", "parts[1]"],
+    ]);
+    expect(notObjects.entries.map((e) => e.id)).toEqual(["SCN-901"]);
+  });
+
   it("an empty parts list is an error", () => {
     expect(one(checkFiles([catalogOf([])]), "shape")).toMatchObject({ severity: "error", where: "parts" });
   });

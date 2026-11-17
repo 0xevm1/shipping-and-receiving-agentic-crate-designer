@@ -194,6 +194,10 @@ write(
   ]),
 );
 
+// An empty parts list, and a list with entries that are not objects (the good one still loads).
+write("parts-empty.json", raw({ parts: [] }));
+write("parts-entry-not-object.json", catalog(["heavy-1500kg.glb", null, GOOD]));
+
 // Only the four required fields: no material, density, size or quantities. Loads with tall-part.glb; the size comes from the model.
 write("parts-lenient.json", raw({ parts: [hand("SCN-920", "tall-part.glb", { name: "Post with the bare minimum", mass_kg: 12 })] }));
 
