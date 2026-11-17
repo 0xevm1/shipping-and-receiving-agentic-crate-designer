@@ -1,6 +1,7 @@
 import { Box3, Vector3, type BufferGeometry, type Mesh, type Object3D } from "three";
 import { FACE_AXES, type FaceDepth, type FaceId, type PartProfile } from "@/domain/profile";
 import type { Vec3 } from "@/domain/schema";
+import { whenIdle } from "./idle";
 import { models } from "./modelRegistry";
 
 /**
@@ -169,20 +170,9 @@ export function scheduleProfile(
     profiles.set(frame, profile);
     onDone(url, profile);
   };
-  const w = globalThis as typeof globalThis & {
-    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
-    cancelIdleCallback?: (id: number) => void;
-  };
-  if (w.requestIdleCallback && w.cancelIdleCallback) {
-    const id = w.requestIdleCallback(run, { timeout: 1500 });
-    return () => {
-      cancelled = true;
-      w.cancelIdleCallback!(id);
-    };
-  }
-  const id = setTimeout(run, 50);
+  const cancel = whenIdle(run);
   return () => {
     cancelled = true;
-    clearTimeout(id);
+    cancel();
   };
 }

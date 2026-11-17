@@ -81,3 +81,40 @@ export function fitFrame(raw: Vec3, expectedMm: Vec3): PartFrame | null {
   }
   return null;
 }
+
+/**
+ * An offset from the middle of the part's bounding box, from the file's own axes (file units) to
+ * the design frame (mm, Z up). A Y-up model is turned a quarter about X (`framedScene`): its
+ * (x, y, z) becomes (x, -z, y), a proper rotation, so a centre of gravity keeps its side of the part.
+ */
+export function offsetToDesign(offsetUnits: Vec3, { units, up }: PartFrame): Vec3 {
+  const k = MM_PER_UNIT[units];
+  const [x, y, z] = offsetUnits;
+  const out: Vec3 = up === "y" ? [x * k, -z * k, y * k] : [x * k, y * k, z * k];
+  // To 0.001 mm: the file's float32 digits and the unit factors leave noise below that. + 0: no negative zero.
+  return out.map((v) => Math.round(v * 1000) / 1000 + 0) as Vec3;
+}
+
+/** The inverse of `offsetToDesign`: a design-frame offset in mm as the file's axes and units have it. */
+export function offsetToFile(offsetMm: Vec3, { units, up }: PartFrame): Vec3 {
+  const k = MM_PER_UNIT[units];
+  const [x, y, z] = offsetMm;
+  const out: Vec3 = up === "y" ? [x / k, z / k, -y / k] : [x / k, y / k, z / k];
+  return out.map((v) => v + 0) as Vec3;
+}
+
+/**
+ * A `cog_mm` from parts.json to the design frame (#110). It is a point in the model's own axes and
+ * origin, written in mm (as `dimensions_mm` is), so in the file's units it is `cogMm / mm-per-unit`;
+ * `centreUnits` is the middle of the model's bounding box in file units (`readGlb`). The offset from
+ * that middle is turned into the design frame once, here: nothing after this knows the file's origin.
+ */
+export function cogFromFile(cogMm: Vec3, centreUnits: Vec3, frame: PartFrame): Vec3 {
+  const k = MM_PER_UNIT[frame.units];
+  return offsetToDesign(cogMm.map((v, i) => v / k - centreUnits[i]) as Vec3, frame);
+}
+
+/** A design-frame offset when the file is read in another frame (the header's units or up axis): the same point of the part. */
+export function reframeOffset(offsetMm: Vec3, from: PartFrame, to: PartFrame): Vec3 {
+  return offsetToDesign(offsetToFile(offsetMm, from), to);
+}

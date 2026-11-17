@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Box3, Vector3 } from "three";
 import type { Layout } from "@/domain/packing";
 import { roundSizeMm } from "@/lib/partFrame";
+import { scheduleCog } from "@/lib/partCog";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -41,6 +42,15 @@ export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layo
     if (analysed) return;
     return scheduleProfile(part.modelUrl, scene, part.mmPerUnit, setPartProfile, `${part.modelUnits}/${part.upAxis}`);
   }, [analysed, part.modelUrl, part.modelUnits, part.upAxis, scene, part.mmPerUnit, setPartProfile]);
+
+  // The part's own centre of gravity (#110), estimated from the mesh the same way (once, when idle) unless
+  // the file or the person supplied one. If the mesh can't give one, the check says it is assumed.
+  const setPartCog = useDesigner((s) => s.setPartCog);
+  const hasCog = !!part.cog;
+  useEffect(() => {
+    if (hasCog) return;
+    return scheduleCog(part.modelUrl, scene, part.mmPerUnit, setPartCog, `${part.modelUnits}/${part.upAxis}`);
+  }, [hasCog, part.modelUrl, part.modelUnits, part.upAxis, scene, part.mmPerUnit, setPartCog]);
 
   const material = useMemo(() => partMaterial(part.material), [part.material]);
   // useFrame updates the material in place through a ref (three.js objects are mutable by design).

@@ -52,8 +52,8 @@ export function designRequestFor(input: {
   return { part: designPartOf(input.part), settings: input.settings, standards: input.standards, layoutKey: input.layoutKey, ranking: input.ranking };
 }
 
-/** Bumped when the hashed shape of a design part changes. */
-const PART_HASH_SCHEMA = 1;
+/** Bumped when the hashed shape of a design part changes. 2: the part's centre of gravity (`cog`, #110). */
+const PART_HASH_SCHEMA = 2;
 
 /**
  * SHA-256 of a part's design fields (canonical JSON): the version of the part a job's server-side

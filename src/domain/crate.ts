@@ -67,7 +67,7 @@ export function designCrate(part: DesignPart, settings: CrateSettings, layout: L
   const labour = estimateLabour(bom, screws, layout.counts[2], standards);
   const freight = freightTerms(grossKg, layout.external, standards);
   // Read-only over the finished members and part placements.
-  const handling = analyseHandling(members, layout, part.mass_kg, standards);
+  const handling = analyseHandling(members, layout, part.mass_kg, standards, part.cog);
 
   const design: CrateDesign = {
     layout,

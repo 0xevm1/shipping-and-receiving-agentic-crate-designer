@@ -53,6 +53,17 @@ export function rotatedSize(size: Vec3, orientation: Orientation): Vec3 {
   return [round(extent(0)), round(extent(1)), round(extent(2))];
 }
 
+/**
+ * A vector fixed to the part (its centre of gravity's offset from the box centre) after the
+ * orientation turns the part: R · v, the same rotation the viewer applies and `rotatedSize` follows.
+ * The box centre stays the box centre, so the offset is all that moves.
+ */
+export function rotatedOffset(offset: Vec3, orientation: Pick<Orientation, "euler">): Vec3 {
+  const m = rotationMatrix(orientation);
+  const at = (row: number) => m[row][0] * offset[0] + m[row][1] * offset[1] + m[row][2] * offset[2] + 0; // + 0: no negative zero
+  return [at(0), at(1), at(2)];
+}
+
 function round(v: number) {
   return Math.round(v * 1000) / 1000;
 }

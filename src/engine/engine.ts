@@ -26,6 +26,7 @@ export const designPartOf = (p: DesignPart): DesignPart => ({
   dimensions_mm: p.dimensions_mm,
   material: p.material,
   profile: p.profile,
+  ...(p.cog ? { cog: p.cog } : {}),
 });
 
 /**

@@ -3,7 +3,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX } from "@/domain/partDetails";
 import { modelNote } from "@/lib/format";
-import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
+import { cogSourceNote, cogUnit, fieldWidthCh, formatCog, formatMass, massUnit, parseCog, parseMass, stepMass } from "@/lib/partFields";
 import { canSetFrame } from "@/lib/part";
 import { UNITS_LABEL, UP_LABEL, type ModelUnits, type UpAxis } from "@/lib/partFrame";
 import { MODEL_UNITS, UP_AXES } from "@/domain/partFrame";
@@ -20,7 +20,7 @@ import { LoadToast } from "./LoadToast";
 import styles from "./PartHeader.module.css";
 
 /** Edits from the header's own fields; their change note shows under the header. */
-const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass", "frame"];
+const PART_SOURCES: readonly ChangeSource[] = ["name", "material", "mass", "cog", "frame"];
 
 /**
  * Top left: app name, then what is shipping, read as a sentence:
@@ -60,6 +60,7 @@ export function PartHeader() {
               {part.material ?? "material not given"} · {partWeight(part.mass_kg, units)} each
               <Gross />
             </div>
+            <CogReadout />
           </>
         ) : (
           // Remount per loaded file so the fields start from that file's values.
@@ -142,7 +143,19 @@ function Gross() {
   );
 }
 
-type FieldId = "name" | "material" | "mass";
+type FieldId = "name" | "material" | "mass" | "cog";
+/** The offset as one readable line: "centre of gravity -38.3, 0, -48.6 mm from the middle", the unit following the toggle. */
+function CogReadout() {
+  const cog = useDesigner((s) => s.part.cog);
+  const fallback = useDesigner((s) => (s.cogFallback?.modelUrl === s.part.modelUrl ? s.cogFallback.reason : undefined));
+  const units = useView((s) => s.units);
+  return (
+    <div data-testid="part-cog">
+      centre of gravity {cog ? `${formatCog(cog.offsetMm, units)} ${cogUnit(units)} from the middle` : "at the middle"} · {cogSourceNote(cog?.source, fallback)}
+    </div>
+  );
+}
+
 const errorId = (f: FieldId) => `partfield-${f}-error`;
 const STAND_IN_ID = "partfield-standin";
 const STAND_IN_HINT = "Stand-in: no mass came with the file, so 10 kg is used. Enter the real mass.";
@@ -156,7 +169,9 @@ function PartDetailsFields() {
   const part = useDesigner((s) => s.part);
   const units = useView((s) => s.units);
   const setPartDetails = useDesigner((s) => s.setPartDetails);
-  const [errors, setErrors] = useState<Record<FieldId, string | null>>({ name: null, material: null, mass: null });
+  const setPartCogOffset = useDesigner((s) => s.setPartCogOffset);
+  const fallback = useDesigner((s) => (s.cogFallback?.modelUrl === s.part.modelUrl ? s.cogFallback.reason : undefined));
+  const [errors, setErrors] = useState<Record<FieldId, string | null>>({ name: null, material: null, mass: null, cog: null });
   const onError = (f: FieldId) => (e: string | null) => setErrors((all) => (all[f] === e ? all : { ...all, [f]: e }));
   const unit = massUnit(units);
 
@@ -245,13 +260,34 @@ function PartDetailsFields() {
         )}
         <Gross />
       </div>
+      <div>
+        centre of gravity{" "}
+        <InlineField
+          field="cog"
+          label={`Centre of gravity: distance from the middle of the part along X, Y and Z, in ${units === "imperial" ? "inches" : "millimetres"}`}
+          value={part.cog ? formatCog(part.cog.offsetMm, units) : ""}
+          placeholder="at the middle"
+          size={[10, 30]}
+          error={errors.cog}
+          onError={onError("cog")}
+          validate={(t) => {
+            const r = parseCog(t, units, part.dimensions_mm);
+            return r.ok ? null : r.error;
+          }}
+          commit={(t) => {
+            const r = parseCog(t, units, part.dimensions_mm);
+            return r.ok ? setPartCogOffset(r.offsetMm) : r.error;
+          }}
+        />{" "}
+        {cogUnit(units)} from the middle · <span data-testid="cog-source">{cogSourceNote(part.cog?.source, fallback)}</span>
+      </div>
       {/* The mass field's description while it is a stand-in (hidden; read through aria-describedby). */}
       {part.massAssumed && (
         <span id={STAND_IN_ID} hidden>
           {STAND_IN_HINT}
         </span>
       )}
-      {(["name", "material", "mass"] as const).map(
+      {(["name", "material", "mass", "cog"] as const).map(
         (f) =>
           errors[f] && (
             <div key={f} id={errorId(f)} className={styles.error}>
