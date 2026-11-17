@@ -82,8 +82,9 @@ buildable crate design and cut list in under a minute, without needing CAD.
   metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
   changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
   and the shop standards stay in mm and kg (the Shop standards editor shows and accepts the selected
-  units, §6.4); the mass field shows and accepts the selected unit
-  and stores kg; the CSV follows the selected units (§7.6). **One rule for a mass shown to
+  units, §6.4); the header's mass field (uncatalogued parts) accepts the selected unit and stores
+  kg, reads by the mass rule below when it has no focus ("22 lb") and holds the full value while
+  it is being edited ("22.05"), so editing never loses what was typed (`weightNumber`); the CSV follows the selected units (§7.6). **One rule for a mass shown to
   people (#62):** in the displayed unit, one decimal under 100 ("47.4 lb", "8 kg", a trailing
   .0 dropped) and whole numbers from 100 ("297 lb"). It lives once in `weight` / `partWeight`
   (`src/lib/units.ts`) and serves the header, Overview, Checks, print and PDF. The CSV and the

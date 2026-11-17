@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editUnit, cut, dims, dimsOther, fraction, groupDigits, length, partWeight, volume, weight, weightFromLb, weightWhole } from "./units";
+import { editUnit, cut, dims, dimsOther, fraction, groupDigits, length, partWeight, volume, weight, weightFromLb, weightNumber, weightWhole } from "./units";
 
 describe("units", () => {
   it("formats overall sizes", () => {
@@ -52,6 +52,10 @@ describe("units", () => {
 
   it("shows every mass by one rule: one decimal under 100, whole from 100 ", () => {
     expect(weight(21.5, "metric")).toBe("21.5 kg");
+    // The number alone (the part header's mass field when it isn't being edited): the same rule, no unit.
+    expect(weightNumber(10, "imperial")).toBe("22");
+    expect(weightNumber(13.6534, "metric")).toBe("13.7");
+    expect(weightNumber(1234, "metric", false)).toBe("1234");
     expect(weight(21.5, "imperial")).toBe("47.4 lb");
     expect(partWeight(21.5, "imperial")).toBe("47.4 lb");
     expect(weight(20, "metric")).toBe("20 kg"); // no trailing .0

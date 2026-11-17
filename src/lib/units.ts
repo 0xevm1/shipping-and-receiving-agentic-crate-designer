@@ -57,10 +57,14 @@ export function cut(mm: number, u: Units): string {
  * a program reads back. CSV and JSON keep their own precision.
  */
 export function weight(kg: number, u: Units, group = true): string {
+  return `${weightNumber(kg, u, group)} ${u === "imperial" ? "lb" : "kg"}`;
+}
+
+/** The number of `weight`, without its unit ("47.4", "297"): for a field that has the unit beside it. */
+export function weightNumber(kg: number, u: Units, group = true): string {
   const v = u === "imperial" ? kg * LB_PER_KG : kg;
   const tenth = Math.round(v * 10) / 10;
-  const n = Math.abs(tenth) < 100 ? String(tenth) : group ? groupDigits(Math.round(v)) : String(Math.round(v));
-  return `${n} ${u === "imperial" ? "lb" : "kg"}`;
+  return Math.abs(tenth) < 100 ? String(tenth) : group ? groupDigits(Math.round(v)) : String(Math.round(v));
 }
 
 /** A mass given in pounds (freight weights are in lb), shown by the same rule as every other mass. */
