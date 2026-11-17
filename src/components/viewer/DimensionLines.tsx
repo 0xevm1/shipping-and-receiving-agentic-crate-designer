@@ -8,7 +8,7 @@ import type { Line2, LineSegments2 } from "three-stdlib";
 import type { CrateDesign } from "@/domain/crate";
 import { anim } from "@/state/motion";
 import { reducedMotion } from "@/state/store";
-import { buildLines, type Axis, type Where } from "./sizeLines";
+import { buildLines, separatePills, type Axis, type PillBox, type Where } from "./sizeLines";
 import { createPulseClock, dimensionPulses, PULSE_DURATION_S, tickPulse } from "./dimensionPulse";
 import { PhotonLayer } from "./PhotonLayer";
 import { PROBE, probeStats } from "./probeStats";
@@ -24,6 +24,10 @@ const WHERE: Where[] = ["front", "right", "part"];
 const NO_PULSES: never[] = [];
 
 const v = new Vector3();
+/** Per-frame scratch for the label pass: which labels show, and the pill boxes in priority order. */
+const shown: boolean[] = [];
+const pills: PillBox[] = [];
+const pillOf: number[] = [];
 
 /**
  * Size lines, in crate-interior mm. Crate: length along the front bottom edge, width along the
@@ -97,18 +101,29 @@ export function DimensionLines({ design, showParts, hide }: { design: CrateDesig
     rightRef.current?.position.set(out, 0, 0);
     const groups: Record<Where, Group | null> = { front: frontRef.current, right: rightRef.current, part: partRef.current };
 
+    // Labels in two passes (read every size, then write every style) so no read follows a write.
+    pills.length = 0;
     labels.forEach((l, i) => {
       const el = labelElements[i];
       const g = groups[l.where];
+      shown[i] = false;
       if (!el || !g) return;
       g.localToWorld(v.set(...l.at)).project(camera);
-      if ((l.where === "part" && !partShown) || v.z > 1 || v.z < -1) {
+      if ((l.where === "part" && !partShown) || v.z > 1 || v.z < -1) return;
+      shown[i] = true;
+      pillOf[i] = pills.push({ x: ((v.x + 1) / 2) * size.width, y: ((1 - v.y) / 2) * size.height, w: el.offsetWidth, h: el.offsetHeight }) - 1;
+    });
+    // The part's pill, which comes last, steps clear of the crate's rather than overlap them.
+    separatePills(pills);
+    labels.forEach((_, i) => {
+      const el = labelElements[i];
+      if (!el) return;
+      if (!shown[i]) {
         el.style.visibility = "hidden";
         return;
       }
-      const x = ((v.x + 1) / 2) * size.width;
-      const y = ((1 - v.y) / 2) * size.height;
-      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+      const p = pills[pillOf[i]];
+      el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -50%)`;
       el.style.visibility = "visible";
     });
   });

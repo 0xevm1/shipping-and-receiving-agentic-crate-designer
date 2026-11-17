@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
-import { buildLines, crateLabelAnchors, hiddenAxis, labelOffsetMm, labelText } from "./sizeLines";
+import { buildLines, crateLabelAnchors, hiddenAxis, labelOffsetMm, labelText, separatePills, type PillBox } from "./sizeLines";
 
 function design(quantity = 4) {
   const d = computeDesign(getPart("PART-001"), { ...DEFAULT_SETTINGS, quantity }).design;
@@ -66,5 +66,40 @@ describe("labelText", () => {
     expect(labelText({ values: [932] }, "metric")).toBe("932 mm");
     expect(labelText({ values: [360, 220, 260] }, "metric")).toBe("360 × 220 × 260 mm");
     expect(labelText({ values: [25.4, 50.8, 254] }, "imperial")).toBe("1.0 × 2.0 × 10.0 in");
+  });
+});
+
+describe("separatePills", () => {
+  const touching = (a: PillBox, b: PillBox) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+
+  it("leaves pills that already clear each other alone", () => {
+    const pills = [
+      { x: 0, y: 0, w: 60, h: 20 },
+      { x: 200, y: 5, w: 60, h: 20 },
+    ];
+    separatePills(pills);
+    expect(pills.map((p) => p.y)).toEqual([0, 5]);
+  });
+
+  it("moves a later pill clear of an earlier one the shorter way, and never moves the first", () => {
+    const pills = [
+      { x: 100, y: 100, w: 60, h: 20 },
+      { x: 120, y: 108, w: 130, h: 20 },
+    ];
+    separatePills(pills);
+    expect(pills[0].y).toBe(100);
+    expect(touching(pills[0], pills[1])).toBe(false);
+    // 108 is nearer the bottom of the first pill than its top, so it steps down.
+    expect(pills[1].y).toBeGreaterThan(108);
+  });
+
+  it("clears several pills at once", () => {
+    const pills = [
+      { x: 100, y: 100, w: 70, h: 20 },
+      { x: 110, y: 104, w: 70, h: 20 },
+      { x: 105, y: 102, w: 140, h: 20 },
+    ];
+    separatePills(pills);
+    for (let i = 0; i < pills.length; i++) for (let j = i + 1; j < pills.length; j++) expect(touching(pills[i], pills[j])).toBe(false);
   });
 });

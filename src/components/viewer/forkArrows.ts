@@ -13,11 +13,12 @@ export function arrowLengthMm(external: readonly number[]): number {
 /**
  * How far outside the end face the arrow's tip stops, mm. The width size label sits on the same
  * centre line, `labelOffsetMm` beyond the end, and a label is a fixed-size pill over a crate that
- * scales to fit, so it covers about a third of the longest side in mm. The tip starts beyond
- * both, so the arrow and the width label never overlap.
+ * scales to fit, so it covers about a third of the longest side in mm (a little more when
+ * exploded, where the framing zooms out). The tip starts beyond both, so the arrow and the
+ * width label never overlap.
  */
 export function arrowGapMm(external: readonly number[]): number {
-  return labelOffsetMm(external) + 0.33 * Math.max(...external) + 60;
+  return labelOffsetMm(external) + 0.36 * Math.max(...external) + 90;
 }
 
 /** How far outside the end face the arrow's tail reaches, mm (what the camera framing must fit). */

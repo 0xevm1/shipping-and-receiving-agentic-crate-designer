@@ -6,7 +6,7 @@
 import { MathUtils, Spherical, Vector3 } from "three";
 import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
-import { currentMode, type CameraPreset, type Insets, type Mode, type ViewState } from "@/state/store";
+import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/store";
 import { crateLabelAnchors, labelOffsetMm } from "./sizeLines";
 import { arrowReachMm } from "./forkArrows";
 import { domainToWorld, EXPLODE_LID_MM, EXPLODE_WALL_MM, FOV_DEG, MM_TO_M, sceneOrigin } from "./scene";
@@ -18,6 +18,14 @@ export const PRESETS: Record<CameraPreset, { theta: number; phi: number }> = {
   front: { theta: 0, phi: Math.PI / 2 - 0.02 },
   end: { theta: -Math.PI / 2, phi: Math.PI / 2 - 0.02 },
 };
+
+/** Px the overlays cover on each side of the canvas (the store's `insets`). */
+export interface Insets {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
 
 export interface Goal {
   target: Vector3;
@@ -54,13 +62,18 @@ export interface Keep {
   halfPx: { x: number; y: number };
 }
 
+/** From this much explode the fork arrow tails must stay on screen too (below it the crate's own framing leaves them room). */
+export const ARROWS_FIT_FROM = 0.5;
+
 /**
- * What must stay on screen at explode amount `e`: the crate's size labels, and (with the size
- * labels on) the tail of each fork arrow, which stands out past them and slides out with the
- * end walls.
+ * What must stay on screen at explode amount `e`: the crate's size labels, and once it is pulled
+ * apart (`ARROWS_FIT_FROM`) the tail of each fork arrow, which stands out past them and slides out
+ * with the end walls. Assembled, the arrows are decoration that may run into the margin, and the
+ * closed and open framing is left as it was.
  */
 export function keepInView(design: CrateDesign, e: number): Keep[] {
   const keep: Keep[] = crateLabelAnchors(design, e).map((at) => ({ at, halfPx: LABEL_HALF_PX }));
+  if (e < ARROWS_FIT_FROM) return keep;
   const ext = design.layout.external;
   const edge = design.construction.panelMm + design.construction.cleat.thick;
   const reach = arrowReachMm(ext);
@@ -130,12 +143,39 @@ export function fitGoal(req: FrameRequest): Goal {
 
   const angles = view.camera ? PRESETS[view.camera] : now;
   const zoom = MODE_ZOOM[zoomMode(view)] * (req.panelsHidden ? PANELS_HIDDEN_ZOOM : 1);
-  const target = new Vector3(0, (ext[2] / 2 + (EXPLODE_LID_MM / 2) * e) * MM_TO_M, 0);
+  const target = homeTarget(design, e);
   const theta = req.keepHeading ? now.theta : angles.theta;
   let radius = (r / Math.sin(half)) * 0.9 * zoom;
   if (view.dims) radius = Math.max(radius, keepRadius(design, keepInView(design, e), target, theta, angles.phi, free, t));
   return { target, theta, phi: angles.phi, radius };
 }
+
+/** What the camera looks at when the crate is framed: the middle of its height, over the floor's centre (world m). */
+export function homeTarget(design: CrateDesign, e: number, out = new Vector3()): Vector3 {
+  return out.set(0, (design.layout.external[2] / 2 + (EXPLODE_LID_MM / 2) * e) * MM_TO_M, 0);
+}
+
+/** How far panning may take the orbit target from `homeTarget`, as a share of the crate's longest side. */
+export const PAN_LIMIT = 0.75;
+
+/**
+ * Pulls a panned orbit `target` back to within `PAN_LIMIT` of the crate's longest side from
+ * `homeTarget`, so the crate can't be panned out of sight. Moves `target` in place and returns
+ * how far it had to move (a vector to add to the camera as well), or null when it was inside.
+ */
+export function clampPan(target: Vector3, design: CrateDesign, e: number): Vector3 | null {
+  const home = homeTarget(design, e, panHome);
+  const limit = Math.max(...design.layout.external) * MM_TO_M * PAN_LIMIT;
+  const away = panAway.copy(target).sub(home);
+  const d = away.length();
+  if (d <= limit) return null;
+  const clamped = home.add(away.multiplyScalar(limit / d));
+  const delta = clamped.clone().sub(target);
+  target.copy(clamped);
+  return delta;
+}
+const panHome = new Vector3();
+const panAway = new Vector3();
 
 const UP = new Vector3(0, 1, 0);
 const axisX = new Vector3();

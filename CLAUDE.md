@@ -12,7 +12,8 @@
   `--no-verify`.
 - **Conventions:**
   - The domain (`src/domain/`) is pure TypeScript in mm/kg, Z-up, and holds all business rules.
-  - Only `CrateViewer.tsx` converts to three.js's Y-up metres.
+  - The Z-up mm to Y-up metres conversion is defined once, in `viewer/scene.ts` (`MM_TO_M`, `domainToWorld`),
+    and applied to the scene graph by `CrateViewer.tsx`'s root group.
 - **Keeping docs current:** when you change a rule, update the constant, its test and spec §7 in
   the same change.
 - **CI:** `.github/workflows/ci.yml` runs install, lint, typecheck, test and build (`checks`),

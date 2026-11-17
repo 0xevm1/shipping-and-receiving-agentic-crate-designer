@@ -65,9 +65,13 @@ buildable crate design and cut list in under a minute, without needing CAD.
   | PART-003 | 435 × 445 × 254 | (2.5, −7.5, 127) |
 
   These match `dimensions_mm` in `parts.json`.
-- **Rendering:** three.js is Y up and in metres. Exactly **one** transform does the conversion:
-  the root `<group rotation={[-π/2,0,0]} scale={0.001}>` in `CrateViewer.tsx`. Everything inside
-  it uses domain coordinates. Domain front (−Y) faces world +Z; domain +X stays world +X.
+- **Rendering:** three.js is Y up and in metres. Exactly **one** transform does the conversion
+  for the scene graph: the root `<group rotation={[-π/2,0,0]} scale={MM_TO_M}>` in
+  `CrateViewer.tsx`. Everything inside it uses domain coordinates. Domain front (−Y) faces world
+  +Z; domain +X stays world +X. The unit constants and the one point converter live in
+  `viewer/scene.ts` (`MM_TO_M`, `domainToWorld`); the few things that work in world space outside
+  that group use them (`framing.ts` projecting label anchors, `Floor.tsx`, the part turntable's
+  model-unit scale) and define no conversion of their own.
 - **Exported GLB** (`src/lib/exportGlb.ts`) follows the input GLB convention, not three.js's:
   metres, **Z up**. The only conversion from the domain is × 0.001 (mm → m); there is no Y-up
   rotation in the file.
@@ -229,19 +233,25 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
 | `src/components/island/Scorecard.tsx` | The Overview's design scorecard (#17): crate cost, build time, freight class and density, dimensional weight, the shipment's totals, the time to design (`Scorecard.module.css`) |
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
-| `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
-| `src/components/viewer/Director.tsx` | Camera framing and view offset, presets, eased moves, fades, idle auto-play |
+| `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; the camera-gesture hint; releases a replaced part's GLB from drei's cache |
+| `src/components/viewer/CrateViewer.module.css` | The context-lost cover and the gesture hint |
+| `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
+| `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), `clampPan` |
 | `src/components/viewer/CrateModel.tsx` | One box per `Member` (a notched solid for cradles, #6); explode, fades, highlight, ghosting, picking |
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
-| `src/components/viewer/DimensionLines.tsx` | Crate and part size lines; positions the DOM labels each frame; drives the photon pulse |
-| `src/components/viewer/dimensionPulse.ts` | Pure size-line geometry (`buildLines`), photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
+| `src/components/viewer/DimensionLines.tsx` | Draws the size lines; positions the DOM labels each frame; shows the part's lines once the inside is open; drives the photon pulse |
+| `src/components/viewer/sizeLines.ts` | Pure size-line geometry (`buildLines`, label anchors, the dimension hidden per preset, label text) |
+| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement, and the occlusion test that hides an arrow behind the crate |
+| `src/components/viewer/probeStats.ts` | What the scene reports to the e2e hook (`probeStats`); writes are gated by `NEXT_PUBLIC_E2E` |
+| `src/components/viewer/tooltipText.ts` | The board tooltip's detail line (belongs with `lib/format.ts` once that is free) |
+| `src/components/viewer/dimensionPulse.ts` | Pure photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
 | `src/components/viewer/PhotonLayer.ts` | One `Points` of photons per line group, updated per frame (#65) |
-| `src/components/viewer/SizeLabels.tsx` | The DOM elements for the size labels |
+| `src/components/viewer/SizeLabels.tsx` | The DOM elements for the size labels, derived from the design, units and view (nothing is stored) |
 | `src/components/viewer/Floor.tsx` | Grid and warm light pool |
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
-| `src/components/viewer/scene.ts` | Colours, explode offsets, opacity rules, highlight rules, part material |
-| `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity stencils on the outside faces (only when a CoG check is a caution, #87), and the fork-entry arrows at both ends (#8, §8.4) |
-| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook; only in `NEXT_PUBLIC_E2E=1` builds (§10) |
+| `src/components/viewer/scene.ts` | Units and shared constants (`MM_TO_M`, `FOV_DEG`, click slop, far plane), colours, explode offsets, opacity rules, highlight rules, part material |
+| `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity stencils on the outside faces (only when a CoG check is a caution, #87), and the fork-entry arrows at both ends, which fade out when the crate hides them (#8, §8.4) |
+| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with the store's types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
 | `playwright.config.ts`, `e2e/*.spec.ts` | End-to-end UI tests (`bun run e2e`, §10) |
 
 ## 6. Data model
@@ -1665,14 +1675,33 @@ open question for the user (see #20).
   - The part model is loaded with `GLTFLoader` and cached per URL. Exported with three's
     `GLTFExporter` (`binary: true`).
 - **Framing per mode:** each mode has its own camera distance, as a fraction of the distance
-  that just fits the whole scene (`MODE_ZOOM` in `Director.tsx`): closed 0.68, open 0.8,
+  that just fits the whole scene (`MODE_ZOOM` in `framing.ts`): closed 0.68, open 0.8,
   exploded 1.0. Hide panels moves in a further ×0.82. Mode changes re-frame, so idle auto-play
   glides in and out with the modes.
-- **Room for the size labels:** with size labels on, the fit also projects the crate's three
-  label anchors (moved out with the walls) at the goal angle and backs the camera off just
-  enough that each label, taken as about 88 × 28 px, sits inside the free area. This only ever
-  zooms out, so it changes nothing when the labels already fit (the default crate); it keeps
-  a long crate's end labels from landing under the island (#43).
+- **Framing maths:** `framing.ts` holds it as pure functions (`fitGoal`, `keepInView`,
+  `viewOffset`, `clampPan`), unit-tested; `Director` only applies the result and eases to it.
+- **Room for the size labels and fork arrows:** with size labels on, the fit also projects what
+  must stay on screen (`keepInView`): the crate's three label anchors (moved out with the walls),
+  each taken as about 88 × 28 px, and the tail of each fork arrow, which stands out past them
+  and slides out with the end walls. It backs the camera off just enough that every one sits
+  inside the free area. This only ever zooms out, so it changes nothing when they already fit
+  (the default crate); it keeps a long crate's end labels from landing under the island (#43)
+  and, exploded on a 360 px phone, the arrows from being clipped at the edge.
+- **Panning:** the main canvas pans by right-drag (Ctrl- or Shift-drag also work, as three's
+  OrbitControls defines them) and, on touch, a two-finger drag, which is also the pinch zoom.
+  - **Bounded:** the orbit target may stray at most 0.75 of the crate's longest side from its
+    middle (`PAN_LIMIT`, `clampPan`, applied on the controls' `change` event by moving the camera
+    and target together), so the crate can't be panned out of sight.
+  - **Deliberate input:** a pan is a `pointerdown`/`touchstart` plus a drag, so it stops idle
+    auto-play like any drag, and clears the camera preset.
+  - **Re-centring:** the view stays panned until the next fit: a rule or quantity change, a mode
+    change, a camera preset (View > 3D is the "reset view"), Hide / Show panels, or a resize.
+    When idle auto-play starts on a panned view it first eases the target back to the crate's
+    middle (keeping the turn angle and zoom), so the turn is about the crate and the crate stays
+    in the free area.
+  - **Hint:** a line at the foot of the stage names the gestures ("Drag to turn · right-drag to
+    pan · scroll to zoom", or the two-finger wording on touch screens); it fades with Hide
+    panels. The view has no keyboard controls, so none are added.
 - **First framing:** OrbitControls registers as the default controls one render after
   `Director` first frames the crate. `Director` keeps the orbit target it placed and hands it to
   the controls when they arrive, so the camera orbits the crate's middle from the first frame
@@ -1712,17 +1741,33 @@ open question for the user (see #20).
     between the skids (`design.handling.openings`), pointing in. They are depth-tested and slide
     out with the end walls when exploded, as the length line does. The tip stops beyond the
     width size label, which sits on the same centre line (`arrowGapMm`: the label's 110 mm + 5 %
-    of the longest side, plus a third of that side for the fixed-size pill, plus 60 mm), so the
+    of the longest side, plus 36 % of that side for the fixed-size pill, plus 90 mm), so the
     arrow and "25.7 in" never overlap, closed or exploded, on a desktop or a phone (#62).
+  - **Hidden behind the crate:** an end's arrows drop out (fading, over about 0.3 s) when the
+    crate hides most of them from the current camera, so the far arrow never shows as a sliver
+    poking out. `forkArrows.ts` samples a 3 × 3 grid over each arrow and tests the segment from the
+    camera to each sample against the crate's box (its top drops to the floor as it explodes);
+    an end hides above 60 % of its samples hidden and returns below 40 %, so it doesn't flicker
+    while the camera turns. It is judged again only when the camera or the explode amount moves.
   - Neither can be hovered or clicked (no raycast) and neither calls `markInput`, so they never
-    count as input (#64). The e2e hook reports them as `cog { mm, marker, arrows, arrowBox }`
-    (`arrowBox`: the near-end arrow's screen box in CSS px).
+    count as input (#64). The e2e hook reports them as `cog { mm, marker, arrows, arrowsShown,
+    endsShown, arrowBox }` (`arrowBox`: the near-end arrow's screen box in CSS px).
 - **Size lines:**
   - **Crate:** length along the front bottom edge, width along the right bottom edge, height at
     the back right corner. Their groups slide out with the walls when exploded; the numbers stay
     the assembled size.
   - **Part:** one part (top layer, front row, rightmost) carries ice-blue dimensions in open and
-    exploded modes only.
+    exploded modes only. Their lines are always built and the group is shown or hidden in the
+    frame loop (no geometry is rebuilt as the crate opens). The three sizes share **one** pill
+    ("14.2 × 8.7 × 10.2 in") at the middle of the three edges: separate pills a few pixels
+    apart overlapped with no leaders (#62 D11). As a guarantee, `DimensionLines` also runs
+    `separatePills` each frame: the pills are placed in priority order (length, width, height,
+    part) and a later one steps up or down, the shorter way, until it clears the earlier ones, so
+    on a phone, where the crate is small, the part's pill gives way to the height pill rather than
+    overlap it.
+  - **Straight-on presets:** Top, Front and End leave out the crate dimension whose axis points at
+    the camera (height, width, length), whose line collapses or reads as a plan dimension
+    (`hiddenAxis`). Its label, lines and photons go with it; they return on any other view.
   - Lines are drei `<Line>` without depth testing.
   - **Photon pulse (#65):** an ambient animation on the lines.
     - **What it does:** about every **10 s**, a small glowing photon leaves each visible label
@@ -1736,7 +1781,7 @@ open question for the user (see #20).
         out other dimension lines, so the width photon doesn't climb the height line.
       - Nodes sit at segment ends, at junctions and at the label anchor.
       - A breadth-first walk from the anchor gives the photon legs, each with its path distance
-        and normalised start and end time.
+        at both ends.
       - Counts: a crate dimension makes 6 legs and 4 ends; a part dimension makes 2 legs and 2
         ends.
     - **Timing:** the first pulse comes **2 s** after the size lines mount (the crate first
@@ -1744,8 +1789,8 @@ open question for the user (see #20).
       - Within one dimension, the head moves at a single speed along every branch, eased in and
         out (sine).
       - Every dimension takes the same time, so short and long ones look alike.
-      - **All dimensions pulse together** (`PULSE_STAGGER_S = 0`): one quiet beat instead of a
-        sweep that pulls the eye round the crate.
+      - **All dimensions pulse together:** one quiet beat instead of a sweep that pulls the eye
+        round the crate. (A per-dimension stagger was built, used at 0 and removed.)
       - The clock advances by the frame delta, capped at 0.1 s like `Director`.
     - **Look:** colours as the lines (`#e6eef7` crate, `#70b8fd` part).
       - Each photon is a soft dot with a white-hot core and a tail of 10% of the dimension line.
@@ -1762,8 +1807,12 @@ open question for the user (see #20).
         burst.
       - It never calls `markInput`, so it never stops idle auto-play.
     - **Test hook:** `window.__crate` exposes `pulses` (fired) and `photonsActive` (photons on
-      screen in the last frame).
+      screen in the last frame), from `probeStats` (`viewer/probeStats.ts`): the scene components
+      write it behind `NEXT_PUBLIC_E2E`, so normal builds drop the writes, and nothing in the app
+      reads it.
   - **Labels** are plain DOM (`SizeLabels`), positioned each frame by projecting their anchors.
+    Their text is derived from the design, units and view (`buildLines(...).labels`); the store's
+    `labels` / `setLabels` are no longer used.
     drei `<Html>` is not used anywhere: each `<Html>` mounts its own React root, and unmounting
     those during a render raced in React 19.
 - **Picking and highlight:**
@@ -1775,6 +1824,19 @@ open question for the user (see #20).
   - **Clear the pin:** Escape, clicking empty space, or "Show everything".
   - **Focus:** while a row is pinned, or a row or weight bar is hovered, everything else draws at
     7% (boards) or 10% (parts) opacity.
+- **A lost WebGL context (#62 D4):** `CrateViewer` listens for `webglcontextlost` /
+  `webglcontextrestored` on the canvas (cancelling the loss, so the browser may restore it). While
+  lost, a navy cover with "The 3D view stopped." and a **Bring back the 3D view** button replaces
+  the blank canvas (a lost canvas paints white, leaving the header unreadable). The context
+  returning removes the cover; the button builds a fresh canvas (new context). Tested by forcing
+  the loss with the `WEBGL_lose_context` extension.
+- **The canvas stays mounted** through a problem state and while the last design is restoring
+  (only the scene's contents come and go, and the message is an overlay), so the WebGL context is
+  created once. `Director` re-frames when the scene returns. Part models: when the part changes,
+  `CrateViewer` clears the old model's entry from drei's `useGLTF` cache. The blob URL itself is
+  not revoked (the last-design loader still fetches it), and the old model's geometry and
+  textures are not disposed on the GPU: a full fix needs a model registry that owns the object
+  URLs and disposes the scene when the part is replaced.
 - **Part view:** a second `<Canvas>` in the island turns the part at 0.25 rad/s (slowed from
   the handoff's 0.45 and reversed, at the user's request). The turn is driven from frame time in
   `useFrame`, not OrbitControls' `autoRotate`, which steps per frame and runs double speed at
@@ -2000,7 +2062,8 @@ refresh or a reopened tab brings back the crate on screen:
   kept GLB that can't be read, or any error on the way. `localStorage` or IndexedDB that is
   missing, blocked or full is treated as empty and a refused save is a warning, never an error.
 - **No flash and no hydration mismatch:** the restore runs in an effect after mount. While it
-  runs, the store's `restoring` flag holds the 3D scene back (`CrateViewer` renders nothing), so
+  runs, the store's `restoring` flag holds the 3D scene back (`CrateViewer` keeps the canvas and
+  draws nothing in it), so
   the default crate doesn't flash before the remembered one.
 - **Time to design (#17):** a reopened crate isn't newly designed, so `restoreDesign` leaves the
   clock stopped (`designStartedAt` null): no "Designed in" note appears for it, and an export
@@ -2253,6 +2316,13 @@ save, rename, remove and undo, and
 `useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
 each time, export and import with duplicates and bad entries counted).
 
+**`src/components/viewer/framing.test.ts`** checks the camera framing: the mode zoom, preset
+angles, that every size label and fork arrow tail projects inside the free area (desktop, 390 and
+360 px phones, closed, open and exploded), the pan bound and the angle helpers.
+**`src/components/viewer/sizeLines.test.ts`** checks the size-line geometry, the one part pill,
+the dimension left out per preset and the label text. **`src/components/viewer/forkArrows.test.ts`**
+checks the arrow size and the occlusion test with its hysteresis.
+**`src/components/viewer/tooltipText.test.ts`** checks the board tooltip's detail line.
 **`src/components/viewer/dimensionPulse.test.ts`** checks the photon paths (#65, §8.4) on
 PART-001 × 4: one pulse per label (L, W, H, then the part's three); each crate dimension gives 6
 legs and 4 ends (two legs leave the anchor in opposite directions, each splits in two at its
@@ -2583,6 +2653,21 @@ HTML report as `playwright-report`.
     `/print#design=…&u=imperial&print=1`, whose checks carry no metric unit, and the same page
     still opens from an old `#d=…` link. Screenshots `28-checks-imperial`, `28-checks-metric`,
     `28-mass-overview` and `28-print-spec-imperial` (copies in `docs/screenshots/62-units-text/`).
+  - `30-viewer` (#62 D4, D11; desktop, plus `.mobile` at 390 and 360): Top, Front and End each leave
+    out one crate size pill and 3D brings it back; open and exploded show exactly one part pill
+    ("14.2 × 8.7 × 10.2 in", metric "…  mm") and no two pills overlap (the check is like
+    `27`'s arrow-versus-label one); closed shows no part pill; the far-end fork arrow is hidden and
+    the near one shown in 3D, the other way round in End, and both in Top; forcing the context
+    loss (`WEBGL_lose_context`) shows the navy cover with its button, the context returning removes
+    it, and the button builds a fresh canvas that draws. Saves `30-top-*`, `30-pills-*`,
+    `30-arrows-3d-*` and `30-context-lost-*`.
+  - `30-free-area` (#96): the closed crate's projected box sits left of the island (at 1440 × 900
+    and 1280 × 720), and its centre stays in the free area after a reload that restores the last
+    design, after Hide and Show panels, after a resize across the narrow breakpoint and back, and
+    through the idle turn.
+  - `30-pan` (#96; desktop, plus `.mobile`): the hint names the gestures; a right-drag (on touch a
+    two-finger drag) pans, stops idle, and clears the preset; the pan is bounded by
+    `PAN_LIMIT`; View > 3D re-centres; the idle turn eases a panned view back to the middle.
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one

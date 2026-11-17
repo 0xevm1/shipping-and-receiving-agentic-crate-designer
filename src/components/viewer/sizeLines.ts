@@ -37,6 +37,34 @@ export function labelText(label: Pick<SizeLabel, "values">, units: Units): strin
   return `${label.values.map((v) => length(v, units)).join(" × ")} ${lengthUnit(units)}`;
 }
 
+/** A pill on screen: its centre and size, px. */
+export interface PillBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const apart = (a: PillBox, b: PillBox, gap: number) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap;
+
+/**
+ * Moves pills up or down so no two overlap. `pills` are in priority order: each one steps clear of
+ * the ones before it (taking the shorter way, below or above), so the crate's own sizes stay where
+ * their lines are and the part's pill gives way. Changes `y` in place.
+ */
+export function separatePills(pills: PillBox[], gap = 2): void {
+  for (let i = 1; i < pills.length; i++) {
+    for (let pass = 0; pass < 4; pass++) {
+      const hit = pills.slice(0, i).find((o) => apart(pills[i], o, gap));
+      if (!hit) break;
+      const p = pills[i];
+      const below = hit.y + (hit.h + p.h) / 2 + gap;
+      const above = hit.y - (hit.h + p.h) / 2 - gap;
+      p.y = Math.abs(below - p.y) <= Math.abs(above - p.y) ? below : above;
+    }
+  }
+}
+
 /** How far the dimension lines (and so the width label) stand off the crate: 110 mm plus 5 % of its longest side. */
 export function labelOffsetMm(external: readonly number[]): number {
   return 110 + 0.05 * Math.max(...external);

@@ -129,6 +129,12 @@ export default function CrateViewer() {
       </Canvas>
       {!restoring && !design && <div className="stage-msg">{problem?.title ?? "No crate to show."}</div>}
       <LoadingOverlay />
+      {scene && (
+        <p className={styles.hint} data-testid="view-hint">
+          <span className={styles.fine}>Drag to turn · right-drag to pan · scroll to zoom</span>
+          <span className={styles.coarse}>Drag to turn · two fingers to pan or zoom</span>
+        </p>
+      )}
       {lost && (
         <div className={styles.lost} role="alert">
           <p className={styles.title}>The 3D view stopped.</p>

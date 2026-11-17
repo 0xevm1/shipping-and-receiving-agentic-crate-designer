@@ -79,6 +79,8 @@ export interface CrateSnapshot {
     marker: Vec3 | null;
     arrows: number;
     arrowsShown: number;
+    /** Whether the −X and +X ends' arrows are shown. */
+    endsShown: [boolean, boolean];
     /** The near-end (+X) arrow's screen box in CSS px, from the last frame; null before one. */
     arrowBox: { left: number; top: number; right: number; bottom: number } | null;
   } | null;
@@ -164,6 +166,7 @@ function snapshot(): CrateSnapshot {
           marker: handling.cog ? [...handling.cog] : null,
           arrows: handling.arrows,
           arrowsShown: handling.arrowsShown,
+          endsShown: [handling.endsShown[0], handling.endsShown[1]],
           arrowBox: handling.arrowBox ? { ...handling.arrowBox } : null,
         }
       : null,

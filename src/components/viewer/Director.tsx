@@ -16,8 +16,11 @@ import {
   pointer,
 } from "@/state/motion";
 import { currentMode, reducedMotion, useDesigner } from "@/state/store";
-import { approach, fitGoal, shortestAngle, viewOffset, type Goal } from "./framing";
+import { approach, clampPan, fitGoal, homeTarget, shortestAngle, viewOffset, type Goal } from "./framing";
 import { CAMERA_FAR_M } from "./scene";
+
+/** A pan smaller than this (m) counts as centred. */
+const PAN_SETTLED_M = 0.005;
 
 const tmp = new Vector3();
 const sph = new Spherical();
@@ -66,13 +69,23 @@ export function Director({ active }: { active: boolean }) {
     const end = () => {
       dragging.current = false;
     };
+    // Panning moves the camera and the orbit target together; pull both back when the target
+    // strays too far from the crate, so it can't be panned out of sight.
+    const bound = () => {
+      const s = useDesigner.getState();
+      if (!s.result.design) return;
+      const delta = clampPan(controls.target, s.result.design, anim.explode);
+      if (delta) camera.position.add(delta);
+    };
     controls.addEventListener("start", start);
     controls.addEventListener("end", end);
+    controls.addEventListener("change", bound);
     return () => {
       controls.removeEventListener("start", start);
       controls.removeEventListener("end", end);
+      controls.removeEventListener("change", bound);
     };
-  }, [controls]);
+  }, [controls, camera]);
 
   // OrbitControls registers as the default controls after the first render, so the first fit
   // runs without them. `place` keeps the target here meanwhile, and the controls take it
@@ -141,6 +154,11 @@ export function Director({ active }: { active: boolean }) {
         autoplay.turned = 0;
         autoplay.fired = false;
         autoplay.step = Math.max(0, IDLE_SEQUENCE.indexOf(currentMode(s.view) ?? "closed"));
+        // The crate turns about the crate: if the view was panned, ease the target back first,
+        // keeping the turn angle and zoom the user left.
+        const home = homeTarget(s.result.design, s.view.explode);
+        const at = currentAngles();
+        if (!goal.current && at.target.distanceTo(home) > PAN_SETTLED_M) goal.current = { target: home, theta: at.theta, phi: at.phi, radius: at.radius };
       }
       const da = dt * IDLE_TURN_RATE;
       const now = currentAngles();
@@ -176,6 +194,7 @@ export function Director({ active }: { active: boolean }) {
       const now = currentAngles();
       const kc = autoplay.slow ? k : 1 - Math.exp(-dt * EASE_FAST);
       const dTheta = shortestAngle(now.theta, g.theta);
+      const dTarget = now.target.distanceTo(g.target);
       const next: Goal = {
         theta: now.theta + dTheta * kc,
         phi: now.phi + (g.phi - now.phi) * kc,
@@ -183,7 +202,7 @@ export function Director({ active }: { active: boolean }) {
         target: now.target.lerp(g.target, kc),
       };
       place(next);
-      if (Math.abs(dTheta) < 0.001 && Math.abs(g.phi - now.phi) < 0.001 && Math.abs(g.radius - now.radius) < 0.001) {
+      if (Math.abs(dTheta) < 0.001 && Math.abs(g.phi - now.phi) < 0.001 && Math.abs(g.radius - now.radius) < 0.001 && dTarget < 0.001) {
         goal.current = null;
       }
     }

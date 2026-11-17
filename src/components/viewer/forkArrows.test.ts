@@ -11,9 +11,9 @@ describe("fork arrow size", () => {
     expect(arrowLengthMm([5000, 1, 1])).toBe(320);
   });
 
-  it("the tip stops beyond the width label: label offset, a third of the longest side, and a margin", () => {
+  it("the tip stops beyond the width label: label offset, about a third of the longest side, and a margin", () => {
     const ext = [1000, 500, 400];
-    expect(arrowGapMm(ext)).toBeCloseTo(110 + 50 + 330 + 60);
+    expect(arrowGapMm(ext)).toBeCloseTo(110 + 50 + 360 + 90);
     expect(arrowReachMm(ext)).toBeCloseTo(arrowGapMm(ext) + arrowLengthMm(ext));
   });
 });

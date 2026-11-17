@@ -119,6 +119,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
       probeStats.handling.cog = null;
       probeStats.handling.arrows = 0;
       probeStats.handling.arrowsShown = 0;
+      probeStats.handling.endsShown = [true, true];
       probeStats.handling.arrowBox = null;
     };
   }, [cog, arrows, showCog]);
@@ -178,6 +179,7 @@ export function HandlingMarks({ design }: { design: CrateDesign }) {
 
     if (PROBE) {
       probeStats.handling.arrowsShown = shown;
+      probeStats.handling.endsShown = [!hidden.current[0], !hidden.current[1]];
       if (nearArrow.current && arrows[0]) {
         // Where the near-end arrow lands on screen, to check it clears the width label.
         nearArrow.current.updateWorldMatrix(true, false);

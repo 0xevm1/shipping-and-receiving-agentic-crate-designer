@@ -20,6 +20,8 @@ export const probeStats = {
     arrows: 0,
     /** Fork-entry arrows the crate isn't hiding. */
     arrowsShown: 0,
+    /** Whether the −X and +X ends' arrows are shown (not hidden behind the crate). */
+    endsShown: [true, true] as [boolean, boolean],
     /** The near-end (+X) arrow's screen box, CSS px, from the last frame. */
     arrowBox: null as { left: number; top: number; right: number; bottom: number } | null,
   },

@@ -5,11 +5,15 @@ import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { arrowReachMm } from "./forkArrows";
 import {
   approach,
+  ARROWS_FIT_FROM,
+  clampPan,
   fitGoal,
   freeArea,
+  homeTarget,
   keepInView,
   LABEL_HALF_PX,
   MODE_ZOOM,
+  PAN_LIMIT,
   PANELS_HIDDEN_ZOOM,
   PRESETS,
   shortestAngle,
@@ -133,19 +137,26 @@ describe("fitGoal", () => {
 describe("keepInView", () => {
   const d = design();
 
-  it("holds the three crate labels, then both fork arrow tails for each opening", () => {
+  it("assembled, only the three crate labels", () => {
     const keep = keepInView(d, 0);
+    expect(keep).toHaveLength(3);
+    expect(keepInView(d, ARROWS_FIT_FROM - 0.01)).toHaveLength(3);
+  });
+
+  it("exploded: the three labels, then both fork arrow tails for each opening", () => {
+    const keep = keepInView(d, 1);
     expect(keep).toHaveLength(3 + 2 * d.handling.openings.length);
     expect(keep.slice(0, 3).every((k) => k.halfPx === LABEL_HALF_PX)).toBe(true);
     const tails = keep.slice(3).map((k) => k.at[0]);
     const reach = arrowReachMm(d.layout.external);
-    expect(Math.min(...tails)).toBeCloseTo(-(d.construction.panelMm + d.construction.cleat.thick) - reach, 6);
+    // The -X tail: outside the end face, reach further, and out with the wall.
+    expect(Math.min(...tails)).toBeCloseTo(-(d.construction.panelMm + d.construction.cleat.thick) - reach - 320, 6);
   });
 
   it("the arrow tails slide out with the end walls when exploded", () => {
-    const [a, b] = [keepInView(d, 0), keepInView(d, 1)];
+    const [a, b] = [keepInView(d, 0.5), keepInView(d, 1)];
     const i = a.length - 1;
-    expect(b[i].at[0] - a[i].at[0]).toBe(320);
+    expect(b[i].at[0] - a[i].at[0]).toBeCloseTo(160, 9);
   });
 });
 
@@ -164,5 +175,32 @@ describe("helpers", () => {
   it("the view offset centres the projection on the free area", () => {
     expect(viewOffset(1000, 800, NO_INSETS)).toEqual({ x: -0, y: -0 });
     expect(viewOffset(1000, 800, { left: 0, top: 0, right: 400, bottom: 0 }).x).toBe(200);
+  });
+});
+
+describe("clampPan", () => {
+  const d = design();
+  const limit = (Math.max(...d.layout.external) / 1000) * PAN_LIMIT;
+
+  it("leaves a target near the crate alone", () => {
+    const t = homeTarget(d, 0).add(new Vector3(limit * 0.5, 0, 0));
+    const before = t.clone();
+    expect(clampPan(t, d, 0)).toBeNull();
+    expect(t).toEqual(before);
+  });
+
+  it("pulls a target that strayed back onto the limit, and returns how far it moved", () => {
+    const home = homeTarget(d, 0);
+    const t = home.clone().add(new Vector3(10, 4, -6));
+    const far = t.clone();
+    const delta = clampPan(t, d, 0)!;
+    expect(t.distanceTo(home)).toBeCloseTo(limit, 9);
+    // Same direction as it strayed in, and the delta is exactly the move made.
+    expect(far.clone().add(delta).distanceTo(t)).toBeCloseTo(0, 9);
+    expect(t.clone().sub(home).normalize().dot(far.sub(home).normalize())).toBeCloseTo(1, 9);
+  });
+
+  it("measures from the middle of the exploded crate when it is exploded", () => {
+    expect(homeTarget(d, 1).y).toBeGreaterThan(homeTarget(d, 0).y);
   });
 });
