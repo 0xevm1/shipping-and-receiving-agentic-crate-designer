@@ -53,7 +53,7 @@ for (const { width, height } of SIZES) {
 
     test("a bad file shows an error toast (an alert) that stays until dismissed", async ({ page }) => {
       await fileInput(page).setInputFiles({ name: "bad.glb", mimeType: "model/gltf-binary", buffer: Buffer.from("not a model") });
-      await expect(page.getByRole("alert").filter({ hasText: "That isn't a .glb file. Choose a .glb or a design .json." })).toBeVisible();
+      await expect(page.getByRole("alert").filter({ hasText: "bad.glb can't be opened. It has a .glb name but isn't a binary glTF." })).toBeVisible();
       await expectToastPlaced(page);
       expect(await loadMessage(page).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13);
       await shot(page, `load-messages-error-${width}x${height}`);

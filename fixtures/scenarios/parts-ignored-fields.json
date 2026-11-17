@@ -1,0 +1,22 @@
+{
+  "schema_version": "2.0",
+  "model_units": "cubits",
+  "owner": "Plant 4",
+  "parts": [
+    {
+      "id": "SCN-930",
+      "name": "Part SCN-930",
+      "model": "tall-part.glb",
+      "mass_kg": 12,
+      "colour": "grey",
+      "supplier": "Acme",
+      "material": 42,
+      "density_kg_m3": 0,
+      "dimensions_mm": [
+        150,
+        150
+      ],
+      "suggested_quantities": "all"
+    }
+  ]
+}

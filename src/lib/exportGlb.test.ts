@@ -6,7 +6,7 @@ import { getPart } from "@/domain/catalog";
 import { ASSEMBLIES } from "@/domain/crate";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { ASSEMBLY_NAMES } from "@/domain/crate";
-import { glbProblem } from "./loadPart";
+import { checkFiles } from "./fileCheck";
 import { buildCrateScene, cratePivotMm, CRATE_NODE, exportCrateGlb, PARTS_NODE, type PartModel } from "./exportGlb";
 
 /**
@@ -77,7 +77,8 @@ describe("GLB export (#27)", () => {
       const glb = await exportCrateGlb(d, part);
 
       expect(glb.byteLength).toBeGreaterThan(0);
-      expect(glbProblem(glb)).toBeNull();
+      // The export is a .glb the file check opens without a finding (it can be loaded back into the app).
+      expect(checkFiles([{ name: "crate.glb", content: glb }]).findings).toEqual([]);
       const back = (await parse(glb)).scene;
 
       // Outside size within 1 mm, in metres. X/Y/Z map straight to L/W/H: no Y-up rotation.

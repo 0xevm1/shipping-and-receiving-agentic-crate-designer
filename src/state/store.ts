@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult, type Rankin
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import type { PartProfile } from "@/domain/profile";
 import { planShipment, type ShipmentPlan } from "@/domain/shipment";
-import { normalizeSettings, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
+import { normalizeSettings, type CatalogEntry, type CrateSettings, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import { canSetFrame, catalogPart, framePart, type LoadedPart } from "@/lib/part";
 import type { PartFrame } from "@/lib/partFrame";
@@ -24,7 +24,7 @@ export interface DesignerState {
   /** The shown crate type's layouts and design: `plan.crates[crateIndex].result`. */
   result: DesignResult;
   /** Extra catalog entries from a dropped parts.json. */
-  extraParts: Part[];
+  extraParts: CatalogEntry[];
   /** The shop's house rules every design is built to. Saved in localStorage. */
   standards: ShopStandards;
 
@@ -74,7 +74,7 @@ export interface DesignerState {
   resetStandards: () => void;
   /** Reads the standards saved in this browser. Called once after the app mounts. */
   loadSavedStandards: () => void;
-  addCatalogParts: (parts: Part[]) => void;
+  addCatalogParts: (parts: CatalogEntry[]) => void;
   /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
   setRanking: (ranking: Ranking) => void;
 }

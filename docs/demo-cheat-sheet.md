@@ -4,7 +4,9 @@ What the app does with inputs it may not have seen. Every "does" cell was run in
 (production build, 1440 × 900, MM KG) for #114; numbers are from that run. Test files:
 `bun run fixtures`, listed in `fixtures/scenarios/README.md`. The app opens in **inches**: use
 **MM KG** (bottom right) to read the numbers below. Drop a `parts.json` with the `.glb` to give a
-part its mass; a `.glb` alone gets a 10 kg stand-in and a caution.
+part its mass; a `.glb` alone gets a 10 kg stand-in and a caution. Every file you drop is checked
+first (#106): when something is wrong or assumed, the toast says it in a line and **Details**
+opens the **File check** report (it stays under **File check**, by Load a part, until the next load).
 
 ## Handled: say it with confidence
 
@@ -19,8 +21,13 @@ part its mass; a `.glb` alone gets a 10 kg stand-in and a caution.
 | 200 parts | Quantity 200 | 7 crates: 6 of 30 plus 1 of 20, each 2,176 × 936 × 971 for the 30. Header shows the shipment total | `planShipment`, `limits.perCrate` |
 | 500 parts | Quantity 500 | **Stops at 200 without saying so** (known gap, #111). Same result as 200 | `RulesTab.tsx` `MAX_QTY` |
 | Max crate weight | Shop standards → Max gross per crate 100, Quantity 8 | 4 crates of 2, 652 × 522 × 497 each | `limits.perCrate.maxGrossKg` |
-| Draco, Meshopt, text .gltf, not a GLB, damaged file | `draco.glb` etc. | A message in the top toast, with a dismiss button. The crate on screen is not touched | `loadPart.ts` `glbProblem`, `loadPartFiles` |
-| Model size differs from `parts.json` | `parts-size-mismatch.json` + `size-mismatch.glb` | Caution "3D model does not match the catalog": 360 × 220 × 300 vs 360 × 220 × 258. Tolerance 1 mm | `lib/checks.ts` `MODEL_TOLERANCE_MM` |
+| Draco, Meshopt, text .gltf, not a GLB, damaged file, an empty or flat model | `draco.glb` etc. | A message in the top toast that says what is wrong and what to do ("draco.glb can't be opened. That .glb uses Draco compression, which the viewer can't read. Export it again without Draco compression."), with Details and a dismiss button. The crate on screen is not touched | `fileCheck.ts` `checkFiles`, `glbInfo.ts`, spec §6.6 |
+| A `parts.json` entry with a missing field | `parts-missing-field.json` + `missing-field.glb` | The entry is skipped and named: toast "parts-missing-field.json: 1 entry skipped (SCN-900: mass_kg). missing-field.glb: loaded with stand-in details." The part loads with the 10 kg stand-in (crate 462 × 362 × 439). Details: "SCN-900 has no mass_kg, so it was skipped. Add the mass of one part in kilograms, like 12.5." Only `id`, `name`, `model` and `mass_kg` are required: `parts-lenient.json` + `tall-part.glb` loads with no material, size or quantities | `fileCheck.ts`, `schema.ts` `CatalogEntry`, spec §6.1 |
+| A `parts.json` with a typo, an odd field, a newer version | `parts-trailing-comma.json`, `parts-bad-entries.json` + `heavy-1500kg.glb`, `parts-ignored-fields.json` + `tall-part.glb` | Not JSON: "…unexpected "]" at line 4, column 3" and nothing changes. Six bad entries: each named with its field, the good one loads. A `schema_version` of 2.0, an unknown `model_units` and unknown fields: it loads, and the report names each ("parts-ignored-fields.json: 7 fields ignored, newer schema_version, unknown model_units.") | `fileCheck.ts`, spec §6.6 (the rules, with their codes) |
+| Two `.glb` files at once | `heavy-1500kg.glb` + `tiny-light.glb` | "Opened heavy-1500kg.glb. The app designs one part at a time, so tiny-light.glb was not used." Drop the second alone to design it. No chooser | `fileCheck.ts` `glb-extra`, spec §6.6 |
+| An absurd mass | `lopsided.glb` alone, type 99999999 in the header's mass | Accepted, with a warning under the header ("99,999,999 kg is more than 20,000 kg, the most one part is taken to weigh. Check for an extra digit or the wrong unit."), a Checks caution "Part mass looks wrong", and the scorecard drops the freight class and says its weights and cost are not real (it was class 50). The same limit warns for a `parts.json` mass | `fileCheck.ts` `MAX_PLAUSIBLE_MASS_KG`, `massWarning` |
+| A file in inches, or Y up | `bracket-inches.glb`, `shaft-inches.glb`, `bracket-y-up.glb` (in `fixtures/units-axis/`) | The header has **File units** and **Up axis** selects for a loaded file. The units are guessed from the size and can be overridden: the inch bracket (14 units) is read as inches, 360 × 220 × 258 mm (toast: "units guessed from the size"); the 60 in shaft reads as a 60 mm part (240 × 240 × 317 crate) until **File units** is set to inches: 1,530 × 172 × 172 mm, crate 1,692 × 334 × 411. A Y-up bracket lies on its side (crate 522 × 420 × 459) until **Up axis** is Y up (522 × 382 × 497). A `parts.json` with `model_units` skips the guess | `partFrame.ts`, `setPartFrame`, #105; `model_units`, #106 |
+| Model size differs from `parts.json` | `parts-size-mismatch.json` + `size-mismatch.glb` | Caution "3D model does not match the catalog": 360 × 220 × 300 vs 360 × 220 × 258. Tolerance 1 mm. The File check report says the same as a warning | `fileCheck.ts` `MODEL_TOLERANCE_MM`, `sizeMatches` |
 | Only some plywood in stock | Shop standards → Stock on hand: set Heavy, then Medium, then Light panel plywood, and Floor, to 18 | Walls and lid and the floor are all 18 mm; 4 brackets go from 932 × 652 × 497 to 944 × 664 × 502. Set in the other order the field refuses ("light ≤ medium ≤ heavy") | `standards.ts` `stock.panelPlywoodMm` |
 | Crates stacked on each other | Shop standards → Structure → Stacked on the lid 500 | Lid is resized, crate 70 mm taller (497 to 567); check "Lid carries the stacking load: rated 528 kg" | `structure.ts` `sizeLid`, `structure.lidStackKg` |
 | Cheapest, not smallest | Layouts → Crate cost / Freight class | Re-ranks the layouts with the reason. For 8 brackets all three rankings pick the same crate | `design.ts` `rankLayouts`, spec §7.2 |
@@ -30,8 +37,6 @@ part its mass; a `.glb` alone gets a 10 kg stand-in and a caution.
 
 | If they ask | The app does today | Ticket |
 |---|---|---|
-| A file in inches, or Y up | Reads metres, or mm above 20 units. An inch bracket becomes a 14 m crate with 3 cautions. Y up is read as Z up, so a tall post lies down | #105 (pending: units and up-axis controls) |
-| A `parts.json` entry with a missing field | The entry is dropped without a message; the part loads with the stand-in mass | #106 |
 | A crate bigger than a plywood sheet | Cut list has panels 2,168 × 1,568 mm; no splice | #107 |
 | "Must fit a pallet position / door" | Only the trailer limit applies; a 1,300 × 1,100 part gets "All checks clear" | #108 |
 | Tall part, "this face down" | Stands upright: tip-over and top-heavy cautions (plus forklift and pallet jack). Keep parts upright off lays it flat. No choice of face | #109 |
@@ -50,7 +55,8 @@ part its mass; a `.glb` alone gets a 10 kg stand-in and a caution.
 
 - **Wrong rules:** Rules → **Reset rules** (keeps the quantity). Wrong house rules: Rules → Shop standards → **Reset to defaults**.
 - **Wrong crate on screen:** reload. The last crate comes back (200 parts, reloaded: same 7 crates).
-- **A file did not load:** read the toast at the top (it stays until dismissed). The old crate is still valid.
+- **A file did not load:** read the toast at the top (an error stays until dismissed); **Details** has the whole File check. The old crate is still valid.
+- **Something looks off after a load:** the **File check** button by **Load a part** (with a count) opens the report for the last load; **Copy report** gives it as text.
 - **Numbers look foreign:** the in / mm toggle is bottom right (**IN LB** / **MM KG**).
-- **Part units and up axis:** controls arrive with #105; until then say the file must be metres, Z up.
+- **Part units and up axis:** the header's **File units** and **Up axis** selects (for a loaded file, not the three catalog parts) re-read it at once. The units are only guessed from the size, so a part that looks 25 times too small or large is the first thing to check; Y up is never guessed.
 - **Export button:** reads **Export Packing Specs**; it is green, and shows a dot when there are cautions.

@@ -1,13 +1,13 @@
-import { Box3, Vector3 } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { catalog } from "@/domain/catalog";
-import { fileProfile, isDesignFileJson, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
+import { fileProfile, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
 import type { Ranking } from "@/domain/design";
 import type { Message } from "@/domain/message";
 import { usableProfile, type PartProfile } from "@/domain/profile";
 import { encodeProfile } from "@/domain/profileCodec";
-import { PartSchema, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
+import type { CatalogEntry, CrateSettings, Part, Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
+import { checkFiles, type FileInput } from "./fileCheck";
+import { reportFor, verdict, type FileReport } from "./fileCheckReport";
 import { catalogPart, framePart, type LoadedPart } from "./part";
 import { fitFrame, framedSizeMm, guessUnits, type PartFrame } from "./partFrame";
 import { renderMessage } from "./message";
@@ -16,24 +16,6 @@ import type { Units } from "./units";
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
 const STAND_IN_MASS_KG = 10;
 const DEFAULT_QUANTITIES = [1, 4, 8];
-const GLB_MAGIC = 0x46546c67; // "glTF"
-
-/** Why a .glb can't be used, or null if it looks fine. Reads only the header and JSON chunk. */
-export function glbProblem(buffer: ArrayBuffer): string | null {
-  const view = new DataView(buffer);
-  if (buffer.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC) return "That isn't a .glb file. Choose a .glb or a design .json.";
-  const jsonLength = view.getUint32(12, true);
-  try {
-    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLength)));
-    const required: string[] = json.extensionsRequired ?? [];
-    if (required.some((e) => /draco|meshopt/i.test(e))) {
-      return "That .glb uses compression the viewer can't read. Export it without Draco or Meshopt.";
-    }
-  } catch {
-    return "That .glb file is damaged. Try exporting it again.";
-  }
-  return null;
-}
 
 /** The part id a file name gives: the name without ".glb"; "part" for a file that is only ".glb". */
 export function idFromFile(fileName: string): string {
@@ -51,31 +33,6 @@ export function nameFromFile(fileName: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Entries from a dropped parts.json that pass the catalog schema; none when it is not JSON. */
-export function partsFromJson(text: string): Part[] {
-  try {
-    return catalogEntries(JSON.parse(text));
-  } catch {
-    return [];
-  }
-}
-
-function catalogEntries(json: unknown): Part[] {
-  const parts = (json as { parts?: unknown } | null)?.parts;
-  const list: unknown[] = Array.isArray(parts) ? parts : [];
-  return list.flatMap((p) => {
-    const r = PartSchema.safeParse(p);
-    return r.success ? [r.data] : [];
-  });
-}
-
-async function measure(buffer: ArrayBuffer): Promise<Vec3> {
-  const gltf = await new GLTFLoader().parseAsync(buffer, "");
-  const size = new Box3().setFromObject(gltf.scene).getSize(new Vector3());
-  if (size.lengthSq() === 0) throw new Error("No solid geometry was found in this file.");
-  return [size.x, size.y, size.z];
-}
-
 interface ReadGlb {
   url: string;
   /** The model's size as the file has it (file units, file axes). */
@@ -85,105 +42,131 @@ interface ReadGlb {
 /** The frame a file is first read in when nothing says otherwise: Z up, units guessed from its size (spec §4). */
 const guessedFrame = (raw: Vec3): PartFrame => ({ units: guessUnits(Math.max(...raw)), up: "z" });
 
-/** Validates and measures a GLB, then makes an object URL for it. A string is a problem message. */
+/** Checks and measures one GLB (the file check's rules), then makes an object URL for it. A string is a problem message. */
 async function readGlb(glb: File): Promise<ReadGlb | string> {
   const buffer = await glb.arrayBuffer();
-  const problem = glbProblem(buffer);
-  if (problem) return problem;
-  const raw = await measure(buffer);
-  const url = URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" }));
-  return { url, raw };
+  const check = checkFiles([{ name: glb.name, content: buffer }]);
+  const error = check.findings.find((f) => f.severity === "error");
+  if (error || !check.opened) return error ? renderMessage(error.message, "metric") : "That .glb file can't be read. Try exporting it again.";
+  return { url: URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" })), raw: check.opened.raw };
 }
 
 export interface LoadOutcome {
   part?: LoadedPart;
   /** Settings and layout to restore with `part`, when a design file was loaded. */
   design?: { settings: CrateSettings; layoutKey: string | null; crateIndex: number; ranking: Ranking };
-  catalogAdditions: Part[];
+  /** The parts.json entries that passed the file check: they join the catalog even when no .glb opened. */
+  catalogAdditions: CatalogEntry[];
+  /** The load toast's one line: empty for a clean load. */
   message: string;
+  /** What the file check found, for the File check report; null when it found nothing. */
+  report?: FileReport | null;
+}
+
+/** The part for a .glb that an entry names: the entry's details, in the frame the check chose. */
+function entryPart(entry: CatalogEntry, url: string, raw: Vec3, frame: PartFrame, guessed: boolean): LoadedPart {
+  const dims = entry.dimensions_mm;
+  const framed = framePart(
+    {
+      id: entry.id,
+      name: entry.name,
+      model: entry.model,
+      ...(entry.material !== undefined ? { material: entry.material } : {}),
+      mass_kg: entry.mass_kg,
+      dimensions_mm: framedSizeMm(raw, frame),
+      suggested_quantities: entry.suggested_quantities ?? DEFAULT_QUANTITIES,
+      modelUrl: url,
+      modelUnits: frame.units,
+      upAxis: frame.up,
+      unitsGuessed: guessed,
+      mmPerUnit: 1,
+      rawSize: raw,
+      ...(dims ? { catalogDims: dims } : {}),
+      massAssumed: false,
+    },
+    frame,
+    guessed,
+  );
+  // An entry with a size designs the crate on that size; the model check says when the file differs.
+  return dims ? { ...framed, dimensions_mm: dims } : framed;
 }
 
 /**
  * Turns dropped or picked files into a part. `units` is how any note on a design is worded. A JSON file is either a saved design (by its
- * `kind`, spec §6.4) or a parts.json catalog.
+ * `kind`, spec §6.4) or a parts.json catalog. Every decision comes from the file check (`checkFiles`, spec §6.6), which is also what
+ * the File check report shows, so the two cannot disagree.
  * - A design restores its part, rules and layout (`loadDesign`).
- * - Otherwise a parts.json adds catalog entries first, and a .glb whose file name matches a
- *   catalog `model` takes that entry's mass, material and quantities. Anything else gets a
- *   stand-in mass.
+ * - Otherwise a parts.json adds its accepted entries, and the .glb an entry names (else the first one) opens as the part with that
+ *   entry's mass, material and quantities. Anything else gets a stand-in mass. One part at a time: other .glb files are not opened.
  */
 export async function loadPartFiles(
   files: File[],
-  known: Part[],
+  known: CatalogEntry[],
   bundled: Part[] = catalog.parts,
   /** The shop standards a saved design is rebuilt with (and its shipment re-planned). */
   standards: ShopStandards = DEFAULT_STANDARDS,
   units: Units = "metric",
 ): Promise<LoadOutcome> {
-  const catalogAdditions: Part[] = [];
-  let designText: string | null = null;
-  for (const f of files.filter((f) => /\.json$/i.test(f.name))) {
-    const text = await f.text();
-    let json: unknown;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      return { catalogAdditions, message: `${f.name} isn't valid JSON. Choose a design or parts .json file.` };
-    }
-    if (isDesignFileJson(json)) designText ??= text;
-    else catalogAdditions.push(...catalogEntries(json));
+  const inputs: FileInput[] = [];
+  for (const f of files) {
+    const kind = /\.([^./\\]+)$/.exec(f.name)?.[1].toLowerCase();
+    inputs.push({ name: f.name, content: kind === "json" ? await f.text() : kind === "glb" ? await f.arrayBuffer() : "" });
   }
-  const glbs = files.filter((f) => /\.glb$/i.test(f.name));
+  const check = checkFiles(inputs, { known });
+  const catalogAdditions = check.entries;
+  const said = verdict(check);
 
-  if (designText !== null) {
-    const parsed = parseDesignFile(designText);
-    if (!parsed.ok) return { catalogAdditions, message: parsed.error };
-    return { catalogAdditions, ...(await loadDesign(parsed.file, glbs, bundled, standards, units)) };
-  }
-
-  const glb = glbs[0];
-  if (!glb) {
-    const message = catalogAdditions.length
-      ? "Part details loaded. Now choose its .glb file."
-      : files.some((f) => /\.gltf$/i.test(f.name))
-        ? "Text .gltf files can't be used. Export the part as a single .glb file."
-        : "Choose a .glb file or a design .json.";
-    return { catalogAdditions, message };
+  if (check.design) {
+    const parsed = parseDesignFile(check.design.text);
+    if (!parsed.ok) return { catalogAdditions, message: parsed.error, report: reportFor(check, false) };
+    const out = await loadDesign(
+      parsed.file,
+      files.filter((f) => /\.glb$/i.test(f.name)),
+      bundled,
+      standards,
+      units,
+    );
+    return { catalogAdditions, ...out, message: [out.message, said].filter(Boolean).join(" "), report: reportFor(check, Boolean(out.part)) };
   }
 
-  const read = await readGlb(glb);
-  if (typeof read === "string") return { catalogAdditions, message: read };
-  const { url, raw } = read;
-
-  const match = [...known, ...catalogAdditions].find((p) => p.model === glb.name);
-  if (match) {
-    // A file with a catalog part's name is read in the frame that gives the catalog size; when none
-    // does, it is guessed like any file, and the model check says it does not match.
-    const fit = fitFrame(raw, match.dimensions_mm);
-    const base: LoadedPart = { ...catalogPart(match, url), rawSize: raw };
-    return { catalogAdditions, message: "", part: { ...framePart(base, fit ?? guessedFrame(raw), !fit), dimensions_mm: match.dimensions_mm } };
+  const opened = check.opened;
+  if (!opened) {
+    // Only details so far: the part is chosen next. Findings (an entry skipped, say) still show.
+    const message = check.awaitingGlb ? ["Part details loaded. Now choose its .glb file.", said].filter(Boolean).join(" ") : said;
+    return {
+      catalogAdditions,
+      message: message || "Nothing could be loaded. Choose a .glb part, with a parts.json if you have one, or a saved design .json.",
+      report: reportFor(check, false),
+    };
   }
-  const frame = guessedFrame(raw);
+
+  const index = files.findIndex((f) => f.name === opened.name);
+  const url = URL.createObjectURL(new Blob([inputs[index].content as ArrayBuffer], { type: "model/gltf-binary" }));
+  const { raw, frame, guessed, entry } = opened;
+  const report = reportFor(check, true);
+  if (entry) return { catalogAdditions, message: said, report, part: entryPart(entry, url, raw, frame, guessed) };
   return {
     catalogAdditions,
-    message: "",
+    message: said,
+    report,
     part: framePart(
       {
-        id: idFromFile(glb.name),
-        name: nameFromFile(glb.name),
-        model: glb.name,
+        id: idFromFile(opened.name),
+        name: nameFromFile(opened.name),
+        model: opened.name,
         mass_kg: STAND_IN_MASS_KG,
         dimensions_mm: framedSizeMm(raw, frame),
         suggested_quantities: DEFAULT_QUANTITIES,
         modelUrl: url,
         modelUnits: frame.units,
         upAxis: frame.up,
-        unitsGuessed: true,
+        unitsGuessed: guessed,
         mmPerUnit: 1,
         rawSize: raw,
         massAssumed: true,
       },
       frame,
-      true,
+      guessed,
     ),
   };
 }
