@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { autoplay } from "@/state/motion";
 import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
-import { exportNote, useExportRun } from "./exportRun";
 
 const MODES: Mode[] = ["closed", "open", "exploded"];
 const MODE_NAME: Record<Mode, string> = { closed: "Closed", open: "Open", exploded: "Exploded" };
@@ -154,42 +153,12 @@ function ViewPopover() {
               onKeyUp={() => requestFit()}
             />
           </div>
-          <ViewExport />
           <span className="lab">
             <span className="hint-mouse">Drag to turn, scroll to zoom, right-drag to move.</span>
             <span className="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to move.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
           </span>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Export specs: the same export as the Export pill (#51, #77), sharing its run and state. The
- * zip holds the assembled crate's GLB with the parts, the PDF, the cut list and the design file.
- */
-function ViewExport() {
-  const canExport = useDesigner((s) => !!s.result.design && !s.plan.problem);
-  const state = useExportRun((s) => s.state);
-  const run = useExportRun((s) => s.run);
-  const busy = state.kind === "busy";
-
-  return (
-    <div style={{ display: "grid", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255, 255, 255, 0.12)" }}>
-      <button
-        type="button"
-        className="btn"
-        disabled={!canExport}
-        aria-busy={busy || undefined}
-        title="Download a .zip with the 3D model, the PDF (spec, build sheet, label), the cut list and the design file"
-        onClick={() => void run()}
-      >
-        {busy ? "Exporting…" : "Export specs"}
-      </button>
-      <span className="lab" role="status">
-        {exportNote(state)}
-      </span>
     </div>
   );
 }

@@ -153,7 +153,7 @@ test.describe("view controls", () => {
     expect((await crate(page)).mode).toBeNull();
   });
 
-  test("Export in the View popover downloads the same .zip as the Export pill, sharing its state (#77)", async ({ page }) => {
+  test("Export from the exploded view downloads the assembled crate; the View popover has no export button (#77, #62)", async ({ page }) => {
     // Exploded view on screen: the GLB must still be the assembled crate (checked in exportGlb.test.ts).
     await modeButton(page).click();
     await modeButton(page).click();
@@ -161,12 +161,11 @@ test.describe("view controls", () => {
 
     const pop = await openViewPopover(page);
     await expect(pop.getByLabel("Include parts", { exact: true })).toHaveCount(0);
-    const button = pop.getByRole("button", { name: /^(Export specs|Exporting…)$/ });
+    await expect(pop.getByRole("button", { name: /Export/ })).toHaveCount(0);
     const pill = page.getByRole("banner").getByRole("button", { name: /^(Export specs|Exporting…)$/ });
 
     const downloaded = page.waitForEvent("download");
-    await button.click();
-    // One shared run: the pill shows it too.
+    await pill.click();
     await expect(pill).toHaveText("Exporting…");
     await shot(page, "06-view-zip-export");
     const download = await downloaded;
@@ -180,9 +179,8 @@ test.describe("view controls", () => {
       expect(names).toContain(n);
     }
     expect(names).not.toContain("Part 5");
-    await expect(pop.getByRole("status")).toHaveText("Downloaded crate-PART-001-x4.zip");
     await expect(page.getByRole("banner").locator(".exportnote")).toHaveText("Downloaded crate-PART-001-x4.zip");
-    await expect(button).toHaveText("Export specs");
+    await expect(pill).toHaveText("Export specs");
   });
 
   test("Hide panels hides the island but keeps the credit", async ({ page }) => {

@@ -184,7 +184,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
 | `src/lib/exportPdf.ts` | `printableToPdf`: the `PrintableDesign` as a vector PDF with jsPDF (#51); loaded only with `import()` |
 | `src/components/shell/ExportPill.tsx` | The green Export pill under the part header and its idle / busy / done / error states (#51) |
-| `src/components/shell/exportRun.ts` | `useExportRun`: the one export run and its state, shared by the Export pill and the View popover's Export specs (#77) |
+| `src/components/shell/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill (#51; #77 briefly shared it with a View popover button, removed in #62) |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
 | `src/state/standardsStorage.ts` | Loads and saves the shop standards in `localStorage` (§9) |
@@ -1284,11 +1284,10 @@ edit during the busy state doesn't change the package.
 
 **The separate downloads stay** in the Cut list tab (CSV and Copy, Download design (.json),
 Print / save PDF): someone who wants one file gets it in one click, and the print route is still
-the quickest way to paper. **The View popover's Export specs** (#77) runs the same export as the
-pill: one shared run and state (`src/components/shell/exportRun.ts`), so either control shows
-"Exporting…" and the same "Downloaded …" note, and a second click while busy does nothing. It
-replaced #27's "Download 3D model (.glb)" and its "Include parts" switch; the zip's GLB always
-includes the parts.
+the quickest way to paper. **The pill is the one export control** (#62): its run and state live in
+`src/components/shell/exportRun.ts`, and a second click while busy does nothing. The View popover
+has no export button (#77 added one; the user removed it as a duplicate). The zip replaced #27's
+"Download 3D model (.glb)" and its "Include parts" switch; its GLB always includes the parts.
 
 ### 7.14 Centre of gravity and handling (`src/domain/handling.ts`, #8)
 
@@ -1613,8 +1612,8 @@ open question for the user (see #20).
   - The mode icon steps closed → open → exploded. The View popover has camera presets (3D, Top,
     Front, End), switches for lid, front wall, blocking, parts and size labels, and a
     continuous Pull apart slider. A mix that matches no mode shows the "custom" icon.
-- **Export specs (#77):** below the slider, the same export as the Export pill (§7.13), sharing
-  its state. The zip's `crate-{part id}-x{quantity}.glb` (#27) is built from the
+- **Export specs:** only the header's Export pill (§7.13) exports; the View popover has no export
+  button (#77 added one, removed in #62). The zip's `crate-{part id}-x{quantity}.glb` (#27) is built from the
   design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
   it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
   - **Units and frame:** metres, Z up, like the input GLBs (§4).
@@ -2382,10 +2381,10 @@ HTML report as `playwright-report`.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
     View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
     Hide panels keeps the credit; idle auto-play starts after 5 s without input; from the
-    exploded view, the popover's "Export specs" shows "Exporting…" on the pill too and saves
+    exploded view, the pill's export (the popover has no export button) shows "Exporting…" and saves
     `crate-PART-001-x4.zip` with the pill's five entries, whose GLB has the `glTF` header, a
     matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1` … `Part 4`),
-    and both controls then say "Downloaded crate-PART-001-x4.zip" (#77); the first framing
+    and the pill's note then says "Downloaded crate-PART-001-x4.zip" (#77, #62); the first framing
     aims at the crate's middle; for PART-001 × 4, PART-002 × 1 and × 4 and PART-003 × 8 no
     size label overlaps the island or leaves the window, in every mode.
   - `07-load-parts` (through the hidden file input, in-memory files): a catalog GLB fills in
