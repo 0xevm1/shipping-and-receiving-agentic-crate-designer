@@ -55,9 +55,9 @@ test("the Overview shows the scorecard under the outside size, in imperial by de
     const big = el.querySelector(".big")!;
     const sc = el.querySelector('[aria-label="Scorecard"]')!;
     const chain = el.querySelector(".chain")!;
-    return [big.compareDocumentPosition(sc), sc.compareDocumentPosition(chain)];
+    return [big.compareDocumentPosition(sc), sc.compareDocumentPosition(chain)].map((p) => (p & 4) === 4); // FOLLOWING
   });
-  expect(order).toEqual([Node.DOCUMENT_POSITION_FOLLOWING, Node.DOCUMENT_POSITION_FOLLOWING]);
+  expect(order).toEqual([true, true]);
   await crop(card, "17-overview-scorecard");
   await shot(page, "17-overview-scorecard");
 
