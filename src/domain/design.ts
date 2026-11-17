@@ -43,25 +43,33 @@ export function computeDesign(
   const problem = inputProblem(part, settings, standards);
   if (problem) return { layouts: [], design: null, problem };
 
-  const construction = resolveConstruction(settings, part.mass_kg * settings.quantity, standards);
-  const layouts = enumerateLayouts(
-    {
-    partSize: part.dimensions_mm,
-    quantity: settings.quantity,
-    keepUpright: settings.keepUpright,
-    maxLayers: settings.maxLayers,
-    partGapMm: settings.partGapMm,
-    wallClearanceMm: settings.wallClearanceMm,
-    separatorMm: construction.panelMm,
-    structureAllowance: structureAllowance(construction),
-    minInteriorMm: minInteriorMm(standards),
-    },
-    standards,
-  );
+  const layouts = rankLayouts(part, settings, standards);
   const layout = layouts.find((l) => l.key === layoutKey) ?? layouts[0];
   // Unreachable for valid input (spec §7.2), but never leave the screen blank.
   if (!layout) return { layouts, design: null, problem: NO_LAYOUT };
   return { layouts, design: designCrate(part, settings, layout, standards), problem: null };
+}
+
+/**
+ * Every layout for the batch, best first (spec §7.2), without designing a crate. For input
+ * `computeDesign` accepts; used by shipment planning to compare crate sizes cheaply.
+ */
+export function rankLayouts(part: DesignPart, settings: CrateSettings, standards: ShopStandards = DEFAULT_STANDARDS): Layout[] {
+  const construction = resolveConstruction(settings, part.mass_kg * settings.quantity, standards);
+  return enumerateLayouts(
+    {
+      partSize: part.dimensions_mm,
+      quantity: settings.quantity,
+      keepUpright: settings.keepUpright,
+      maxLayers: settings.maxLayers,
+      partGapMm: settings.partGapMm,
+      wallClearanceMm: settings.wallClearanceMm,
+      separatorMm: construction.panelMm,
+      structureAllowance: structureAllowance(construction),
+      minInteriorMm: minInteriorMm(standards),
+    },
+    standards,
+  );
 }
 
 const NO_LAYOUT: DesignProblem = {

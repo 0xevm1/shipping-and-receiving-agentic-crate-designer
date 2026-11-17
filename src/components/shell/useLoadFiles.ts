@@ -14,10 +14,12 @@ export function useLoadFiles() {
     const s = useDesigner.getState();
     s.setLoadMessage("");
     try {
-      const outcome = await loadPartFiles([...list], [...catalog.parts, ...s.extraParts]);
+      const outcome = await loadPartFiles([...list], [...catalog.parts, ...s.extraParts], catalog.parts, s.standards);
       if (outcome.catalogAdditions.length) s.addCatalogParts(outcome.catalogAdditions);
-      if (outcome.part && outcome.design) s.loadDesign(outcome.part, outcome.design.settings, outcome.design.layoutKey);
-      else if (outcome.part) s.setPart(outcome.part);
+      if (outcome.part && outcome.design) {
+        const { settings, layoutKey, crateIndex } = outcome.design;
+        s.loadDesign(outcome.part, settings, layoutKey, crateIndex);
+      } else if (outcome.part) s.setPart(outcome.part);
       s.setLoadMessage(outcome.message);
     } catch (err) {
       s.setLoadMessage(err instanceof Error ? err.message : "That file could not be read.");

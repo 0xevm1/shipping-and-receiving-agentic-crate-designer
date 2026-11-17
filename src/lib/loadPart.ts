@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { catalog } from "@/domain/catalog";
 import { isDesignFileJson, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
 import { PartSchema, type CrateSettings, type Part, type Vec3 } from "@/domain/schema";
+import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
 import { catalogPart, type LoadedPart } from "@/state/store";
 
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
@@ -84,7 +85,7 @@ async function readGlb(glb: File): Promise<ReadGlb | string> {
 export interface LoadOutcome {
   part?: LoadedPart;
   /** Settings and layout to restore with `part`, when a design file was loaded. */
-  design?: { settings: CrateSettings; layoutKey: string | null };
+  design?: { settings: CrateSettings; layoutKey: string | null; crateIndex: number };
   catalogAdditions: Part[];
   message: string;
 }
@@ -97,7 +98,13 @@ export interface LoadOutcome {
  *   catalog `model` takes that entry's mass, material and quantities. Anything else gets a
  *   stand-in mass.
  */
-export async function loadPartFiles(files: File[], known: Part[], bundled: Part[] = catalog.parts): Promise<LoadOutcome> {
+export async function loadPartFiles(
+  files: File[],
+  known: Part[],
+  bundled: Part[] = catalog.parts,
+  /** The shop standards a saved design is rebuilt with (and its shipment re-planned). */
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): Promise<LoadOutcome> {
   const catalogAdditions: Part[] = [];
   let designText: string | null = null;
   for (const f of files.filter((f) => /\.json$/i.test(f.name))) {
@@ -116,7 +123,7 @@ export async function loadPartFiles(files: File[], known: Part[], bundled: Part[
   if (designText !== null) {
     const parsed = parseDesignFile(designText);
     if (!parsed.ok) return { catalogAdditions, message: parsed.error };
-    return { catalogAdditions, ...(await loadDesign(parsed.file, glbs, bundled)) };
+    return { catalogAdditions, ...(await loadDesign(parsed.file, glbs, bundled, standards)) };
   }
 
   const glb = glbs[0];
@@ -164,7 +171,12 @@ const SAME_SIZE_MM = 0.5;
  * - A custom part (or a catalog id this app doesn't have) needs its GLB, picked or dropped
  *   together with the design file. Without it nothing changes and the message names the file.
  */
-async function loadDesign(file: DesignFile, glbs: File[], bundled: Part[]): Promise<Omit<LoadOutcome, "catalogAdditions">> {
+async function loadDesign(
+  file: DesignFile,
+  glbs: File[],
+  bundled: Part[],
+  standards: ShopStandards,
+): Promise<Omit<LoadOutcome, "catalogAdditions">> {
   const saved = file.part;
   const entry = saved.source === "catalog" ? bundled.find((p) => p.id === saved.id) : undefined;
   const notes: string[] = [];
@@ -201,11 +213,11 @@ async function loadDesign(file: DesignFile, glbs: File[], bundled: Part[]): Prom
     };
   }
 
-  const restored = restoreDesign(file, part);
+  const restored = restoreDesign(file, part, standards);
   notes.push(...restored.notes);
   return {
     part,
-    design: { settings: restored.settings, layoutKey: restored.layoutKey },
+    design: { settings: restored.settings, layoutKey: restored.layoutKey, crateIndex: restored.crateIndex },
     message: [`Design loaded: ${file.settings.quantity} × ${part.name}.`, ...notes].join(" "),
   };
 }

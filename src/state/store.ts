@@ -1,9 +1,10 @@
 import { create } from "zustand";
 import { catalog, modelUrl } from "@/domain/catalog";
 import type { Assembly } from "@/domain/crate";
-import { computeDesign, DEFAULT_SETTINGS, settingsFromStandards, type DesignResult } from "@/domain/design";
+import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult } from "@/domain/design";
 import { diffDesigns, type DesignChange } from "@/domain/diff";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
+import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CrateSettings, type DesignPart, type Part, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import type { Units } from "@/lib/units";
@@ -94,6 +95,11 @@ export interface DesignerState {
   measured: Vec3 | null;
   settings: CrateSettings;
   layoutKey: string | null;
+  /** How the batch ships: one crate, or crate types with counts when it is split (#25). */
+  plan: ShipmentPlan;
+  /** The crate type on screen (index into `plan.crates`); 3D, Layouts, Cut list and Checks follow it. */
+  crateIndex: number;
+  /** The shown crate type's layouts and design: `plan.crates[crateIndex].result`. */
   result: DesignResult;
   /** Extra catalog entries from a dropped parts.json. */
   extraParts: Part[];
@@ -117,7 +123,9 @@ export interface DesignerState {
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
-  loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null) => void;
+  loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex?: number) => void;
+  /** Shows another crate type of a split batch. Out-of-range indexes are ignored. */
+  setCrateIndex: (index: number) => void;
   setMeasured: (size: Vec3) => void;
   /**
    * Name, material and mass for a part loaded without catalog data. Validated;
@@ -181,6 +189,12 @@ export function currentMode(v: Pick<ViewState, "lid" | "front" | "explode">): Mo
   return null;
 }
 
+/** The preloaded part's plan: one crate at the default quantity. */
+function initialPlan(): Pick<DesignerState, "plan" | "crateIndex" | "result"> {
+  const plan = planShipment(initialPart, DEFAULT_SETTINGS);
+  return { plan, crateIndex: 0, result: plan.crates[0].result };
+}
+
 export const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -204,11 +218,16 @@ export const useDesigner = create<DesignerState>()((set, get) => {
    */
   const recompute = (patch: Partial<DesignerState>, source?: ChangeSource) => {
     const next = { ...get(), ...patch };
-    const result = computeDesign(next.part, next.settings, next.layoutKey, next.standards);
+    const plan = planShipment(next.part, next.settings, next.layoutKey, next.standards);
+    // Stay on the crate type on screen while the plan still has it.
+    const crateIndex = next.crateIndex < plan.crates.length ? next.crateIndex : 0;
+    const result = plan.crates[crateIndex].result;
     const pinGone = next.pin && !result.design?.bom.some((l) => l.key === next.pin);
     const sizeChanged = result.design?.layout.key !== get().result.design?.layout.key || patch.part;
     set({
       ...patch,
+      plan,
+      crateIndex,
       result,
       ...(source ? change(source, get().result, result) : { lastChange: null }),
       hover: null,
@@ -233,7 +252,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     measured: null,
     settings: DEFAULT_SETTINGS,
     layoutKey: null,
-    result: computeDesign(initialPart, DEFAULT_SETTINGS),
+    ...initialPlan(),
     extraParts: [],
     standards: DEFAULT_STANDARDS,
 
@@ -258,8 +277,13 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         layoutKey: null,
         settings: normalizeSettings({ quantity: part.suggested_quantities[0] ?? 1 }, get().settings),
       }),
-    loadDesign: (part, settings, layoutKey) =>
-      recompute({ part, measured: null, pin: null, layoutKey, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
+    loadDesign: (part, settings, layoutKey, crateIndex = 0) =>
+      recompute({ part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
+    setCrateIndex: (index) => {
+      const { plan, crateIndex, fit } = get();
+      if (index === crateIndex || !Number.isInteger(index) || index < 0 || index >= plan.crates.length) return;
+      set({ crateIndex: index, result: plan.crates[index].result, pin: null, hover: null, fit: { nonce: fit.nonce + 1, instant: false } });
+    },
     setMeasured: (measured) => set({ measured }),
     setPartDetails: (input) => {
       const current = get().part;
@@ -279,10 +303,12 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       }
       // Name and material don't move anything: refresh the result (checks may quote the
       // part) without re-framing the camera or dropping the user's layout pick.
-      const { settings, layoutKey, standards } = get();
-      const result = computeDesign(part, settings, layoutKey, standards);
+      const { settings, layoutKey, standards, crateIndex } = get();
+      const plan = planShipment(part, settings, layoutKey, standards);
+      const index = crateIndex < plan.crates.length ? crateIndex : 0;
+      const result = plan.crates[index].result;
       const source: ChangeSource = mass_kg !== undefined ? "mass" : "material" in meta ? "material" : "name";
-      set({ part, result, ...change(source, get().result, result) });
+      set({ part, plan, crateIndex: index, result, ...change(source, get().result, result) });
       return null;
     },
     // Settings are clamped or rejected per field here (normalizeSettings), so the domain never sees bad values.

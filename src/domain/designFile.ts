@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { version } from "../../package.json";
 import type { CrateDesign } from "./crate";
-import { computeDesign } from "./design";
 import { CrateSettingsSchema, Vec3Schema, type CrateSettings, type DesignPart, type Vec3 } from "./schema";
+import { describeShipment, planShipment, type ShipmentPlan } from "./shipment";
+import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
  * The saved design file (#28, spec §6.4): a versioned, zod-validated JSON document that
@@ -50,6 +51,11 @@ export const DesignFileSchema = z.object({
     outsideMm: Vec3Schema,
     /** Gross weight, kg, one decimal. */
     grossKg: z.number().positive(),
+    /**
+     * Only for a batch split across crates (#25): each crate type's count and parts per
+     * crate. The rest of the summary then describes the crate type that was on screen.
+     */
+    shipment: z.array(z.object({ count: z.number().int().positive(), quantity: z.number().int().positive() })).min(1).optional(),
   }),
 });
 export type DesignFile = z.infer<typeof DesignFileSchema>;
@@ -59,12 +65,14 @@ export interface SerializeInput {
   settings: CrateSettings;
   layoutKey: string;
   design: CrateDesign;
+  /** The shipment plan the design belongs to; a split is recorded in the summary. */
+  plan?: ShipmentPlan;
   /** ISO timestamp; passed in so this stays pure. */
   savedAt: string;
 }
 
 /** The design as pretty-printed JSON, ending in a newline. */
-export function serializeDesign({ part, settings, layoutKey, design, savedAt }: SerializeInput): string {
+export function serializeDesign({ part, settings, layoutKey, design, plan, savedAt }: SerializeInput): string {
   const file: DesignFile = {
     kind: DESIGN_FILE_KIND,
     schemaVersion: DESIGN_SCHEMA_VERSION,
@@ -73,7 +81,10 @@ export function serializeDesign({ part, settings, layoutKey, design, savedAt }: 
     part: DesignFilePartSchema.parse(part),
     settings: CrateSettingsSchema.parse(settings),
     layoutKey,
-    summary: summarize(design),
+    summary: {
+      ...summarize(design),
+      ...(plan?.split ? { shipment: plan.crates.map((c) => ({ count: c.count, quantity: c.quantity })) } : {}),
+    },
   };
   return JSON.stringify(file, null, 2) + "\n";
 }
@@ -141,6 +152,8 @@ export interface RestoredDesign {
   layoutKey: string | null;
   /** Plain sentences on anything that came out differently from the saved design. */
   notes: string[];
+  /** Which crate type of a split batch to show (0 for a single crate). */
+  crateIndex: number;
 }
 
 /**
@@ -148,14 +161,24 @@ export interface RestoredDesign {
  * against the saved summary. The saved layout is kept if it still exists; otherwise the
  * recommended one is used and a note says so.
  */
-export function restoreDesign(file: DesignFile, part: DesignPart): RestoredDesign {
+export function restoreDesign(file: DesignFile, part: DesignPart, standards: ShopStandards = DEFAULT_STANDARDS): RestoredDesign {
   const { settings } = file;
   const notes: string[] = [];
-  const result = computeDesign(part, settings, file.layoutKey);
+  const plan = planShipment(part, settings, file.layoutKey, standards);
+  // The summary describes the crate type that was on screen: find it by its part count.
+  const crateIndex = Math.max(0, plan.crates.findIndex((c) => c.quantity === file.summary.quantity));
+  const result = plan.crates[crateIndex].result;
   const found = result.layouts.some((l) => l.key === file.layoutKey);
   if (!found) notes.push(`The saved layout (${file.summary.layout}) no longer fits, so the recommended layout is shown.`);
+  const saved = file.summary.shipment ?? [{ count: 1, quantity: settings.quantity }];
+  const same =
+    saved.length === plan.crates.length && saved.every((c, i) => c.count === plan.crates[i].count && c.quantity === plan.crates[i].quantity);
+  if (!same) {
+    const was = describeShipment({ crates: saved.map((c, i) => ({ ...c, label: String.fromCharCode(65 + i) })) });
+    notes.push(`The batch now ships as ${describeShipment(plan)} (saved: ${was}).`);
+  }
   const design = result.design;
-  if (design) {
+  if (design && same) {
     const now = summarize(design);
     const mm = (v: Vec3) => `${v.join(" × ")} mm`;
     if (now.outsideMm.some((v, i) => v !== file.summary.outsideMm[i])) {
@@ -165,5 +188,5 @@ export function restoreDesign(file: DesignFile, part: DesignPart): RestoredDesig
       notes.push(`Gross is now ${now.grossKg} kg (saved: ${file.summary.grossKg} kg).`);
     }
   }
-  return { settings, layoutKey: found ? file.layoutKey : null, notes };
+  return { settings, layoutKey: found ? file.layoutKey : null, notes, crateIndex };
 }

@@ -49,6 +49,7 @@ describe("ShopStandardsSchema", () => {
       minBlockingGapMm: 19,
     });
     expect(s.limits).toMatchObject({ ltlExcessiveLengthMm: 2438, stackKg: 100, baseRatingKg: 1000, stableHeightRatio: 1.5, lowUtilization: 0.25 });
+    expect(s.limits.perCrate).toEqual({ maxGrossKg: 1000, maxParts: 0 });
     expect(s.rates).toEqual({
       densityKgM3: { plywood: 600, lumber: 480 },
       costUsdPerM3: { plywood: 1100, lumber: 650 },
@@ -81,6 +82,9 @@ describe("ShopStandardsSchema", () => {
     ["a door wider than the trailer", { limits: { trailerMm: { doorWidth: 3000 } } }],
     ["blocking wider than two cleats", { stock: { blockWidthMm: 200 } }],
     ["a tiny cleat spacing", { construction: { maxCleatSpacingMm: 1 } }],
+    ["a zero max gross per crate", { limits: { perCrate: { maxGrossKg: 0 } } }],
+    ["a fractional part limit", { limits: { perCrate: { maxParts: 2.5 } } }],
+    ["a negative part limit", { limits: { perCrate: { maxParts: -1 } } }],
   ])("rejects %s", (_, patch) => {
     const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
     expect(r.ok).toBe(false);
