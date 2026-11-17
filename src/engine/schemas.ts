@@ -3,7 +3,7 @@ import { cogInsideBox, PartCogSchema } from "@/domain/cog";
 import { RANKINGS } from "@/domain/design";
 import { FACE_IDS } from "@/domain/profile";
 import { CrateSettingsSchema, PartSchema, Vec3Schema } from "@/domain/schema";
-import type { ShipmentPlan } from "@/domain/shipment";
+import { TotalSplitSchema, type ShipmentPlan } from "@/domain/shipment";
 import { ShopStandardsSchema } from "@/domain/standards";
 import type { SweepRequest, SweepResponse } from "./sweep";
 
@@ -49,6 +49,11 @@ export const UnitsSchema = z.enum(["imperial", "metric"]);
 /**
  * One design: a part, its packing rules (`settings.quantity` is the batch), the shop standards,
  * an optional layout pick and the ranking. `planShipment` runs on exactly these.
+ *
+ * `total` (#140) is a job's Parts to ship as the crate types it splits into (`planTotal`'s answer).
+ * When it is set the request is for the whole shipment: `planTotalShipment` designs those crates,
+ * and the quantity and layout pick are not read (`totalRequest` in request.ts fixes them, so
+ * requests for one total hash alike). It is hashed; without it a request hashes as it always did.
  */
 export const DesignRequestSchema = z.object({
   part: DesignPartSchema,
@@ -56,6 +61,7 @@ export const DesignRequestSchema = z.object({
   standards: ShopStandardsSchema,
   layoutKey: z.string().nullable(),
   ranking: RankingSchema,
+  total: TotalSplitSchema.nullable().optional(),
 });
 export type DesignRequest = z.infer<typeof DesignRequestSchema>;
 

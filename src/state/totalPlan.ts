@@ -1,12 +1,17 @@
 import { useMemo } from "react";
 import type { Message } from "@/domain/message";
+import type { CrateSettings, DesignPart } from "@/domain/schema";
+import { planTotalShipment, type ShipmentPlan, type TotalSplit } from "@/domain/shipment";
+import type { ShopStandards } from "@/domain/standards";
 import { planTotal, type QuantitySweep } from "@/domain/sweep";
 import { explainTotalPlan, planText } from "@/domain/totalPlan";
+import { totalSplitFor } from "@/engine/request";
 import { MAX_TOTAL_QUANTITY } from "@/lib/api/designs";
 import type { TotalPlanResponse } from "@/lib/api/jobs";
-import { useBestQuantity } from "./bestQuantity";
+import { useBestQuantity, useSweep } from "./bestQuantity";
 import { useJobSync } from "./jobSync";
 import { changesFor, effectiveJob, usePendingChanges } from "./pendingChanges";
+import { useDesigner } from "./store";
 
 /**
  * The job's total quantity and how it ships (spec §7.16), for the shared job section and the
@@ -161,4 +166,59 @@ export function useTotalPlan(): TotalPlanView {
   const { sweep, current } = useBestQuantity();
   const server = useJobSync((s) => s.totalPlan);
   return useMemo(() => totalPlanView({ total, unsynced, sweep, sweepCurrent: current, server }), [total, unsynced, sweep, current, server]);
+}
+
+/**
+ * The shipment the exports and the header describe (#140): the job's total plan when Parts to ship is
+ * set and a plan passes every check, else the on-screen plan (`plan`). With a total, `plan` is
+ * `planTotalShipment` of the plan's crate types (its counts, gross, lumber, cost), not the capped
+ * plan of the crate on screen, and `total` is the split a design request carries.
+ */
+export interface WholeShipment {
+  total: TotalSplit | null;
+  plan: ShipmentPlan;
+}
+
+/** `view`'s shown plan as the split a request carries, or null when there is no total or no plan for it. */
+export function totalSplitOf(view: Pick<TotalPlanView, "total" | "shown">): TotalSplit | null {
+  const shown = view.shown;
+  return view.total && shown ? totalSplitFor(shown.total, shown.crates) : null;
+}
+
+/** The whole shipment for the design on screen (`s`) and the total plan `view`. Pure. */
+export function wholeShipment(
+  s: { part: DesignPart; settings: CrateSettings; standards: ShopStandards; plan: ShipmentPlan },
+  view: Pick<TotalPlanView, "total" | "shown">,
+): WholeShipment {
+  const total = totalSplitOf(view);
+  return total ? { total, plan: planTotalShipment(s.part, s.settings, total, s.standards) } : { total: null, plan: s.plan };
+}
+
+/** `wholeShipment` for the part on screen. */
+export function useWholeShipment(): WholeShipment {
+  const part = useDesigner((s) => s.part);
+  const settings = useDesigner((s) => s.settings);
+  const standards = useDesigner((s) => s.standards);
+  const plan = useDesigner((s) => s.plan);
+  const view = useTotalPlan();
+  const total = useMemo(() => totalSplitOf(view), [view]);
+  return useMemo(
+    () => (total ? { total, plan: planTotalShipment(part, settings, total, standards) } : { total: null, plan }),
+    [total, part, settings, standards, plan],
+  );
+}
+
+/**
+ * The total plan in effect right now, read outside React (an export's click): this browser's sweep
+ * for the part and rules on screen, with the server's plan behind it, as `useTotalPlan` shows.
+ */
+export function totalPlanViewNow(): TotalPlanView {
+  const job = useJobSync.getState();
+  const { part } = useDesigner.getState();
+  const mine = changesFor(usePendingChanges.getState().items, job.job?.id ?? null, job.partKey);
+  const { totalQuantity } = effectiveJob(job.job, mine);
+  const unsynced = mine.some((c) => c.kind === "patch" && c.changes.totalQuantity !== undefined && c.state !== "rejected");
+  const { inputs, done } = useSweep.getState();
+  const sweep = done && done.inputs.part === part ? done.sweep : null;
+  return totalPlanView({ total: totalQuantity ?? null, unsynced, sweep, sweepCurrent: !!done && done.inputs === inputs, server: job.totalPlan });
 }

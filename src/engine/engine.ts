@@ -1,5 +1,5 @@
 import type { DesignPart } from "@/domain/schema";
-import { planShipment, type ShipmentPlan } from "@/domain/shipment";
+import { planShipment, planTotalShipment, type ShipmentPlan } from "@/domain/shipment";
 import { candidateQuantities } from "@/domain/sweep";
 import { bomToCsv, shipmentToCsv } from "@/lib/csv";
 import { cutListFileName } from "@/lib/fileNames";
@@ -39,8 +39,12 @@ export const designPartOf = (p: DesignPart): DesignPart => ({
  * values hash the same in every runtime, whatever order their keys were set in.
  */
 export function inputHash(req: DesignRequest): string {
-  const { part, settings, standards, layoutKey, ranking } = req;
-  return sha256Text(canonicalJson({ v: INPUT_HASH_SCHEMA, part: designPartOf(part), settings, standards, layoutKey: layoutKey ?? null, ranking }));
+  const { part, settings, standards, layoutKey, ranking, total } = req;
+  // The total (#140) is hashed only when set, so a request without one hashes as it always did.
+  const whole = total
+    ? { total: { parts: total.parts, types: total.types.map((t) => ({ count: t.count, quantity: t.quantity, layoutKey: t.layoutKey ?? null })) } }
+    : {};
+  return sha256Text(canonicalJson({ v: INPUT_HASH_SCHEMA, part: designPartOf(part), settings, standards, layoutKey: layoutKey ?? null, ranking, ...whole }));
 }
 
 /** The stamp every engine output carries. */
@@ -71,7 +75,9 @@ export function summarize(plan: ShipmentPlan): DesignSummary {
 
 /** One design: how the batch ships (`planShipment`), its summary, and the stamp. Never throws for valid input. */
 export function designShipment(req: DesignRequest): DesignResponse {
-  const plan = planShipment(req.part, req.settings, req.layoutKey, req.standards, req.ranking);
+  const plan = req.total
+    ? planTotalShipment(req.part, req.settings, req.total, req.standards, req.ranking)
+    : planShipment(req.part, req.settings, req.layoutKey, req.standards, req.ranking);
   return { ...stamp(req), summary: summarize(plan), plan };
 }
 
@@ -83,8 +89,10 @@ export function cutList(req: CutListRequest, plan: ShipmentPlan = designShipment
   const crateType = plan.crates[req.crateIndex] ?? plan.crates[0];
   const design = crateType?.result.design;
   if (!design) throw new Error(plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : "There is no crate to list.");
-  const whole = plan.split && req.scope === "shipment";
+  // A job's total (#140) is always a shipment, even when it fits one crate: its CSV names the whole.
+  const shipment = plan.split || plan.total !== undefined;
+  const whole = shipment && req.scope === "shipment";
   const csv = whole ? shipmentToCsv(req.part, plan, req.units) : bomToCsv(req.part, design, req.units);
-  const fileName = cutListFileName({ partId: req.part.id, quantity: req.settings.quantity, split: plan.split, whole, crateLabel: crateType.label });
+  const fileName = cutListFileName({ partId: req.part.id, quantity: plan.totals.parts, split: shipment, whole, crateLabel: crateType.label });
   return { ...stamp(req), fileName, csv };
 }

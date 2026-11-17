@@ -11,6 +11,11 @@
  *   served from blob storage under a content-addressed key (`artifactKey`, `bundleKey`). The
  *   crate GLB's key and the bundle id also name the part model's sha256: the GLB embeds the mesh,
  *   and `inputHash` hashes the part's design fields only (spec §5.1).
+ * - **The job's total (#140):** when the job has a current total plan (`currentTotalPlan`), the
+ *   shipment-level files (`spec.pdf`, `cutlist.csv`, `bundle.zip`) are built from the configuration's
+ *   request with the total's crate types (`withTotal`), as the browser's Export package is, so they
+ *   describe the whole shipment; the keys carry the hash of that request. `crate.glb` stays the
+ *   configuration's own crate.
  * - **Deterministic bytes:** a file is dated with its configuration's `createdAt` (a bundle with
  *   its newest configuration's), in UTC, imperial units (the app's default): the same inputs and
  *   engine always give the same bytes, which is what makes the key content-addressed.
@@ -18,6 +23,9 @@
  */
 import { createHash } from "node:crypto";
 import { ARTIFACT_CONTENT_TYPES, type ArtifactRequest } from "@/engine/artifacts";
+import { inputHash } from "@/engine/engine";
+import { totalSplitFor, withTotal } from "@/engine/request";
+import type { TotalSplit } from "@/domain/shipment";
 import { type DesignRequest, DesignRequestSchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
 import { ARTIFACT_FILE_KINDS, type ArtifactFileName, type ArtifactUrlResponse, type BundleResponse, MAX_BUNDLE_CONFIGS } from "@/lib/api/artifacts";
@@ -26,6 +34,7 @@ import type { BlobStore } from "../blob/store";
 import type { OrgContext } from "../db/org";
 import { createRepository, type Database, type DesignJob, inTransaction, type JobConfiguration, type Repository } from "../db/repository";
 import { ApiFailure, requireId } from "../http";
+import { currentTotalPlan } from "../jobs/totalPlan";
 import { BundleJobPayloadSchema, enqueueBundle } from "../queue/jobs";
 import { type JobHandler, PermanentJobError } from "../queue/runner";
 import type { EnginePool } from "../workers/pool";
@@ -62,6 +71,12 @@ function designRequest(config: JobConfiguration): DesignRequest {
   const parsed = DesignRequestSchema.safeParse(config.settings);
   if (!parsed.success) throw new ApiFailure(422, "invalid_request", "This configuration was saved by an older version and can't be rebuilt. Save it again.");
   return parsed.data;
+}
+
+/** The job's current total plan as the split a request carries (#140), or null: no total, not planned yet, or no plan passes. */
+function jobTotal(job: DesignJob): TotalSplit | null {
+  const current = currentTotalPlan(job);
+  return current?.plan ? totalSplitFor(current.total, current.plan.types) : null;
 }
 
 /** The request with how the part's model is read (its scale and up axis, spec §4); not hashed. */
@@ -111,12 +126,15 @@ export async function configurationArtifact(jobId: string, configurationId: stri
   const job = await requireJob(repo, org, jobId);
   const config = await repo.configurations.getForJob(org, job.id, requireId(configurationId, "configuration"));
   if (!config) throw new ApiFailure(404, "not_found", NO_CONFIG);
-  const req = designRequest(config);
+  // Everything but the crate's own model describes the whole shipment when the job has a total (#140).
+  const total = kind === "glb" ? null : jobTotal(job);
+  const req = withTotal(designRequest(config), total);
+  const hash = total ? inputHash(req) : config.inputHash;
 
   let stored: Stored;
   try {
     stored = await storeOnce(deps, {
-      key: artifactKey(org, config.inputHash, ENGINE_VERSION, file as ArtifactFileName, kind === "glb" ? await jobModelSha256(repo, org, job) : null),
+      key: artifactKey(org, hash, ENGINE_VERSION, file as ArtifactFileName, kind === "glb" ? await jobModelSha256(repo, org, job) : null),
       kind,
       configurationId: config.id,
       jobId: job.id,
@@ -132,10 +150,10 @@ export async function configurationArtifact(jobId: string, configurationId: stri
     if (e instanceof Error && e.name === "NoCrateError") throw new ApiFailure(422, "invalid_request", `There is no crate to export: ${e.message}`);
     throw e;
   }
-  return urlResponse(stored, await presigned(blob, stored), config.inputHash);
+  return urlResponse(stored, await presigned(blob, stored), hash);
 }
 
-type BundlePlan = { job: DesignJob; configs: JobConfiguration[]; bundleId: string; bundleHash: string };
+type BundlePlan = { job: DesignJob; configs: JobConfiguration[]; bundleId: string; bundleHash: string; total: TotalSplit | null };
 
 /**
  * Which configurations a bundle holds: `ids` in order (duplicates and equal inputs once), or every
@@ -155,20 +173,23 @@ async function planBundle(repo: Repository, org: OrgContext, jobId: string, ids:
   } else {
     configs = (await repo.configurations.listForJob(org, job.id)).slice(0, MAX_BUNDLE_CONFIGS);
   }
+  // With a total (#140) each configuration is built as the whole shipment, so equal shipments are one folder.
+  const total = jobTotal(job);
+  const hashes = new Map(configs.map((c) => [c, total ? inputHash(withTotal(designRequest(c), total)) : c.inputHash]));
   const seen = new Set<string>();
-  configs = configs.filter((c) => !seen.has(c.inputHash) && seen.add(c.inputHash));
+  configs = configs.filter((c) => !seen.has(hashes.get(c)!) && seen.add(hashes.get(c)!));
   if (!configs.length) throw new ApiFailure(422, "invalid_request", "This job has no saved configurations to bundle yet.", "configs");
   // The manifest's bundleHash (spec §7.17): SHA-256 of the input hashes joined by newlines. The
   // id adds the part model (the bundle's GLBs embed it) and the engine version.
-  const bundleHash = sha256(configs.map((c) => c.inputHash).join("\n"));
+  const bundleHash = sha256(configs.map((c) => hashes.get(c)!).join("\n"));
   const model = modelSegment(await jobModelSha256(repo, org, job));
-  return { job, configs, bundleHash, bundleId: `${bundleHash}-${model}-${versionSegment(ENGINE_VERSION)}` };
+  return { job, configs, total, bundleHash, bundleId: `${bundleHash}-${model}-${versionSegment(ENGINE_VERSION)}` };
 }
 
 /** Builds (or finds) a planned bundle. Shared by the request path and the queue's `bundle` job. */
 async function storeBundle(plan: BundlePlan, deps: ArtifactsDeps, repo: Repository): Promise<Stored> {
   const { blob, org } = deps;
-  const requests = plan.configs.map(designRequest);
+  const requests = plan.configs.map((c) => withTotal(designRequest(c), plan.total));
   const newest = plan.configs.reduce((t, c) => (c.createdAt > t ? c.createdAt : t), plan.configs[0]!.createdAt);
   return storeOnce(deps, {
     key: bundleKey(org, plan.bundleId),
