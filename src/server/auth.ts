@@ -31,7 +31,7 @@ export interface AuthenticateOptions {
 }
 
 /** True for a request from this app's own pages. */
-export function isSameOriginUi(request: Request): boolean {
+function isSameOriginUi(request: Request): boolean {
   return request.headers.get("sec-fetch-site") === "same-origin";
 }
 

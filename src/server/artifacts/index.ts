@@ -13,7 +13,7 @@ import type { ArtifactsDeps } from "./service";
 export { BUNDLE_SYNC_MAX_CONFIGS, configurationArtifact, createBundleHandler, jobBundle, type ArtifactsDeps, type BundleOutcome } from "./service";
 
 /** The process's engine pool, or a 503 the client can read when its thread bundle isn't built. */
-export function requireEnginePool() {
+function requireEnginePool() {
   try {
     return getEnginePool();
   } catch (e) {

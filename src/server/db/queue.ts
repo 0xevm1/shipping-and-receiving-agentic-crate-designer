@@ -20,10 +20,6 @@ export const QUEUE_CHANNEL = "crate_jobs";
 export const QUEUE_BACKOFF = { baseMs: 1_000, maxMs: 5 * 60_000 } as const;
 export const DEFAULT_MAX_ATTEMPTS = 5;
 
-export function retryDelayMs(attempt: number, backoff: { baseMs: number; maxMs: number } = QUEUE_BACKOFF): number {
-  return Math.min(backoff.maxMs, backoff.baseMs * 2 ** Math.max(0, attempt - 1));
-}
-
 export interface EnqueueInput {
   kind: string;
   payload: Record<string, unknown>;
@@ -139,7 +135,7 @@ export function createQueueStore(db: Executor) {
     },
 
     /**
-     * Records a failed attempt. Retries later (`queued`, `run_at` pushed back by `retryDelayMs`)
+     * Records a failed attempt. Retries later (`queued`, `run_at` pushed back by `QUEUE_BACKOFF`)
      * until `max_attempts`, or at once goes `dead` when `permanent` or out of attempts. Returns the
      * new status, or undefined when the lease was lost.
      */

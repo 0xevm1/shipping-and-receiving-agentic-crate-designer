@@ -13,14 +13,14 @@ export type ApiKey = typeof apiKey.$inferSelect;
 /** A key's row without its hash, for listing. */
 export type ApiKeyInfo = Omit<ApiKey, "keyHash">;
 
-export const API_KEY_PREFIX = "cdk_";
+const API_KEY_PREFIX = "cdk_";
 /** `cdk_` + 43 base64url characters (32 bytes). */
 const API_KEY_PATTERN = /^cdk_[A-Za-z0-9_-]{43}$/;
 
-export const hashApiKey = (key: string): string => createHash("sha256").update(key).digest("hex");
+const hashApiKey = (key: string): string => createHash("sha256").update(key).digest("hex");
 
 /** A new random key. Shown once; only `hashApiKey(key)` is kept. */
-export const generateApiKey = (): string => API_KEY_PREFIX + randomBytes(32).toString("base64url");
+const generateApiKey = (): string => API_KEY_PREFIX + randomBytes(32).toString("base64url");
 
 /** Don't write `last_used_at` more often than this per key (a busy script would write on every call). */
 const LAST_USED_RESOLUTION_MS = 60_000;

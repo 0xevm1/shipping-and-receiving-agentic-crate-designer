@@ -23,11 +23,11 @@ export class EngineWorkerMissingError extends Error {
   }
 }
 
-export function engineWorkerPath(env: NodeJS.ProcessEnv = process.env): string {
+function engineWorkerPath(env: NodeJS.ProcessEnv = process.env): string {
   return env.ENGINE_WORKER_PATH || join(/* turbopackIgnore: true */ process.cwd(), ENGINE_WORKER_FILE);
 }
 
-export function defaultPoolSize(env: NodeJS.ProcessEnv = process.env): number {
+function defaultPoolSize(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number(env.ENGINE_POOL_SIZE);
   if (Number.isInteger(n) && n > 0) return n;
   return Math.max(1, Math.min(4, availableParallelism() - 1));
