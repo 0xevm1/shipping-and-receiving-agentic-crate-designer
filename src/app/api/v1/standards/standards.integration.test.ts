@@ -93,3 +93,20 @@ describe("the queue's sweep", () => {
     expect(seen[0]!.standards.rates.costUsdPerM3.plywood).not.toBe(DEFAULT_STANDARDS.rates.costUsdPerM3.plywood);
   });
 });
+
+describe("fork entry (#112)", () => {
+  it("keeps a stored side entry, and reads a row stored before the field existed as end entry", async () => {
+    const current = (await t.repo.standards.current(DEFAULT_ORG))!;
+    const sides = withWood(1200);
+    sides.handling.forkEntry = "sides";
+    const saved = StandardsResponseSchema.parse(await (await put({ standards: sides, baseVersion: current.version })).json());
+    expect(saved.standards.handling.forkEntry).toBe("sides");
+
+    // A row an older build wrote has no `forkEntry`.
+    const old = withWood(1100) as unknown as { handling: Record<string, unknown> };
+    delete old.handling.forkEntry;
+    await t.repo.standards.put(DEFAULT_ORG, old as unknown as ShopStandards, saved.version);
+    const now = StandardsResponseSchema.parse(await (await GET(new Request(URL_))).json());
+    expect(now.standards.handling.forkEntry).toBe("ends");
+  });
+});
