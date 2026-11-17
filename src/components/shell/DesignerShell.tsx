@@ -10,6 +10,7 @@ import { SizeLabels } from "../viewer/SizeLabels";
 import { Flash } from "./ChangeFeedback";
 import { Credit } from "./Credit";
 import { PartHeader } from "./PartHeader";
+import { useFocusTrap } from "./useFocusTrap";
 import { useLoadFiles } from "./useLoadFiles";
 import { ViewBar } from "./ViewBar";
 
@@ -29,8 +30,6 @@ const ISLAND_GAP = 56;
 /** Narrow screens: side margins, and the gap kept between the crate and the header or the foot. */
 const NARROW_SIDE = 12;
 const NARROW_GAP = 8;
-
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function subscribeNarrow(onChange: () => void) {
   const mq = window.matchMedia(NARROW);
@@ -115,39 +114,7 @@ export function DesignerShell() {
 
   // The drawer is modal: focus moves into it, Tab cycles inside it, and closing returns focus
   // to the hamburger.
-  const wasOpen = useRef(false);
-  useEffect(() => {
-    const island = islandRef.current;
-    if (!drawer || !island) {
-      if (wasOpen.current && narrow) burgerRef.current?.focus();
-      wasOpen.current = false;
-      return;
-    }
-    wasOpen.current = true;
-    island.querySelector<HTMLElement>(".drawer-close")?.focus();
-    const trap = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const items = [...island.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-        (el) => !el.hasAttribute("disabled") && !el.hidden && el.getClientRects().length > 0,
-      );
-      if (!items.length) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      if (!island.contains(active)) {
-        e.preventDefault();
-        first.focus();
-      } else if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", trap);
-    return () => document.removeEventListener("keydown", trap);
-  }, [drawer, narrow]);
+  useFocusTrap(islandRef, drawer, { initial: ".drawer-close", restore: burgerRef });
 
   // The crate is centred in the space the overlays leave free.
   useEffect(() => {
@@ -190,20 +157,25 @@ export function DesignerShell() {
     };
   }, [panelsHidden]);
 
-  // Drop a .glb (and optionally a parts.json) anywhere on the page.
+  // Drop a .glb (and optionally a parts.json) anywhere on the page. Only file drags count:
+  // dragging selected text over the page must not raise the veil or lose its drop.
   useEffect(() => {
     let depth = 0;
+    const hasFiles = (e: DragEvent) => Boolean(e.dataTransfer?.types.includes("Files"));
     const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       depth++;
       setDragging(true);
     };
-    const over = (e: DragEvent) => e.preventDefault();
-    const leave = () => {
+    const over = (e: DragEvent) => hasFiles(e) && e.preventDefault();
+    const leave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
       depth = Math.max(0, depth - 1);
       if (!depth) setDragging(false);
     };
     const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       depth = 0;
       setDragging(false);
@@ -313,7 +285,7 @@ function Tooltip() {
   if (!tip) return null;
   const left = Math.min(tip.x + 14, window.innerWidth - 260);
   return (
-    <div className="tip glass" style={{ position: "fixed", left, top: tip.y + 16 }}>
+    <div className="tip glass" style={{ left, top: tip.y + 16 }}>
       <b>{tip.title}</b>
       <span className="nominal">{tip.detail}</span>
     </div>

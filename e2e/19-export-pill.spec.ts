@@ -168,8 +168,14 @@ test("the busy state holds for at least 1.5 s with motion on", async ({ page }) 
 test("Hide panels hides the pill with the header", async ({ page }) => {
   await openApp(page);
   await page.getByRole("button", { name: "Hide panels" }).click();
-  await expect(page.locator(".tl")).toHaveCSS("opacity", "0");
-  await expect(page.locator(".tl")).toHaveCSS("pointer-events", "none");
+  await expect(page.locator(".tl")).toHaveCSS("visibility", "hidden");
+  await expect(pill(page)).toBeHidden();
+  // The hidden Export button can't be reached with the keyboard, either way round.
+  await page.getByRole("button", { name: "Show panels" }).focus();
+  for (const key of ["Tab", "Shift+Tab", "Shift+Tab"]) {
+    await page.keyboard.press(key);
+    expect(await page.evaluate(() => !!document.activeElement?.closest(".tl"))).toBe(false);
+  }
 });
 
 test("on a phone the pill stays under the part lines, at touch size", async ({ page }) => {

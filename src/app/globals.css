@@ -564,6 +564,10 @@ h1.brand {
   display: grid;
   gap: 12px;
 }
+.pop-switches {
+  display: grid;
+  gap: 10px;
+}
 .pop .seg {
   background: rgba(255, 255, 255, 0.05);
   padding: 3px;
@@ -692,15 +696,25 @@ h1.brand {
 .island,
 .loadrow,
 .br .hideable {
-  transition: opacity 0.2s;
+  transition:
+    opacity 0.2s,
+    visibility 0s;
 }
-/* The credit stays on screen when panels are hidden. */
+/*
+ * The credit stays on screen when panels are hidden. `visibility: hidden` (not just opacity 0)
+ * takes the controls out of the tab order and the accessibility tree; it switches after the
+ * fade, and straight back on when the panels return.
+ */
 .hud-off .tl,
 .hud-off .island,
 .hud-off .loadrow,
 .hud-off .br .hideable {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
+  transition:
+    opacity 0.2s,
+    visibility 0s linear 0.2s;
 }
 
 /* ---- The island ---- */
@@ -1550,8 +1564,13 @@ h1.brand {
   .island,
   .drawer-open .island,
   .loadrow,
+  .br .hideable,
+  .hud-off .tl,
+  .hud-off .island,
+  .hud-off .loadrow,
+  .hud-off .br .hideable,
   .partmeta .pf {
-    /* The narrow drawer (#42) appears and goes without a slide. */
+    /* The narrow drawer appears and goes without a slide, and Hide panels without a fade. */
     transition: none;
   }
   /* Changed values don't flash and the note doesn't fade; it still shows, then goes. */
