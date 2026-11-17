@@ -8,7 +8,7 @@ import { MODEL_UNITS, UP_AXES } from "./partFrame";
 import { usableProfile, type PartProfile } from "./profile";
 import { decodeProfile, EncodedProfileSchema } from "./profileCodec";
 import { CrateSettingsSchema, readSettings, Vec3Schema, type CrateSettings, type DesignPart, type Vec3 } from "./schema";
-import { describeShipment, planShipment, type ShipmentPlan } from "./shipment";
+import { describeShipment, planShipment, planTotalShipment, TotalSplitSchema, type ShipmentPlan, type TotalSplit } from "./shipment";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
@@ -26,8 +26,10 @@ export const DESIGN_FILE_KIND = "crate-design";
  * planned from a file depends on both.
  * 3: the part's file units and up axis joined the file, because the model is measured with them.
  * 4: `settings.keepUpright` became `settings.restingFaces`, the faces the part may rest on.
+ * 5: `total` joined the file (#140): a job's Parts to ship as its crate types, so a file made for a
+ * total opens and prints as the whole shipment. Optional, so format 4 files migrate as they are.
  */
-export const DESIGN_SCHEMA_VERSION = 4;
+export const DESIGN_SCHEMA_VERSION = 5;
 
 const DesignFilePartSchema = z.object({
   /** "catalog": the model ships with the app (/public/parts). "custom": the user supplies the GLB. */
@@ -82,6 +84,12 @@ const DesignFileSchema = z.object({
   ranking: z.enum(RANKINGS),
   /** Key of the layout on screen when saved (`Layout.key`). */
   layoutKey: z.string().min(1),
+  /**
+   * The job's total quantity as the crate types it ships in (#140), when the file is for a whole
+   * shipment: `settings.quantity` is then the fuller crate's, and the plan is these crates, not a
+   * search for `settings.quantity`. Absent for a batch planned from the settings.
+   */
+  total: TotalSplitSchema.optional(),
   summary: z.object({
     quantity: z.number().int().positive(),
     /** "2 × 2 × 1, As modeled": counts along X × Y × Z and the orientation. */
@@ -116,6 +124,8 @@ export interface SerializeInput {
   design: CrateDesign;
   /** The shipment plan the design belongs to; a split is recorded in the summary. */
   plan?: ShipmentPlan;
+  /** The job's total quantity when `plan` is its shipment (`planTotalShipment`); recorded as `total`. */
+  total?: TotalSplit | null;
   /** Who wrote the file; passed in so the domain does not read package metadata. */
   app: { name: string; version: string };
   /** ISO timestamp; passed in so this stays pure. */
@@ -125,7 +135,7 @@ export interface SerializeInput {
 }
 
 /** The design as pretty-printed JSON, ending in a newline. */
-export function serializeDesign({ part, settings, layoutKey, ranking = "volume", design, plan, app, savedAt, engine }: SerializeInput): string {
+export function serializeDesign({ part, settings, layoutKey, ranking = "volume", design, plan, total, app, savedAt, engine }: SerializeInput): string {
   const file: DesignFile = {
     kind: DESIGN_FILE_KIND,
     schemaVersion: DESIGN_SCHEMA_VERSION,
@@ -136,6 +146,7 @@ export function serializeDesign({ part, settings, layoutKey, ranking = "volume",
     settings: CrateSettingsSchema.parse(settings),
     ranking,
     layoutKey,
+    ...(total ? { total: TotalSplitSchema.parse(total) } : {}),
     summary: {
       ...summarize(design),
       ...(plan?.split ? { shipment: plan.crates.map((c) => ({ count: c.count, quantity: c.quantity })) } : {}),
@@ -183,6 +194,8 @@ const FORMAT = {
     },
     // 3 to 4: Keep parts upright on is "as modelled" (rest on the model's own base), off is "any face".
     3: (doc: Record<string, unknown>) => ({ ...doc, settings: readSettings(doc.settings) }),
+    // 4 to 5: `total` is optional, and no earlier file was for a total.
+    4: (doc: Record<string, unknown>) => doc,
   },
 };
 
@@ -232,7 +245,9 @@ export function restoreDesign(file: DesignFile, part: DesignPart, standards: Sho
   const savedCog = file.part.cog;
   const shaped: DesignPart =
     withOutline.cog || !savedCog || !cogInsideBox(savedCog.offsetMm, part.dimensions_mm) ? withOutline : { ...withOutline, cog: savedCog };
-  const plan = planShipment(shaped, settings, file.layoutKey, standards, file.ranking);
+  const plan = file.total
+    ? planTotalShipment(shaped, settings, file.total, standards, file.ranking)
+    : planShipment(shaped, settings, file.layoutKey, standards, file.ranking);
   // The summary describes the crate type that was on screen: find it by its part count.
   const crateIndex = Math.max(
     0,

@@ -23,10 +23,12 @@ export async function buildBundleZip(
   at = new Date(input.generatedAt),
 ): Promise<BundleZip> {
   const [{ buildBundle, zipBundle }, { glbMaker }] = await Promise.all([import("@/lib/exportBundle"), import("./glb")]);
-  const { part, settings, standards, ranking, layoutKey } = input;
-  const st = stamp({ part, settings, standards, ranking, layoutKey });
+  const { part, settings, standards, ranking, layoutKey, total } = input;
+  // The request the files are made from (#140): with a total, the whole shipment's, whose hash is the stamp.
+  const request = { part, settings, standards, ranking, layoutKey, ...(total ? { total } : {}) };
+  const st = stamp(request);
   const bundle = await buildBundle(
-    { ...input, stamp: st, sweep: input.sweep === undefined ? sweepFor({ part, settings, standards, ranking, layoutKey }) : input.sweep },
+    { ...input, stamp: st, sweep: input.sweep === undefined ? sweepFor(request) : input.sweep },
     {
       glb: glbMaker(input.part, read, { ...st }),
       pdf: async (doc) => (await import("@/lib/exportPdf")).printableToPdf(doc),

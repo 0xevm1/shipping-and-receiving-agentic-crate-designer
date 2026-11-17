@@ -20,22 +20,27 @@ import type { CrateDesign } from "@/domain/crate";
 import type { Ranking } from "@/domain/design";
 import { serializeDesign } from "@/domain/designFile";
 import type { CrateSettings } from "@/domain/schema";
-import { describeShipment, type ShipmentPlan } from "@/domain/shipment";
+import { describeShipment, type ShipmentPlan, type TotalSplit } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
 import { type LoadedPart } from "./part";
 import { APP } from "./appInfo";
 import type { QuantitySweep } from "@/domain/sweep";
 import { bomToCsv, shipmentToCsv, stampCsv } from "./csv";
-import { documentDate } from "./format";
+import { documentDate, groupThousands } from "./format";
 import { renderMessage } from "./message";
 import { designFilePart } from "./loadPart";
 import { buildPrintable, type PrintableDesign, type PrintableStamp } from "./printable";
-import type { Units } from "./units";
+import { groupDigits, type Units } from "./units";
 
 export interface BundleInput {
   part: LoadedPart;
   settings: CrateSettings;
   plan: ShipmentPlan;
+  /**
+   * The job's total quantity as its crate types (#140), when `plan` is that total's shipment
+   * (`planTotalShipment`): design.json records it. Absent for a batch planned from `settings.quantity`.
+   */
+  total?: TotalSplit | null;
   /** The crate type on screen; the design file records its layout. */
   crateIndex: number;
   standards: ShopStandards;
@@ -98,7 +103,7 @@ const encode = (s: string) => new TextEncoder().encode(s);
 
 /** The package's files, in the order they are zipped. */
 export async function buildBundle(input: BundleInput, make: BundleMakers): Promise<Bundle> {
-  const { part, settings, plan, crateIndex, standards, units, ranking, generatedAt, timeZone, stamp, sweep } = input;
+  const { part, settings, plan, total, crateIndex, standards, units, ranking, generatedAt, timeZone, stamp, sweep } = input;
   const csv = (text: string) => encode(stamp ? stampCsv(text, stamp) : text);
   const shown = plan.crates[crateIndex]?.result.design ?? plan.crates[0]?.result.design;
   if (!shown || plan.problem)
@@ -108,7 +113,7 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
     return { label: t.label, design: t.result.design };
   });
 
-  const stem = bundleStem(part.id, settings.quantity);
+  const stem = bundleStem(part.id, plan.totals.parts);
   const split = plan.split;
   const files: BundleFile[] = [];
   const notes: [string, string][] = [];
@@ -136,7 +141,7 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
       notes.push([name, `The cut list for one crate ${label}, for the shop floor or a spreadsheet.`]);
     }
     files.push({ name: "shipment-cut-list.csv", data: csv(shipmentToCsv(part, plan, units)) });
-    notes.push(["shipment-cut-list.csv", `Every piece for all ${plan.totals.crates} crates, equal pieces merged.`]);
+    notes.push(["shipment-cut-list.csv", `Every piece for all ${groupDigits(plan.totals.crates)} crates, equal pieces merged.`]);
   } else {
     files.push({ name: "cut-list.csv", data: csv(bomToCsv(part, shown, units)) });
     notes.push(["cut-list.csv", "The cut list, for the shop floor or a spreadsheet."]);
@@ -149,6 +154,7 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
     ranking,
     design: shown,
     plan,
+    ...(total ? { total } : {}),
     app: APP,
     savedAt: generatedAt,
     ...(stamp ? { engine: { version: stamp.engineVersion, inputHash: stamp.inputHash } } : {}),
@@ -172,7 +178,7 @@ function readme(input: BundleInput, stem: string, files: [string, string][]): st
     `Crate Designer export: ${stem}`,
     "",
     `Part:      ${part.id} ${part.name}`,
-    `Quantity:  ${plan.totals.parts}${plan.split ? `, shipping as ${describeShipment(plan).replace(/×/g, "x")}` : ""}`,
+    `Quantity:  ${groupDigits(plan.totals.parts)}${plan.split ? `, shipping as ${groupThousands(describeShipment(plan)).replace(/×/g, "x")}` : ""}`,
     `Made:      ${documentDate(generatedAt, timeZone)} (${generatedAt})`,
     `App:       ${APP.name} ${APP.version}`,
     ...(input.stamp ? [`Engine:    ${input.stamp.engineVersion}`, `Input:     ${input.stamp.inputHash}`] : []),
