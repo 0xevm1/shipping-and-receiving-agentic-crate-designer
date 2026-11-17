@@ -1,7 +1,7 @@
 "use client";
 
 import { useDesigner } from "@/state/store";
-import { exportNote, useExportRun } from "./exportRun";
+import { exportNote, useExportRun } from "@/state/exportRun";
 
 /**
  * The Export pill (#51), under the part header: one click downloads `crate-<part>-x<qty>.zip`

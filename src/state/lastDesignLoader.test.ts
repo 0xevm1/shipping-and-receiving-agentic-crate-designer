@@ -1,10 +1,11 @@
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentDesignFile } from "@/lib/currentDesign";
-import { saveLastGlb } from "@/state/glbCache";
-import { useLibrary } from "@/state/libraryStore";
-import { useDesigner } from "@/state/store";
+import { saveLastGlb } from "./glbCache";
 import { restoreLastDesign } from "./lastDesignLoader";
+import { useLibrary } from "./libraryStore";
+import { beginLoad } from "./loadSequence";
+import { useDesigner } from "./store";
 
 const initial = useDesigner.getState();
 const s = () => useDesigner.getState();
@@ -18,7 +19,7 @@ function savedCatalogCrate() {
   return { design, tab: "rules" as const, ranking: "cost" as const };
 }
 
-describe("reopening the last crate (#71)", () => {
+describe("reopening the last crate", () => {
   beforeEach(() => useDesigner.setState(initial, true));
   afterEach(() => {
     vi.restoreAllMocks();
@@ -41,6 +42,16 @@ describe("reopening the last crate (#71)", () => {
     // A new part starts it again.
     s().setPart(s().part);
     expect(s().designStartedAt).not.toBeNull();
+  });
+
+  it("applies nothing when a later load started while it was reading", async () => {
+    const saved = savedCatalogCrate();
+    const ticket = beginLoad();
+    const reopening = restoreLastDesign(saved, new IDBFactory(), ticket);
+    beginLoad();
+    expect(await reopening).toBe(false);
+    expect(s().settings).toEqual(initial.settings);
+    expect(s().tab).toBe(initial.tab);
   });
 
   it("without the custom part's GLB, keeps the default part, names the file and waits for it", async () => {

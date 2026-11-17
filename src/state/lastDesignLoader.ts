@@ -1,13 +1,12 @@
-"use client";
-
 import { catalog } from "@/domain/catalog";
 import { planShipment } from "@/domain/shipment";
 import { designFilePart, loadDesign } from "@/lib/loadPart";
-import { browserIdb, loadLastGlb, saveLastGlb } from "@/state/glbCache";
-import { createDebouncedSaver, lastDesignOf, saveLastDesign, type LastDesign } from "@/state/lastDesignStorage";
-import { useLibrary } from "@/state/libraryStore";
-import { browserStorage, type KeyValueStore } from "@/state/standardsStorage";
-import { useDesigner, type DesignerState, type LoadedPart } from "@/state/store";
+import { browserIdb, loadLastGlb, saveLastGlb } from "./glbCache";
+import { createDebouncedSaver, lastDesignOf, saveLastDesign, type LastDesign } from "./lastDesignStorage";
+import { useLibrary } from "./libraryStore";
+import { beginLoad, type LoadTicket } from "./loadSequence";
+import { browserStorage, type KeyValueStore } from "./standardsStorage";
+import { useDesigner, type DesignerState, type LoadedPart } from "./store";
 
 /**
  * Reopens the last-opened crate (spec §9) through the design-file path (`loadDesign`), with
@@ -15,15 +14,17 @@ import { useDesigner, type DesignerState, type LoadedPart } from "@/state/store"
  * from IndexedDB; when it isn't there (never kept, over the cap, or another file) the default
  * part stays, the load row names the file, and loading it reopens the design (like a shared
  * custom-part link). Anything else that fails falls back to the default part with a warning.
- * True when the crate was reopened.
+ * True when the crate was reopened. Nothing is applied once `ticket` is no longer current (the
+ * person loaded something else while this was reading), and then it resolves false.
  */
-export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | null = browserIdb()): Promise<boolean> {
+export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | null = browserIdb(), ticket: LoadTicket = beginLoad()): Promise<boolean> {
   const file = saved.design;
   const inCatalog = file.part.source === "catalog" && catalog.parts.some((p) => p.id === file.part.id);
   try {
     let glbs: File[] = [];
     if (!inCatalog) {
       const kept = await loadLastGlb(idb);
+      if (!ticket.current()) return false;
       if (!kept || kept.name !== file.part.model) {
         useLibrary.getState().setPendingShare(file);
         useDesigner
@@ -37,6 +38,10 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
     }
     const s = useDesigner.getState();
     const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, s.units);
+    if (!ticket.current()) {
+      if (outcome.part?.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
+      return false;
+    }
     if (!outcome.part || !outcome.design) {
       console.warn(`Last-opened crate not reopened, opening the default part. ${outcome.message}`);
       return false;
@@ -77,6 +82,19 @@ export function watchLastDesign({
   storage = browserStorage(),
   idb = browserIdb(),
 }: { saveNow?: boolean; storage?: KeyValueStore | null; idb?: IDBFactory | null } = {}) {
+  // The last GLB kept, so the same part re-loaded (e.g. its name edited) isn't written again.
+  let keptUrl: string | null = null;
+  const keepGlb = async (part: LoadedPart) => {
+    if (part.modelUrl === keptUrl || !part.model) return;
+    keptUrl = part.modelUrl;
+    try {
+      const bytes = await (await fetch(part.modelUrl)).arrayBuffer();
+      const r = await saveLastGlb(part.model, bytes, idb);
+      if (r === "too-big") console.warn(`${part.model} is over 50 MB, so it isn't kept for the next visit.`);
+    } catch (e) {
+      console.warn("Couldn't keep the part's model for the next visit.", e);
+    }
+  };
   const saver = createDebouncedSaver<LastDesign>((d) => saveLastDesign(d, storage));
   const schedule = (s: Watched) => {
     const d = lastDesignOf(s);
@@ -84,7 +102,7 @@ export function watchLastDesign({
   };
   const unsubscribe = useDesigner.subscribe((s, prev) => {
     if (changed(s, prev)) schedule(s);
-    if (s.part !== prev.part && s.part.modelUrl.startsWith("blob:") && designFilePart(s.part).source === "custom") void keepGlb(s.part, idb);
+    if (s.part !== prev.part && s.part.modelUrl.startsWith("blob:") && designFilePart(s.part).source === "custom") void keepGlb(s.part);
   });
   if (saveNow) schedule(useDesigner.getState());
   const onHide = () => saver.flush();
@@ -97,20 +115,4 @@ export function watchLastDesign({
     window.removeEventListener("pagehide", onHide);
     document.removeEventListener("visibilitychange", onVisibility);
   };
-}
-
-/** Last GLB kept, so the same part re-loaded (e.g. its name edited) isn't written again. */
-let keptUrl: string | null = null;
-
-/** Reads a loaded part's GLB back from its object URL and keeps it in IndexedDB. */
-async function keepGlb(part: LoadedPart, idb: IDBFactory | null) {
-  if (part.modelUrl === keptUrl || !part.model) return;
-  keptUrl = part.modelUrl;
-  try {
-    const bytes = await (await fetch(part.modelUrl)).arrayBuffer();
-    const r = await saveLastGlb(part.model, bytes, idb);
-    if (r === "too-big") console.warn(`${part.model} is over 50 MB, so it isn't kept for the next visit.`);
-  } catch (e) {
-    console.warn("Couldn't keep the part's model for the next visit.", e);
-  }
 }

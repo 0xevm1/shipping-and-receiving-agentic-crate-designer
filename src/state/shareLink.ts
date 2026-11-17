@@ -1,10 +1,8 @@
-"use client";
-
 import { catalog } from "@/domain/catalog";
 import { readShareHash } from "@/domain/shareLink";
-import { useLibrary } from "@/state/libraryStore";
-import { useDesigner } from "@/state/store";
-import { openDesignFile } from "./useLoadFiles";
+import { useLibrary } from "./libraryStore";
+import { useDesigner } from "./store";
+import { openDesignFile } from "./partLoader";
 
 /**
  * Opens a share link (spec §9): a design in the URL hash (`#design=…`). Called after the
