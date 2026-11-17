@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { APP } from "./appInfo";
 import { describe, expect, it } from "vitest";
 import { parts } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
@@ -56,7 +57,7 @@ describe("design files (#28)", () => {
   const settings = { ...DEFAULT_SETTINGS, quantity: 8, maxLayers: 3 };
   const designJson = (part: LoadedPart) => {
     const design = computeDesign(part, settings).design!;
-    return serializeDesign({ part: designFilePart(part), settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T00:00:00Z" });
+    return serializeDesign({ app: APP, part: designFilePart(part), settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T00:00:00Z" });
   };
   const jsonFile = (text: string, name = "design.json") => new File([text], name, { type: "application/json" });
   const shaft = catalogPart(parts.find((p) => p.id === "PART-002")!);

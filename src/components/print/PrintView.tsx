@@ -8,7 +8,7 @@ import { DEFAULT_UNITS, loadUnits } from "@/state/unitsStorage";
 import { PrintDocument } from "./PrintDocument";
 
 /**
- * The print route's body (#26). Client-only (loaded with `ssr: false`): it reads the design
+ * The print route's body. Client-only (loaded with `ssr: false`): it reads the design
  * from the URL hash (`src/lib/printLink.ts`), rebuilds it with this browser's shop standards,
  * renders the document, and opens the print dialog when the link asks for it.
  */

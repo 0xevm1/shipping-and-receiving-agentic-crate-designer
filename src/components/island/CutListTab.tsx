@@ -3,10 +3,9 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ASSEMBLIES, type BomLine, type CrateDesign } from "@/domain/crate";
 import { ASSEMBLY_NAMES, bomToCsv, downloadText, shipmentToCsv } from "@/domain/export";
-import { serializeDesign } from "@/domain/designFile";
 import { describeShipment, shipmentBom } from "@/domain/shipment";
 import { cutText, stockText } from "@/lib/format";
-import { designFilePart } from "@/lib/loadPart";
+import { currentDesignText } from "@/lib/currentDesign";
 import { PRINT_PATH, printHash } from "@/lib/printLink";
 import { area, lengthUnit, run } from "@/lib/units";
 import { useDesigner } from "@/state/store";
@@ -46,16 +45,8 @@ export function CutListTab({ design }: { design: CrateDesign }) {
     : whole
       ? `crate-${part.id}-x${quantity}-shipment.csv`
       : `crate-${part.id}-x${quantity}-crate-${crateType.label}.csv`;
-  /** The design file (§6.5) for the design on screen: the download, and the print link (#26). */
-  const designText = () =>
-    serializeDesign({
-      part: designFilePart(part),
-      settings: useDesigner.getState().settings,
-      layoutKey: design.layout.key,
-      design,
-      plan,
-      savedAt: new Date().toISOString(),
-    });
+  /** The design file (§6.5) for the design on screen: the download, and the print link. */
+  const designText = () => currentDesignText(useDesigner.getState()) ?? "";
 
   return (
     <>

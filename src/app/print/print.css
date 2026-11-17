@@ -1,5 +1,5 @@
 /*
- * The export document (#26): Letter pages, black on white, vector SVG drawings.
+ * The export document: Letter pages, black on white, vector SVG drawings.
  * Imported only by the print route. Next keeps a route's global CSS loaded after navigation,
  * so every rule is scoped to the print document (`.print-doc`, or `:has()` it).
  */
@@ -226,6 +226,12 @@ html:has(.print-doc, .print-loading) body {
 .print-doc .steps {
   margin: 0;
   padding-left: 18px;
+  /* The assembly order is read top to bottom as one sequence: never a step alone on a page. */
+  break-inside: avoid;
+}
+/* Fasteners and the assembly order: if they do not fit under the cut list, both go to the next page. */
+.print-doc .assembly-row {
+  break-inside: avoid;
 }
 .print-doc .steps li {
   margin-bottom: 7px;
@@ -274,6 +280,12 @@ html:has(.print-doc, .print-loading) body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+}
+/* The end view takes what the page has left, scaled to fit, so the label never spills onto a second page. */
+.print-doc .label .end-marks {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
 }
 .print-doc .part-no {
   font: 800 54px/1 var(--display);
@@ -346,7 +358,13 @@ html:has(.print-doc, .print-loading) body {
   .print-doc .sheet:last-child {
     break-after: auto;
   }
+  /* The page holds 10 in between its margins; the label is exactly one page of it. */
+  .print-doc .label-sheet {
+    break-inside: avoid;
+  }
   .print-doc .label {
-    min-height: 9.8in;
+    height: 9.8in;
+    min-height: 0;
+    overflow: hidden;
   }
 }

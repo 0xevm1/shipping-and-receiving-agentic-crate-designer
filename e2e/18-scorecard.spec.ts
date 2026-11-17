@@ -16,6 +16,20 @@ const crateCost = async (page: Page) => {
   return Number((text ?? "").replace(/[$,]/g, ""));
 };
 
+/** The tile's "$91 material + $95 labour" line as numbers. */
+const costSplit = async (page: Page) => {
+  const text = (await scorecard(page).textContent()) ?? "";
+  const m = /\$([\d,]+) material \+ \$([\d,]+) labour/.exec(text);
+  if (!m) throw new Error(`No cost split in: ${text}`);
+  return { material: Number(m[1].replace(/,/g, "")), labour: Number(m[2].replace(/,/g, "")) };
+};
+
+/** The first number in `text`, as written ("26.7 lb/ft³" gives 26.7). */
+const first = (text: string | null) => Number(/[\d,]+(\.\d+)?/.exec(text ?? "")?.[0].replace(/,/g, ""));
+
+/** What a scorecard tile shows, by its label. */
+const tile = async (page: Page, label: string) => (await scorecard(page).locator("div", { hasText: label }).locator("dd").first().textContent()) ?? "";
+
 /** Element crops for the PR (the full-page shots stay in e2e/screenshots). */
 async function crop(locator: Locator, name: string) {
   mkdirSync("e2e/screenshots/crops", { recursive: true });
@@ -38,18 +52,23 @@ test("the Overview shows the scorecard under the outside size, in imperial by de
   await openTab(page, "Overview");
   const card = scorecard(page);
   await expect(card).toBeVisible();
-  // PART-001 × 4 with the shipped standards (spec §7.11 worked example).
+  // The numbers themselves are pinned by the domain unit tests (spec §7.11); this checks the
+  // card is wired to them: every tile is there, in the right format, and the parts add up.
   await expect(card).toContainText("Crate cost");
-  await expect(card).toContainText("$186");
-  await expect(card).toContainText("$91 material + $95 labour");
   await expect(card).toContainText("Build time");
-  await expect(card).toContainText("2 h 43 m");
   await expect(card).toContainText("Freight class");
-  await expect(card).toContainText("65");
-  await expect(card).toContainText("26.7 lb/ft³");
   await expect(card).toContainText("Dim weight");
-  await expect(card).toContainText("139 lb");
-  await expect(card).toContainText("÷ 139 in³/lb");
+  const cost = await crateCost(page);
+  expect(cost).toBeGreaterThan(0);
+  const { material, labour } = await costSplit(page);
+  // Each part is rounded to whole dollars on its own, so the sum can be a dollar off.
+  expect(Math.abs(material + labour - cost)).toBeLessThanOrEqual(1);
+  expect(await tile(page, "Build time")).toMatch(/^(\d+ h )?\d+ m$/);
+  expect(await tile(page, "Freight class")).toMatch(/^\d+(\.5)?$/);
+  await expect(card).toContainText(/\d+\.\d lb\/ft³/);
+  const dimLb = first(await tile(page, "Dim weight"));
+  expect(await tile(page, "Dim weight")).toMatch(/^\d+ lb$/);
+  await expect(card).toContainText("÷ 139 in³/lb"); // the shipped dim-weight divisor, read from the standards
   // It sits between the outside size and the build chain.
   const order = await panel(page).evaluate((el) => {
     const big = el.querySelector(".big")!;
@@ -61,9 +80,14 @@ test("the Overview shows the scorecard under the outside size, in imperial by de
   await crop(card, "17-overview-scorecard");
   await shot(page, "17-overview-scorecard");
 
+  const lbFt3 = first(/(\d+\.\d) lb\/ft³/.exec((await card.textContent()) ?? "")?.[1] ?? null);
   await setUnits(page, "metric");
-  await expect(card).toContainText("428 kg/m³");
-  await expect(card).toContainText("63 kg"); // 139 lb of dim weight
+  // The same figures in metric: 1 lb/ft³ is 16.0185 kg/m³, and 1 kg is 2.20462 lb.
+  const kgM3 = first(/([\d,]+) kg\/m³/.exec((await card.textContent()) ?? "")?.[1] ?? null);
+  expect(Math.abs(kgM3 - lbFt3 * 16.0185)).toBeLessThanOrEqual(1);
+  const dimKg = first(await tile(page, "Dim weight"));
+  expect(await tile(page, "Dim weight")).toMatch(/^\d+ kg$/);
+  expect(Math.abs(dimKg - dimLb / 2.20462)).toBeLessThanOrEqual(1);
 });
 
 test("the Layouts cards show deltas against the recommendation, and the ranking toggle re-ranks", async ({ page }) => {
@@ -105,7 +129,8 @@ test("the Layouts cards show deltas against the recommendation, and the ranking 
 test("changing the labour rate in Shop standards changes the crate cost", async ({ page }) => {
   await openTab(page, "Overview");
   const before = await crateCost(page);
-  expect(before).toBe(186);
+  const { labour: labourBefore } = await costSplit(page);
+  expect(before).toBeGreaterThan(0);
 
   await openStandards(page);
   const labour = standards(page).getByRole("region", { name: "Labour" });
@@ -122,14 +147,16 @@ test("changing the labour rate in Shop standards changes the crate cost", async 
   await shot(page, "17-standards-labour");
 
   await openTab(page, "Overview");
-  // Labour doubles: $95 → $190, so the crate is $95 dearer.
-  await expect.poll(() => crateCost(page)).toBe(281);
+  // Labour doubles (the rate went from $35 to $70 an hour), so the crate is dearer by what
+  // labour cost before, give or take the rounding of each dollar figure.
+  await expect.poll(async () => Math.abs((await crateCost(page)) - (before + labourBefore)) <= 1).toBe(true);
+  expect((await costSplit(page)).labour).toBeCloseTo(labourBefore * 2, -1);
   await expect(scorecard(page)).toContainText("labour at $70/h");
 
   await openStandards(page);
   await standards(page).getByRole("button", { name: "Reset to defaults" }).click();
   await openTab(page, "Overview");
-  await expect.poll(() => crateCost(page)).toBe(186);
+  await expect.poll(() => crateCost(page)).toBe(before);
 });
 
 test("the first export shows the time to design", async ({ page }) => {

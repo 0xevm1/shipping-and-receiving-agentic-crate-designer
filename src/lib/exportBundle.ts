@@ -1,14 +1,14 @@
 /**
- * The Export pill's package (#51): everything a crate needs to leave the building, as one .zip
+ * The Export pill's package: everything a crate needs to leave the building, as one .zip
  * built in the browser (nothing is uploaded).
  *
  *     crate-PART-001-x4.zip
- *     ├─ crate-PART-001-x4.glb      the assembled crate with the parts (#27); a split batch has
+ *     ├─ crate-PART-001-x4.glb      the assembled crate with the parts; a split batch has
  *     │                             one per crate type: …-crate-A.glb, …-crate-B.glb
- *     ├─ crate-PART-001-x4.pdf      crate spec, build sheets and labels (#26), every crate type
- *     ├─ cut-list.csv               the cut list in the selected units (#15); a split batch has
+ *     ├─ crate-PART-001-x4.pdf      crate spec, build sheets and labels, every crate type
+ *     ├─ cut-list.csv               the cut list in the selected units; a split batch has
  *     │                             cut-list-crate-A.csv … plus shipment-cut-list.csv
- *     ├─ design.json                the design file (#28), re-importable with Load a part
+ *     ├─ design.json                the design file, re-importable with Load a part
  *     └─ README.txt                 what each file is for, the app version, date and units
  *
  * `buildBundle` is pure apart from its two injected makers (GLB and PDF), so the file list,
@@ -17,12 +17,15 @@
  */
 import { zipSync, type Zippable } from "fflate";
 import type { CrateDesign } from "@/domain/crate";
-import { APP_NAME, APP_VERSION, serializeDesign } from "@/domain/designFile";
-import { bomToCsv, shipmentToCsv } from "@/domain/export";
+import type { Ranking } from "@/domain/design";
+import { serializeDesign } from "@/domain/designFile";
 import type { CrateSettings } from "@/domain/schema";
 import { describeShipment, type ShipmentPlan } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
 import type { LoadedPart } from "@/state/store";
+import { APP } from "./appInfo";
+import { bomToCsv, shipmentToCsv } from "./csv";
+import { documentDate } from "./format";
 import { designFilePart } from "./loadPart";
 import { buildPrintable, type PrintableDesign } from "./printable";
 import type { Units } from "./units";
@@ -35,8 +38,12 @@ export interface BundleInput {
   crateIndex: number;
   standards: ShopStandards;
   units: Units;
+  /** How the plan was ranked: the PDF's "why this layout won" and design.json record it. */
+  ranking: Ranking;
   /** ISO timestamp; passed in so this stays pure. */
   generatedAt: string;
+  /** IANA zone the dates in the PDF and README are read in; this device's own zone when absent. */
+  timeZone?: string;
 }
 
 export interface BundleMakers {
@@ -85,7 +92,7 @@ const encode = (s: string) => new TextEncoder().encode(s);
 
 /** The package's files, in the order they are zipped. */
 export async function buildBundle(input: BundleInput, make: BundleMakers): Promise<Bundle> {
-  const { part, settings, plan, crateIndex, standards, units, generatedAt } = input;
+  const { part, settings, plan, crateIndex, standards, units, ranking, generatedAt, timeZone } = input;
   const shown = plan.crates[crateIndex]?.result.design ?? plan.crates[0]?.result.design;
   if (!shown || plan.problem) throw new NoCrateError(plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : "There is no crate to export.");
   const designs = plan.crates.map((t) => {
@@ -107,7 +114,7 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
     ]);
   }
 
-  const doc = buildPrintable({ part, plan, standards, units, generatedAt });
+  const doc = buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone });
   files.push({ name: `${stem}.pdf`, data: await make.pdf(doc) });
   notes.push([
     `${stem}.pdf`,
@@ -127,7 +134,7 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
     notes.push(["cut-list.csv", "The cut list, for the shop floor or a spreadsheet."]);
   }
 
-  const designText = serializeDesign({ part: designFilePart(part), settings, layoutKey: shown.layout.key, design: shown, plan, savedAt: generatedAt });
+  const designText = serializeDesign({ part: designFilePart(part), settings, layoutKey: shown.layout.key, ranking, design: shown, plan, app: APP, savedAt: generatedAt });
   files.push({ name: "design.json", data: encode(designText) });
   notes.push([
     "design.json",
@@ -140,16 +147,16 @@ export async function buildBundle(input: BundleInput, make: BundleMakers): Promi
 }
 
 /** README.txt: what each file is for, the app version, the date and the units. */
-export function readme(input: BundleInput, stem: string, files: [string, string][]): string {
-  const { part, plan, units, generatedAt } = input;
+function readme(input: BundleInput, stem: string, files: [string, string][]): string {
+  const { part, plan, units, generatedAt, timeZone } = input;
   const width = Math.max(...files.map(([n]) => n.length)) + 2;
   const lines = [
     `Crate Designer export: ${stem}`,
     "",
     `Part:      ${part.id} ${part.name}`,
     `Quantity:  ${plan.totals.parts}${plan.split ? `, shipping as ${describeShipment(plan).replace(/×/g, "x")}` : ""}`,
-    `Made:      ${generatedAt.slice(0, 10)} (${generatedAt})`,
-    `App:       ${APP_NAME} ${APP_VERSION}`,
+    `Made:      ${documentDate(generatedAt, timeZone)} (${generatedAt})`,
+    `App:       ${APP.name} ${APP.version}`,
     `Units:     ${UNITS_TEXT[units]} in the PDF and CSV; the 3D model is in metres; design.json stores mm and kg.`,
     "",
     "Files",

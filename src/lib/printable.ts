@@ -1,7 +1,7 @@
 /**
- * The export document (#26): the PM's hand-off as one pure model, `PrintableDesign`, built
- * from a shipment plan. The print route (`src/app/print`) is a plain render of it; a later
- * PDF export (#51) can build the same model and lay it out programmatically.
+ * The export document: the PM's hand-off as one pure model, `PrintableDesign`, built from a
+ * shipment plan. The print route (`src/app/print`) renders it as HTML and the PDF export
+ * (`exportPdf.ts`) lays out the same model, so the two cannot disagree.
  *
  * Three audiences, in print order:
  * - **Crate spec** (PM and logistics): part, quantity, outside size, weights, volume, freight
@@ -11,23 +11,25 @@
  *   assembly order base → walls → load parts → blocking and separators → lid.
  * - **Shipping label** per crate type (dock).
  *
- * Text follows the selected units (#15): imperial by default, with fractional inches, nominal
+ * Text follows the selected units: imperial by default, with fractional inches, nominal
  * lumber names and lb; metric when chosen. Formatted with the same helpers as the UI and CSV.
  */
+import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
 import { CRADLE_LABEL, longAxis } from "@/domain/cradles";
-import { ASSEMBLY_NAMES } from "@/domain/export";
-import type { Assembly, BomLine, Check, CrateDesign, ScrewLine } from "@/domain/crate";
-import { screwSchedule } from "@/domain/crate";
-import { explainLayout, type LayoutExplanation } from "@/domain/design";
-import { parseDesignFile, restoreDesign } from "@/domain/designFile";
+import type { BomLine, Check, CrateDesign, ScrewLine } from "@/domain/crate";
+import { SHAPED_BLOCK, screwSchedule } from "@/domain/crate";
+import { explainLayout, type LayoutExplanation, type Ranking } from "@/domain/design";
+import { fileProfile, parseDesignFile, restoreDesign } from "@/domain/designFile";
+import type { Message } from "@/domain/message";
 import type { Layout } from "@/domain/packing";
-import type { DesignPart, Vec3 } from "@/domain/schema";
+import type { DesignPart } from "@/domain/schema";
 import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
 import { renderMessage } from "./message";
 import { allChecks } from "@/state/checks";
 import { crateDrawings, type Drawing } from "./drawings";
-import { cutText, describeLayout, stockText } from "./format";
+import { cutText, describeLayout, documentDate, stockText } from "./format";
+import { memberBounds } from "./memberBounds";
 import { area, cut, dims, dimsOther, LB_PER_KG, lengthUnit, run, volume, weight, type Units } from "./units";
 
 /** A labelled value, with an optional second line (the other units, or how it was worked out). */
@@ -37,7 +39,7 @@ export interface Row {
   note?: string;
 }
 
-export interface PrintableCheck {
+interface PrintableCheck {
   id: string;
   level: Check["level"];
   levelText: "Pass" | "Caution" | "Info";
@@ -45,7 +47,7 @@ export interface PrintableCheck {
   detail: string;
 }
 
-export interface CutGroup {
+interface CutGroup {
   /** "4x4", "1/2″ plywood", "19 × 89 lumber". */
   stock: string;
   material: BomLine["material"];
@@ -55,7 +57,7 @@ export interface CutGroup {
   total: string;
 }
 
-export interface Fastener {
+interface Fastener {
   title: string;
   rule: string;
   qty: number;
@@ -63,7 +65,7 @@ export interface Fastener {
 
 export const ASSEMBLY_STEPS = ["Base", "Walls", "Load the parts", "Blocking and separators", "Lid"] as const;
 
-export interface AssemblyStep {
+interface AssemblyStep {
   n: number;
   title: (typeof ASSEMBLY_STEPS)[number];
   text: string;
@@ -88,12 +90,10 @@ export interface PrintableLabel {
   heightMm: number;
   skidTallMm: number;
   skids: { y: number; w: number }[];
-  /** The fork openings between the skids (#8, `design.handling.openings`), where the entry arrows go. */
+  /** The fork openings between the skids (`design.handling.openings`), where the entry arrows go. */
   openings: { y: number; w: number }[];
-  /** The design's centre of gravity (#8), crate-interior mm; null for a design without one. */
-  cogMm: Vec3 | null;
-  /** The centre of gravity on the end view, from the bottom-left corner; null without one. */
-  cogEnd: { y: number; z: number } | null;
+  /** The design's centre of gravity on the end view, from the bottom-left corner. */
+  cogEnd: { y: number; z: number };
 }
 
 export interface PrintableCrate {
@@ -125,7 +125,7 @@ export interface PrintableDesign {
   units: Units;
   unitsNote: string;
   title: string;
-  /** "2026-11-16" (UTC). */
+  /** "2026-11-16", as the clock read where the document was made (see `PrintableInput.timeZone`). */
   date: string;
   part: Row[];
   shipment: { split: boolean; text: string | null; rows: Row[]; unmet: string | null };
@@ -139,20 +139,23 @@ export interface PrintableInput {
   plan: ShipmentPlan;
   standards: ShopStandards;
   units: Units;
+  /** How the plan was ranked; the "why this layout won" wording follows it. */
+  ranking: Ranking;
   /** ISO timestamp; passed in so this stays pure. */
   generatedAt: string;
+  /** IANA zone the document date is read in; this device's own zone when absent. */
+  timeZone?: string;
 }
 
 const other = (u: Units): Units => (u === "imperial" ? "metric" : "imperial");
 const withUnit = (mm: readonly number[], u: Units) => `${dims(mm, u)} ${lengthUnit(u)}`;
-const massEach = (kg: number, u: Units) => weight(kg, u);
 /** A spacing or other shop size with its unit: 11 13/16″ or 300 mm. */
 const shopSize = (mm: number, u: Units) => (u === "imperial" ? cut(mm, u) : `${Math.round(mm)} mm`);
 
 const LEVEL_TEXT: Record<Check["level"], PrintableCheck["levelText"]> = { ok: "Pass", caution: "Caution", info: "Info" };
 
 /** The `explainLayout` result as a sentence, as the Layouts tab words it. */
-export function whyText(e: LayoutExplanation): string {
+function whyText(e: LayoutExplanation): string {
   switch (e.kind) {
     case "only":
       return "This is the only way to pack this batch under the current packing rules.";
@@ -181,13 +184,7 @@ function runnerUp(layouts: Layout[], shown: Layout, u: Units): string | null {
   return `${layoutText(next, u)}, ${volume(next.externalVolumeM3, u)}, ${vol}${next.stable ? "" : ", may tip"}.`;
 }
 
-/** The design's centre of gravity (#8), when it is a usable point. */
-function cogOf(design: CrateDesign): Vec3 | null {
-  const cog: unknown = design.centerOfGravityMm;
-  return Array.isArray(cog) && cog.length === 3 && cog.every((v) => typeof v === "number" && Number.isFinite(v)) ? (cog as Vec3) : null;
-}
-
-/** The design's own LTL freight terms (#17, spec §7.12), so the print and the Overview agree. */
+/** The design's own LTL freight terms (spec §7.12), so the print and the Overview agree. */
 function freightRows(design: CrateDesign, u: Units): Row[] {
   const f = design.freight;
   const imperial = u === "imperial";
@@ -222,13 +219,40 @@ function cutList(design: CrateDesign, u: Units): CutGroup[] {
   return [...groups.values()].map(({ amount, ...g }) => ({ ...g, total: g.material === "plywood" ? area(amount, u) : run(amount, u) }));
 }
 
-/** Which assembly step a cut-list line or screw line belongs to. */
-function stepOf(assembly: Assembly, what: string): number {
-  if (assembly === "base") return 0;
-  if (assembly === "sides" || assembly === "ends") return 1;
-  if (assembly === "lid") return 4;
-  // Bearers and floor cradles (#6) go down before the parts; the rest is blocking.
-  return what === "Bearer" || what === "bearers" || what === CRADLE_LABEL || what === "cradles" ? 2 : 3;
+const STEP_BASE = 0;
+const STEP_WALLS = 1;
+const STEP_LOAD = 2;
+const STEP_BLOCKING = 3;
+const STEP_LID = 4;
+
+/**
+ * The assembly step of a cut-list line (or member). Base, walls and lid follow their
+ * assembly. Inside the crate, bearers and the floor cradles go down before the parts are
+ * loaded; every other inside piece (blocking, end stops, separators, stacking cradles) comes
+ * after. The floor cradle is the one piece the domain tells apart from the stacking cradle only
+ * by its label (both are `cradle` members), hence `CRADLE_LABEL`.
+ */
+export function stepOfMember(m: Pick<BomLine, "assembly" | "kind" | "label">): number {
+  switch (m.assembly) {
+    case "base":
+      return STEP_BASE;
+    case "sides":
+    case "ends":
+      return STEP_WALLS;
+    case "lid":
+      return STEP_LID;
+    case "inside": {
+      return m.kind === "bearer" || (m.kind === "cradle" && m.label === CRADLE_LABEL) ? STEP_LOAD : STEP_BLOCKING;
+    }
+  }
+}
+
+/** The screw lines that are driven before the parts go in; the other inside lines come after. */
+const LOAD_STEP_SCREWS: readonly ScrewLine["id"][] = ["bearers", "cradles"];
+
+function stepOfScrews(s: Pick<ScrewLine, "assembly" | "id">): number {
+  if (s.assembly !== "inside") return stepOfMember({ assembly: s.assembly, kind: "blocking", label: "" });
+  return LOAD_STEP_SCREWS.includes(s.id) ? STEP_LOAD : STEP_BLOCKING;
 }
 
 /** The part gap in the layout, from the slot spacing; null with one part per row and column. */
@@ -246,9 +270,9 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
   const { layout, construction: c, members } = design;
   const out: AssemblyStep[] = ASSEMBLY_STEPS.map((title, i) => ({ n: i + 1, title, text: "", pieces: [], screws: 0 }));
   for (const l of design.bom) {
-    out[stepOf(l.assembly, l.label)].pieces.push({ piece: l.label, stock: stockText(l, u), cut: cutText(l, u), qty: l.qty });
+    out[stepOfMember(l)].pieces.push({ piece: l.label, stock: stockText(l, u), cut: cutText(l, u), qty: l.qty });
   }
-  for (const s of schedule) out[stepOf(s.assembly, s.id)].screws += s.qty;
+  for (const s of schedule) out[stepOfScrews(s)].screws += s.qty;
 
   const has = (kind: string) => members.some((m) => m.kind === kind);
   const [nx, ny, nz] = layout.counts;
@@ -305,9 +329,10 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
 
 function label(design: CrateDesign, part: DesignPart, type: CrateType, split: boolean, u: Units): PrintableLabel {
   const { layout, construction: c, members } = design;
-  const y0 = Math.min(...members.map((m) => m.min[1]));
-  const z0 = Math.min(...members.map((m) => m.min[2]));
-  const cog = cogOf(design);
+  const {
+    min: [, y0, z0],
+  } = memberBounds(members);
+  const cog = design.centerOfGravityMm;
   return {
     partId: part.id,
     partName: part.name,
@@ -321,10 +346,18 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
     heightMm: layout.external[2],
     skidTallMm: c.skid.tall,
     skids: members.filter((m) => m.kind === "skid").map((m) => ({ y: m.min[1] - y0, w: m.size[1] })),
-    openings: (design.handling?.openings ?? []).map((o) => ({ y: o.y - y0, w: o.width })),
-    cogMm: cog,
-    cogEnd: cog ? { y: cog[1] - y0, z: cog[2] - z0 } : null,
+    openings: design.handling.openings.map((o) => ({ y: o.y - y0, w: o.width })),
+    cogEnd: { y: cog[1] - y0, z: cog[2] - z0 },
   };
+}
+
+/**
+ * The rule for a fixed count per piece. The blocking line counts every blocking member, shaped
+ * blocks included, so with shaped blocks it says "per post or shaped block" (the quantity is
+ * screws, not posts).
+ */
+function fixedRule(s: Pick<ScrewLine, "id" | "rule">, shaped: boolean): string {
+  return s.id === "blocking" && shaped ? s.rule.replace(/per post$/, "per post or shaped block") : s.rule;
 }
 
 function crateSection(input: PrintableInput, type: CrateType, split: boolean): PrintableCrate | null {
@@ -334,6 +367,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
   const { layout } = design;
   const schedule = screwSchedule(design.members, layout.interior, standards);
   const checks = allChecks(design.checks, { massAssumed: !!part.massAssumed, readAsMm: false }, null);
+  const shaped = design.members.some((m) => m.label === SHAPED_BLOCK);
   const both = (kg: number): Row => ({ label: "", value: weight(kg, u), note: weight(kg, other(u)) });
   return {
     letter: type.label,
@@ -354,7 +388,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       freight: freightRows(design, u),
       layout: {
         chosen: `${layoutText(layout, u)}, ${volume(layout.externalVolumeM3, u)}`,
-        why: whyText(explainLayout(layouts, layout, standards)),
+        why: whyText(explainLayout(layouts, layout, standards, input.ranking)),
         runnerUp: runnerUp(layouts, layout, u),
       },
       checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: renderMessage(k.detail, u) })),
@@ -370,7 +404,7 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       ],
       fasteners: schedule.map((s) => ({
         title: s.title,
-        rule: s.everyMm === null ? s.rule : `1 every ${shopSize(s.everyMm, u)} ${s.rule}`,
+        rule: s.everyMm === null ? fixedRule(s, shaped) : `1 every ${shopSize(s.everyMm, u)} ${s.rule}`,
         qty: s.qty,
       })),
       fastenerTotal: schedule.reduce((n, s) => n + s.qty, 0),
@@ -382,19 +416,19 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
 
 /** The whole hand-off document for a plan, in the selected units. Pure. */
 export function buildPrintable(input: PrintableInput): PrintableDesign {
-  const { part, plan, units: u, generatedAt } = input;
+  const { part, plan, units: u, generatedAt, timeZone } = input;
   const { totals, split } = plan;
   const crates = plan.crates.map((t) => crateSection(input, t, split)).filter((c): c is PrintableCrate => c !== null);
   return {
     units: u,
     unitsNote: u === "imperial" ? "Inches and pounds; cuts to the nearest 1/16″, lumber by nominal size" : "Millimetres and kilograms",
     title: split ? `Shipment of ${totals.parts} × ${part.name}` : `Crate for ${totals.parts} × ${part.name}`,
-    date: generatedAt.slice(0, 10),
+    date: documentDate(generatedAt, timeZone),
     part: [
       { label: "Part", value: part.id },
       { label: "Name", value: part.name },
       { label: "Material", value: part.material ?? "not given" },
-      { label: "Mass each", value: massEach(part.mass_kg, u), note: massEach(part.mass_kg, other(u)) },
+      { label: "Mass each", value: weight(part.mass_kg, u), note: weight(part.mass_kg, other(u)) },
       { label: "Quantity", value: String(totals.parts) },
     ],
     shipment: {
@@ -419,16 +453,32 @@ export type PrintableFromFile = { ok: true; doc: PrintableDesign; notes: string[
 
 /**
  * The document for a saved design file (§6.5), rebuilt with `standards` the way reopening the
- * file does. The part comes from the file itself (its size and mass), so a custom part needs
- * no model to print. `notes` say what came out differently from the saved summary.
+ * file does. The part comes from the file itself (its size, mass and measured outline), and so
+ * does the ranking, so the print is the crate that was saved and a custom part needs no model
+ * to print. `notes` say, in `units`, what came out differently from the saved summary.
  */
-export function printableFromDesignFile(text: string, standards: ShopStandards, units: Units, generatedAt: string): PrintableFromFile {
+export function printableFromDesignFile(
+  text: string,
+  standards: ShopStandards,
+  units: Units,
+  generatedAt: string,
+  timeZone?: string,
+): PrintableFromFile {
   const parsed = parseDesignFile(text);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const { file } = parsed;
   const p = file.part;
-  const part = { id: p.id, name: p.name, material: p.material, mass_kg: p.mass_kg, dimensions_mm: p.dimensions_mm, massAssumed: p.massAssumed };
-  const plan = planShipment(part, file.settings, file.layoutKey, standards);
+  const part = {
+    id: p.id,
+    name: p.name,
+    material: p.material,
+    mass_kg: p.mass_kg,
+    dimensions_mm: p.dimensions_mm,
+    massAssumed: p.massAssumed,
+    profile: fileProfile(file),
+  };
+  const { ranking } = file;
+  const plan = planShipment(part, file.settings, file.layoutKey, standards, ranking);
   const { notes } = restoreDesign(file, part, standards);
-  return { ok: true, doc: buildPrintable({ part, plan, standards, units, generatedAt }), notes };
+  return { ok: true, doc: buildPrintable({ part, plan, standards, units, ranking, generatedAt, timeZone }), notes: notes.map((n: Message) => renderMessage(n, units)) };
 }

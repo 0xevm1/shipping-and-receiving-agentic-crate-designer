@@ -180,7 +180,7 @@ function BuildSheet({ doc, crate: c }: { doc: PrintableDesign; crate: PrintableC
             </div>
           ))}
         </div>
-        <div className="cols">
+        <div className="cols assembly-row">
           <div>
             <h3>Fasteners</h3>
             <table className="fasteners">
@@ -276,7 +276,9 @@ function EndMarks({ label: l }: { label: PrintableLabel }) {
   const H = l.heightMm * s;
   const skidH = l.skidTallMm * s;
   const pad = 30;
-  // The openings the handling checks measured (#8), so the arrows match them.
+  const cx = l.cogEnd.y * s;
+  const cy = H - l.cogEnd.z * s;
+  // The openings the handling checks measured, so the arrows match them.
   const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   return (
     <svg className="end-marks" viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad + 40}`} width="100%" role="img" aria-label="Crate end with fork entry marks">
@@ -296,16 +298,14 @@ function EndMarks({ label: l }: { label: PrintableLabel }) {
           </g>
         );
       })}
-      {l.cogEnd && (
-        <g aria-label="Centre of gravity">
-          <circle cx={l.cogEnd.y * s} cy={H - l.cogEnd.z * s} r="14" fill="#fff" stroke="#000" strokeWidth="2" />
-          <path d={`M${l.cogEnd.y * s} ${H - l.cogEnd.z * s - 14} A14 14 0 0 1 ${l.cogEnd.y * s + 14} ${H - l.cogEnd.z * s} H${l.cogEnd.y * s} Z`} fill="#000" />
-          <path d={`M${l.cogEnd.y * s} ${H - l.cogEnd.z * s + 14} A14 14 0 0 1 ${l.cogEnd.y * s - 14} ${H - l.cogEnd.z * s} H${l.cogEnd.y * s} Z`} fill="#000" />
-          <text x={l.cogEnd.y * s + 20} y={H - l.cogEnd.z * s + 5} fontSize="14" fontFamily="var(--sans)">
-            CENTRE OF GRAVITY
-          </text>
-        </g>
-      )}
+      <g aria-label="Centre of gravity">
+        <circle cx={cx} cy={cy} r="14" fill="#fff" stroke="#000" strokeWidth="2" />
+        <path d={`M${cx} ${cy - 14} A14 14 0 0 1 ${cx + 14} ${cy} H${cx} Z`} fill="#000" />
+        <path d={`M${cx} ${cy + 14} A14 14 0 0 1 ${cx - 14} ${cy} H${cx} Z`} fill="#000" />
+        <text x={cx + 20} y={cy + 5} fontSize="14" fontFamily="var(--sans)">
+          CENTRE OF GRAVITY
+        </text>
+      </g>
     </svg>
   );
 }

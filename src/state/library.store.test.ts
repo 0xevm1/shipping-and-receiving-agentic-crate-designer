@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP } from "@/lib/appInfo";
 import { parts } from "@/domain/catalog";
 import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
 import { parseDesignFile, serializeDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
@@ -25,7 +26,7 @@ function filePart(id: string): DesignFilePart {
 function designText(part: DesignFilePart, quantity = 4) {
   const settings = { ...DEFAULT_SETTINGS, quantity };
   const design = computeDesign(part, settings).design!;
-  return serializeDesign({ part, settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T12:00:00.000Z" });
+  return serializeDesign({ app: APP, part, settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T12:00:00.000Z" });
 }
 const designFile = (part: DesignFilePart, quantity = 4): DesignFile => {
   const r = parseDesignFile(designText(part, quantity));

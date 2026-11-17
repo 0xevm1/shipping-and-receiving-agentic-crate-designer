@@ -10,7 +10,7 @@ import { browserStorage, type KeyValueStore } from "@/state/standardsStorage";
 import { useDesigner, type DesignerState, type LoadedPart } from "@/state/store";
 
 /**
- * Reopens the last-opened crate (#71, spec §9) through the design-file path (`loadDesign`), with
+ * Reopens the last-opened crate (spec §9) through the design-file path (`loadDesign`), with
  * its tab and ranking, after the saved standards and units are applied. A custom part's GLB comes
  * from IndexedDB; when it isn't there (never kept, over the cap, or another file) the default
  * part stays, the load row names the file, and loading it reopens the design (like a shared
@@ -36,18 +36,20 @@ export async function restoreLastDesign(saved: LastDesign, idb: IDBFactory | nul
       glbs = [new File([kept.bytes], kept.name, { type: "model/gltf-binary" })];
     }
     const s = useDesigner.getState();
-    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards);
+    const outcome = await loadDesign(file, glbs, catalog.parts, s.standards, s.units);
     if (!outcome.part || !outcome.design) {
       console.warn(`Last-opened crate not reopened, opening the default part. ${outcome.message}`);
       return false;
     }
-    const { settings, layoutKey, crateIndex } = outcome.design;
-    const plan = planShipment(outcome.part, settings, layoutKey, s.standards, saved.ranking);
+    const { settings, layoutKey, crateIndex, ranking } = outcome.design;
+    const plan = planShipment(outcome.part, settings, layoutKey, s.standards, ranking);
     if (!plan.crates[crateIndex]?.result.design) {
       console.warn("Last-opened crate no longer makes a crate, opening the default part.");
+      // The part will not be shown, so its object URL would never be released.
+      if (outcome.part.modelUrl.startsWith("blob:")) URL.revokeObjectURL(outcome.part.modelUrl);
       return false;
     }
-    useDesigner.getState().restoreDesign(outcome.part, settings, layoutKey, crateIndex, { tab: saved.tab, ranking: saved.ranking });
+    useDesigner.getState().restoreDesign(outcome.part, settings, layoutKey, crateIndex, { tab: saved.tab, ranking });
     // Only what came out differently is worth a line; the crate itself shows it reopened.
     const lead = `Design loaded: ${file.settings.quantity} × ${outcome.part.name}.`;
     const notes = outcome.message.startsWith(lead) ? outcome.message.slice(lead.length).trim() : "";

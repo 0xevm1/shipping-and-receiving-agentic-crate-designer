@@ -28,6 +28,18 @@ export function layoutName(l: Layout): string {
   return describeLayout(l) + (l.orientation.id === "as-modeled" ? "" : `, ${l.orientation.label.toLowerCase()}`);
 }
 
+/**
+ * The calendar date of `iso` as "2026-11-16" in `timeZone` (an IANA name such as "Europe/Paris"),
+ * or in this device's own zone when none is given. Documents carry the date the person saw on
+ * their clock, not the UTC one. The zone is a parameter so the function stays testable.
+ */
+export function documentDate(iso: string, timeZone?: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  // en-CA writes year-month-day.
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
 /** Whole dollars with thousands separators: "$1,186". */
 export function usd(v: number): string {
   return `$${Math.round(v).toLocaleString("en-US")}`;

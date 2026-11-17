@@ -1,18 +1,34 @@
 import { parseDesignFile, serializeDesign, type DesignFile } from "@/domain/designFile";
 import type { DesignerState } from "@/state/store";
+import { APP } from "./appInfo";
 import { designFilePart } from "./loadPart";
 
+type Current = Pick<DesignerState, "part" | "settings" | "plan" | "result" | "ranking">;
+
 /**
- * The design on screen as a #28 design file, exactly as "Download design (.json)" writes it, or
- * null when there is no crate. Used by the design library and share links (#14).
+ * The design on screen as design-file text, exactly as "Download design (.json)" writes it, or
+ * null when there is no crate. Carries the part's measured outline and the ranking, so the file
+ * rebuilds the same crate wherever it is opened.
  */
-export function currentDesignFile(
-  s: Pick<DesignerState, "part" | "settings" | "plan" | "result">,
-  savedAt = new Date().toISOString(),
-): DesignFile | null {
+export function currentDesignText(s: Current, savedAt = new Date().toISOString()): string | null {
   const design = s.result.design;
   if (!design) return null;
-  const text = serializeDesign({ part: designFilePart(s.part), settings: s.settings, layoutKey: design.layout.key, design, plan: s.plan, savedAt });
+  return serializeDesign({
+    part: designFilePart(s.part),
+    settings: s.settings,
+    layoutKey: design.layout.key,
+    ranking: s.ranking,
+    design,
+    plan: s.plan,
+    app: APP,
+    savedAt,
+  });
+}
+
+/** The design on screen as a parsed design file. Used by the design library and share links. */
+export function currentDesignFile(s: Current, savedAt = new Date().toISOString()): DesignFile | null {
+  const text = currentDesignText(s, savedAt);
+  if (text === null) return null;
   const r = parseDesignFile(text);
   return r.ok ? r.file : null;
 }
