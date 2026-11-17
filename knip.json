@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/pre-commit.mjs"],
+  "entry": ["scripts/pre-commit.mjs", "scripts/fixtures/units-axis.mjs"],
   "ignore": [".claude/**", "docs/design-handoff/**"],
   "ignoreBinaries": ["gs"]
 }
