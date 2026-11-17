@@ -117,6 +117,9 @@ tab at a time.
      tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
      cardboard box may be enough)
 6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
+7. **Download the crate as a 3D model** (View → "Download 3D model (.glb)"): the assembled crate
+   in metres, Z up, every board a named mesh grouped by assembly, with the parts in their slots
+   unless "Include parts" is off.
 
 ### The crate it designs
 

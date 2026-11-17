@@ -68,6 +68,9 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Rendering:** three.js is Y up and in metres. Exactly **one** transform does the conversion:
   the root `<group rotation={[-π/2,0,0]} scale={0.001}>` in `CrateViewer.tsx`. Everything inside
   it uses domain coordinates. Domain front (−Y) faces world +Z; domain +X stays world +X.
+- **Exported GLB** (`src/lib/exportGlb.ts`) follows the input GLB convention, not three.js's:
+  metres, **Z up**. The only conversion from the domain is × 0.001 (mm → m); there is no Y-up
+  rotation in the file.
 - **Loaded GLBs** are read as metres, Z up, like the samples. A file more than **20 units**
   across is read as millimetres instead (`MM_FILE_THRESHOLD` in `src/lib/loadPart.ts`), and the
   UI says so ("file read as millimetres", plus an info check).
@@ -135,12 +138,13 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions) |
 | `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging |
+| `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
 | `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()` |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
 | `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; idle input tracking, Escape, drag-and-drop, free-area insets, tooltip |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, part metadata; name, material and mass fields for unknown parts |
-| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover, Hide panels |
+| `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part |
 | `src/components/island/*.tsx` | The island and its five tabs |
 | `src/components/viewer/CrateViewer.tsx` | Main canvas; the Z-up → Y-up root transform; lights; loading overlay |
@@ -581,6 +585,20 @@ open question for the user (see #20).
   - The mode icon steps closed → open → exploded. The View popover has camera presets (3D, Top,
     Front, End), switches for lid, front wall, blocking, parts and size labels, and a
     continuous Pull apart slider. A mix that matches no mode shows the "custom" icon.
+- **GLB download (#27):** below the slider, an "Include parts" switch (on by default) and
+  "Download 3D model (.glb)" save `crate-{part id}-x{quantity}.glb`. The file is built from the
+  design data in a fresh three.js scene (`src/lib/exportGlb.ts`), never from the live viewer, so
+  it is always the assembled crate: no explode offsets, fades, ghosting or highlight colours.
+  - **Units and frame:** metres, Z up, like the input GLBs (§4).
+  - **Node tree:** `Crate` → `Base`, `Side walls`, `End walls`, `Lid`, `Inside the crate`
+    (empty assemblies are left out), each holding one box mesh per board named
+    `{label} {n}`, numbered per label across the crate (e.g. `Side rail 3`); then, with parts,
+    `Parts` → `Part 1` … `Part N`, placed with the same transform as `PartInstances`
+    (re-centre, `mmPerUnit` scale, slot centre, `orientation.euler`).
+  - **Materials:** one per board kind, named `Wood {kind}` and coloured as `WOOD` in
+    `scene.ts`; parts get `Part steel` or `Part aluminum`.
+  - The part model is loaded with `GLTFLoader` and cached per URL. Exported with three's
+    `GLTFExporter` (`binary: true`).
 - **Framing per mode:** each mode has its own camera distance, as a fraction of the distance
   that just fits the whole scene (`MODE_ZOOM` in `Director.tsx`): closed 0.68, open 0.8,
   exploded 1.0. Hide panels moves in a further ×0.82. Mode changes re-frame, so idle auto-play
@@ -717,6 +735,15 @@ flag, invalid input changes nothing, and catalog parts are read-only.
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
 names, and filtering a `parts.json`.
 
+**`src/lib/exportGlb.test.ts`** round-trips the GLB export (#27) for each sample part: export
+with `GLTFExporter`, re-load with `GLTFLoader`, and check that the boards' bounds (parts
+excluded) equal `layout.external` within 1 mm in metres with X, Y, Z = L, W, H (Z up, no
+rotation); the node tree is `Crate` → the non-empty assemblies in build order → `Parts`; there is
+one uniquely named mesh per member (`Floor 1`, `Side rail 4`, …) with `Wood …` materials; and
+`Part 1…N` match the slot count and sit inside the crate. It also checks that each part's centre
+is its slot centre, that parts can be left out, and the file name. Node has no `FileReader`,
+which the exporter's binary path uses, so the test installs a minimal one.
+
 When you change packing or construction rules, keep these passing. If a rule change
 deliberately changes an expected value, update the test and this spec in the same PR.
 
@@ -752,7 +779,10 @@ HTML report as `playwright-report`.
     "Showing N × piece", Escape clears it.
   - `06-view`: the mode icon steps closed → open → exploded with growing camera distance; the
     View popover is on top of the island (hit-tested); camera presets; switches and Pull apart;
-    Hide panels keeps the credit; idle auto-play starts after 6 s without input.
+    Hide panels keeps the credit; idle auto-play starts after 6 s without input; from the
+    exploded view, "Download 3D model (.glb)" saves `crate-PART-001-x4.glb` with the `glTF`
+    header, a matching length and named nodes (`Crate`, `Side walls`, `Side rail 1`, `Part 1`
+    … `Part 4`), and with "Include parts" off the file has no `Parts` node.
   - `07-load-parts` (through the hidden file input, in-memory files): a catalog GLB fills in
     mass and material (PART-002: 1692 × 334 × 411); an unknown GLB gets the stand-in caution
     and Checks badge until name, material and mass are entered; a text `.gltf` is rejected; a
