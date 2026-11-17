@@ -270,7 +270,7 @@ describe("computeDesign with custom standards", () => {
     const r = computeDesign(getPart("PART-001"), DEFAULT_SETTINGS, null, bad);
     expect(r.design).toBeNull();
     expect(r.problem).toMatchObject({ id: "standards" });
-    expect(r.problem!.detail).toContain("rates.costUsdPerM3.plywood");
+    expect(metric(r.problem!.detail)).toContain("rates.costUsdPerM3.plywood");
   });
 });
 

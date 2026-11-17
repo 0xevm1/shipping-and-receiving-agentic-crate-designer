@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX } from "@/domain/partDetails";
 import { modelNote } from "@/lib/format";
 import { fieldWidthCh, formatMass, massUnit, parseMass, stepMass } from "@/lib/partFields";
-import { dims, lengthUnit, partWeight, weight } from "@/lib/units";
+import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
 import { useDesigner, type ChangeSource } from "@/state/store";
 import { ChangeNote, Flash } from "./ChangeFeedback";
@@ -170,6 +170,8 @@ function PartDetailsFields() {
           field="mass"
           label={`Mass of one part in ${units === "imperial" ? "pounds" : "kilograms"}`}
           value={formatMass(part.mass_kg, units)}
+          // Not being edited, it reads by the one mass rule like every other mass; while editing, the full value.
+          display={weightNumber(part.mass_kg, units, false)}
           placeholder="enter mass"
           inputMode="decimal"
           size={[3, 10]}
@@ -214,8 +216,10 @@ function PartDetailsFields() {
 interface InlineFieldProps {
   field: FieldId;
   label: string;
-  /** The stored value as text; shown whenever the field isn't being edited. */
+  /** The stored value as text; what the field holds while it is being edited. */
   value: string;
+  /** How the value reads when the field has no focus, if that differs (a rounded mass). */
+  display?: string;
   placeholder: string;
   /** Width in `ch` for browsers without `field-sizing: content`: [min, max]. */
   size: [number, number];
@@ -241,7 +245,14 @@ interface InlineFieldProps {
  */
 function InlineField(p: InlineFieldProps) {
   const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? p.value;
+  const [focused, setFocused] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  // Focus swaps a rounded display for the full value, which moves the caret: select it all, as a click into a field would expect.
+  useLayoutEffect(() => {
+    if (focused && p.display !== undefined && p.display !== p.value) input.current?.select();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
+  const text = draft ?? (focused ? p.value : (p.display ?? p.value));
 
   const finish = () => {
     setDraft(null);
@@ -267,6 +278,7 @@ function InlineField(p: InlineFieldProps) {
 
   return (
     <input
+      ref={input}
       type="text"
       className={className}
       value={text}
@@ -296,7 +308,9 @@ function InlineField(p: InlineFieldProps) {
         }
       }}
       // Blur keeps a valid edit and drops an invalid one, back to the last valid value.
+      onFocus={() => setFocused(true)}
       onBlur={() => {
+        setFocused(false);
         if (!save()) finish();
       }}
     />

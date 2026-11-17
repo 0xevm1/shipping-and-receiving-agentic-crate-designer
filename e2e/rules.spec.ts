@@ -47,3 +47,19 @@ test("Reset rules restores the defaults but keeps the quantity", async ({ page }
   await pollCrate(page, (s) => s.outside).toEqual(defaults);
   await shot(page, "rules-reset");
 });
+
+test("the suggested quantities are their own labelled group, apart from the stepper, and set the quantity", async ({ page }) => {
+  const presets = panel(page).getByRole("group", { name: "Suggested quantities" });
+  await expect(presets).toBeVisible();
+  const stepper = panel(page).getByLabel("Quantity");
+  // Not inside the stepper's capsule: they sit below it.
+  const s = (await stepper.boundingBox())!;
+  const p = (await presets.boundingBox())!;
+  expect(p.y).toBeGreaterThan(s.y + s.height - 1);
+  const eight = presets.getByRole("button", { name: "8", exact: true });
+  await eight.click();
+  await pollCrate(page, (st) => st.quantity).toBe(8);
+  await expect(eight).toHaveAttribute("aria-pressed", "true");
+  await expect(stepper).toHaveValue("8");
+  await shot(page, "rules-presets");
+});

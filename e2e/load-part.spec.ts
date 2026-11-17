@@ -17,6 +17,7 @@ import {
   setUnits,
   SHAFT,
   shot,
+  stage,
   tab,
   triangleGlb,
 } from "./helpers";
@@ -96,9 +97,16 @@ test("a part over 20 m is refused with a problem message", async ({ page }) => {
   // 30 000 units across, so it is read as millimetres: a 30 m part.
   await fileInput(page).setInputFiles({ name: "giant-beam.glb", mimeType: "model/gltf-binary", buffer: triangleGlb([30_000, 100, 100]) });
   const alert = panel(page).getByRole("alert");
-  await expect(alert).toContainText("The part is over 20 m long");
-  await expect(alert).toContainText("Its longest side is 30000 mm");
+  await expect(alert).toContainText("This part is too large to crate");
+  // The size and the limit follow the units (metres here, feet in imperial).
+  await expect(alert).toContainText("Its longest side is 30 m and the limit is 20 m");
   await pollCrate(page, (s) => s.problem).toBe("part-too-large");
+  // Said once: the tabs with nothing to show are disabled, and the way out is on the card.
+  for (const name of ["Layouts", "Cut list", "Rules", "Checks"]) await expect(page.getByRole("tab", { name })).toBeDisabled();
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeEnabled();
+  await expect(alert.getByRole("button", { name: "Load another part" })).toBeVisible();
+  // The canvas message is readable, not a dim line.
+  await expect(stage(page).getByText("Load another part to continue.")).toBeVisible();
   await shot(page, "load-part-too-large");
 });
 

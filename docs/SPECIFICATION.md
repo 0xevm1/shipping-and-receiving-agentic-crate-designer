@@ -81,8 +81,10 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Units in the UI (#15):** **imperial (in / lb) is the default**, for a domestic US shop floor;
   metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
   changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
-  and the shop standards stay in mm and kg; the mass field shows and accepts the selected unit
-  and stores kg; the CSV follows the selected units (§7.6). **One rule for a mass shown to
+  and the shop standards stay in mm and kg (the Shop standards editor shows and accepts the selected
+  units, §6.4); the header's mass field (uncatalogued parts) accepts the selected unit and stores
+  kg, reads by the mass rule below when it has no focus ("22 lb") and holds the full value while
+  it is being edited ("22.05"), so editing never loses what was typed (`weightNumber`); the CSV follows the selected units (§7.6). **One rule for a mass shown to
   people (#62):** in the displayed unit, one decimal under 100 ("47.4 lb", "8 kg", a trailing
   .0 dropped) and whole numbers from 100 ("297 lb"). It lives once in `weight` / `partWeight`
   (`src/lib/units.ts`) and serves the header, Overview, Checks, print and PDF. The CSV and the
@@ -229,7 +231,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/printLink.ts` | The print route's URL hash: the design file as base64url (the share link's encoding), plus the units (`printHash`, `readPrintHash`) |
 | `src/app/print/page.tsx`, `print.css` | The print route and its Letter print styles. The route sits outside the `(designer)` group, so it loads `globals.css` and `print.css` only |
 | `src/app/globals.css` | Global CSS, loaded on every route: the design tokens (custom properties, including the `--z-*` stacking scale), the `@layer` order, the base element rules, and the one list of breakpoints |
-| `src/app/ui.css` | The shared UI primitives in `@layer ui`: `glass`, `card`, `seg`, `pillbtn`, `btn`, `linkbtn`, `iconbtn`, `switch`, `lede`, `subhead`, `line`, `actions`, `mono`, `muted`, `nw`, `nominal`, `tight`, `sr-only`, `eyebrow-label`, `hint-mouse` / `hint-touch`. Used as plain string class names; everything else is a module (§13) |
+| `src/app/ui.css` | The shared UI primitives in `@layer ui`: `glass`, `card`, `seg`, `pillbtn`, `btn`, `linkbtn`, `iconbtn`, `switch`, `lede`, `subhead`, `line`, `actions`, `mono`, `muted`, `nw`, `nominal`, `tight`, `sr-only`, `eyebrow-label`, `hint-mouse` / `hint-touch` (the touch wording shows wherever there is no hover or the pointer is coarse, the mouse wording otherwise, so one always shows; the cut list row toggle is 44 px under the same drawer-or-coarse rule as the other controls, #62). Used as plain string class names; everything else is a module (§13) |
 | `src/app/(designer)/layout.tsx`, `designer.css`, `page.tsx` | The route group (no URL segment) for `/`: it loads `ui.css` and `designer.css` (the dark, full-window, never-scrolling page) |
 | `src/components/print/*.tsx` | `PrintView` (reads the hash, opens the print dialog), `PrintDocument` (the pages), `DrawingSvg` |
 | `src/lib/exportBundle.ts` | The Export pill's package (#51, §7.13): `buildBundle` (file list, names, CSVs, design file, README; GLB and PDF makers injected), `zipBundle` (fflate), `browserMakers` (lazy GLB and PDF) |
@@ -247,7 +249,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
 | `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
 | `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
-| `src/components/shell/LoadToast.tsx` | The load message as a glass toast under the part header: a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
+| `src/components/shell/LoadToast.tsx` | The load message as a glass toast by the part header (beside it on desktop, under it on narrow screens): a note (`role="status"`, goes after 9 s) or an error (`role="alert"`, stays until dismissed); a dismiss button |
 | `src/components/shell/PartHeader.tsx` | Top left: app name, the part as a sentence with the crate gross; inline name, material and mass fields for unknown parts (§8.5) |
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (`usePopover`), Hide panels |
@@ -271,7 +273,8 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
 | `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/PartViewSlot.tsx` | The part view's box in the island (its module sets the size and the drawer sizes), shared by the `PartView` canvas and the loading placeholder |
-| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…", why there is no crate); shared by the shell and the viewer |
+| `src/components/viewer/StageMessage.tsx` | A line centred over the 3D stage ("Loading model…"), or with `problem` the no-crate message on a dark pill with a next-step line; shared by the shell and the viewer |
+| `src/components/island/ProblemCard.tsx` | The island's panel when there is no crate (§7.9): the problem once, in the selected units, with the action for its kind |
 | `src/components/shell/Tooltip.tsx` | The hover tooltip over the 3D view |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
 | `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), keeping a panned crate in the free area (`keepCrateInFreeArea`) |
@@ -279,7 +282,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
 | `src/components/viewer/DimensionLines.tsx` | Draws the size lines; positions the DOM labels each frame; shows the part's lines once the inside is open; drives the photon pulse |
 | `src/components/viewer/sizeLines.ts` | Pure size-line geometry (`buildLines`, label anchors, the dimension hidden per preset, label text) |
-| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement, and the occlusion test that hides an arrow behind the crate |
+| `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement (`layoutArrows`: gap, size and whether it is drawn, to keep it in the free area, #62), and the occlusion test that hides an arrow behind the crate |
 | `src/components/viewer/probeStats.ts` | What the scene reports to the e2e hook (`probeStats`); writes are gated by `NEXT_PUBLIC_E2E` |
 | `src/components/viewer/dimensionPulse.ts` | Pure photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
 | `src/components/viewer/PhotonLayer.ts` | One `Points` of photons per line group, updated per frame (#65) |
@@ -432,7 +435,7 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
     same layout, and the number of shaped blocks
 - **`LayoutExplanation`** (from `explainLayout`, §7.8).
 - **`DesignResult`:** `{ layouts, design, problem }`. `problem` (`DesignProblem`:
-  `{ id, title, detail }`) is set exactly when `design` is null (§7.9).
+  `{ id, title, detail }`, with `detail` a unit-free `Message` like a check's, §7.16) is set exactly when `design` is null (§7.9).
 
 ### 6.4 Shop standards (`ShopStandardsSchema`, #19)
 
@@ -552,6 +555,23 @@ text is a valid standard; invalid text is outlined in gold with the reason and r
 A changed field is tinted and says its default. A **Customised** tag shows when anything
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
 standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUtilization`).
+
+**Units in the editor (#62).** The stored standards, the standards JSON file and the validation are
+always metric; the editor converts at the edge with `editUnit(dimension, units)` in
+`src/lib/units.ts`. Each field in `standardsFields.ts` has a `dim`: `length` (mm to inches, 2
+decimals, step 1/4″), `lumber` (a stock side: nominal actual inches, so 3.5 in is exactly the 89
+mm a 2x4 is; 3 decimals otherwise), `plywood` (the sheet as sold: 12 / 15 / 19 mm read and type as
+1/2, 5/8, 3/4; the 16 and 18 mm sheets read as 5/8 and 3/4), `mass` (lb, 2 decimals, step 1),
+`density` (lb/ft³) and `cost` ($/ft³). Stock fields name the section ("The section is 1x4.") and
+the plywood fields say what it is sold as. The "Default …" note and the hint sentences follow the
+units. A value typed in inches is stored as mm to 3 decimals and shows as the same inches
+after a save and a reload (`units.test.ts`). **Kept as they are**, in both unit systems, because
+the app has no imperial convention for them: minutes, $/h, $/100 screws, %, ×, degrees, counts,
+in³/lb (already imperial), and MPa (the app shows no stress anywhere else, and the shipped
+values are not the round psi figures the hint quotes, so a psi column would only add a second set
+of numbers to check). A field where 0 is stored for "none" (`zero` in the table: max parts per
+crate, stacked on the lid) shows an empty box with the placeholder "no limit" / "none"; clearing
+the box stores 0.
 
 ### 6.5 Design file (`DesignFileSchema`, #28)
 
@@ -1097,14 +1117,20 @@ the first `problem` that applies:
 | id | When | What the user is told |
 |---|---|---|
 | `part-size` | A dimension is 0, negative, NaN or infinite (e.g. a flat model) | Every side must be longer than zero |
-| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | The size, and to check the file's units |
-| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero |
+| `part-too-large` | The longest side is over 20 m (`MAX_PART_MM` in `design.ts`) | "This part is too large to crate": the size and the limit, in metres or feet (`longMm`), and to check the file's units |
+| `part-mass` | Mass is not a finite number above zero | Enter a mass above zero, in the part header |
 | `settings` | Settings fail `CrateSettingsSchema` (only if the store boundary was bypassed) | Which field, and to reset the rules |
 | `standards` | Custom standards fail `ShopStandardsSchema` (only if `setStandards` was bypassed; the shipped defaults are not re-parsed) | Which field, and to reset the shop standards |
 | `no-layout` | Packing returned nothing (unreachable for valid input, §7.2) | Try more layers, smaller gaps or turning off upright |
 
-The island shows the title and detail in place of the tabs' content (with Reset rules for
-`settings` and `no-layout`), and the canvas shows the title.
+The problem is shown once (#62). The island's panel is a `ProblemCard`: the title, the detail in the
+selected units and the way out for the kind of problem: **Load another part** for `part-size`,
+`part-too-large` and `part-mass` (gold for the first two; the mass is entered in the header),
+**Reset rules** for `settings` and `no-layout`, **Reset shop standards** for `standards`. The
+tabs other than Overview are disabled, since they have nothing to show, so the message is not
+repeated on all five. The canvas shows the title on its own dark pill at 22 px with one line
+saying what to do next (`StageMessage` with `problem`); on a phone the summary chip says "No crate"
+and opens the drawer on the card.
 
 Very small parts (down to sub-millimetre) get the minimum 178 mm interior (§7.2). Very large ones
 up to 20 m get a normal design, with the `oversize` and `door` checks as they apply. The 3D view
@@ -1660,7 +1686,7 @@ The canvas fills the window. Four regions float above it:
 | Region | Contents |
 |---|---|
 | Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a), then the green **Export** pill (#51, §7.13), left-aligned with the lines, with its status note beside it. Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
-| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
+| Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px), which folds away (0.25 s, none with reduced motion) once the panel is scrolled, and altogether in windows under 760 px tall, so a laptop gets the room for content (#62); the tabs; the selected tab's panel, which is the only thing that scrolls. The island keeps its fixed height |
 | Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads).  |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
 
@@ -1694,9 +1720,11 @@ The canvas fills the window. Four regions float above it:
     focus to its close button, Tab and Shift+Tab cycle inside it, and closing it (close button,
     scrim, or Escape) returns focus to the hamburger. Escape closes the drawer before it clears
     a pin. It slides in over 0.28 s, and just appears with `prefers-reduced-motion`. Inside: part
-    name, Load a part and close, the part view (130 px; 84 px on screens under 560 px tall),
-    the tabs, the panel (the only thing that scrolls), then the credit at half size (hidden on
-    short screens). `drawerOpen` in the store is separate from `panelsHidden`.
+    name, Load a part and close, the part view (130 px, folded away once the panel is scrolled
+    and on screens under 760 px tall; it only folds if the content overflows by more than its
+    height, so folding can't leave nothing to scroll), the tabs, then the panel (the only thing
+    that scrolls) with the credit at half size as its last item, scrolling with the content
+    instead of pinned (#62). With the thumbnail folded, a rules or layout change note floats under the tabs. `drawerOpen` in the store is separate from `panelsHidden`.
   - **Foot:** the **summary chip** (always the width of the foot, outside size and gross
     weight in amber, with thousands separators, the size shortening before it can touch the weight; for a split batch, "Crate A outside" with the shown type's size and
     "Gross, 7 crates" with the shipment's gross; tapping it opens the drawer on Overview; it flashes with the Overview on an
@@ -1727,7 +1755,7 @@ The canvas fills the window. Four regions float above it:
 | **Overview** (default) | For a split batch (#25), first a **Shipment** block: "Ships as 6 × crate A (30 each) + 1 × crate B (20)", the parts, total outside volume and gross, why it is split, and the **crate type picker** (Crate A / Crate B, with count × parts), then "Crate A: 30 × part" and "6 of these". Otherwise "Crate for N × part" (the part name as typed, as the documents print it); the outside size in amber; the other-unit size; then the **verdict** (a green "All checks clear", or an amber "1 caution: parts are not restrained" button with its title, "2 cautions: a and b", "3 cautions: a and 2 more", that opens Checks); volume and gross. Then the **Scorecard** (#17, §7.12): crate cost (material + labour), build time and the labour rate, the estimated freight class with the density (lb/ft³, or kg/m³ in metric), dimensional weight with the divisor and the gross; after the first export since the last edit, "Designed in 1 m 12 s" beside the heading. For a split, the Shipment block (not the scorecard) carries the whole shipment's cost, labour and dimensional weight next to its parts, volume and gross. A chain: Parts → Layout → Walls and lid → Base → Blocking → Gross weight (last dot amber). Crate weight by assembly as bars; hovering a bar highlights that assembly in 3D. Then **Saved designs** (#14, §9): this part's saved designs, newest first (name, date, quantity, outside size, gross, notes), each with **Use**, **Rename** and **Delete** (undo for 8 s); **Save design** (name, optional notes) and **Copy share link** (the link also shows in a field, in case the clipboard is blocked); **Export library** / **Import library**. Works the same inside the narrow-screen drawer, with 44 px targets |
 | **Layouts** | The `explainLayout` sentence. A **Rank by** toggle (Volume / Crate cost / Freight class, #17, §7.2; the store's `ranking`, kept across edits, not saved). Cards with a top-view and side-view SVG drawing, a grid description, outside size, orientation, volume, a cost-and-freight line (the recommended card: "$254 to build · class 65 · 29.8 lb/ft³"; the others against it: "+$26 · same class 65 · −2.2 lb/ft³", dearer and higher class in red, cheaper and lower in green; `scoreLayouts` designs only the cards on screen) and a volume bar. Badges: "recommended" and "may tip". First 4 shown, then "Show all N layouts". "Use the recommended layout" link when the user has picked another |
 | **Cut list** | Grouped by assembly. Piece, stock, cut, qty (Piece never wraps and Stock gives way; the Qty column keeps its own right padding and never wraps; the cut wraps between its dimensions, so Qty is always fully inside the panel, #62). When the panel is narrower than 380 px (a phone's drawer) each row stacks (container query on `.panel`): piece and stock on one line, cut (with its unit) and "× qty" on the next, so nothing scrolls sideways and the heading row stays for screen readers only. Each row's first cell holds a real `<button aria-pressed>` (the keyboard and screen-reader control); hover or focus highlights the row, the row click (mouse) or the button (Enter / Space) pins. The hint reads "Point at a row… Click it…" with a mouse and "Tap a row…" where there is no hover. Two pieces of one name and different sizes ("Shaped block") are lettered A, B by size in the cut list (`tellApart` in `bom.ts`; the boards keep their `label` and `variant`). Totals for plywood, lumber and screws. Download and Copy (CSV), Download design (.json), and **Print / save PDF** (#26), which opens the export document (§7.11) in a new tab with its print dialog. For a split batch: **This crate** / **Whole shipment**; this crate shows the picker and the type on screen (`…-crate-A.csv`); whole shipment lists every crate's pieces (`shipmentBom`, rows not linked to 3D, `…-shipment.csv`) |
-| **Rules** | Quantity (− / input / + and the part's suggested quantities), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
+| **Rules** | Quantity (a − / input / + capsule, the 18 px glyphs being the intended look, and under it the part's suggested quantities as their own labelled group, #62; the one matching the stepper is outlined in gold, not filled), keep upright, most layers (1–4), gap between parts and clearance to walls (0–150 mm sliders), wall and lid plywood (Auto / 12 / 15 / 19), Reset rules (keeps quantity) |
 | **Checks** | Every check, cautions first, with a gold count on the tab for cautions and a neutral count for info-level notes (each read out as "N cautions" / "N notes") |
 
 Quantity lives in Rules, as the handoff asks. Whether that buries the main input is still an
@@ -1755,8 +1783,11 @@ open question for the user (see #20).
   foot. Its surface is near-opaque (0.97 / 0.98), as is the drawer's, so the crate's colours don't
   show through the blur. It closes on Escape (focus returns to View), a press outside, or focus
   leaving it; `aria-controls` is set only while it exists.
-- **Load messages (`LoadToast`):** one glass toast under the part header on every layout, never
-  loose text over the floor. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
+- **Load messages (`LoadToast`):** one glass toast by the part header on every layout, never
+  loose text over the floor. On a desktop it sits beside the header, level with the app name
+  (left at the header's right edge + 18 px, width up to 440 px and never under the island), so
+  it can't brush the crate's top-left corner, which it did when it hung under the header (#62);
+  under 981 px it hangs under the header as wide as it. A note ("Design loaded…", "Reopened. …") is a polite `role="status"`
   region and goes after 9 s; an error is `role="alert"`, has a gold edge and stays until
   dismissed or the next load. Both have a dismiss button.
 - **Export specs:** only the header's Export pill (§7.13) exports; the View popover has no export
@@ -1854,6 +1885,21 @@ open question for the user (see #20).
     width size label, which sits on the same centre line (`arrowGapMm`: the label's 110 mm + 5 %
     of the longest side, plus 36 % of that side for the fixed-size pill, plus 90 mm), so the
     arrow and "25.7 in" never overlap, closed or exploded, on a desktop or a phone (#62).
+  - **Kept in the free area (#62):** framing fits the arrows' tails only once exploded
+    (`ARROWS_FIT_FROM`), because fitting them when closed zoomed the crate out too far; so on first
+    load the near arrow sat under the island's glass and the far one half off the screen. Instead
+    `layoutArrows` (`forkArrows.ts`) places each arrow for the camera of the frame, in three steps. (1) At the
+    +X end, which has the width label, the tip stands at the smallest gap (down to 120 mm) at which
+    the arrow's outline is clear of the label's 88 × 28 px pill on screen (`clearGapMm`) instead of the
+    worst-case `arrowGapMm`, so it usually lies in the free area between the crate and the island; the −X end,
+    which has no label but is mostly hidden behind the crate from the usual angle, keeps the full gap. (2)
+    If its outline still leaves the free area (the insets, but out to 12 px from the window's left edge,
+    since the arrow is low and flat) it is drawn smaller, down to 50 % of its size (`fitArrowScale`:
+    the tip stays put, the proportions stay). (3) If even that doesn't fit, it is not drawn; it needs 60 %
+    to come back, so an arrow at the edge doesn't flicker as the camera turns. The size eases to its target.
+    Nothing is drawn under the island, the header, the bottom bars or off screen, in the closed, open and
+    exploded views (exploded, the framing already fits the tails, so all are full size); the crate is framed
+    exactly as before. The e2e hook reports the drawn arrows' screen boxes (`cog.arrowBoxes`).
   - **Hidden behind the crate:** an end's arrows drop out (fading, over about 0.3 s) when the
     crate hides most of them from the current camera, so the far arrow never shows as a sliver
     poking out. `forkArrows.ts` samples a 3 × 3 grid over each arrow and tests the segment from the
@@ -2455,7 +2501,10 @@ angles, that every size label and fork arrow tail projects inside the free area 
 360 px phones, closed, open and exploded), the pan bound and the angle helpers.
 **`src/components/viewer/sizeLines.test.ts`** checks the size-line geometry, the one part pill,
 the dimension left out per preset and the label text. **`src/components/viewer/forkArrows.test.ts`**
-checks the arrow size and the occlusion test with its hysteresis.
+checks the arrow size and the occlusion test with its hysteresis, the fit into the free area (tip fixed, proportions kept,
+shortest and longest scale, dropped when the tip is out, the return threshold) and the gap that clears the width label.
+`framing.test.ts` also lays the arrows out for the three sample parts at 1440 × 900, 1280 × 720, a 900 px drawer layout and 390 / 360 px
+phones, closed, open and exploded, and checks every drawn arrow lies in the free area and clears the width label.
 **`src/components/viewer/tooltipText.test.ts`** checks the board tooltip's detail line.
 **`src/components/viewer/dimensionPulse.test.ts`** checks the photon paths (#65, §8.4) on
 PART-001 × 4: one pulse per label (L, W, H, then the part's three); each crate dimension gives 6
@@ -2537,7 +2586,10 @@ check of PART-001/002/003 at quantities 1, 8 and 40 leaves "mm" or "kg" in imper
 `src/lib/units.test.ts` also pins the one mass rule (one decimal under 100, whole from 100).
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions, including the edges (0, under
 and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into the next inch) and the
-CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
+CSV's ` in` mark, and the standards editor's conversions (`editUnit`, #62): nominal stock both ways
+(3.5 in is 89 mm, 3/4 is 19 mm), metric as stored, and a value typed in inches in every dimension
+reading back the same after a JSON round trip. `standardsFields.test.ts` checks every field's dimension and that
+every default shows in imperial and stores back a valid value. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
 4x6, …, either order and 1 mm of rounding, no name for non-stock), plywood by sold thickness with
 the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
 **`src/lib/csv.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
@@ -2681,7 +2733,8 @@ copies chosen shots there on request.
   - `view-controls`: the mode icon, the first framing, camera presets, the switches and Pull apart, Hide panels. `view-popover`
     (`.mobile`): placement, nothing covering it, closing by Escape, focus-out and a press outside, the gesture hint.
   - `size-labels`: labels stay in the free area for every sample part and mode. `viewer` (`.mobile`): which labels each camera
-    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, a lost WebGL context.
+    shows, the part pill, fork-arrow hiding, the arrow clear of the width label, no arrow under the island or summary bar or off screen,
+    a lost WebGL context.
   - `camera` (`.mobile`): right-drag and two-finger pan, bounded so the crate can't be lost; a preset or the idle turn returns
     to the middle. `layout` (`.narrow`, `.mobile`): only the island panel scrolls; the crate sits in the free area at load, after
     a reload, Hide / Show panels and a resize; the narrow drawer and the phone layout. `drawer.mobile`: the drawer's open and
@@ -2689,7 +2742,7 @@ copies chosen shots there on request.
   - `idle-autoplay`: hover never stops auto-play, a click, drag, wheel or key does, it resumes after 5 s, and the tooltip follows
     the turning crate. `dimension-pulse`: a pulse fires after framing, splits at the witness lines and ends; none with size
     labels off or reduced motion.
-  - `shop-standards`: collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
+  - `shop-standards` (also in imperial: inches, lb and plywood fractions, a value typed in inches surviving a reload, and the "no limit" placeholder): collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
     resets; a lower threshold switches the plywood; bad input is flagged. `scorecard`: the Overview card, the Layouts deltas and
     ranking toggle, the labour rate, "Designed in" after the first export.
   - `design-file`: Download design (.json) and reopen it (catalog, custom with and without its model, stale layout, newer

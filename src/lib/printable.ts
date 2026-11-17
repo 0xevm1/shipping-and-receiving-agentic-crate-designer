@@ -436,7 +436,7 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
       unmet: plan.unmet && renderMessage(plan.unmet, u),
     },
     crates,
-    problem: plan.problem ? `${plan.problem.title}. ${plan.problem.detail}` : null,
+    problem: plan.problem ? `${plan.problem.title}. ${renderMessage(plan.problem.detail, u)}` : null,
   };
 }
 

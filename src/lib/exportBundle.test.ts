@@ -152,7 +152,7 @@ describe("Export bundle (#51)", () => {
 
   it("refuses when there is no crate", async () => {
     const inp = input(catalogPart(), 4);
-    const plan = { ...inp.plan, problem: { title: "Too big", detail: "Nothing fits." } } as BundleInput["plan"];
+    const plan = { ...inp.plan, problem: { id: "part-too-large", title: "Too big", detail: ["Nothing fits."] } } as BundleInput["plan"];
     await expect(buildBundle({ ...inp, plan }, makers)).rejects.toBeInstanceOf(NoCrateError);
   });
 

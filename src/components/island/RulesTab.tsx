@@ -62,7 +62,12 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           <button type="button" className={styles.step} aria-label="One more" onClick={() => setQty(settings.quantity + 1)}>
             +
           </button>
-          <span className={styles.sep} />
+        </div>
+        {/* The part's suggested batch sizes: their own small group, so they don't read as part of the stepper. */}
+        <div className={styles.presets} role="group" aria-label="Suggested quantities">
+          <span className={styles.presetsLabel} aria-hidden="true">
+            Suggested
+          </span>
           {suggested.map((n) => (
             <button key={n} type="button" className={styles.chip} aria-pressed={settings.quantity === n} onClick={() => setQty(n)}>
               {n}

@@ -12,6 +12,8 @@ export interface LengthQty {
   readonly kind: "length";
   readonly mm: number;
   readonly fine?: boolean;
+  /** A distance rather than a size (a part's 30 m length): metres or feet, not mm or inches. */
+  readonly long?: boolean;
 }
 
 /** A mass in kg. */
@@ -28,6 +30,8 @@ export type Message = readonly MessagePart[];
 export const mm = (v: number): LengthQty => ({ kind: "length", mm: v });
 /** A shop measurement in mm (a gap, clearance, floor or fork width): nearest 1/16" in imperial. */
 export const shopMm = (v: number): LengthQty => ({ kind: "length", mm: v, fine: true });
+/** A long distance in mm: "30 m" in metric, "98.4 ft" in imperial. */
+export const longMm = (v: number): LengthQty => ({ kind: "length", mm: v, long: true });
 export const kg = (v: number): MassQty => ({ kind: "mass", kg: v });
 
 type Hole = string | number | Quantity | Message;

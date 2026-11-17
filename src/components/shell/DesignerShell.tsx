@@ -116,7 +116,7 @@ export function DesignerShell() {
 
   // The drawer is modal: focus moves into it, Tab cycles inside it, and closing returns focus
   // to the hamburger.
-  useFocusTrap(islandRef, drawer, { initial: ".drawer-close", restore: burgerRef });
+  useFocusTrap(islandRef, drawer, { initial: '[aria-label="Close the panel"]', restore: burgerRef });
 
   // The crate is centred in the space the overlays leave free.
   useEffect(() => {
