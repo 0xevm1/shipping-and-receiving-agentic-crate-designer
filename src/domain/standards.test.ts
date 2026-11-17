@@ -44,7 +44,7 @@ describe("ShopStandardsSchema", () => {
       minBlockingGapMm: 19,
     });
     expect(s.limits).toMatchObject({ ltlExcessiveLengthMm: 2438, stackKg: 100, stableHeightRatio: 1.5, lowUtilization: 0.25 });
-    expect(s.limits.perCrate).toEqual({ maxGrossKg: 1000, maxParts: 0 });
+    expect(s.limits.perCrate).toEqual({ maxGrossKg: 1000, maxParts: 0, maxOutsideMm: { length: 0, width: 0, height: 0 } });
     expect(s.rates).toEqual({
       densityKgM3: { plywood: 600, lumber: 480 },
       costUsdPerM3: { plywood: 1100, lumber: 650 },

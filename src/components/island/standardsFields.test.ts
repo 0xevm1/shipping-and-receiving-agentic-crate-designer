@@ -56,6 +56,12 @@ describe("the editable standards table", () => {
   });
 
   it("marks the fields where an empty box means zero", () => {
-    expect(fields.filter((f) => f.zero).map((f) => f.path.join("."))).toEqual(["limits.perCrate.maxParts", "structure.lidStackKg"]);
+    expect(fields.filter((f) => f.zero).map((f) => f.path.join("."))).toEqual([
+      "limits.perCrate.maxParts",
+      "limits.perCrate.maxOutsideMm.length",
+      "limits.perCrate.maxOutsideMm.width",
+      "limits.perCrate.maxOutsideMm.height",
+      "structure.lidStackKg",
+    ]);
   });
 });

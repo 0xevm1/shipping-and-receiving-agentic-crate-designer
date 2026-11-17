@@ -15,6 +15,8 @@ import { sha256Text } from "./sha256";
  */
 export interface ParityCase {
   part: string;
+  /** Set on a case run under a per-crate size limit (#108); absent for the default standards. */
+  sizeLimitMm?: { length: number; width: number; height: number };
   quantity: number;
   inputHash: string;
   summary: DesignSummary;
@@ -28,22 +30,31 @@ export const parityRequest = (id: string, quantity: number, ranking: Ranking = "
   return { part: catalogPart(p), settings: { ...DEFAULT_SETTINGS, quantity }, standards: DEFAULT_STANDARDS, layoutKey: null, ranking };
 };
 
+/** A pallet-position limit that splits a batch of 8 of PART-003, which one crate would not fit (#108). */
+const SIZE_LIMIT_CASE = { part: "PART-003", quantity: 8, sizeLimitMm: { length: 1200, width: 800, height: 1000 } } as const;
+
 export function parityCases(): ParityCase[] {
-  return catalog.parts.flatMap((p) =>
-    p.suggested_quantities.map((quantity) => {
-      const req = parityRequest(p.id, quantity);
-      const out = designShipment(req);
-      const csv = (units: "imperial" | "metric", scope: "crate" | "shipment" = "crate") => cutList({ ...req, units, scope, crateIndex: 0 }, out.plan).csv;
-      return {
-        part: p.id,
-        quantity,
-        inputHash: out.inputHash,
-        summary: out.summary,
-        planHash: sha256Text(canonicalJson(out.plan)),
-        csv: { imperial: csv("imperial"), metric: csv("metric"), ...(out.plan.split ? { shipment: csv("imperial", "shipment") } : {}) },
-      };
-    }),
-  );
+  const runs = [...catalog.parts.flatMap((p) => p.suggested_quantities.map((quantity) => ({ part: p.id, quantity, sizeLimitMm: undefined }))), SIZE_LIMIT_CASE];
+  return runs.map(({ part, quantity, sizeLimitMm }) => {
+    const base = parityRequest(part, quantity);
+    const req = sizeLimitMm
+      ? {
+          ...base,
+          standards: { ...base.standards, limits: { ...base.standards.limits, perCrate: { ...base.standards.limits.perCrate, maxOutsideMm: sizeLimitMm } } },
+        }
+      : base;
+    const out = designShipment(req);
+    const csv = (units: "imperial" | "metric", scope: "crate" | "shipment" = "crate") => cutList({ ...req, units, scope, crateIndex: 0 }, out.plan).csv;
+    return {
+      part,
+      ...(sizeLimitMm ? { sizeLimitMm } : {}),
+      quantity,
+      inputHash: out.inputHash,
+      summary: out.summary,
+      planHash: sha256Text(canonicalJson(out.plan)),
+      csv: { imperial: csv("imperial"), metric: csv("metric"), ...(out.plan.split ? { shipment: csv("imperial", "shipment") } : {}) },
+    };
+  });
 }
 
 /** The baseline's text: stable key order and a trailing newline, as Prettier leaves JSON. */

@@ -127,10 +127,14 @@ describe("stored data from before persist.ts still loads", () => {
     const loaded = loadStandards(memoryStorageWith(STANDARDS_STORAGE_KEY, fixture("shop-standards.v1.json")));
     expect(loaded.defaults.maxLayers).toBe(3);
     expect(loaded.stock.floorPlywoodMm).toBe(19);
-    // Saving what was loaded writes the same stored text back.
+    // A row from before the per-crate size limit reads as no limit (#108).
+    expect(loaded.limits.perCrate.maxOutsideMm).toEqual({ length: 0, width: 0, height: 0 });
+    // Saving what was loaded writes the stored text back, plus the fields added since (the size limit).
     const store = memoryStorage();
     expect(saveStandards(loaded, store)).toBe(true);
-    expect(store.data.get(STANDARDS_STORAGE_KEY)).toBe(fixture("shop-standards.v1.json"));
+    const stored = JSON.parse(fixture("shop-standards.v1.json"));
+    stored.standards.limits.perCrate.maxOutsideMm = { length: 0, width: 0, height: 0 };
+    expect(JSON.parse(store.data.get(STANDARDS_STORAGE_KEY)!)).toEqual(stored);
   });
 
   it("units (crate-designer.units.v1) are the bare word", () => {

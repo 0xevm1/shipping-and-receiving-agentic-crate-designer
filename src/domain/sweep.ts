@@ -3,10 +3,10 @@ import { designCrate } from "./crate";
 import { smallestSideGap } from "./crateChecks";
 import type { CrateDesign } from "./crateDesign";
 import { inputProblem, rankLayouts, type DesignProblem } from "./design";
-import { kg, msg, parts, type Message } from "./message";
+import { dimsMessage, kg, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart } from "./schema";
-import { withinOutsideLimits } from "./shipment";
+import { sizeLimitText, withinOutsideLimits, withinSizeLimit } from "./shipment";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /**
@@ -15,7 +15,7 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  * check, and score the rest by **cost per part moved** = (crate cost + freight cost) ÷ parts.
  *
  * - **Hard checks first**, never traded for cost: the trailer door and floor, stability, every
- *   part blocked in, the base rating, and the per-crate gross and part limits (#25). A quantity
+ *   part blocked in, the base rating, and the per-crate size, gross and part limits (#25, #108). A quantity
  *   whose layouts all fail is never recommended, and its curve point says which rule stopped it.
  * - **Freight dollars only from caller-supplied rates** (`FreightRates`). Without them the score is
  *   the crate cost per part alone, `basis: "crate-only"`, and no freight figure is invented.
@@ -37,7 +37,7 @@ export const SWEEP_LAYOUTS_PER_QUANTITY = 3;
 export const SWEEP_SHORTLIST_SIZE = 5;
 
 /** The hard rules, in the order a failing crate reports them. */
-export const SWEEP_CONSTRAINTS = ["door", "stable", "blocking", "base-rating", "max-gross", "max-parts"] as const;
+export const SWEEP_CONSTRAINTS = ["door", "stable", "blocking", "base-rating", "max-size", "max-gross", "max-parts"] as const;
 export type SweepConstraint = (typeof SWEEP_CONSTRAINTS)[number];
 
 /**
@@ -167,6 +167,12 @@ export function hardFailure(d: CrateDesign, k: number, standards: ShopStandards 
     if (c?.level === "caution") return { binding: id, reason: c.detail };
   }
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
+  if (!withinSizeLimit(d.layout.external, standards)) {
+    return {
+      binding: "max-size",
+      reason: msg`The crate is ${dimsMessage(d.layout.external)} outside, over the shop's size limit (${sizeLimitText(standards) ?? ""}).`,
+    };
+  }
   if (d.grossKg > maxGrossKg) return { binding: "max-gross", reason: msg`Gross ${kg(d.grossKg)} is over the ${kg(maxGrossKg)} per-crate limit.` };
   if (maxParts > 0 && k > maxParts) return { binding: "max-parts", reason: maxPartsReason(maxParts) };
   return null;

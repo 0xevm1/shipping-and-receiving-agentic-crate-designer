@@ -3,7 +3,7 @@ import type { Check } from "./check";
 import { designCrate } from "./crate";
 import type { CrateDesign } from "./crateDesign";
 import { computeDesign, rankByObjective, rankLayouts, type DesignProblem, type DesignResult, type Ranking } from "./design";
-import { joinMessages, kg, msg, parts, type Message } from "./message";
+import { dimsMessage, joinMessages, kg, mm, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -59,10 +59,43 @@ export interface ShipmentPlan {
   problem: DesignProblem | null;
 }
 
-/** True when a crate's outside size fits through the trailer door and on its floor (`limits.trailerMm`). */
+/**
+ * True when a crate's outside size is within the shop's own size limit (`limits.perCrate.maxOutsideMm`,
+ * 0 on a side = no limit there). The crate may be turned on the floor, so length and width may
+ * swap: it passes when it fits either way round. Height never swaps.
+ */
+export function withinSizeLimit(external: Vec3, standards: ShopStandards = DEFAULT_STANDARDS): boolean {
+  const { length, width, height } = standards.limits.perCrate.maxOutsideMm;
+  const [l, w, h] = external;
+  const under = (v: number, max: number) => max === 0 || v <= max;
+  return under(h, height) && ((under(l, length) && under(w, width)) || (under(w, length) && under(l, width)));
+}
+
+/**
+ * True when a crate's outside size fits through the trailer door and on its floor (`limits.trailerMm`)
+ * and is within the shop's own size limit (`limits.perCrate.maxOutsideMm`).
+ */
 export function withinOutsideLimits(external: Vec3, standards: ShopStandards = DEFAULT_STANDARDS): boolean {
   const t = standards.limits.trailerMm;
-  return external[0] <= t.interiorLength && external[1] <= t.doorWidth && external[2] <= t.doorHeight;
+  return external[0] <= t.interiorLength && external[1] <= t.doorWidth && external[2] <= t.doorHeight && withinSizeLimit(external, standards);
+}
+
+/** The size limit in words ("1,200 × 1,000 × 1,000 mm, length and width either way round"), or null when there is none. */
+export function sizeLimitText(standards: ShopStandards): Message | null {
+  const { length, width, height } = standards.limits.perCrate.maxOutsideMm;
+  if (length === 0 && width === 0 && height === 0) return null;
+  if (length > 0 && width > 0 && height > 0) return msg`${dimsMessage([length, width, height])} outside, length and width either way round`;
+  const sides = (
+    [
+      ["length", length],
+      ["width", width],
+      ["height", height],
+    ] as const
+  ).filter(([, v]) => v > 0);
+  return msg`outside ${joinMessages(
+    sides.map(([name, v]) => msg`${name} ${mm(v)}`),
+    ", ",
+  )} at most`;
 }
 
 interface Candidate {
@@ -89,6 +122,9 @@ export function planShipment(
   const inside = (l: Layout) => withinOutsideLimits(l.external, standards);
   // Gross within the smaller of the per-crate limit and the computed base rating (as a gross weight).
   const fitsLimits = (d: CrateDesign, k: number) => inside(d.layout) && d.grossKg <= crateGrossLimitKg(d, standards) && (maxParts === 0 || k <= maxParts);
+  const sizeOk = (l: Layout) => withinSizeLimit(l.external, standards);
+  /** Layouts over the shop's size limit are not offered, unless every one is (then the batch splits). */
+  const offered = (layouts: Layout[]): Layout[] => (layouts.some(sizeOk) ? layouts.filter(sizeOk) : layouts);
   const layoutMemo = new Map<number, Layout[]>();
   const memo = new Map<number, Candidate>();
 
@@ -97,7 +133,8 @@ export function planShipment(
     let layouts = layoutMemo.get(k);
     if (!layouts) {
       const ranked = rankLayouts(part, { ...settings, quantity: k }, standards);
-      layouts = inside(ranked[0]) ? ranked : [...ranked.filter(inside), ...ranked.filter((l) => !inside(l))];
+      const within = offered(ranked);
+      layouts = inside(within[0]) ? within : [...within.filter(inside), ...within.filter((l) => !inside(l))];
       layoutMemo.set(k, layouts);
     }
     return layouts;
@@ -130,8 +167,9 @@ export function planShipment(
   if (!single.design) return plan([{ label: "A", count: 1, quantity: total, result: single }], null, standards);
   // Reuse the design already made, unless its layout had to be skipped for the trailer.
   if (inside(single.design.layout)) {
-    layoutMemo.set(total, single.layouts);
-    memo.set(total, { quantity: total, result: single, fits: fitsLimits(single.design, total) });
+    const layouts = offered(single.layouts);
+    layoutMemo.set(total, layouts);
+    memo.set(total, { quantity: total, result: { ...single, layouts }, fits: fitsLimits(single.design, total) });
   }
   const whole = candidate(total);
   // The user's pick for the whole batch counts too: a batch ships in one crate when the crate on
@@ -248,10 +286,16 @@ function plan(types: CrateType[], unmet: Message | null, standards: ShopStandard
   };
 }
 
-/** "1,000 kg gross, 40 parts and the trailer door": the limits in force, for messages. */
+/** "1,000 kg gross, 40 parts, 1,200 × 1,000 × 1,000 mm outside and the trailer door": the limits in force, for messages. */
 function limitText(standards: ShopStandards): Message {
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
-  const limits = [msg`${kg(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []), parts("the trailer door and floor")];
+  const size = sizeLimitText(standards);
+  const limits = [
+    msg`${kg(maxGrossKg)} gross or the base rating`,
+    ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []),
+    ...(size ? [size] : []),
+    parts("the trailer door and floor"),
+  ];
   return joinMessages(limits, ", ");
 }
 

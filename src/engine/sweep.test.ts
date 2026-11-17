@@ -116,3 +116,33 @@ describe("rankConfigurations: the headless answer", () => {
     expect(bad.recommendation).toBeNull();
   });
 });
+
+describe("the sweep under a per-crate size limit (#108)", () => {
+  const standards = {
+    ...DEFAULT_STANDARDS,
+    limits: { ...DEFAULT_STANDARDS.limits, perCrate: { ...DEFAULT_STANDARDS.limits.perCrate, maxOutsideMm: { length: 1000, width: 700, height: 700 } } },
+  };
+  const outsideOk = (o: readonly number[] | null) => !!o && o[2] <= 700 && ((o[0] <= 1000 && o[1] <= 700) || (o[1] <= 1000 && o[0] <= 700));
+
+  it("recommends and splits only into crates within the limit, and hashes it", () => {
+    const req = request({ standards, total: 41 });
+    expect(sweepInputHash(req)).not.toBe(sweepInputHash(request({ total: 41 })));
+    const out = rankConfigurations(req);
+    expect(out.configurations.length).toBeGreaterThan(0);
+    for (const c of out.configurations) expect(outsideOk(c.outsideMm)).toBe(true);
+    expect(out.recommendation!.quantityPerCrate).toBeLessThan(rankConfigurations(request()).recommendation!.quantityPerCrate);
+    expect(out.total!.types.length).toBeGreaterThan(0);
+    for (const t of out.total!.types) {
+      const d = designShipment(sweepDesignRequest(req, t.quantity, t.layoutKey));
+      expect(d.summary.crates).toHaveLength(1);
+      expect(outsideOk(d.summary.crates[0].outsideMm)).toBe(true);
+    }
+  });
+
+  it("validates a request without the field (an old stored row) as no limit", () => {
+    const old = structuredClone(request()) as unknown as { standards: { limits: { perCrate: Record<string, unknown> } } };
+    delete old.standards.limits.perCrate.maxOutsideMm;
+    const parsed = SweepRequestSchema.parse(old);
+    expect(parsed.standards.limits.perCrate.maxOutsideMm).toEqual({ length: 0, width: 0, height: 0 });
+  });
+});
