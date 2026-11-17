@@ -1,5 +1,11 @@
-/* Cascade layers, lowest first: Tailwind's reset (theme, base), our base rules (`base`), the shared UI
-   primitives (`ui`, in ui.css). Unlayered CSS, the component modules, beats every layer. */
+/*
+ * Global CSS is only this: the design tokens (custom properties), the base element rules, and
+ * (in ui.css, loaded by the designer) the shared `@layer ui` primitives. Everything else is a CSS
+ * module next to its component. This file loads on every route, `/print` included.
+ *
+ * Cascade layers, lowest first: Tailwind's reset (`theme`, `base`), our base rules (`base`), the
+ * primitives (`ui`). Unlayered CSS, the component modules, beats every layer.
+ */
 @layer theme, base, ui, components, utilities;
 @import "tailwindcss";
 
@@ -11,13 +17,17 @@
  *   at 125% width; Söhne Mono (labels, buttons) → Geist Mono. Söhne is a
  *   licensed Klim typeface; swap it in here via next/font/local if licensed.
  *
- * Breakpoints (media queries can't read custom properties, so the numbers are written out):
- *   980px  the one narrow breakpoint: below it the island is a drawer and the scene is full-bleed.
- *          `NARROW` in src/components/shell/DesignerShell.tsx must match it, and so must the
- *          `max-width: 980px` queries in the CSS modules. `(pointer: coarse)` joins it where a
- *          touch screen needs bigger targets whatever the width.
- *   981px–1180px  a compact desktop: the tagline goes and the island narrows to 420px.
- *   600px / 560px  phones in landscape (narrow and at least 600px wide, or at most 560px tall).
+ * Breakpoints (media queries can't read custom properties, so the numbers are written out in the
+ * modules; this is the one list of them):
+ *   980px  the one narrow breakpoint: at or below it the island is a drawer and the scene is
+ *          full-bleed. `NARROW` in src/components/shell/DesignerShell.tsx must match it, and so
+ *          must every `max-width: 980px` query in the CSS modules and designer.css.
+ *          `(pointer: coarse)` joins it where a touch screen needs bigger targets whatever the width.
+ *   981px–1180px  a compact desktop (PartHeader.module.css, Island.module.css): the tagline goes
+ *          and the island narrows to 420px.
+ *   600px / 560px  phones in landscape (DesignerShell.module.css, ViewBar.module.css,
+ *          Island.module.css, PartViewSlot.module.css): narrow and at least 600px wide, or at most
+ *          560px tall. 430px (PartHeader.module.css) is where "crate" drops out of "crate gross".
  */
 
 :root {
@@ -51,6 +61,8 @@
   /* Stacking order, bottom to top. */
   --z-labels: 1;
   --z-island: 2;
+  /* Inside the stage: over the size labels (1), under the tooltip (6). */
+  --z-cover: 3;
   --z-header: 3;
   --z-foot: 4;
   --z-toast: 5;

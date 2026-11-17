@@ -100,7 +100,7 @@ export function OverviewTab({ design, checks }: { design: CrateDesign; checks: r
         </Step>
       </ul>
 
-      <h3>Crate weight by assembly</h3>
+      <h3 className="subhead">Crate weight by assembly</h3>
       <div className={styles.bars}>
         {ASSEMBLIES.filter((a) => design.tareKgByAssembly[a] > 0).map((a) => {
           const kg = design.tareKgByAssembly[a];

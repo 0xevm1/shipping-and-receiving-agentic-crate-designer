@@ -3,8 +3,8 @@
  * its own, tabs and the selected tab's panel (the only thing on the page that scrolls). On narrow
  * screens (`max-width: 980px`, matching `NARROW` in DesignerShell.tsx) it is a right-side drawer.
  *
- * `.panel` also sets the type and touch targets of the tab content (headings, buttons and inputs
- * inside it), so a tab doesn't repeat them. Tab modules own everything else about their content.
+ * `.panel` also sets the touch targets of the tab content (buttons and inputs inside it) and the
+ * tab title (`h2`), so a tab doesn't repeat them. Tab modules own everything else about their content.
  */
 
 .island {
@@ -119,13 +119,6 @@
 }
 .panel h2 {
   margin: 0 0 14px;
-}
-.panel h3 {
-  font: 400 14px/1.3 var(--sans);
-  color: var(--soft);
-  margin: 18px 0 8px;
-  padding-top: 16px;
-  border-top: 1px solid var(--hair);
 }
 
 /*

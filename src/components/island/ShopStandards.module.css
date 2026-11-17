@@ -50,8 +50,7 @@
   margin: 4px 0 6px;
 }
 
-/* `.root` in front to win over the panel's `.panel h3` (Island.module.css). */
-.root .group {
+.group {
   margin: 18px 0 0;
   padding: 0;
   border: 0;
