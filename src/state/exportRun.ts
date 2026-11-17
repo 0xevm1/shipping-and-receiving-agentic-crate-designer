@@ -1,7 +1,9 @@
 import { create } from "zustand";
+import { withTotal } from "@/engine/request";
 import { downloadBytes } from "@/lib/download";
 import { models } from "@/lib/modelRegistry";
 import { useDesigner } from "./store";
+import { totalPlanViewNow, wholeShipment } from "./totalPlan";
 import { useView } from "./viewStore";
 
 /** The busy state shows at least this long, so a fast export still registers (not with reduced motion). */
@@ -41,6 +43,10 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       // The design as it is now, whatever is edited while the files are made.
       const at = new Date();
+      // With Parts to ship set (#140) the files describe the whole shipment: the job's total plan, one
+      // request built like every other (`withTotal`), so the server's files for it are the same.
+      const whole = wholeShipment(s, totalPlanViewNow());
+      const req = withTotal({ part: s.part, settings: s.settings, standards: s.standards, layoutKey: s.layoutKey, ranking: s.ranking }, whole.total);
       // The part's model is held for the whole run: the part may be replaced while the files are made.
       const hold = models.acquire(s.part.modelUrl);
       try {
@@ -48,13 +54,14 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
           const [{ buildBundleZip }, { urlModelReader }] = await Promise.all([import("@/engine/files"), import("@/engine/glb")]);
           const input = {
             part: s.part,
-            settings: s.settings,
-            plan: s.plan,
-            crateIndex: s.crateIndex,
+            settings: req.settings,
+            plan: whole.plan,
+            total: whole.total,
+            crateIndex: whole.total ? 0 : s.crateIndex,
             standards: s.standards,
             units,
-            ranking: s.ranking,
-            layoutKey: s.layoutKey,
+            ranking: req.ranking,
+            layoutKey: req.layoutKey,
             generatedAt: at.toISOString(),
           };
           return buildBundleZip(input, urlModelReader, at);

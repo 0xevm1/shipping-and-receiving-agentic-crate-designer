@@ -1,7 +1,8 @@
 import type { Ranking } from "@/domain/design";
 import type { CrateSettings, DesignPart } from "@/domain/schema";
+import { TotalSplitSchema, type TotalSplit } from "@/domain/shipment";
 import type { ShopStandards } from "@/domain/standards";
-import { candidateQuantities } from "@/domain/sweep";
+import { candidateQuantities, type TotalPlan } from "@/domain/sweep";
 import { canonicalJson } from "./canonical";
 import { designPartOf } from "./engine";
 import type { DesignRequest } from "./schemas";
@@ -48,15 +49,50 @@ export function sweepRequestFor(input: {
   };
 }
 
-/** The design request for a part at one set of rules (the quantity is `settings.quantity`). */
+/**
+ * The crate types of a job's total (`planTotal`'s answer, or the server's stored one) as the split a
+ * design request carries (#140). Null when there is no plan to carry: no types, or types that don't
+ * make up `parts` (a plan from another total).
+ */
+export function totalSplitFor(parts: number, types: readonly { count: number; quantity: number; layoutKey: string | null }[]): TotalSplit | null {
+  const r = TotalSplitSchema.safeParse({ parts, types: types.map((t) => ({ count: t.count, quantity: t.quantity, layoutKey: t.layoutKey })) });
+  return r.success ? r.data : null;
+}
+
+/** A `planTotal` answer as the split a request carries (#140). */
+export function totalSplitOfPlan(plan: TotalPlan): TotalSplit {
+  return { parts: plan.total, types: plan.types.map((t) => ({ count: t.count, quantity: t.quantity, layoutKey: t.crate.layoutKey })) };
+}
+
+/**
+ * `req` for a job's whole shipment (#140): the same part, rules and standards with the total's crate
+ * types, so every file built from it describes the total. The quantity and layout pick are not read
+ * when a total is set, so they are fixed (the fuller crate's quantity, the recommended layout and the
+ * volume ranking): requests for one total from different edits of the crate on screen are one
+ * request, with one `inputHash`, in the browser and on the server. Without a total, `req` as it is.
+ */
+export function withTotal(req: DesignRequest, total: TotalSplit | null | undefined): DesignRequest {
+  if (!total) return req;
+  return { ...req, settings: { ...req.settings, quantity: total.types[0].quantity }, layoutKey: null, ranking: "volume", total };
+}
+
+/** The design request for a part at one set of rules (the quantity is `settings.quantity`), or for the whole shipment of a `total` (`withTotal`). */
 export function designRequestFor(input: {
   part: DesignPart;
   settings: CrateSettings;
   standards: ShopStandards;
   layoutKey: string | null;
   ranking: Ranking;
+  total?: TotalSplit | null;
 }): DesignRequest {
-  return { part: designPartOf(input.part), settings: input.settings, standards: input.standards, layoutKey: input.layoutKey, ranking: input.ranking };
+  const req: DesignRequest = {
+    part: designPartOf(input.part),
+    settings: input.settings,
+    standards: input.standards,
+    layoutKey: input.layoutKey,
+    ranking: input.ranking,
+  };
+  return withTotal(req, input.total);
 }
 
 /** Bumped when the hashed shape of a design part changes. 2: the part's centre of gravity (`cog`, #110). */

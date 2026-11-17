@@ -61,8 +61,8 @@ describe("a design file saved as format 3, with keepUpright", () => {
     return doc;
   };
 
-  it("is format 4 now", () => {
-    expect(DESIGN_SCHEMA_VERSION).toBe(4);
+  it("is format 5 now (the total joined it, #140)", () => {
+    expect(DESIGN_SCHEMA_VERSION).toBe(5);
   });
 
   it.each([

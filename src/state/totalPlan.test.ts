@@ -3,13 +3,14 @@ import { getPart } from "@/domain/catalog";
 import { DEFAULT_SETTINGS } from "@/domain/design";
 import { planShipment, withinSizeLimit } from "@/domain/shipment";
 import { planTotal, sweepQuantities } from "@/domain/sweep";
+import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { custom } from "@/domain/testFixtures";
 import { explainTotalPlan } from "@/domain/totalPlan";
 import { ENGINE_VERSION } from "@/engine/version";
 import { MAX_TOTAL_QUANTITY } from "@/lib/api/designs";
 import type { TotalPlanResponse } from "@/lib/api/jobs";
 import { metricText } from "@/lib/message";
-import { parseTotal, totalPlanView } from "./totalPlan";
+import { parseTotal, totalPlanView, wholeShipment } from "./totalPlan";
 
 const sweep = sweepQuantities(getPart("PART-001"), DEFAULT_SETTINGS);
 const CONFIG_A = "00000000-0000-4000-8000-0000000000a1";
@@ -119,5 +120,39 @@ describe("Parts to ship under a per-crate size limit (#108)", () => {
       expect(withinSizeLimit(d.layout.external, limited)).toBe(true);
     }
     expect(Math.max(...view.shown!.crates.map((c) => c.quantity))).toBeLessThan(Math.max(...plain.shown!.crates.map((c) => c.quantity)));
+  });
+});
+
+describe("wholeShipment (#140)", () => {
+  const part = getPart("PART-001");
+  const screen = { part, settings: { ...DEFAULT_SETTINGS, quantity: 8 }, standards: DEFAULT_STANDARDS };
+  const onScreen = planShipment(part, screen.settings, null, DEFAULT_STANDARDS);
+
+  it("is the plan on screen while Parts to ship is not set", () => {
+    const w = wholeShipment({ ...screen, plan: onScreen }, totalPlanView({ total: null, sweep, server: null }));
+    expect(w.total).toBeNull();
+    expect(w.plan).toBe(onScreen);
+  });
+
+  it("is the total's plan: its parts, crates and cost, not the plan of the 200 on screen", () => {
+    const view = totalPlanView({ total: 10000, sweep, server: null });
+    const w = wholeShipment({ ...screen, plan: planShipment(part, { ...screen.settings, quantity: 200 }, null, DEFAULT_STANDARDS) }, view);
+    const mine = planTotal(sweep, 10000)!;
+    expect(w.total).toEqual({ parts: 10000, types: mine.types.map((t) => ({ count: t.count, quantity: t.quantity, layoutKey: t.crate.layoutKey })) });
+    expect(w.plan.total).toBe(10000);
+    expect(w.plan.totals).toMatchObject({ parts: 10000, crates: mine.crates });
+    expect(w.plan.totals.costUsd).toBeCloseTo(mine.crateCostUsd, 6);
+  });
+
+  it("follows the server's plan while this browser's sweep is not there yet", () => {
+    const w = wholeShipment({ ...screen, plan: onScreen }, totalPlanView({ total: 100, sweep: null, server: serverPlan(100) }));
+    expect(w.plan.totals.parts).toBe(100);
+  });
+
+  it("falls back to the plan on screen when no plan passes every check", () => {
+    const failing = { ...sweep, curve: sweep.curve.map((p) => ({ ...p, ok: false })) };
+    const w = wholeShipment({ ...screen, plan: onScreen }, totalPlanView({ total: 100, sweep: failing, server: null }));
+    expect(w.total).toBeNull();
+    expect(w.plan).toBe(onScreen);
   });
 });

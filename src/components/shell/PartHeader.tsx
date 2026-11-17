@@ -7,12 +7,13 @@ import { cogSourceNote, cogUnit, fieldWidthCh, formatCog, formatMass, massUnit, 
 import { canSetFrame } from "@/lib/part";
 import { UNITS_LABEL, UP_LABEL, type ModelUnits, type UpAxis } from "@/lib/partFrame";
 import { MODEL_UNITS, UP_AXES } from "@/domain/partFrame";
-import { dims, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
+import { dims, groupDigits, lengthUnit, partWeight, weight, weightNumber } from "@/lib/units";
 import { modelMatchesCatalog } from "@/lib/checks";
 import { massWarning } from "@/lib/fileCheck";
 import { renderMessage } from "@/lib/message";
 import type { ChangeSource } from "@/state/designEvents";
 import { useDesigner } from "@/state/store";
+import { useWholeShipment } from "@/state/totalPlan";
 import { useView } from "@/state/viewStore";
 import { ChangeNote, Flash } from "./ChangeFeedback";
 import { ExportPill } from "./ExportPill";
@@ -121,14 +122,15 @@ function FrameFields() {
 function Gross() {
   const gross = useDesigner((s) => s.result.design?.grossKg);
   const units = useView((s) => s.units);
-  const crates = useDesigner((s) => (s.plan.split ? s.plan.totals : null));
+  // A split batch, or the job's total (#140): the whole shipment, not the crate on screen.
+  const shipment = useWholeShipment();
+  const crates = shipment.total || shipment.plan.split ? shipment.plan.totals : null;
   if (gross === undefined) return null;
-  // A split batch: the shipment, not one crate.
   if (crates) {
     return (
       <>
         {" "}
-        · <span>{crates.crates} crates,</span> <span>{weight(crates.grossKg, units, true)} gross in all</span>
+        · <span>{groupDigits(crates.crates)} crates,</span> <span>{weight(crates.grossKg, units, true)} gross in all</span>
       </>
     );
   }
