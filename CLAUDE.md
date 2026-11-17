@@ -15,7 +15,9 @@
   - Only `CrateViewer.tsx` converts to three.js's Y-up metres.
 - **Keeping docs current:** when you change a rule, update the constant, its test and spec §7 in
   the same change.
-- **CI:** `.github/workflows/ci.yml` runs install, lint, typecheck, test and build on every PR
-  to `main`. A green run is required before merging (not enforced by GitHub on this private
-  repo; see the README "Pull requests" note).
+- **CI:** `.github/workflows/ci.yml` runs install, lint, typecheck, test and build (`checks`),
+  plus the Playwright suite (`e2e`), on every PR to `main`. A green run is required before
+  merging (not enforced by GitHub on this private repo; see the README "Pull requests" note).
+- **UI changes must update the e2e specs in `e2e/`; check the UI by running `bun run e2e`**
+  (spec §10), and use its screenshots in the PR.
 - **Work tracking:** GitHub issues in `0xevm1/shipping-ui`. Name branches `<type>/<issue>-<slug>`.

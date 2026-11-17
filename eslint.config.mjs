@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Design reference prototype; not app code.
     "docs/**",
+    // Playwright output (#34); the specs in e2e/ are linted.
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 
