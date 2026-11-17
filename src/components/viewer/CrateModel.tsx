@@ -8,7 +8,7 @@ import { anim } from "@/state/motion";
 import { useDesigner } from "@/state/store";
 import { cradleGeometry } from "./cradleGeometry";
 import { CLICK_SLOP_PX, EDGE, explodeOffset, GHOST_BOARD, GHOST_EDGE, hasFocus, ICE, ICE_EDGE, isLit, memberAlpha, setOpacity, WOOD } from "./scene";
-import { boardTooltipDetail } from "./tooltipText";
+import { boardTooltipDetail } from "@/lib/format";
 
 const UNIT_BOX = new BoxGeometry(1, 1, 1);
 const UNIT_EDGES = new EdgesGeometry(UNIT_BOX);

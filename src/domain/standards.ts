@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { CrateSettingsSchema } from "./schema";
+import { hasKind, isPlainObject, readEnvelopeJson, writeEnvelope, type EnvelopeFormat } from "./envelope";
+import { CrateSettingsSchema, PLYWOOD_MM } from "./schema";
 
 /**
  * Shop standards: the house rules every crate is designed to.
@@ -52,7 +53,7 @@ export const ShopStandardsSchema = z
       /** Floor plywood, always this thickness. */
       floorPlywoodMm: mm(6, 50),
       /** Wall, lid and separator plywood that Auto picks from, by payload. */
-      panelPlywoodMm: z.object({ light: mm(6, 50), medium: mm(6, 50), heavy: mm(6, 50) }),
+      panelPlywoodMm: z.object({ light: mm(PLYWOOD_MM.min, PLYWOOD_MM.max), medium: mm(PLYWOOD_MM.min, PLYWOOD_MM.max), heavy: mm(PLYWOOD_MM.min, PLYWOOD_MM.max) }),
       /** Width of blocking posts and bearers. */
       blockWidthMm: mm(19, 300),
       /**
@@ -386,10 +387,6 @@ function merge(base: unknown, patch: unknown): unknown {
   return out;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
 /**
  * A failure carries `error` ("stock.cleatMm.wide: Too small") for a file-level message, and the
  * same problem split into the `path` and the plain-words `message` for a message by one field.
@@ -405,30 +402,38 @@ export function parseStandards(input: unknown): StandardsResult {
   return { ok: false, error: `${path || "Standards"}: ${issue.message}`, path, message: issue.message };
 }
 
+/** The panel plywood thicknesses the shop stocks, smallest first (what the Rules tab offers besides auto). */
+export function panelOptions(s: ShopStandards): number[] {
+  return [...new Set(Object.values(s.stock.panelPlywoodMm))].sort((a, b) => a - b);
+}
+
 /** File and storage format version. Bump it when a field changes meaning. */
 export const STANDARDS_VERSION = 1;
 
+const STANDARDS_KIND = "crate-designer/shop-standards";
+const STANDARDS_FORMAT: EnvelopeFormat = { kind: STANDARDS_KIND, version: STANDARDS_VERSION, label: "standards file", what: "a shop standards file" };
+
 /** Standards as a downloadable JSON document. */
 export function standardsToJson(s: ShopStandards): string {
-  return JSON.stringify({ kind: "crate-designer/shop-standards", version: STANDARDS_VERSION, standards: s }, null, 2) + "\n";
+  return writeEnvelope({ kind: STANDARDS_KIND, version: STANDARDS_VERSION, standards: s });
 }
 
 /**
  * Reads standards from a downloaded file (or storage). Accepts the `standardsToJson`
- * envelope or a bare standards object; a partial object is filled in from the defaults.
+ * envelope (read by the shared envelope reader, like the design file) or a bare standards
+ * object; a partial object is filled in from the defaults.
  */
 export function standardsFromJson(text: string): StandardsResult {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
-    return { ok: false, error: "The file isn't valid JSON." };
+    return { ok: false, error: "This standards file is not valid JSON." };
   }
-  if (isPlainObject(data) && "standards" in data) {
-    if (data.version !== undefined && data.version !== STANDARDS_VERSION) {
-      return { ok: false, error: `Standards version ${String(data.version)} isn't supported (expected ${STANDARDS_VERSION}).` };
-    }
-    data = data.standards;
+  if (isPlainObject(data) && (hasKind(data, STANDARDS_KIND) || "standards" in data)) {
+    const read = readEnvelopeJson(data, STANDARDS_FORMAT);
+    if (!read.ok) return read;
+    data = read.doc.standards;
   }
   if (!isPlainObject(data)) return { ok: false, error: "The file doesn't hold shop standards." };
   return parseStandards(mergeStandards(DEFAULT_STANDARDS, data as DeepPartial<ShopStandards>));

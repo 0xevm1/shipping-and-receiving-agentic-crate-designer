@@ -12,6 +12,11 @@
   `--no-verify`.
 - **Conventions:**
   - The domain (`src/domain/`) is pure TypeScript in mm/kg, Z-up, and holds all business rules.
+  - **Layers point down only:** `src/domain` imports nothing above it (and no three, react, zustand or
+    DOM globals); `src/lib` (edge code) may import domain; `src/state` (zustand, persistence) may import
+    lib and domain; `src/components` and `src/app` may import everything. `bun run lint` enforces this,
+    type-only imports and tests included (the one three.js exception is
+    `src/domain/orientations.parity.test.ts`). If two layers need a thing, move it to the lower one.
   - The Z-up mm to Y-up metres conversion is defined once, in `viewer/scene.ts` (`MM_TO_M`, `domainToWorld`),
     and applied to the scene graph by `CrateViewer.tsx`'s root group.
 - **Keeping docs current:** when you change a rule, update the constant, its test and spec §7 in

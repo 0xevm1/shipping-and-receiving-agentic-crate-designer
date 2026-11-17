@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
 import { nominalLumber } from "./lumber";
 import { countKind, memberBounds, sortDesc } from "./members";
 import type { Vec3 } from "./schema";
-import { designOf } from "./testFixtures";
+import { designOf, metricText as metric } from "./testFixtures";
 
 describe("countKind", () => {
   it("counts the boards of one kind", () => {

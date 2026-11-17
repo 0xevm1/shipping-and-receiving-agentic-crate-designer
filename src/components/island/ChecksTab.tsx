@@ -1,7 +1,7 @@
 "use client";
 
 import { renderMessage } from "@/lib/message";
-import type { CheckItem } from "@/state/checks";
+import type { CheckItem } from "@/lib/checks";
 import { useDesigner } from "@/state/store";
 import { CrateTypePicker } from "./Shipment";
 

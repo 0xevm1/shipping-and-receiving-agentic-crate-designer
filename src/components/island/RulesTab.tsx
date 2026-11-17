@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
 import { settingsAdjustments, type CrateSettings } from "@/domain/schema";
+import { panelOptions } from "@/domain/standards";
 import { clampNote } from "@/lib/clampNote";
 import { plywoodLabel } from "@/lib/lumber";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { ChangeNote } from "../shell/ChangeFeedback";
 import { ShopStandards } from "./ShopStandards";
 
 const MAX_QTY = 200;
 const GAP_MAX_MM = 150;
-const PANELS: CrateSettings["panelThickness"][] = ["auto", 12, 15, 19];
 /** How long a clamp note stays; it fades over the end of it (`.changenote`, none with reduced motion). */
 const CLAMP_NOTE_MS = 5000;
 
@@ -24,6 +25,9 @@ export function RulesTab({ design }: { design: CrateDesign }) {
   const standards = useDesigner((s) => s.standards);
   const minGap = standards.construction.minBlockingGapMm;
   const floorMm = design.construction.floorMm;
+  // The thicknesses the shop stocks; a design saved with another one still shows it, selected.
+  const panels: CrateSettings["panelThickness"][] = ["auto", ...panelOptions(standards)];
+  if (!panels.includes(settings.panelThickness)) panels.push(settings.panelThickness);
   const { setSettings, resetRules } = useDesigner.getState();
   const setQty = (q: number) => setSettings({ quantity: Math.max(1, Math.min(MAX_QTY, Math.round(q) || 1)) });
   const mm = (v: number) => `${length(v, units)} ${lengthUnit(units)}`;
@@ -63,9 +67,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
             </button>
           ))}
         </div>
-        <div className="changenote" role="status">
-          {note && <span key={note.id}>{note.text}</span>}
-        </div>
+        <ChangeNote note={note} />
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 
@@ -126,7 +128,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
       <div className="rule">
         <b>Wall and lid plywood</b>
         <div className="seg" role="group" aria-label="Wall and lid plywood">
-          {PANELS.map((p) => (
+          {panels.map((p) => (
             <button key={p} type="button" aria-pressed={settings.panelThickness === p} onClick={() => setSettings({ panelThickness: p })}>
               {p === "auto" ? "Auto" : units === "imperial" ? plywoodLabel(p, units) : p}
             </button>

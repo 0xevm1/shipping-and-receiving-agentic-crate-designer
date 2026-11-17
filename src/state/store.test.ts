@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getPart } from "@/domain/catalog";
 import type { PartProfile } from "@/domain/profile";
-import { catalogPart, useDesigner, type LoadedPart } from "./store";
+import { useDesigner } from "./store";
+import { catalogPart, type LoadedPart } from "@/lib/part";
 
 /** An unknown part as `loadPartFiles` builds it: stand-in mass, no material. */
 const unknownPart: LoadedPart = {

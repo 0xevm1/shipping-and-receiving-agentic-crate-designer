@@ -6,8 +6,9 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Box3, MathUtils, Spherical, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { isIdle } from "@/state/motion";
-import { reducedMotion, useDesigner, type LoadedPart } from "@/state/store";
+import { reducedMotion, useDesigner } from "@/state/store";
 import { cloneWithMaterial, FOV_DEG, MM_TO_M, partMaterial } from "./scene";
+import { type LoadedPart } from "@/lib/part";
 
 /**
  * Turn speed, rad/s: slower than the handoff's 0.45, and reversed, at the user's request.

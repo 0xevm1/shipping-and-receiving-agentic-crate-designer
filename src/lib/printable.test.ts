@@ -63,10 +63,10 @@ describe("PrintableDesign (#26)", () => {
     const d = plan.crates[0].result.design!;
     // The design's own CoG, on the end view from the outside bottom-left corner.
     const { panelMm, cleat, floorMm, skid } = d.construction;
-    expect(crate.label.cogEnd.y).toBeCloseTo(d.centerOfGravityMm[1] + panelMm + cleat.thick, 6);
-    expect(crate.label.cogEnd.z).toBeCloseTo(d.centerOfGravityMm[2] + floorMm + skid.tall, 6);
+    expect(crate.label.cogEnd.y).toBeCloseTo(d.handling.cogMm[1] + panelMm + cleat.thick, 6);
+    expect(crate.label.cogEnd.z).toBeCloseTo(d.handling.cogMm[2] + floorMm + skid.tall, 6);
     expect(crate.label.cogEnd.y).toBeCloseTo(d.layout.external[1] / 2, 6);
-    Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, centerOfGravityMm: [400, 300, 150] });
+    Object.assign(d, { freight: { ...d.freight, freightClass: 85 }, handling: { ...d.handling, cogMm: [400, 300, 150] } });
     const withExtras = buildPrintable({ part: bracket, plan, standards: DEFAULT_STANDARDS, units: "imperial", ranking: "volume", generatedAt: NOW });
     expect(withExtras.crates[0].spec.freight.find((r) => r.label === "Freight class")?.value).toBe("85");
     expect(withExtras.crates[0].label.cogEnd.y).toBeCloseTo(300 - Math.min(...d.members.map((m) => m.min[1])), 6);

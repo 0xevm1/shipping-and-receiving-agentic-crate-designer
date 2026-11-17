@@ -137,12 +137,27 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
                                        reads `motion.ts` for per-frame values
 ```
 
+- **Layers, enforced by lint.** Arrows point down only; `eslint.config.mjs` (`no-restricted-imports`,
+  `no-restricted-globals`) fails `bun run lint` on any import that points up, type-only imports
+  included, in code and in tests:
+
+  ```
+  src/components/, src/app/   render; may import everything below
+  src/state/                  zustand stores and persistence; may import lib and domain
+  src/lib/                    edge code: formatting, file loading, exports; may import domain
+  src/domain/                 pure TypeScript, mm/kg, Z-up; imports nothing above it, and no
+                              three, react, zustand or DOM globals
+  ```
+
+  The one exception is `src/domain/orientations.parity.test.ts`, which may import three.js to
+  check the domain's rotations against it. Shared code that two layers need goes in the lower
+  one (`LoadedPart` and `modelUrl` are in `lib/part.ts`; `checks.ts` is in `lib`).
 - **The domain layer is pure and synchronous.** It has no React, DOM or I/O, and it is fully
   unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the
   store re-runs it on every input change.
 - **One store, two kinds of state.**
   - `src/state/store.ts` (zustand) holds everything the UI renders from: the part, settings,
-    the shop standards (§6.4), the design result, units, tab, view targets, hover / pin, tooltip, size labels, panel
+    the shop standards (§6.4), the design result, units, tab, view targets, hover / pin, tooltip, panel
     visibility, the free-area insets, and a `fit` request counter for the camera. Any change to
     the part, settings, standards or layout key goes through `recompute()`, which also drops a pin whose
     cut-list line no longer exists.
@@ -157,7 +172,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | File | Responsibility |
 |---|---|
 | `src/domain/schema.ts` | zod schemas and types: `Part`, `CrateSettings`, `DesignPart`, `Vec3`; `normalizeSettings` (the store boundary) |
-| `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart` and `modelUrl` |
+| `src/domain/catalog.ts` | Parses `parts.json` at module load (fails loudly). `getPart`. Data only: the `/parts/…` model URL is built in `lib/part.ts` |
 | `src/domain/orientations.ts` | The 6 orientations; `rotationMatrix()` (integer, as three.js's XYZ Euler) and `rotatedSize()` |
 | `src/domain/standards.ts` | `ShopStandardsSchema`, `DEFAULT_STANDARDS`, `minInteriorMm()`, merging, parsing and the JSON file format (§6.4) |
 | `src/domain/packing.ts` | `enumerateLayouts()` |
@@ -165,7 +180,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/lib/cradleGeometry.ts` | A cradle's notched solid (its profile extruded) for the 3D view and the GLB (`components/viewer/cradleGeometry.ts` re-exports it) |
 | `src/lib/sceneMaterials.ts` | The wood colours and part material the viewer and the GLB share (`components/viewer/scene.ts` re-exports them), so `lib` imports nothing from `components` |
 | `src/domain/crate.ts` | `designCrate`: wires the steps below into a `CrateDesign`, and re-exports the crate's public types and entry points (`Member`, `BomLine`, `Check`, `CrateDesign`, `ASSEMBLIES`, `SHAPED_BLOCK`, `screwSchedule`, `resolveConstruction`, ...) so importers keep one path |
-| `src/domain/members.ts` | The boards: `Member`, `MemberKind`, `MemberVariant` (shaped blocks and stacking cradles, found by variant not label), `Assembly`, `Face`, `ASSEMBLIES`, the cradle `Notch` types, `memberBounds()`, `sortDesc()` |
+| `src/domain/members.ts` | The boards: `Member`, `MemberKind`, `MemberVariant` (shaped blocks and stacking cradles, found by variant not label), `Assembly`, `Face`, `ASSEMBLIES` and `ASSEMBLY_NAMES` (how each assembly is named for people), the cradle `Notch` types, `memberBounds()`, `sortDesc()` |
 | `src/domain/check.ts` | `Check` and its id groups, each owned by the module that produces it (`crateChecks.ts`, `handling.ts`, `shipment.ts`) |
 | `src/domain/construction.ts` | `resolveConstruction` (§7.3: panel, floor, cleat and the smallest skid from the payload), `structureMaterials`, `structureAllowance`, `constructionFor` |
 | `src/domain/shell.ts` | `addShell`: floor, joists, skids, the four walls and the lid as boards (§7.4) |
@@ -174,7 +189,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/materials.ts` | `memberKg`, `materialTotals`: tare by assembly, wood volumes, plywood area and lumber length from the boards |
 | `src/domain/crateDesign.ts` | The `CrateDesign` type |
 | `src/domain/crateChecks.ts` | `evaluateChecks` and the base-rating, lid, blocking, door, stack, LTL, utilization and cardboard checks (§7.7) |
-| `src/domain/lumber.ts` | `NOMINAL_LUMBER` and `nominalLumber()`: the plain-`x` names ("4x6") check text uses; `src/lib/lumber.ts` should import this table |
+| `src/domain/lumber.ts` | `NOMINAL_LUMBER` and `nominalLumber()`: the plain-`x` names ("4x6") check text uses; `src/lib/lumber.ts` formats this one table |
 | `src/domain/units.ts` | `MM_PER_IN`, `MM_PER_FT`, `LB_PER_KG`, `IN3_PER_FT3` and the mm to m conversions the domain uses |
 | `src/domain/profile.ts` | Shaped blocking (#16, §7.5b): the `PartProfile` type, `usableProfile`, rotating a profile into the crate (`sideGrid`), post placement and shaped blocks (`planShapedBlocking`, `slotPlans`), and the restraint metric (`restraint`) |
 | `src/domain/message.ts` | `Message`: sentences with lengths and masses as data (`msg`, `mm`, `shopMm`, `kg`), so checks stay unit-free (#62, §7.7) |
@@ -183,8 +198,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/structure.ts` | Structural sizing (§7.15, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
-| `src/domain/assemblyNames.ts` | `ASSEMBLY_NAMES`: how each assembly is named for people (belongs beside `ASSEMBLIES` in the domain core) |
-| `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file and the library |
+| `src/domain/envelope.ts` | The versioned-envelope reader and writer (`readEnvelope`, `writeEnvelope`, `hasKind`): JSON → kind → version → migrations → "newer version" error, shared by the design file, the library, the shop standards file and the last-design entry |
 | `src/domain/profileCodec.ts` | `encodeProfile` / `decodeProfile`: a part profile packed losslessly for the design file (§6.5) |
 | `src/domain/designFile.ts` | The saved design file (§6.5): `DesignFileSchema`, `serializeDesign` (app name and version passed in), `parseDesignFile` (version check and migrations), `fileProfile`, `restoreDesign` (its notes are typed `Message`s) |
 | `src/domain/designLibrary.ts` | The design library (#14, §9): `partKey`, entries (`createEntry`, rename, remove / restore, `mergeEntries`, `entriesForPart`), the versioned envelope (`libraryToJson`, `parseLibrary`) |
@@ -197,8 +211,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/standards.test.ts` | Standards schema, defaults, and designs under custom standards (§10) |
 | `src/lib/units.ts` | Display-only unit formatting (mm ↔ in, kg ↔ lb, m³ ↔ ft³, 1/16″ fractions, the one mass rule) |
 | `src/lib/message.ts` | `renderMessage`: check messages (typed quantities) rendered for the selected units (#62, §7.7) |
-| `src/lib/lumber.ts` | US shop names (#15): `NOMINAL_LUMBER` (`nominalLumber`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
-| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
+| `src/lib/part.ts` | `LoadedPart` (a part with its model URL and load facts), `catalogPart()` and `modelUrl()` |
+| `src/lib/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
+| `src/lib/lumber.ts` | US shop names (#15): the nominal-lumber names from `domain/lumber.ts` (`sectionText`), plywood by sold thickness (`plywoodText`), `lumberText` (blocking "from 4x4"), `sectionText` |
+| `src/lib/format.ts` | Cut-list stock / cut text, layout descriptions, `documentDate` (the date in a given time zone), `boardTooltipDetail` (the board tooltip's second line); scorecard text (`usd`, `usdDelta`, `hoursText`, `elapsedText`, `densityText`, `densityDelta`) |
 | `src/lib/loadPart.ts` | GLB validation (`glbProblem`), measuring, catalog matching, `parts.json` merging, opening a design file; `designFilePart` |
 | `src/lib/partProfile.ts` | Part analysis (#16, §7.5b): `buildPartProfile()` rasterises the mesh into a depth grid per bounding-box face; `scheduleProfile()` runs it once per model when the browser is idle, cached by model URL |
 | `src/lib/currentDesign.ts` | `currentDesignText()` / `currentDesignFile()`: the design on screen as a design file (§6.5) with its part outline and ranking, for the download, the print link, the library and share links |
@@ -218,14 +234,13 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/ExportPill.tsx` | The green Export pill under the part header, its idle / busy / done / error states, and an amber dot with a tooltip and description ("2 cautions, see Checks") when the design has cautions; exporting is never blocked |
 | `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill; a success note clears after 8 s, an error after 15 s |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
-| `src/state/store.ts` | The zustand store and its actions; `LoadedPart`, `currentMode()`, `lastChange` |
+| `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange` |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
 | `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
 | `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
 | `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
 | `src/state/motion.ts` | Per-frame animation values and idle timing constants |
-| `src/state/checks.ts` | Domain checks plus file-dependent checks (model size, stand-in mass), sorted; `cautionCount` |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
 | `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
 | `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
@@ -239,7 +254,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/state/startup.ts` | `createStartup` / `startSavedState`: the run-once startup (saved units, standards, library, then share link, last crate or default) that survives StrictMode's second effect run |
 | `src/components/shell/SavedStateLoader.tsx` | Runs `startSavedState()` once, then keeps saving (`watchLastDesign`) and follows `hashchange` share links |
 | `src/state/lastDesignLoader.ts` | `restoreLastDesign()` (with a load ticket) and `watchLastDesign()`: reopens the last-opened crate, and saves it (debounced) plus a custom GLB's bytes (§9) |
-| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope, validation, precedence, debounced saver (§9) |
+| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope (read by `domain/envelope.ts`), validation, precedence, debounced saver (§9). Imports no GLB code; `lastDesignOf` (the store state as an entry) is in `lastDesignLoader.ts` |
 | `src/state/glbCache.ts` | The last custom GLB's bytes in IndexedDB, one record, 50 MB cap (§9) |
 | `src/state/shareLink.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
 | `src/components/island/*.tsx` | The island and its five tabs. `Island.tsx` owns the WAI-ARIA tabs (§8.3a) and computes `allChecks` once for the tab badges, the Overview verdict and the Checks tab |
@@ -258,7 +273,6 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/sizeLines.ts` | Pure size-line geometry (`buildLines`, label anchors, the dimension hidden per preset, label text) |
 | `src/components/viewer/forkArrows.ts` | Pure fork-arrow size and placement, and the occlusion test that hides an arrow behind the crate |
 | `src/components/viewer/probeStats.ts` | What the scene reports to the e2e hook (`probeStats`); writes are gated by `NEXT_PUBLIC_E2E` |
-| `src/components/viewer/tooltipText.ts` | The board tooltip's detail line (belongs with `lib/format.ts` once that is free) |
 | `src/components/viewer/dimensionPulse.ts` | Pure photon paths (`pulsePaths`) and the 10 s pulse clock (#65) |
 | `src/components/viewer/PhotonLayer.ts` | One `Points` of photons per line group, updated per frame (#65) |
 | `src/components/viewer/SizeLabels.tsx` | The DOM elements for the size labels, derived from the design, units and view (nothing is stored) |
@@ -301,7 +315,7 @@ and is never written to `parts.json`, design files or share links.
 | `maxLayers` | int 1–6 (UI offers 1–4) | 2 (`defaults.maxLayers`) | Upper limit on `nz` |
 | `partGapMm` | 0–300 | 50 (`defaults.partGapMm`) | Clear gap between adjacent parts, filled by blocking |
 | `wallClearanceMm` | 0–300 | 50 (`defaults.wallClearanceMm`) | Gap to the walls, floor and lid |
-| `panelThickness` | `"auto"` \| 12 \| 15 \| 19 | auto | Plywood for walls, lid and separators |
+| `panelThickness` | `"auto"` \| mm (6 to 50) | auto | Plywood for walls, lid and separators. The Rules tab offers the thicknesses in `stock.panelPlywoodMm` (12, 15, 19 by default); a design saved with another one still opens |
 
 The part is not a setting. It is passed to `computeDesign` separately, and loading a new part
 resets `quantity` to that part's first suggested quantity.
@@ -338,7 +352,7 @@ throwing (§7.9).
 optional `material`. Catalog parts satisfy it. So does a GLB loaded at runtime, which has
 measured dimensions and possibly no material.
 
-The UI wraps it in a **`LoadedPart`** (`src/state/store.ts`), which adds:
+The UI wraps it in a **`LoadedPart`** (`src/lib/part.ts`), which adds:
 
 - `modelUrl` (a `/parts/…` path or a `blob:` URL)
 - `mmPerUnit` (1000 for metre files, 1 for files read as millimetres)
@@ -399,10 +413,9 @@ the name shows in the island title, the Overview heading, the tooltip and the CS
     `cost` (`CrateCost`: `woodUsd`, `fastenersUsd`, `materialUsd`, `labourUsd`, `totalUsd`) and
     `freight` (`FreightTerms`: `grossLb`, `outsideIn`, `volumeFt3`, `dimWeightLb`,
     `dimDivisorIn3PerLb`, `densityLbFt3`, `freightClass`) (#17, §7.12)
-  - `freightClass`, `densityLbFt3` and `dimWeightLb`: the same freight values at the top level,
-    for exports and the build sheet (#26)
-  - `centerOfGravityMm` (crate-interior frame) and `handling` (`Handling`: the CoG offset,
-    height and tip angle, the fork openings and the device fits) (#8, §7.14)
+  - `handling` (`Handling`: the centre of gravity `cogMm` in the crate-interior frame, its
+    height and tip angle, the fork openings and the device fits) (#8, §7.14). The freight class,
+    density, dimensional weight and CoG each live in one place (`freight.*`, `handling.cogMm`)
   - `checks[]`
   - `shapedBlocking?`: `{ shaped, boundingBox, blocks }`, set only when blocking was shaped to a
     part profile (§7.5b): the restraint of this crate's blocking, of bounding-box blocking for the
@@ -1232,7 +1245,7 @@ is testable). The same date is in the PDF header and the zip's README.txt.
      ("FORK ENTRY FROM THE ENDS"). The openings are `design.handling.openings` (§7.14), the
      same ones the forklift and pallet-jack checks measure (`PrintableLabel.openings`);
    - the **centre-of-gravity** mark (ISO 7000-0627, the quartered circle) at the design's
-     `centerOfGravityMm`, projected onto the end view (`cogEnd`: Y and Z from the outside
+     `handling.cogMm`, projected onto the end view (`cogEnd`: Y and Z from the outside
      bottom-left corner). Every design has a CoG, so the mark is always drawn.
 
 **How the design reaches the page.** The Cut list's **Print / save PDF** serializes the design
@@ -1399,7 +1412,7 @@ cautions still exports (no confirm dialog), but the pill carries an amber dot, a
 `designCrate` built and the part placements (`layout.slots`). It never changes the
 construction, so it follows whatever skids, bearers, blocking or cradles the construction rules
 produce (#6, #7, #16). `designCrate` stores the result as `design.handling` and
-`design.centerOfGravityMm`, and appends `handlingChecks` to the checks after `base-rating`.
+`design.handling.cogMm`, and appends `handlingChecks` to the checks after `base-rating`.
 
 **Frame.** Everything is in the crate-interior frame of `Member` (§4): origin at the interior min
 corner on top of the floor, Z up, X along the length. The ground is the bottom of the skids
@@ -1819,7 +1832,7 @@ open question for the user (see #20).
   - **CoG, only when it matters (#87):** shown only when the `cog-offset` or `cog-tip` check is a
     caution; a centred, low CoG gets no 3D marker (the label and Checks still give it). It is
     drawn as a real crate marking: a flat ISO 7000-0627 quartered circle stencilled on each of
-    the four outside faces, at `design.centerOfGravityMm` projected onto that face (along the
+    the four outside faces, at `design.handling.cogMm` projected onto that face (along the
     face and at the CoG's height), 3 mm off the boards. The stencils are depth-tested, so only
     the faces turned to the camera show them, and each moves out with its wall when exploded.
   - **Fork entry:** a flat gold arrow on the ground at each end (−X and +X) for every opening

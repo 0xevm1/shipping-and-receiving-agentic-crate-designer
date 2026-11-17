@@ -10,7 +10,7 @@ import { decodeProfile, encodeProfile } from "@/domain/profileCodec";
 import { shareHash } from "@/domain/shareLink";
 import { planShipment } from "@/domain/shipment";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
-import { catalogPart, type LoadedPart } from "@/state/store";
+import { catalogPart, type LoadedPart } from "./part";
 import { APP } from "./appInfo";
 import { designFilePart } from "./loadPart";
 import { metricText } from "./message";

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ASSEMBLIES, type BomLine, type CrateDesign } from "@/domain/crate";
-import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { ASSEMBLY_NAMES } from "@/domain/crate";
 import { describeShipment, shipmentBom } from "@/domain/shipment";
 import { currentDesignText } from "@/lib/currentDesign";
 import { bomToCsv, shipmentToCsv } from "@/lib/csv";

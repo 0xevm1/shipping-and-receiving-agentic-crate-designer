@@ -1,4 +1,4 @@
-import { ASSEMBLY_NAMES } from "@/domain/assemblyNames";
+import { ASSEMBLY_NAMES } from "@/domain/crate";
 import type { BomLine, CrateDesign } from "@/domain/crate";
 import type { DesignPart } from "@/domain/schema";
 import { describeShipment, shipmentBom, type ShipmentPlan } from "@/domain/shipment";

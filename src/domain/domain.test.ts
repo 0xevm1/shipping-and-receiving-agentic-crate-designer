@@ -1,13 +1,11 @@
-import { Box3, Euler, Matrix4, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
 import { ASSEMBLIES } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from "./design";
 import { ORIENTATIONS, rotatedSize } from "./orientations";
 import type { CrateSettings, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS } from "./standards";
-import { custom as customStandards } from "./testFixtures";
+import { custom as customStandards, metricText as metric } from "./testFixtures";
 
 const { trailerMm: DRY_VAN_53FT_MM, ltlExcessiveLengthMm: LTL_EXCESSIVE_LENGTH_MM, cardboard: CARDBOARD_LIMITS } = DEFAULT_STANDARDS.limits;
 
@@ -25,18 +23,6 @@ describe("orientations", () => {
     const size: Vec3 = [1, 2, 3];
     const keys = new Set(ORIENTATIONS.map((o) => rotatedSize(size, o).join(",")));
     expect(keys.size).toBe(6);
-  });
-
-  it("rotatedSize matches three.js's rotated bounding box", () => {
-    for (const size of [[1, 2, 3], [1530.25, 172, 90.5], [40, 40, 40]] as Vec3[]) {
-      for (const o of ORIENTATIONS) {
-        const half = new Vector3(...size).multiplyScalar(0.5);
-        const box = new Box3(half.clone().negate(), half).applyMatrix4(new Matrix4().makeRotationFromEuler(new Euler(...o.euler)));
-        const three = box.getSize(new Vector3());
-        const expected = [three.x, three.y, three.z].map((v) => Math.round(v * 1000) / 1000);
-        expect(rotatedSize(size, o)).toEqual(expected);
-      }
-    }
   });
 
   it("upright orientations keep Z vertical", () => {

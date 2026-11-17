@@ -3,7 +3,9 @@ import { PrintPage } from "@/components/print/PrintPage";
 import "./print.css";
 
 export const metadata: Metadata = {
-  title: "Print · Crate Designer",
+  // No title here: the print view renders its own <title> (the crate's name, which the browser
+  // offers as the PDF's file name), and a route title would sit before it in <head> and win.
+  title: "",
   robots: { index: false },
 };
 

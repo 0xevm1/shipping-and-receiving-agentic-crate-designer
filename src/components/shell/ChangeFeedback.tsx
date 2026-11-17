@@ -10,10 +10,28 @@ import { useDesigner, type ChangeSource } from "@/state/store";
  * `lastChange`, so every highlight and note agrees with one diff of the previous and new design.
  * The region is always mounted, so screen readers announce new text; the text fades (CSS) and
  * is replaced by the next edit's.
+ *
+ * With `note` (a message of the caller's own, e.g. a clamped quantity), the region shows that
+ * instead and ignores the store; `note.id` restarts the fade for a new message.
  */
-export function ChangeNote({ sources, className }: { sources: readonly ChangeSource[]; className?: string }) {
+export function ChangeNote({
+  sources = [],
+  note,
+  className,
+}: {
+  sources?: readonly ChangeSource[];
+  note?: { id: number; text: string } | null;
+  className?: string;
+}) {
   const last = useDesigner((s) => s.lastChange);
   const units = useDesigner((s) => s.units);
+  if (note !== undefined) {
+    return (
+      <div className={className ? `changenote ${className}` : "changenote"} role="status">
+        {note && <span key={note.id}>{note.text}</span>}
+      </div>
+    );
+  }
   const show = last && sources.includes(last.source);
   const text = show ? changeSummary(last.changes, units) : "";
   // The full before → after: on hover (`title`) and for screen readers (visually hidden text).

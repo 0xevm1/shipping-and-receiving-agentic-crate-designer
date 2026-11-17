@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBom, tellApart } from "./bom";
+import { buildBom, screwSchedule, tellApart } from "./bom";
 import type { Member } from "./members";
 
 const block = (length: number, variant?: Member["variant"]): Member => ({
@@ -42,5 +42,16 @@ describe("buildBom: pieces that share a name", () => {
     expect(a.label).toBe("Shaped block");
     const merged = tellApart([{ ...a }, { ...b }]);
     expect(merged.map((l) => l.label)).toEqual(["Shaped block B", "Shaped block A"]);
+  });
+});
+
+describe("screwSchedule: the blocking line", () => {
+  const interior: [number, number, number] = [600, 400, 300];
+  const blocking = (members: Member[]) => screwSchedule(members, interior).find((l) => l.id === "blocking")!;
+
+  it("says it counts posts, and shaped blocks when there are any", () => {
+    expect(blocking([block(300)]).rule).toBe("2 per post");
+    expect(blocking([block(300), block(60, "shaped-block")]).rule).toBe("2 per post or shaped block");
+    expect(blocking([block(300), block(60, "shaped-block")]).qty).toBe(4);
   });
 });

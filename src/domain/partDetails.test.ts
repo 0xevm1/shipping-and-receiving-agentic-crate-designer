@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDesign, DEFAULT_SETTINGS } from "./design";
-import { bomToCsv } from "@/lib/csv";
 import { cleanPartDetails, MATERIAL_SUGGESTIONS, PART_MATERIAL_MAX, PART_NAME_MAX, partFinish } from "./partDetails";
-import type { DesignPart } from "./schema";
 
 describe("cleanPartDetails", () => {
   it("tidies a name and material and keeps a positive mass", () => {
@@ -49,20 +46,5 @@ describe("partFinish", () => {
 
   it("covers every suggestion", () => {
     expect(MATERIAL_SUGGESTIONS.map(partFinish)).toEqual(["aluminum", "steel", "steel"]);
-  });
-});
-
-describe("entered details on the cut list", () => {
-  const part: DesignPart = { id: "widget", name: "Gear housing", material: "6061-T6 aluminum", mass_kg: 3.25, dimensions_mm: [300, 200, 100] };
-  const design = computeDesign(part, { ...DEFAULT_SETTINGS, quantity: 2 }).design!;
-
-  it("puts the name, material and mass in the CSV header", () => {
-    const lines = bomToCsv(part, design, "metric").split("\n");
-    expect(lines[0]).toBe("# Crate for 2 x widget Gear housing");
-    expect(lines[1]).toBe("# Part 6061-T6 aluminum, 3.25 kg each");
-  });
-
-  it("says when no material was given", () => {
-    expect(bomToCsv({ ...part, material: undefined }, design, "metric")).toContain("# Part material not given, 3.25 kg each");
   });
 });
