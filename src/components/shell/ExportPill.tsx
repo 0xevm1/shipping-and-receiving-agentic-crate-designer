@@ -1,19 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { downloadBytes } from "@/lib/exportGlb";
 import { useDesigner } from "@/state/store";
-
-/** The busy state shows at least this long, so a fast export still registers (not with reduced motion). */
-export const MIN_BUSY_MS = 1500;
-/** How long "Downloaded …" stays under the pill. */
-const NOTE_MS = 8000;
-
-type State = { kind: "idle" } | { kind: "busy" } | { kind: "done"; name: string } | { kind: "error"; message: string };
-
-const ERROR_TEXT = "The export could not be made here. Try again, or use the separate downloads in the Cut list tab.";
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+import { exportNote, useExportRun } from "./exportRun";
 
 /**
  * The Export pill (#51), under the part header: one click downloads `crate-<part>-x<qty>.zip`
@@ -22,43 +10,15 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
  *
  * Idle → busy ("Exporting…" with a spinner, held for at least 1.5 s; with reduced motion, no
  * spin and no hold) → "Downloaded crate-PART-001-x4.zip", or a plain error. The note is a
- * `role="status"` live region, so screen readers hear the outcome.
+ * `role="status"` live region, so screen readers hear the outcome. The run and its state are
+ * shared with the View popover's Export (#77, `exportRun.ts`).
  */
 export function ExportPill() {
   const canExport = useDesigner((s) => !!s.result.design && !s.plan.problem);
-  const [state, setState] = useState<State>({ kind: "idle" });
+  const state = useExportRun((s) => s.state);
+  const run = useExportRun((s) => s.run);
   const busy = state.kind === "busy";
-  const noteTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(noteTimer.current), []);
-
-  const run = async () => {
-    if (busy || !canExport) return;
-    clearTimeout(noteTimer.current);
-    setState({ kind: "busy" });
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // The design as it is now, whatever is edited while the files are made.
-    const s = useDesigner.getState();
-    const at = new Date();
-    try {
-      const work = (async () => {
-        const { browserMakers, buildBundle, zipBundle } = await import("@/lib/exportBundle");
-        const input = { part: s.part, settings: s.settings, plan: s.plan, crateIndex: s.crateIndex, standards: s.standards, units: s.units, generatedAt: at.toISOString() };
-        const bundle = await buildBundle(input, await browserMakers(s.part));
-        return { name: bundle.name, zip: zipBundle(bundle.files, at) };
-      })();
-      const [{ name, zip }] = await Promise.all([work, reduce ? null : wait(MIN_BUSY_MS)]);
-      downloadBytes(name, zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, "application/zip");
-      useDesigner.getState().markExported();
-      setState({ kind: "done", name });
-      noteTimer.current = setTimeout(() => setState((st) => (st.kind === "done" ? { kind: "idle" } : st)), NOTE_MS);
-    } catch (e) {
-      console.error("Export failed", e);
-      setState({ kind: "error", message: e instanceof Error && e.name === "NoCrateError" ? e.message : ERROR_TEXT });
-    }
-  };
-
-  const note = state.kind === "done" ? `Downloaded ${state.name}` : state.kind === "error" ? state.message : "";
+  const note = exportNote(state);
 
   return (
     <div className="exportrow">
