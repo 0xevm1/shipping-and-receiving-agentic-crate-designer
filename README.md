@@ -110,7 +110,7 @@ tab at a time.
    **Freight class** instead of volume. A crate that may tip or leaves parts loose never wins on
    cost or freight; Volume is the default.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
-   labels. The real part models sit in each slot. Left alone for 6 s, the crate slowly turns and
+   labels. The real part models sit in each slot. Left alone for 5 s, the crate slowly turns and
    cycles through the modes.
 5. **Read off the build data:**
    - **Overview:** outside size, gross weight, then the **scorecard** (#17): crate cost

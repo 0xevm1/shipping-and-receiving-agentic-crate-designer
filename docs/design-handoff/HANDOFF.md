@@ -154,14 +154,18 @@ out 320 mm, lid up 420 mm). These correspond to today's `assembled`, `cutaway` a
 
 ### Idle animation
 
-- When there has been no pointer, wheel or key input anywhere on the page for **6 s**, the crate
+- When there has been no click or tap, drag, wheel or key input anywhere on the page for **5 s**
+  (6 s originally; shortened at the user's request in #64), the crate
   turns about the vertical axis at **0.3 rad/s** and steps through the sequence
   **closed → exploded → open → exploded → repeat**.
 - **Every mode lasts half a revolution.** The transition to the next mode starts 0.12 of a turn
   before the switch and eases slowly (rate ≈ 1.5 /s, against ≈ 10 /s for a user-triggered change),
   so it lands as the half-turn completes.
-- Any input stops it immediately. It also holds still while a cut-list row is pinned or a board is
-  hovered. It resumes from the mode on screen.
+- Any deliberate input (click or tap, drag, wheel, key) stops it immediately. It also holds still
+  while a cut-list row is pinned. It resumes from the mode on screen.
+- **Hovering doesn't stop it** (#64, which replaces "holds still while … a board is hovered"):
+  moving the pointer over the canvas, a board, a cut-list row or a weight bar neither stops nor
+  delays it. A hovered board keeps its tooltip and highlight, which follow the board as it turns.
 - It runs on first load.
 - Respect `prefers-reduced-motion`: no auto-rotation, mode changes are instant.
 - With drei, `OrbitControls` `autoRotate` covers the turning; the idle timer, sequence and eased
@@ -171,7 +175,8 @@ out 320 mm, lid up 420 mm). These correspond to today's `assembled`, `cutaway` a
 
 - The part on its own, no crate, transparent background, slowly turning (0.45 rad/s).
 - Click or touch stops it; drag turns it, scroll zooms. Double-click resets tilt and zoom.
-- It starts turning again after the same 6 s of idle, from the angle it was left at.
+- Hovering it doesn't stop it; grabbing does (#64).
+- It starts turning again after the same 5 s of idle, from the angle it was left at.
 - Implement as a second small `<Canvas>` or a drei `<View>`.
 
 ### Dimension lines
@@ -285,9 +290,10 @@ Each step is shippable on its own. Per `CLAUDE.md`: open a GitHub issue, branch 
   does today. The redesign must not change any domain output; compare a few part / quantity pairs
   before and after. (The prototype shows 932 × 652 × 497 mm for PART-001 × 4, but that figure comes
   from the prototype's own port and was not checked against this repo.)
-- Leave the page alone for 6 s: the crate turns and goes closed → exploded → open → exploded, half
-  a turn each, with the lid and front wall fading rather than popping. Move the mouse: it stops.
-- Grab the part in the island: it stops. Leave it 6 s: it turns again from where it was.
+- Leave the page alone for 5 s: the crate turns and goes closed → exploded → open → exploded, half
+  a turn each, with the lid and front wall fading rather than popping. Move the mouse over it: it
+  keeps turning (#64). Click: it stops.
+- Grab the part in the island: it stops. Leave it 5 s: it turns again from where it was.
 - Hover a cut-list row: those boards turn ice blue and the rest fade. Click a board in 3D: the Cut
   list tab opens on its row.
 - Drop `PART-002-long-steel-shaft.glb`: mass and material fill in from the catalog. Drop an unknown
