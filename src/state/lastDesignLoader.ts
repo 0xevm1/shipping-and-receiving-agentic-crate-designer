@@ -6,7 +6,7 @@ import { browserIdb, loadLastGlb, saveLastGlb } from "./glbCache";
 import { createDebouncedSaver, saveLastDesign, type LastDesign } from "./lastDesignStorage";
 import { useLibrary } from "./libraryStore";
 import { beginLoad, type LoadTicket } from "./loadSequence";
-import { browserStorage, type KeyValueStore } from "./standardsStorage";
+import { browserStorage, type KeyValueStore } from "./persist";
 import { useDesigner, type DesignerState } from "./store";
 import { useView, type Tab } from "./viewStore";
 import type { LoadedPart } from "@/lib/part";

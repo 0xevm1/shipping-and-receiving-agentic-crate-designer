@@ -157,12 +157,28 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 - **The domain layer is pure and synchronous.** It has no React, DOM or I/O, and it is fully
   unit-tested. `computeDesign` is cheap (6 orientations × at most a few hundred grids), so the
   store re-runs it on every input change.
-- **One store, two kinds of state.**
-  - `src/state/store.ts` (zustand) holds everything the UI renders from: the part, settings,
-    the shop standards (§6.4), the design result, units, tab, view targets, hover / pin, tooltip, panel
-    visibility, the free-area insets, and a `fit` request counter for the camera. Any change to
-    the part, settings, standards or layout key goes through `recompute()`, which also drops a pin whose
-    cut-list line no longer exists.
+- **Two stores, one rule: the design, and how it is shown.**
+  - `src/state/store.ts` (`useDesigner`, zustand) is the design: the part (and its measured size and
+    profile), settings, layout pick, the shop standards (§6.4), the ranking, extra catalog parts, and
+    what is derived from them: the shipment plan, the crate type on screen and its result. It is
+    the only store that persistence (last design, design file, share links), exports and the print
+    document read. Any change to the part, settings, standards, ranking or layout key goes through
+    `recompute()`, which re-plans once and then announces the edit.
+  - `src/state/viewStore.ts` (`useView`, zustand) is everything about how it is shown right now:
+    the tab, the 3D view toggles and camera preset, hover, pin, tooltip, panel visibility, the
+    narrow-screen drawer, the free-area insets, the `fit` request counter, the load message, the
+    `restoring` flag, the change note (`lastChange`), the time-to-design clock and the display units
+    (saved in this browser, not with a design). Nothing in it is an input to the design.
+  - **The coupling** is one mechanism, `src/state/designEvents.ts`: after each design action sets
+    its own state it emits a `DesignEdit` (`opened`, `edited`, `refined` or `crate-switched`, with
+    the shown result before and after), and `viewStore.ts` listens and applies the reaction in a
+    single `set`: clear the hover, drop a pin or hover whose cut-list line the new design no longer
+    has, ask the camera to re-frame (new part or design, a different layout, another crate type),
+    write the change note for the input behind the edit, and stop or restart the time-to-design
+    clock. The design store never writes view state and the view store never writes the design;
+    the emit is synchronous, so by the time an action returns the view has reacted and React sees
+    both stores change in the same tick. The view store imports the design store's types only
+    through `designEvents.ts`; components that need both read each with its own selector.
   - `src/state/motion.ts` holds values that change every frame (eased explode distance, lid and
     front-wall opacity, idle auto-play bookkeeping, last-input time). They live outside React on
     purpose, so animation never re-renders the UI.
@@ -239,13 +255,15 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/ExportPill.tsx` | The green Export pill under the part header, its idle / busy / done / error states, and an amber dot with a tooltip and description ("2 cautions, see Checks") when the design has cautions; exporting is never blocked |
 | `src/state/exportRun.ts` | `useExportRun`: the one export run and its state, behind the Export pill; a success note clears after 8 s, an error after 15 s |
 | `src/lib/exportGlb.ts` | The assembled crate as GLB (`buildCrateScene`, `exportCrateGlb`): fresh scene from the design, named boards grouped by assembly, optional parts; cached part loading, file name, binary download |
-| `src/state/store.ts` | The zustand store and its actions; `currentMode()`, `lastChange` |
+| `src/state/store.ts` | `useDesigner`: the design store (part, settings, layout pick, standards, ranking, plan and result) and its actions; emits a `DesignEdit` after each one |
+| `src/state/viewStore.ts` | `useView`: the view store (tab, 3D view, hover / pin, tooltip, panels, drawer, insets, `fit`, load message, `restoring`, `lastChange`, the time-to-design clock, units); reacts to `DesignEdit`; `currentMode()` |
+| `src/state/designEvents.ts` | `DesignEdit`, `onDesignEdit` / `emitDesignEdit` and `ChangeSource`: how the design store tells the view store what changed |
 | `src/state/persist.ts` | The `localStorage` primitives: `KeyValueStore`, `browserStorage()`, `readJson` (missing, throwing or invalid data gives a fallback) and `writeJson` (never throws, returns whether it stored) (§9) |
-| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; re-exports `KeyValueStore` and `browserStorage` (§9) |
+| `src/state/standardsStorage.ts` | `loadStandards` / `saveStandards` over `persist.ts`; (§9) |
 | `src/state/unitsStorage.ts` | `DEFAULT_UNITS` (imperial) and `loadUnits` / `saveUnits` over `persist.ts` (§9) |
 | `src/state/libraryStorage.ts` | `loadLibrary` / `saveLibrary` over `persist.ts` (§9) |
 | `src/state/libraryStore.ts` | `useLibrary`: the design library's own small zustand store (save, rename, delete / undo, import / export, a shared custom design waiting for its GLB) |
-| `src/state/motion.ts` | Per-frame animation values and idle timing constants |
+| `src/state/motion.ts` | Per-frame animation values, idle timing constants and `reducedMotion()` |
 | `src/components/shell/DesignerShell.tsx` | Full-bleed layout; the narrow-screen drawer, hamburger and summary chip; idle input tracking, Escape, drag-and-drop (file drags only), free-area insets, tooltip |
 | `src/components/shell/useFocusTrap.ts` | `useFocusTrap` for the drawer (focus in, Tab wraps, focus back to the hamburger); `FOCUSABLE` includes `summary`; `trapTarget` is the pure wrap rule |
 | `src/components/shell/usePopover.ts` | `usePopover`: open state, Escape (focus back to the trigger), press outside and focus-out close it |
@@ -259,7 +277,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/state/startup.ts` | `createStartup` / `startSavedState`: the run-once startup (saved units, standards, library, then share link, last crate or default) that survives StrictMode's second effect run |
 | `src/components/shell/SavedStateLoader.tsx` | Runs `startSavedState()` once, then keeps saving (`watchLastDesign`) and follows `hashchange` share links |
 | `src/state/lastDesignLoader.ts` | `restoreLastDesign()` (with a load ticket) and `watchLastDesign()`: reopens the last-opened crate, and saves it (debounced) plus a custom GLB's bytes (§9) |
-| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope (read by `domain/envelope.ts`), validation, precedence, debounced saver (§9). Imports no GLB code; `lastDesignOf` (the store state as an entry) is in `lastDesignLoader.ts` |
+| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope (read by `domain/envelope.ts`), validation, precedence, debounced saver (§9). Imports no GLB code; `lastDesignOf` (the design store's state plus the tab as an entry) is in `lastDesignLoader.ts` |
 | `src/state/glbCache.ts` | The last custom GLB's bytes in IndexedDB, one record, 50 MB cap (§9) |
 | `src/state/shareLink.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
 | `src/components/island/*.tsx` | The island and its five tabs. `Island.tsx` owns the WAI-ARIA tabs (§8.3a) and computes `allChecks` once for the tab badges, the Overview verdict and the Checks tab |
@@ -291,7 +309,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/viewer/PartView.tsx` | The island's turntable canvas |
 | `src/components/viewer/scene.ts` | Units and shared constants (`MM_TO_M`, `FOV_DEG`, click slop, far plane), colours, explode offsets, opacity rules, highlight rules, part material |
 | `src/components/viewer/HandlingMarks.tsx` | The 3D centre-of-gravity stencils on the outside faces (only when a CoG check is a caution, #87), and the fork-entry arrows at both ends, which fade out when the crate hides them (#8, §8.4) |
-| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with the store's types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
+| `src/components/viewer/E2EProbe.tsx` | Read-only `window.__crate` test hook (typed with both stores' types); only in `NEXT_PUBLIC_E2E=1` builds (§10) |
 | `playwright.config.ts`, `e2e/*.spec.ts`, `e2e/helpers/` | End-to-end UI tests and their shared helpers (`bun run e2e`, §10); screenshots go to the git-ignored `e2e/screenshots/` |
 | `scripts/docs-shots.mjs` | `bun run e2e:docs-shots`: copies chosen e2e screenshots into `docs/screenshots/` on request |
 | `.prettierrc`, `.prettierignore`, `knip.json` | Formatting (`bun run format`, checked in CI) and the unused-code report (`bun run knip`) |
@@ -1200,8 +1218,8 @@ takes about 150 ms. The tests fail above 200 ms and 500 ms.
 
 **In the store:** `plan`, `crateIndex` (the crate type on screen) and `result`, which is always
 `plan.crates[crateIndex].result`, so the 3D view, Layouts, Cut list and Checks follow the
-selected type unchanged. `setCrateIndex(i)` switches type (clears the pin and hover, re-frames,
-records no change note). An edit keeps the type while the new plan has it, else shows A.
+selected type unchanged. `setCrateIndex(i)` switches type (the view clears the pin and hover and
+re-frames; no change note). An edit keeps the type while the new plan has it, else shows A.
 
 ### 7.11 Export document (`PrintableDesign`, #26)
 
@@ -1724,7 +1742,7 @@ The canvas fills the window. Four regions float above it:
     and on screens under 760 px tall; it only folds if the content overflows by more than its
     height, so folding can't leave nothing to scroll), the tabs, then the panel (the only thing
     that scrolls) with the credit at half size as its last item, scrolling with the content
-    instead of pinned (#62). With the thumbnail folded, a rules or layout change note floats under the tabs. `drawerOpen` in the store is separate from `panelsHidden`.
+    instead of pinned (#62). With the thumbnail folded, a rules or layout change note floats under the tabs. `drawerOpen` in the view store is separate from `panelsHidden`.
   - **Foot:** the **summary chip** (always the width of the foot, outside size and gross
     weight in amber, with thousands separators, the size shortening before it can touch the weight; for a split batch, "Crate A outside" with the shown type's size and
     "Gross, 7 crates" with the shipment's gross; tapping it opens the drawer on Overview; it flashes with the Overview on an
@@ -2066,7 +2084,7 @@ keeps the minimum crate), so every edit gets feedback from **one diff**:
   new values in domain units: gross, tare and payload (kg, compared to the gram), outside size,
   wall plywood, floor, skid section and count, and the layout grid. It returns `[]` when either side
   has no design.
-- **`lastChange`** in the store: `{ id, at, source, changes }`, set when an input changes the design:
+- **`lastChange`** in the view store: `{ id, at, source, changes }`, written when a `DesignEdit` with a source arrives (the design store knows nothing of it), after an input changes the design:
   `setPartDetails` (source `name`, `material` or `mass`), `setSettings` / `resetRules` (`rules`)
   and `setLayoutKey` (`layout`). Loading a part, a units change, or a design that became a problem
   doesn't set one. It clears after `CHANGE_NOTE_MS` (5 s).
@@ -2105,14 +2123,15 @@ key, so an incompatible future format starts fresh rather than misreading old da
 
 All four saved items (standards, units, library, last design) go through `src/state/persist.ts`
 with one contract: a save never throws and returns `true` only if the value is stored, so a
-missing store (server, blocked) is a failed save. Standards and units save inside their
-`useDesigner` actions, the library inside `useLibrary`, and the last design from a debounced
-subscriber in `lastDesignLoader.ts`. The library shows the "browser refused to store it"
+missing store (server, blocked) is a failed save. Standards save inside their
+`useDesigner` actions, units inside `useView`'s, the library inside `useLibrary`, and the last design
+from a debounced subscriber in `lastDesignLoader.ts` (it watches the design store, and the view
+store for the tab it saves beside the crate). The library shows the "browser refused to store it"
 message when a save, rename, delete (`remove(...).saveError`) or undo fails to store.
 
 **Display units** (#15) are saved under `crate-designer.units.v1` (`src/state/unitsStorage.ts`)
 as `"imperial"` or `"metric"` on every `setUnits`. Either choice is saved, so a later change of
-default doesn't flip anyone. The store starts on `DEFAULT_UNITS` (imperial), and
+default doesn't flip anyone. The view store starts on `DEFAULT_UNITS` (imperial), and
 `SavedStateLoader` applies the saved units after mount, like the standards, so there is no
 hydration mismatch. Nothing saved, an unknown value (with a `console.warn`) or storage that
 throws keeps the default.
@@ -2224,11 +2243,11 @@ refresh or a reopened tab brings back the crate on screen:
   kept GLB that can't be read, or any error on the way. `localStorage` or IndexedDB that is
   missing, blocked or full is treated as empty and a refused save is a warning, never an error.
 - **No flash and no hydration mismatch:** the restore runs in an effect after mount. While it
-  runs, the store's `restoring` flag holds the 3D scene back (`CrateViewer` keeps the canvas and
+  runs, the view store's `restoring` flag holds the 3D scene back (`CrateViewer` keeps the canvas and
   draws nothing in it), so
   the default crate doesn't flash before the remembered one.
 - **Time to design (#17):** a reopened crate isn't newly designed, so `restoreDesign` leaves the
-  clock stopped (`designStartedAt` null): no "Designed in" note appears for it, and an export
+  clock stopped (the view's `designStartedAt` null): no "Designed in" note appears for it, and an export
   records nothing. Loading a new part or design (any `setPart` / `loadDesign`) starts the clock
   as usual. When nothing is reopened (the default part, a share link, a failed restore), the
   clock starts at mount as before.
@@ -2422,13 +2441,11 @@ under the cost ranking. Shipment totals sum cost, labour and dim weight. **`stan
 also rejects a negative or over-$1,000 labour rate, NaN or negative minutes, an hour per screw,
 a negative screw cost and a dim divisor outside 50–500. **`src/state/scorecard.store.test.ts`**
 checks `ranking` (default volume; `setRanking` resets the pick, is kept across edits and
-standards changes) and a labour-rate change re-costing the design, and the time-to-design
-clock (no record before it starts, starts once, records only the first export, restarts on a
-new part). **`src/lib/format.test.ts`** checks the scorecard text.
+standards changes) and a labour-rate change re-costing the design. **`src/lib/format.test.ts`** checks the scorecard text.
 
 **`src/state/shipment.store.test.ts`** checks the store: one crate at start, 200 brackets show
-crate A, `setCrateIndex` switches `result` (clearing the pin, re-framing, no change note, out of
-range ignored), the type is kept across edits while it exists, a lower max gross re-plans, and
+crate A, `setCrateIndex` switches `result` (out of range ignored; the view's reaction is in
+`designToView.test.ts`), the type is kept across edits while it exists, a lower max gross re-plans, and
 `loadDesign` opens the saved type.
 
 **`src/domain/designFile.test.ts`** checks the design file (§6.5, #28):
@@ -2531,17 +2548,29 @@ damaged one) keeps the default part, naming the file and holding the design unti
 a design file that survives a share-link round trip and restores with no notes, and gives null
 without a crate.
 
-**`src/state/store.test.ts`** checks `setPartDetails`: name and material update without
-changing the layout pick or re-framing, a mass recomputes the payload and clears the stand-in
-flag, invalid input changes nothing, and catalog parts are read-only. `loadDesign` keeps the
-given settings and layout pick (unlike `setPart`). It also checks
-`lastChange`: cleared by loading a part; a mass edit on a 1 mm part records gross 16 → 20 kg and
-payload with source `mass`; name and material edits record an empty diff; rules and layout edits
-record theirs; a units change doesn't; and a design that becomes a problem leaves nothing.
-`setPartProfile` (#16) shapes the blocking without moving the layout pick or the camera, ignores
-a profile for another model or a failed analysis, drops a pin or hover on a cut-list line that is
-gone, survives a mass edit and is dropped with a new
-part.
+**`src/state/store.test.ts`** checks the design store: `setPartDetails` (name and material update without
+changing the layout pick, a mass recomputes the payload and clears the stand-in flag, invalid input
+changes nothing, catalog parts are read-only), `loadDesign` (keeps the given settings and layout
+pick, unlike `setPart`) and `setPartProfile` (#16: shapes the blocking without moving the layout
+pick, ignores a profile for another model or a failed analysis, survives a mass edit and is dropped
+with a new part).
+
+**`src/state/designToView.test.ts`** checks the coupling (`designEvents.ts`) from both ends: opening
+a part or design clears the pin, hover and note, re-frames once and restarts the clock (a reopened
+crate has none) and keeps the tab; each kind of edit writes its change note (mass 16 → 20 kg and
+payload for a 1 mm part, name and material an empty diff, rules, layout and ranking, none for a
+standards change or a units or tab change, none when the design becomes a problem); a re-frame only
+when the layout or part changed; a pin whose line is gone is dropped and one that remains is kept;
+the stale "Designed in" goes; a measured profile drops a stale pin without re-framing or touching
+the note; switching crate type clears the pin and re-frames; ignored actions (out-of-range index,
+the same ranking, invalid input, a catalog rename) leave the view untouched; each edit is one design
+update and one view update, with the new design already in place when the view changes; the note
+expires after 5 s and an older timer never removes a newer note.
+
+**`src/state/viewStore.test.ts`** checks the view store: the display units (imperial default,
+versioned key round trip, nothing saved, an unknown value, storage that throws, no window,
+`setUnits` / `loadSavedUnits`), the 3D view (modes, `setView`, insets and `requestFit`),
+hover de-duplication, the load message and the time-to-design clock.
 
 **`src/domain/profile.test.ts`** checks shaped blocking (#16, §7.5b) with synthetic profiles: the
 rotation matrix equals three.js's for all six orientations, and a part lying on its side shows
@@ -2595,9 +2624,7 @@ the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
 **`src/lib/csv.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
 units line, `cut_in`), nominal stock, fractional cuts and ASCII only; the metric header and
 `cut_mm`; the same rows and quantities in both; and a split shipment in both.
-**`src/state/units.store.test.ts`** checks the imperial default, the versioned key round trip,
-nothing saved, an unknown value, storage that throws, no window, and `setUnits` /
-`loadSavedUnits` in the store. **`src/lib/loadPart.test.ts`**
+**`src/lib/loadPart.test.ts`**
 checks GLB validation (samples accepted; non-GLB, Draco and Meshopt rejected), names from file
 names, and filtering a `parts.json`. For design files: catalog vs custom source, a catalog
 design restored from the bundled catalog, a custom design without its GLB naming the file,
@@ -2879,7 +2906,7 @@ Other known gaps:
   3. load it and check that the part line reads "model matches catalog"
 - Never derive values in components that the domain should own. If the UI needs a number,
   add it to `CrateDesign` with a test.
-- Inside the 3D scene, read the store with `useDesigner.getState()` in `useFrame` and write
+- Inside the 3D scene, read the stores with `useDesigner.getState()` (the design) and `useView.getState()` (the view) in `useFrame` and write
   three.js objects directly. Subscribe with hooks only for things that change rarely.
 - Don't use drei `<Html>`; use the `SizeLabels` pattern for DOM over the canvas.
 - **Styles:** Tailwind v4 runs through Next's built-in PostCSS support (`postcss.config.mjs`,
