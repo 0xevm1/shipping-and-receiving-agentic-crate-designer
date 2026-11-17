@@ -1,7 +1,7 @@
 import type { DesignResult, Ranking } from "@/domain/design";
 import { parseDesignFile, serializeDesign, type DesignFile } from "@/domain/designFile";
 import type { CrateSettings } from "@/domain/schema";
-import type { ShipmentPlan } from "@/domain/shipment";
+import type { ShipmentPlan, TotalSplit } from "@/domain/shipment";
 import { APP } from "./appInfo";
 import { designFilePart } from "./loadPart";
 import type { LoadedPart } from "./part";
@@ -13,6 +13,8 @@ export interface Current {
   plan: ShipmentPlan;
   result: DesignResult;
   ranking: Ranking;
+  /** The job's total quantity when `plan` is its shipment (#140); the file then records it. */
+  total?: TotalSplit | null;
 }
 
 /**
@@ -30,6 +32,7 @@ export function currentDesignText(s: Current, savedAt = new Date().toISOString()
     ranking: s.ranking,
     design,
     plan: s.plan,
+    ...(s.total ? { total: s.total } : {}),
     app: APP,
     savedAt,
   });

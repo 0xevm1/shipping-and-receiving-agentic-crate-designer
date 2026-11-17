@@ -93,7 +93,7 @@ describe("the design file carries the centre of gravity", () => {
     const text = json(withCog(cog));
     expect(JSON.parse(text).part.cog).toEqual(cog);
     expect(JSON.parse(text).schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
-    expect(DESIGN_SCHEMA_VERSION).toBe(4);
+    expect(DESIGN_SCHEMA_VERSION).toBe(5);
     const parsed = parseDesignFile(text);
     expect(parsed.ok && parsed.file.part.cog).toEqual(cog);
     // A part without one writes none.

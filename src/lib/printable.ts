@@ -23,7 +23,7 @@ import { fileProfile, parseDesignFile, restoreDesign } from "@/domain/designFile
 import type { Message } from "@/domain/message";
 import type { Layout } from "@/domain/packing";
 import type { CrateSettings, DesignPart } from "@/domain/schema";
-import { describeShipment, planShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
+import { describeShipment, planShipment, planTotalShipment, type CrateType, type ShipmentPlan } from "@/domain/shipment";
 import { CONSTRAINT_TEXT, explainRecommendation } from "@/domain/explainRecommendation";
 import { costsArePlaceholder, PLACEHOLDER_COST_NOTE, type ShopStandards } from "@/domain/standards";
 import type { QuantitySweep } from "@/domain/sweep";
@@ -31,7 +31,8 @@ import { explanationText, type ExplanationText } from "./explanation";
 import { renderMessage } from "./message";
 import { allChecks } from "@/lib/checks";
 import { crateDrawings, type Drawing } from "./drawings";
-import { cutText, describeLayout, documentDate, stockText, usdCents } from "./format";
+import { cutText, describeLayout, documentDate, groupThousands, stockText, usdCents } from "./format";
+import { shipmentFigures } from "./shipmentFigures";
 import { memberBounds } from "./memberBounds";
 import { LB_PER_KG } from "@/domain/units";
 import { area, cut, dims, dimsOther, groupDigits, lengthUnit, run, volume, weight, type Units } from "./units";
@@ -199,7 +200,10 @@ export const RANKING_WORDS: Record<Ranking, string> = { volume: "volume", cost: 
  * the crate is the quantity sweep's recommendation: its layout is then the one cheapest per part,
  * not one picked by hand.
  */
-function whyText(e: LayoutExplanation, ranking: Ranking, recommended: boolean): string {
+function whyText(e: LayoutExplanation, ranking: Ranking, recommended: boolean, total = false): string {
+  if (e.kind === "picked" && total) {
+    return `Chosen by the total's plan: the lowest crate cost per part for this many parts in a crate. The layouts are ranked by ${RANKING_WORDS[ranking]}, where it ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the top layout.`;
+  }
   if (e.kind === "picked" && recommended) {
     return `Recommended: cheapest per part. This is the quantity sweep's crate, the lowest crate cost per part. The layouts are ranked by ${RANKING_WORDS[ranking]}, where it ships ${e.morePct > 0 ? `${e.morePct}% more volume than` : "about the same volume as"} the top layout.`;
   }
@@ -388,7 +392,7 @@ function label(design: CrateDesign, part: DesignPart, type: CrateType, split: bo
     quantity: `${type.quantity} PCS`,
     gross: weight(design.grossKg, u).toUpperCase(),
     grossOther: weight(design.grossKg, other(u)).toUpperCase(),
-    crate: split ? `CRATE ${type.label} · ${type.count} ${type.count === 1 ? "CRATE" : "CRATES"} OF THIS TYPE` : null,
+    crate: split ? `CRATE ${type.label} · ${groupDigits(type.count)} ${type.count === 1 ? "CRATE" : "CRATES"} OF THIS TYPE` : null,
     outside: withUnit(layout.external, u),
     forkEntry: "Fork entry from the ends",
     widthMm: layout.external[1],
@@ -412,10 +416,10 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
     letter: type.label,
     count: type.count,
     quantity: type.quantity,
-    heading: split ? `Crate ${type.label}: ${type.quantity} × ${part.name} · build ${type.count}` : `Crate for ${type.quantity} × ${part.name}`,
+    heading: split ? `Crate ${type.label}: ${type.quantity} × ${part.name} · build ${groupDigits(type.count)}` : `Crate for ${type.quantity} × ${part.name}`,
     spec: {
       rows: [
-        { label: "Parts in the crate", value: `${type.quantity} × ${part.id}`, note: split ? `${type.count} of these crates` : undefined },
+        { label: "Parts in the crate", value: `${type.quantity} × ${part.id}`, note: split ? `${groupDigits(type.count)} of these crates` : undefined },
         { label: "Outside (L × W × H)", value: withUnit(layout.external, u), note: dimsOther(layout.external, u) },
         { ...both(design.grossKg), label: "Gross" },
         { ...both(design.tareKg), label: "Tare (empty crate)" },
@@ -425,10 +429,22 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
       freight: freightRows(design, u),
       layout: {
         chosen: `${layoutText(layout, u)}, ${volume(layout.externalVolumeM3, u)}`,
-        why: whyText(explainLayout(layouts, layout, standards, input.ranking), input.ranking, isRecommended(input.plan, input.sweep)),
+        why: whyText(
+          explainLayout(layouts, layout, standards, input.ranking),
+          input.ranking,
+          isRecommended(input.plan, input.sweep),
+          input.plan.total !== undefined,
+        ),
         runnerUp: runnerUp(layouts, layout, u),
       },
-      checks: checks.map((k) => ({ id: k.id, level: k.level, levelText: LEVEL_TEXT[k.level], title: k.title, detail: renderMessage(k.detail, u) })),
+      checks: checks.map((k) => ({
+        id: k.id,
+        level: k.level,
+        levelText: LEVEL_TEXT[k.level],
+        title: k.title,
+        // The shipment's own sentence names the crate counts of a total (#140), which can pass a thousand.
+        detail: input.plan.total ? groupThousands(renderMessage(k.detail, u)) : renderMessage(k.detail, u),
+      })),
     },
     build: {
       drawings: crateDrawings(design, u),
@@ -455,14 +471,15 @@ function crateSection(input: PrintableInput, type: CrateType, split: boolean): P
 export function isRecommended(plan: ShipmentPlan, sweep: QuantitySweep | null | undefined): boolean {
   const rec = sweep?.recommendation;
   const design = plan.crates[0]?.result.design;
-  return !!rec && !!design && !plan.split && plan.totals.parts === rec.quantity && design.layout.key === rec.crate.layoutKey;
+  return !!rec && !!design && !plan.split && !plan.total && plan.totals.parts === rec.quantity && design.layout.key === rec.crate.layoutKey;
 }
 
 /** The quantity section: the recommendation, its rationale and the constraint that stopped a larger crate. */
 function quantitySection(input: PrintableInput, sweep: QuantitySweep): PrintableQuantity | null {
   const { plan, standards, units: u, settings, part } = input;
   const rec = sweep.recommendation;
-  if (!rec || plan.problem) return null;
+  // A job's total (#140) ships as the even split of its own plan, not the part's recommended crate.
+  if (!rec || plan.problem || plan.total) return null;
   const recommended = isRecommended(plan, sweep);
   const here = plan.split ? plan.crates.map((c) => c.quantity).join(" and ") : String(plan.totals.parts);
   const { stoppedBy } = rec;
@@ -507,6 +524,32 @@ export function recommendationWhy(
   return e && explanationText(e, u);
 }
 
+/**
+ * The shipment's rows: crates, parts, gross and volume of every crate. For a job's total quantity
+ * (#140) also what the whole shipment takes (wood, screws, cost, labour) and its freight terms.
+ */
+function shipmentRows(plan: ShipmentPlan, u: Units): Row[] {
+  const { totals } = plan;
+  const rows: Row[] = [
+    { label: "Crates", value: groupDigits(totals.crates) },
+    { label: "Parts", value: groupDigits(totals.parts) },
+    { label: "Gross, all crates", value: weight(totals.grossKg, u), note: weight(totals.grossKg, other(u)) },
+    { label: "Volume, all crates", value: groupThousands(volume(totals.volumeM3, u)), note: groupThousands(volume(totals.volumeM3, other(u))) },
+  ];
+  if (!plan.total) return rows;
+  const f = shipmentFigures(plan, u);
+  return [
+    ...rows,
+    { label: "Plywood, all crates", value: f.plywood },
+    { label: "Lumber, all crates", value: f.lumber },
+    { label: "Wood screws, all crates", value: f.screws },
+    { label: "Crate cost, all crates", value: f.cost, note: "wood, screws and labour" },
+    { label: "Labour, all crates", value: f.labour },
+    { label: "Dimensional weight, all crates", value: f.dimWeight },
+    { label: "Freight class", value: f.freight, note: "estimate from density (NMFC), by crate type" },
+  ];
+}
+
 /** The whole hand-off document for a plan, in the selected units. Pure. */
 export function buildPrintable(input: PrintableInput): PrintableDesign {
   const { part, plan, units: u, generatedAt, timeZone } = input;
@@ -515,26 +558,19 @@ export function buildPrintable(input: PrintableInput): PrintableDesign {
   return {
     units: u,
     unitsNote: u === "imperial" ? "Inches and pounds; cuts to the nearest 1/16″, lumber by nominal size" : "Millimetres and kilograms",
-    title: split ? `Shipment of ${totals.parts} × ${part.name}` : `Crate for ${totals.parts} × ${part.name}`,
+    title: split ? `Shipment of ${groupDigits(totals.parts)} × ${part.name}` : `Crate for ${groupDigits(totals.parts)} × ${part.name}`,
     date: documentDate(generatedAt, timeZone),
     part: [
       { label: "Part", value: part.id },
       { label: "Name", value: part.name },
       { label: "Material", value: part.material ?? "not given" },
       { label: "Mass each", value: weight(part.mass_kg, u), note: weight(part.mass_kg, other(u)) },
-      { label: "Quantity", value: String(totals.parts) },
+      { label: "Quantity", value: groupDigits(totals.parts) },
     ],
     shipment: {
       split,
-      text: split ? `Ships as ${describeShipment(plan)}` : null,
-      rows: split
-        ? [
-            { label: "Crates", value: String(totals.crates) },
-            { label: "Parts", value: String(totals.parts) },
-            { label: "Gross, all crates", value: weight(totals.grossKg, u), note: weight(totals.grossKg, other(u)) },
-            { label: "Volume, all crates", value: volume(totals.volumeM3, u), note: volume(totals.volumeM3, other(u)) },
-          ]
-        : [],
+      text: split ? `Ships as ${groupThousands(describeShipment(plan))}` : null,
+      rows: split ? shipmentRows(plan, u) : [],
       unmet: plan.unmet && renderMessage(plan.unmet, u),
     },
     crates,
@@ -568,7 +604,10 @@ export function printableFromDesignFile(text: string, standards: ShopStandards, 
     cog: p.cog,
   };
   const { ranking } = file;
-  const plan = planShipment(part, file.settings, file.layoutKey, standards, ranking);
+  // A file made for a job's total (#140) prints the whole shipment, as the Export package does.
+  const plan = file.total
+    ? planTotalShipment(part, file.settings, file.total, standards, ranking)
+    : planShipment(part, file.settings, file.layoutKey, standards, ranking);
   const { notes } = restoreDesign(file, part, standards);
   return {
     ok: true,

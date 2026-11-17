@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { tellApart, type BomLine } from "./bom";
 import type { Check } from "./check";
 import { designCrate } from "./crate";
@@ -57,6 +58,59 @@ export interface ShipmentPlan {
   unmet: Message | null;
   /** The design problem (§7.9), when there is no crate at all. */
   problem: DesignProblem | null;
+  /**
+   * Set when the plan is a job's total quantity (`planTotalShipment`, #140): the parts to ship,
+   * which the crate types add up to. Absent for a batch planned by `planShipment`.
+   */
+  total?: number;
+}
+
+/**
+ * How a total quantity ships (#140): the crate types of `planTotal`'s even split, with the layout
+ * the sweep chose for each. This is what a design request carries to make every shipment-level
+ * output describe the whole shipment; the crates are designed from it, never re-planned.
+ */
+export const TotalSplitSchema = z
+  .object({
+    /** The parts to ship. */
+    parts: z.int().min(1),
+    /** One or two crate types, the fuller first (labels A and B). */
+    types: z
+      .array(
+        z.object({
+          count: z.int().positive(),
+          quantity: z.int().min(1).max(200),
+          /** The layout the sweep chose for this quantity; null: the recommended one. */
+          layoutKey: z.string().nullable(),
+        }),
+      )
+      .min(1)
+      .max(2),
+  })
+  .refine((t) => t.types.reduce((n, x) => n + x.count * x.quantity, 0) === t.parts, { path: ["types"], message: "the crate types don't add up to the parts" });
+export type TotalSplit = z.infer<typeof TotalSplitSchema>;
+
+/**
+ * The shipment for a total quantity (#140): each crate type of `split` designed on its layout, as
+ * `planShipment` designs a crate type, so the whole shipment (counts, gross, lumber, cost, labour)
+ * and each type's build sheet, cut list, label and model come from the same crates the sweep
+ * priced. Nothing is searched: it costs two single designs, whatever the total. `settings.quantity`
+ * is not read.
+ */
+export function planTotalShipment(
+  part: DesignPart,
+  settings: CrateSettings,
+  split: TotalSplit,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+  ranking: Ranking = "volume",
+): ShipmentPlan {
+  const types: CrateType[] = split.types.map((t, i) => ({
+    label: i ? "B" : "A",
+    count: t.count,
+    quantity: t.quantity,
+    result: computeDesign(part, { ...settings, quantity: t.quantity }, t.layoutKey, standards, ranking),
+  }));
+  return { ...plan(types, null, standards), total: split.parts };
 }
 
 /**
