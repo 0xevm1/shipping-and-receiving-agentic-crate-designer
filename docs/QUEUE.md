@@ -201,11 +201,6 @@ Clients other than the UI (the CLI, an ERP, batch scripts) send `Authorization: 
 
 ## Known gaps
 
-- **Sweep vs. shipment planner.** The sweep's hard checks pass some quantities that
-  `planShipment` then splits into two crates, because the planner caps a crate's gross by its
-  computed base rating more strictly than the sweep's `base-rating` check (PART-001 at 33–34 per
-  crate, PART-002 at 24). Each configuration reports `crates` (from the full design) so this is
-  visible; reconciling the two rules belongs in the domain (§7.10 / §7.16).
 - Fair scheduling, per-org concurrency caps and quotas: deferred until a second org (#60).
 - Jobs use the app's default rules and standards; per-job rules and the `shop_standard` table come
   with the jobs and standards slices.
