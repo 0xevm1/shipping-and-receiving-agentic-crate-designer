@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { glbProblem, nameFromFile, partsFromJson } from "./loadPart";
+import { parts } from "@/domain/catalog";
+import { computeDesign, DEFAULT_SETTINGS } from "@/domain/design";
+import { serializeDesign } from "@/domain/designFile";
+import { catalogPart, type LoadedPart } from "@/state/store";
+import { designFilePart, glbProblem, loadPartFiles, nameFromFile, partsFromJson } from "./loadPart";
 
 const sample = (name: string) => {
   const b = readFileSync(`public/parts/${name}`);
@@ -45,5 +49,60 @@ describe("file helpers", () => {
     const text = readFileSync("src/data/parts.json", "utf8");
     expect(partsFromJson(text)).toHaveLength(3);
     expect(partsFromJson('{"parts":[{"id":"x"}]}')).toHaveLength(0);
+  });
+});
+
+describe("design files (#28)", () => {
+  const settings = { ...DEFAULT_SETTINGS, quantity: 8, maxLayers: 3 };
+  const designJson = (part: LoadedPart) => {
+    const design = computeDesign(part, settings).design!;
+    return serializeDesign({ part: designFilePart(part), settings, layoutKey: design.layout.key, design, savedAt: "2026-11-16T00:00:00Z" });
+  };
+  const jsonFile = (text: string, name = "design.json") => new File([text], name, { type: "application/json" });
+  const shaft = catalogPart(parts.find((p) => p.id === "PART-002")!);
+  const custom: LoadedPart = {
+    ...shaft,
+    id: "widget_v2",
+    name: "Widget",
+    model: "widget_v2.glb",
+    modelUrl: "blob:x",
+    catalogDims: undefined,
+  };
+
+  it("marks bundled catalog parts as catalog and anything else as custom", () => {
+    expect(designFilePart(shaft)).toMatchObject({ source: "catalog", id: "PART-002", model: "PART-002-long-steel-shaft.glb" });
+    // The bundled model loaded from disk is still the catalog part.
+    expect(designFilePart({ ...shaft, modelUrl: "blob:y" }).source).toBe("catalog");
+    expect(designFilePart(custom)).toMatchObject({ source: "custom", model: "widget_v2.glb" });
+    expect(designFilePart({ ...custom, massAssumed: true }).massAssumed).toBe(true);
+  });
+
+  it("restores a catalog design from the bundled catalog with its rules and layout", async () => {
+    const out = await loadPartFiles([jsonFile(designJson(shaft))], parts);
+    expect(out.part).toMatchObject({ id: "PART-002", modelUrl: "/parts/PART-002-long-steel-shaft.glb" });
+    expect(out.design?.settings).toEqual(settings);
+    expect(out.design?.layoutKey).toBe(computeDesign(shaft, settings).design!.layout.key);
+    expect(out.message).toBe("Design loaded: 8 × Long steel shaft.");
+    expect(out.catalogAdditions).toEqual([]);
+  });
+
+  it("names the model file a custom design needs, and changes nothing without it", async () => {
+    const out = await loadPartFiles([jsonFile(designJson(custom))], parts);
+    expect(out.part).toBeUndefined();
+    expect(out.design).toBeUndefined();
+    expect(out.message).toMatch(/custom model\. Add widget_v2\.glb together with the design file/);
+  });
+
+  it("still treats other JSON as a parts.json catalog", async () => {
+    const out = await loadPartFiles([jsonFile(readFileSync("src/data/parts.json", "utf8"), "parts.json")], []);
+    expect(out.catalogAdditions).toHaveLength(3);
+    expect(out.message).toMatch(/Now add the .glb/);
+  });
+
+  it("reports a bad design file or bad JSON plainly", async () => {
+    const bad = JSON.parse(designJson(shaft));
+    bad.settings.quantity = 0;
+    expect((await loadPartFiles([jsonFile(JSON.stringify(bad))], parts)).message).toMatch(/settings\.quantity/);
+    expect((await loadPartFiles([jsonFile("{oops", "x.json")], parts)).message).toBe("x.json is not valid JSON.");
   });
 });

@@ -117,6 +117,9 @@ tab at a time.
      tip-over, blocking, stack load, base rating, LTL length surcharge, and a hint when a
      cardboard box may be enough)
 6. **Switch units** between mm / kg and in / lb, and **download or copy the cut list** as CSV.
+7. **Save the design** with **Download design (.json)** in the Cut list tab, and reopen it later
+   through **Load a part** or a drop. It restores the part, rules and layout; for a custom
+   part, add its `.glb` in the same pick or drop. The format is in spec §6.4.
 
 ### The crate it designs
 
@@ -140,7 +143,8 @@ tab at a time.
 - **Certified engineering.** Sizing rules are reasonable shop defaults. They are not ASTM D6039
   or a structural calculation.
 - **Metal hardware** (brackets, banding, lag bolts).
-- **Persistence and accounts.** Nothing is saved yet. The plan is in
+- **Persistence and accounts.** Nothing is saved in the app yet (a design can be downloaded as
+  a JSON file and reopened). The plan is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
 - **Material properties.** An entered material sets the part's look and labels only. It doesn't
   change the mass or any rule.

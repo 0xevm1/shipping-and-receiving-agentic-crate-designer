@@ -68,3 +68,20 @@ describe("setPartDetails", () => {
     expect(s().part).toBe(part);
   });
 });
+
+describe("loadDesign (#28)", () => {
+  beforeEach(() => useDesigner.setState(initial, true));
+
+  it("keeps the saved settings and layout instead of resetting them like setPart", () => {
+    const shaft = catalogPart(getPart("PART-002"));
+    const settings = { ...s().settings, quantity: 6, maxLayers: 3, partGapMm: 20 };
+    s().loadDesign(shaft, settings, null);
+    const keys = s().result.layouts.map((l) => l.key);
+    const pick = keys[keys.length - 1];
+    s().loadDesign(shaft, settings, pick);
+    expect(s().part.id).toBe("PART-002");
+    expect(s().settings).toEqual(settings);
+    expect(s().layoutKey).toBe(pick);
+    expect(s().result.design?.layout.key).toBe(pick);
+  });
+});
