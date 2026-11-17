@@ -48,7 +48,7 @@ describe("ShopStandardsSchema", () => {
       maxCleatSpacingMm: 600,
       minBlockingGapMm: 19,
     });
-    expect(s.limits).toMatchObject({ ltlExcessiveLengthMm: 2438, stackKg: 100, baseRatingKg: 1000, stableHeightRatio: 1.5, lowUtilization: 0.25 });
+    expect(s.limits).toMatchObject({ ltlExcessiveLengthMm: 2438, stackKg: 100, stableHeightRatio: 1.5, lowUtilization: 0.25 });
     expect(s.limits.perCrate).toEqual({ maxGrossKg: 1000, maxParts: 0 });
     expect(s.rates).toEqual({
       densityKgM3: { plywood: 600, lumber: 480 },
@@ -67,6 +67,22 @@ describe("ShopStandardsSchema", () => {
       handlingMin: 15,
     });
     expect(s.freight).toEqual({ dimDivisorIn3PerLb: 139 });
+    // #7: structural sizing, SPF No. 2 allowable stresses.
+    expect(s.stock.joistMm).toEqual({ thick: 38, wide: 89 });
+    expect(s.structure).toEqual({
+      lumberBendingMPa: 7.8,
+      lumberShearMPa: 0.93,
+      lumberBearingMPa: 2.93,
+      plywoodBendingMPa: 6,
+      loadFactor: 1.5,
+      supportLengthMm: 100,
+      minForkOpeningMm: 200,
+      joistOverKg: 450,
+      maxJoistSpacingMm: 400,
+      lidStackKg: 0,
+    });
+    // The fixed 1,000 kg base rating is gone: the base is rated from its members (#7).
+    expect("baseRatingKg" in s.limits).toBe(false);
   });
 
   it("keeps the old exports as views of the defaults", () => {
@@ -105,6 +121,12 @@ describe("ShopStandardsSchema", () => {
     ["a negative screw cost", { rates: { screwCostUsdPer100: -1 } }],
     ["a dim divisor of 0", { freight: { dimDivisorIn3PerLb: 0 } }],
     ["a dim divisor over 500", { freight: { dimDivisorIn3PerLb: 501 } }],
+    ["a load factor under 1", { structure: { loadFactor: 0.9 } }],
+    ["a zero bending stress", { structure: { lumberBendingMPa: 0 } }],
+    ["NaN plywood stress", { structure: { plywoodBendingMPa: NaN } }],
+    ["a negative stacking load", { structure: { lidStackKg: -1 } }],
+    ["a tiny joist spacing", { structure: { maxJoistSpacingMm: 10 } }],
+    ["a paper-thin joist", { stock: { joistMm: { thick: 1 } } }],
   ])("rejects %s", (_, patch) => {
     const r = parseStandards(mergeStandards(DEFAULT_STANDARDS, patch));
     expect(r.ok).toBe(false);
@@ -171,11 +193,15 @@ describe("computeDesign with custom standards", () => {
     expect(d.tareKgByAssembly.inside).toBeCloseTo(base.tareKgByAssembly.inside * 2, 6); // all-lumber dunnage at 1 layer
   });
 
-  it("a lower base rating turns the check into a caution", () => {
+  it("weaker lumber lowers the computed base rating, down to a caution (#7)", () => {
     const base = design("PART-001", DEFAULT_STANDARDS);
     expect(check(base, "base-rating")!.level).toBe("ok");
-    const d = design("PART-001", custom({ limits: { baseRatingKg: 100 } }));
-    expect(check(d, "base-rating")).toMatchObject({ level: "caution", title: "Over 100 kg gross" });
+    const weaker = design("PART-001", custom({ structure: { plywoodBendingMPa: 3 } }));
+    expect(weaker.structure.ratedPayloadKg).toBeLessThan(base.structure.ratedPayloadKg);
+    const weak = custom({ structure: { lumberBendingMPa: 0.5, lumberShearMPa: 0.1, lumberBearingMPa: 0.5, plywoodBendingMPa: 0.5, loadFactor: 5 } });
+    const d = design("PART-001", weak);
+    expect(check(d, "base-rating")).toMatchObject({ level: "caution", title: "Over the base rating" });
+    expect(d.checks.find((c) => c.id === "base-rating")!.detail).toMatch(/^Base rated \d+ kg; this crate's payload is 86 kg/);
   });
 
   it("a lower stack limit turns the stack check into a caution", () => {
@@ -259,6 +285,15 @@ describe("standards JSON", () => {
     const r = standardsFromJson(JSON.stringify({ limits: { stackKg: 80 } }));
     expect(r.ok && r.standards.limits.stackKg).toBe(80);
     expect(r.ok && r.standards.rates).toEqual(DEFAULT_STANDARDS.rates);
+  });
+
+  it("still loads a file saved before #7: the old base rating is dropped, the structure filled in", () => {
+    const r = standardsFromJson(JSON.stringify({ limits: { baseRatingKg: 1200, stackKg: 80 } }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect("baseRatingKg" in r.standards.limits).toBe(false);
+    expect(r.standards.structure).toEqual(DEFAULT_STANDARDS.structure);
+    expect(r.standards.limits.stackKg).toBe(80);
   });
 
   it.each([

@@ -50,7 +50,7 @@ export function buildLines(design: CrateDesign, withPart: boolean) {
   const { layout, construction } = design;
   const ext = layout.external;
   const o = construction.panelMm + construction.cleat.thick;
-  const mn: Vec3 = [-o, -o, -construction.floorMm - construction.skid.tall];
+  const mn: Vec3 = [-o, -o, -construction.baseMm];
   const mx: Vec3 = [mn[0] + ext[0], mn[1] + ext[1], mn[2] + ext[2]];
   const longest = Math.max(...ext);
   const off = 110 + longest * 0.05;

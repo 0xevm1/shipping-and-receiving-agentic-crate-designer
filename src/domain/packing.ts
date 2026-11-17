@@ -20,8 +20,11 @@ export interface PackingInput {
   wallClearanceMm: number;
   /** Thickness of the plywood sheet placed between stacked layers. */
   separatorMm: number;
-  /** Amount the crate structure adds to the interior on each axis (walls, cleats, skids, lid). */
-  structureAllowance: Vec3;
+  /**
+   * Amount the crate structure adds to the interior on each axis (walls, cleats, skids, lid).
+   * A function sizes it per layout from the interior and grid (#7: the base is sized for its spans).
+   */
+  structureAllowance: Vec3 | ((grid: Pick<Layout, "interior" | "cellSize" | "counts" | "clearance">) => Vec3);
   /**
    * Smallest interior on any axis. A tiny part's crate is padded up to this, with
    * the extra split evenly as clearance, so the cleat frame still fits.
@@ -92,11 +95,12 @@ export function enumerateLayouts(input: PackingInput, standards: ShopStandards =
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
 
-        const external: Vec3 = [
-          interior[0] + input.structureAllowance[0],
-          interior[1] + input.structureAllowance[1],
-          interior[2] + input.structureAllowance[2],
-        ];
+        const counts: [number, number, number] = [nx, ny, nz];
+        const allowance =
+          typeof input.structureAllowance === "function"
+            ? input.structureAllowance({ interior, cellSize: [a, b, c], counts, clearance })
+            : input.structureAllowance;
+        const external: Vec3 = [interior[0] + allowance[0], interior[1] + allowance[1], interior[2] + allowance[2]];
 
         const slots: Slot[] = [];
         outer: for (let k = 0; k < nz; k++) {
@@ -115,7 +119,7 @@ export function enumerateLayouts(input: PackingInput, standards: ShopStandards =
           key,
           orientation,
           cellSize: [a, b, c],
-          counts: [nx, ny, nz],
+          counts,
           interior,
           clearance,
           external,

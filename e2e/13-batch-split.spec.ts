@@ -59,7 +59,7 @@ test("200 brackets split into crates within the 1,000 kg limit, and switching cr
   // The Checks follow the crate on screen and include the per-crate limit.
   await openTab(page, "Checks");
   await expect(panel(page)).toContainText("Within the per-crate limits");
-  await expect(panel(page)).toContainText("Within the standard base rating");
+  await expect(panel(page)).toContainText("Within the base rating");
 
   // The cut list follows it too, and can show the whole shipment.
   await openTab(page, "Cut list");

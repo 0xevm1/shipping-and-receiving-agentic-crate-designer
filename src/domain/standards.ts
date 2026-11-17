@@ -46,7 +46,10 @@ export const ShopStandardsSchema = z
     stock: z.object({
       /** Cleat lumber for the wall and lid frames. Its width also sets the smallest interior (two cleats). */
       cleatMm: SectionSchema,
-      /** Skid lumber: `standard` for most loads, `heavy` above `construction.heavySkidOverKg`. */
+      /**
+       * Skid lumber, smallest first (#7): structural sizing takes `standard` when it passes, else
+       * `heavy`; `heavy` is also the minimum above `construction.heavySkidOverKg`.
+       */
       skidMm: z.object({ standard: SkidSchema, heavy: SkidSchema }),
       /** Floor plywood, always this thickness. */
       floorPlywoodMm: mm(6, 50),
@@ -54,6 +57,11 @@ export const ShopStandardsSchema = z
       panelPlywoodMm: z.object({ light: mm(6, 50), medium: mm(6, 50), heavy: mm(6, 50) }),
       /** Width of blocking posts and bearers. */
       blockWidthMm: mm(19, 300),
+      /**
+       * Floor joist lumber (#7), set on edge across the skids: `thick` along the crate, `wide`
+       * tall. Also the lid joists when crates are stacked.
+       */
+      joistMm: SectionSchema,
     }),
     /** What a new crate starts with, and what Reset rules goes back to. */
     defaults: z.object({
@@ -69,9 +77,9 @@ export const ShopStandardsSchema = z
       panelLightMaxKg: kg(0, 100000),
       /** Auto panel: payload up to this → `medium` plywood; above it, `heavy`. */
       panelMediumMaxKg: kg(0, 100000),
-      /** Payload above this gets `heavy` skids. */
+      /** Payload above this gets `heavy` skids at least (structural sizing may pick them sooner, #7). */
       heavySkidOverKg: kg(0, 100000),
-      /** At most this much crate width per skid gap: skids = max(2, ceil(width / spacing) + 1). */
+      /** At most this much crate width per skid gap: at least max(2, ceil(width / spacing) + 1) skids. */
       skidSpacingMm: mm(200, 5000),
       /** Wall uprights and lid cross cleats at most this far apart. */
       maxCleatSpacingMm: mm(100, 5000),
@@ -94,8 +102,6 @@ export const ShopStandardsSchema = z
       cardboard: z.object({ partKg: kg(0, 1000), payloadKg: kg(0, 1000), boxDimSumMm: mm(0, 10000) }),
       /** Most mass from upper layers on each bottom position. */
       stackKg: kg(0, 100000),
-      /** Most gross weight the standard base is good for. */
-      baseRatingKg: kg(1, 100000),
       /** Crate height at most this × the short side counts as stable. */
       stableHeightRatio: z.number().finite().min(0.5).max(10),
       /** Below this share of the interior filled, say it is mostly air. */
@@ -105,7 +111,7 @@ export const ShopStandardsSchema = z
        * trailer door and floor (`trailerMm`), so there is no separate size limit.
        */
       perCrate: z.object({
-        /** Most gross weight one crate may have; a heavier batch is split. */
+        /** Most gross weight one crate may have (a handling limit); a heavier batch is split. The base rating (#7) also applies. */
         maxGrossKg: kg(1, 100000),
         /** Most parts in one crate; 0 means no limit. */
         maxParts: z.number().int().min(0).max(200),
@@ -139,6 +145,32 @@ export const ShopStandardsSchema = z
       assemblyStepMin: minutes(0, 240),
       /** Minutes per crate for moving, marking and staging it. */
       handlingMin: minutes(0, 480),
+    }),
+    /**
+     * Structural sizing (#7, spec §7.15): allowable stresses, the load factor and the base and
+     * lid rules. Defaults are SPF No. 2 lumber and sheathing plywood, deliberately conservative.
+     */
+    structure: z.object({
+      /** Allowable bending stress of the lumber, MPa (Fb). */
+      lumberBendingMPa: z.number().finite().min(0.5).max(50),
+      /** Allowable shear stress of the lumber, MPa (Fv). */
+      lumberShearMPa: z.number().finite().min(0.1).max(10),
+      /** Allowable bearing stress across the grain, MPa (Fc⊥). */
+      lumberBearingMPa: z.number().finite().min(0.5).max(20),
+      /** Allowable bending stress of the plywood on its gross section, MPa. */
+      plywoodBendingMPa: z.number().finite().min(0.5).max(50),
+      /** Design load = this × (payload + crate weight): drops, rough handling and uneven support. */
+      loadFactor: z.number().finite().min(1).max(5),
+      /** Length of skid resting on each end support (a fork tine or a block), mm. */
+      supportLengthMm: mm(25, 1000),
+      /** Skids are never added past the point where the clear gap between them is below this. */
+      minForkOpeningMm: mm(0, 2000),
+      /** Payload above this always gets floor joists across the skids. */
+      joistOverKg: kg(0, 100000),
+      /** Floor joists at most this far apart, centre to centre. */
+      maxJoistSpacingMm: mm(100, 2000),
+      /** Weight stacked on the lid the lid is sized for; 0 means crates aren't stacked (nominal lid). */
+      lidStackKg: kg(0, 100000),
     }),
     /** Freight terms for domestic LTL (#17, spec §7.12). */
     freight: z.object({
@@ -216,6 +248,7 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     floorPlywoodMm: 19,
     panelPlywoodMm: { light: 12, medium: 15, heavy: 19 },
     blockWidthMm: 89, // cut from 2×4 / 4×4
+    joistMm: { thick: 38, wide: 89 }, // 2×4 on edge
   },
   defaults: { partGapMm: 50, wallClearanceMm: 50, maxLayers: 2, volumeTolerance: 0.03 },
   construction: {
@@ -250,10 +283,13 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
      */
     cardboard: { partKg: 15, payloadKg: 25, boxDimSumMm: 1905 },
     stackKg: 100,
-    baseRatingKg: 1000,
     stableHeightRatio: 1.5,
     lowUtilization: 0.25,
-    /** The standard base's 1,000 kg rating; no part-count limit. No sample part splits at its suggested quantities. */
+    /**
+     * 1,000 kg gross per crate (the old fixed base rating, kept as a handling limit); a crate is
+     * also held to its computed base rating (#7). No part-count limit. No sample part splits at
+     * its suggested quantities.
+     */
     perCrate: { maxGrossKg: 1000, maxParts: 0 },
   },
   rates: {
@@ -276,6 +312,26 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     screwMin: 0.15,
     assemblyStepMin: 6,
     handlingMin: 15,
+  },
+  /**
+   * Structural sizing (#7, spec §7.15). Allowable stresses are the NDS Supplement (2018) Table 4A
+   * reference design values for Spruce-Pine-Fir No. 2 (Fb 875 psi, Fv 135 psi, Fc⊥ 425 psi), with
+   * no size, repetitive-member or load-duration increases, which keeps them conservative. The
+   * plywood value (6 MPa, about 870 psi on the gross section) is a conservative figure for
+   * sheathing-grade plywood bent across its supports; check it against your supplier's panel
+   * design values. The 2.0 load factor covers drops, rough handling and uneven support.
+   */
+  structure: {
+    lumberBendingMPa: 7.8,
+    lumberShearMPa: 0.93,
+    lumberBearingMPa: 2.93,
+    plywoodBendingMPa: 6.0,
+    loadFactor: 1.5,
+    supportLengthMm: 100,
+    minForkOpeningMm: 200,
+    joistOverKg: 450,
+    maxJoistSpacingMm: 400,
+    lidStackKg: 0,
   },
   /**
    * 139 in³/lb is the dimensional-weight divisor most US carriers publish for domestic

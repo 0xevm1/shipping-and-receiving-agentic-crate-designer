@@ -257,9 +257,14 @@ function steps(design: CrateDesign, schedule: ScrewLine[], u: Units): AssemblySt
   const skid = design.bom.find((l) => l.kind === "skid");
   const floor = design.bom.find((l) => l.kind === "floor");
   const separator = design.bom.find((l) => l.kind === "separator");
+  const joist = design.bom.find((l) => l.kind === "joist");
   out[0].text =
     `Lay the ${c.skidCount} ${skid ? stockText(skid, u) : ""} skids along the length, evenly spread across the ${shopSize(extW, u)} width, ` +
-    `and screw the ${floor ? stockText(floor, u) : "plywood"} floor on top. Forklift tines go between the skids from the ends.`;
+    (c.joist && joist
+      ? `screw ${c.joist.count} ${stockText(joist, u)} floor joists on edge across them, evenly spread along the length, and screw the ` +
+        `${floor ? stockText(floor, u) : "plywood"} floor to the joists. `
+      : `and screw the ${floor ? stockText(floor, u) : "plywood"} floor on top. `) +
+    `The base is rated for ${weight(design.structure.ratedPayloadKg, u)} of parts. Forklift tines go between the skids from the ends.`;
   out[1].text =
     "Screw the rails and uprights to the outside of each side and end panel. Stand the side walls on the floor, fit the end walls " +
     "between them, then screw the walls to the floor and at the four corners.";

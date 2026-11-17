@@ -153,7 +153,7 @@ function Why({ explanation: e, onUseBest }: { explanation: LayoutExplanation; on
 function Thumb({ layout: l, design }: { layout: Layout; design: CrateDesign }) {
   const c = design.construction;
   const wall = c.panelMm + c.cleat.thick;
-  const base = c.floorMm + c.skid.tall;
+  const base = c.baseMm;
   const [EL, EW, EH] = l.external;
   const [a, b, h] = l.cellSize;
   const gap = 140;
