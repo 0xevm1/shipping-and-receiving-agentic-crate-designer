@@ -1,0 +1,173 @@
+/**
+ * The job kinds (#46 slice 7, docs/QUEUE.md "Job kinds"): what `enqueueSweep` / `enqueueBundle`
+ * put on the queue, and the handlers `bun run worker` runs them with.
+ *
+ * - `sweep`: for a design job, run the quantity sweep on the engine pool, save the shortlist as
+ *   `precomputed` configurations, select the recommendation, and emit `configs.ready`, all in one
+ *   transaction. Dead-lettered: the job goes to `error` and `job.error` is emitted.
+ * - `bundle`: the server-built `bundle.zip` (slice 6, artifacts). Only the payload and the enqueue
+ *   call are fixed here; the artifacts slice passes its handler to `createJobHandlers`.
+ */
+import { z } from "zod";
+import { DEFAULT_STANDARDS } from "@/domain/standards";
+import { DEFAULT_SWEEP_RULES, type SweepRequest } from "@/engine/sweep";
+import { emitEvent } from "../events/emit";
+import { type OrgContext, orgContext } from "../db/org";
+import { createQueueStore, type QueueJob } from "../db/queue";
+import { createRepository, type Database, inTransaction, type Transaction } from "../db/repository";
+import type { EnginePool } from "../workers/pool";
+import { type JobHandler, PermanentJobError } from "./runner";
+
+export const SweepJobPayloadSchema = z.object({ jobId: z.uuid() });
+export type SweepJobPayload = z.infer<typeof SweepJobPayloadSchema>;
+
+export const BundleJobPayloadSchema = z.object({
+  jobId: z.uuid(),
+  /** The configurations to put in the ZIP, a folder each; empty means the job's shortlist. */
+  configurationIds: z.array(z.uuid()).max(50),
+});
+export type BundleJobPayload = z.infer<typeof BundleJobPayloadSchema>;
+
+export const JOB_KINDS = ["sweep", "bundle"] as const;
+export type JobKind = (typeof JOB_KINDS)[number];
+
+type Executor = Database | Transaction;
+
+async function requireJob(executor: Executor, ctx: OrgContext, jobId: string) {
+  const job = await createRepository(executor).jobs.get(ctx, jobId);
+  if (!job) throw new Error(`No design job ${jobId} in this org.`);
+  return job;
+}
+
+/**
+ * Queues the sweep for design job `jobId` (POST /jobs calls this, in its own transaction to have
+ * both commit together). A sweep already queued or running for the job is returned, not doubled.
+ */
+export async function enqueueSweep(ctx: OrgContext, jobId: string, executor: Executor): Promise<QueueJob> {
+  await requireJob(executor, ctx, jobId);
+  const payload: SweepJobPayload = { jobId };
+  const { job } = await createQueueStore(executor).enqueue(ctx, { kind: "sweep", payload, dedupeKey: jobId });
+  return job;
+}
+
+/** Queues a server-built bundle for design job `jobId`. */
+export async function enqueueBundle(ctx: OrgContext, input: BundleJobPayload, executor: Executor): Promise<QueueJob> {
+  const payload = BundleJobPayloadSchema.parse(input);
+  await requireJob(executor, ctx, payload.jobId);
+  const { job } = await createQueueStore(executor).enqueue(ctx, { kind: "bundle", payload, maxAttempts: 3 });
+  return job;
+}
+
+export interface JobHandlerDeps {
+  db: Database;
+  pool: EnginePool;
+  /** The artifacts slice's bundle builder. Until then a bundle job dead-letters with "not built yet". */
+  bundle?: JobHandler;
+}
+
+/** What a sweep job stores as its queue result: small, and enough to draw the curve. */
+export interface SweepJobResult {
+  count: number;
+  recommendedConfigurationId: string | null;
+  inputHash: string;
+  engineVersion: string;
+  curve: { quantity: number; ok: boolean; binding: string | null; scoreUsdPerPart: number | null }[];
+  total: unknown;
+}
+
+export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<JobKind, JobHandler> {
+  const sweep: JobHandler = async ({ org, job: queued, signal }) => {
+    const parsed = SweepJobPayloadSchema.safeParse(queued.payload);
+    if (!parsed.success) throw new PermanentJobError("A sweep job needs a jobId.");
+    const repo = createRepository(db);
+    const job = await repo.jobs.get(org, parsed.data.jobId);
+    if (!job) throw new PermanentJobError(`No design job ${parsed.data.jobId}.`);
+    const part = await repo.parts.get(org, job.partId);
+    if (!part) throw new PermanentJobError(`No part ${job.partId}.`);
+    if (job.status === "open" || job.status === "error") await repo.jobs.update(org, job.id, job.version, { status: "running" });
+
+    const req: SweepRequest = {
+      part: {
+        id: part.id,
+        name: part.name,
+        mass_kg: part.massKg,
+        dimensions_mm: [part.sizeXMm, part.sizeYMm, part.sizeZMm],
+        material: part.material ?? undefined,
+      },
+      rules: DEFAULT_SWEEP_RULES,
+      standards: DEFAULT_STANDARDS,
+      total: job.totalQuantity,
+    };
+    const report = await pool.run("designs", req);
+    signal.throwIfAborted();
+
+    return inTransaction(db, async (tx) => {
+      const ids: string[] = [];
+      for (const c of report.configurations) {
+        const { row } = await tx.configurations.save(org, {
+          jobId: job.id,
+          inputHash: c.inputHash,
+          quantityPerCrate: c.quantityPerCrate,
+          layout: c.layoutKey,
+          settings: c.settings,
+          resultSummary: { ...c, settings: undefined, sweepInputHash: report.inputHash },
+          score: c.scoreUsdPerPart,
+          origin: "precomputed",
+          engineVersion: report.engineVersion,
+        });
+        ids.push(row.id);
+      }
+      const recommendedConfigurationId = ids[0] ?? null;
+      const current = await tx.jobs.get(org, job.id);
+      if (current) {
+        await tx.jobs.update(org, job.id, current.version, {
+          status: report.problem || !recommendedConfigurationId ? "error" : "ready",
+          selectedConfigurationId: recommendedConfigurationId ?? current.selectedConfigurationId,
+        });
+      }
+      await emitEvent(tx, org, {
+        jobId: job.id,
+        type: "configs.ready",
+        payload: { count: ids.length, recommendedConfigurationId, inputHash: report.inputHash, ...(report.problem ? { problem: report.problem.title } : {}) },
+      });
+      const result: SweepJobResult = {
+        count: ids.length,
+        recommendedConfigurationId,
+        inputHash: report.inputHash,
+        engineVersion: report.engineVersion,
+        curve: report.curve,
+        total: report.total,
+      };
+      return result;
+    });
+  };
+
+  const bundleStub: JobHandler = async () => {
+    throw new PermanentJobError("Server-built bundles aren't available yet.");
+  };
+
+  return { sweep, bundle: bundle ?? bundleStub };
+}
+
+/**
+ * After a job is dead-lettered: a sweep's design job goes to `error` and `job.error` tells its
+ * viewers. The message is generic (it is shown to users); the cause is in `queue_job.last_error`.
+ */
+export function createOnDead(db: Database) {
+  return async (job: QueueJob): Promise<void> => {
+    if (job.kind !== "sweep") return;
+    const parsed = SweepJobPayloadSchema.safeParse(job.payload);
+    if (!parsed.success) return;
+    const org = orgContext(job.orgId);
+    await inTransaction(db, async (tx) => {
+      const current = await tx.jobs.get(org, parsed.data.jobId);
+      if (!current) return;
+      await tx.jobs.update(org, current.id, current.version, { status: "error" });
+      await emitEvent(tx, org, {
+        jobId: current.id,
+        type: "job.error",
+        payload: { message: "The quantity sweep failed. Start the job again, or check the part's size and mass." },
+      });
+    });
+  };
+}

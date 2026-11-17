@@ -25,6 +25,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -250,4 +251,76 @@ export const idempotencyKey = pgTable(
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ name: "idempotency_key_pkey", columns: [t.orgId, t.key] })],
+);
+
+export const QUEUE_JOB_STATUSES = ["queued", "running", "done", "dead"] as const;
+export type QueueJobStatus = (typeof QUEUE_JOB_STATUSES)[number];
+
+/**
+ * The background job queue (#46 slice 7, docs/QUEUE.md): Postgres, not Redis. Workers claim the
+ * oldest due row with `SELECT … FOR UPDATE SKIP LOCKED`, woken by `NOTIFY crate_jobs` with a
+ * polling fallback. A claimed row is leased until `locked_until`; a worker that crashes stops
+ * renewing it and the row is claimed again once the lease runs out. A failed attempt goes back to
+ * `queued` with exponential backoff (`run_at`) until `max_attempts`, then to `dead` (dead letter).
+ * Single FIFO for now; `org_id` is kept so fair scheduling between orgs can be added (deferred, #60).
+ */
+export const queueJob = pgTable(
+  "queue_job",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: orgId(),
+    /** What to run: `sweep`, `bundle`, … (src/server/queue/handlers.ts). */
+    kind: text("kind").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    status: text("status").$type<QueueJobStatus>().notNull().default("queued"),
+    /** Claims so far, including the one running. */
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    /** Not claimed before this (backoff after a failure). */
+    runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The running claim's lease; past it, the job is claimable again (the worker died). */
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    lockedBy: text("locked_by"),
+    /** At most one queued-or-running job per (org, kind, dedupe key): enqueueing again is a no-op. */
+    dedupeKey: text("dedupe_key"),
+    lastError: text("last_error"),
+    result: jsonb("result").$type<unknown>(),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("queue_job_org_id_id_key").on(t.orgId, t.id),
+    // The claim's scan: due queued jobs, and running ones whose lease ran out, oldest first.
+    index("queue_job_claim_idx")
+      .on(t.runAt, t.createdAt)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    uniqueIndex("queue_job_dedupe_key")
+      .on(t.orgId, t.kind, t.dedupeKey)
+      .where(sql`${t.dedupeKey} is not null and ${t.status} in ('queued', 'running')`),
+    check("queue_job_status_check", sql`${t.status} in ('queued', 'running', 'done', 'dead')`),
+    check("queue_job_max_attempts_positive", sql`${t.maxAttempts} > 0`),
+  ],
+);
+
+/**
+ * API keys for clients other than the UI (#46 slice 7, docs/QUEUE.md "API keys"): the CLI, ERP
+ * and batch scripts send `Authorization: Bearer <key>`. Only the SHA-256 of a key is stored; the
+ * key itself is shown once, by `bun run apikey:create`. A revoked key is refused.
+ */
+export const apiKey = pgTable(
+  "api_key",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: orgId(),
+    name: text("name").notNull(),
+    /** The key's first characters ("cdk_AbC123"), to recognise it in a list. Not secret. */
+    prefix: text("prefix").notNull(),
+    /** SHA-256 (hex) of the whole key. Keys are 256-bit random, so a fast hash is enough. */
+    keyHash: text("key_hash").notNull().unique(),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [index("api_key_org_id_idx").on(t.orgId, t.createdAt)],
 );

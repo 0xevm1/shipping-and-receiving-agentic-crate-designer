@@ -19,6 +19,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.integration.test.ts"],
+    // The engine worker-thread bundle the server's pool runs (`bun run engine:build`).
+    globalSetup: ["./src/server/workers/buildEngineWorker.globalSetup.ts"],
     exclude: [...configDefaults.exclude, "e2e/**", ".claude/**"],
     testTimeout: 30_000,
     hookTimeout: 60_000,
