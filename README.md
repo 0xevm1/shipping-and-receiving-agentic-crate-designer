@@ -135,7 +135,7 @@ tab at a time.
 8. **Set the shop standards** (the house rules every crate is built to) at the bottom of the
    **Rules** tab, under **Shop standards**: lumber and plywood on hand, default gap, clearance
    and layers, the panel and skid thresholds, cleat and skid spacing, the trailer, LTL, carton,
-   stack and base-rating limits, densities, material costs, screw spacing and screw price,
+   stack and base-rating limits, the cradle rules for long parts, densities, material costs, screw spacing and screw price,
    the **labour rate and shop times** (minutes per cut, set-up, screw, assembly step and per
    crate), the dimensional-weight divisor, and **handling** (forklift and pallet-jack tine width,
    spread and clearance under the floor, the off-centre limit and the smallest tip angle). A change
@@ -213,6 +213,12 @@ tab at a time.
 - **Walls and lid:** plywood panels, each stiffened by a frame of 1×4 cleats.
 - **Inside:** wood holds the parts in place. Bearers lift the bottom layer, a plywood separator
   sits between layers, and blocking posts fill every gap.
+- **Long parts sit in cradles** (#6, spec §7.5a): a slender part (longest side at least 3× its
+  middle side, like the 1.53 m shaft) rests in notched wooden saddles across its length, one
+  150 mm in from each end and at most 600 mm apart, with a round seat a quarter of the part's
+  height deep (a flat pocket for a non-round section). Stacked layers get stacking cradles,
+  notched under and over, instead of a separator, and end stops hold each part along its axis.
+  The cradles show notched in 3D and are in the cut list, screws, labour and build sheet.
 - **Fasteners:** wood screws only.
 - **Sizing:** board sizes go up with payload mass.
 
@@ -297,6 +303,10 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
   - panel joints: one every 200 mm
   - skids: one every 300 mm
   - blocking: 2 per block
+  - cradles: 4 per cradle
+- **Cradles** (Shop standards → Cradles): slender at longest ÷ middle ≥ 3, cradles at most
+  600 mm apart and 150 mm in from the ends, notches 25% of the part's height deep, sections
+  within 10% of square taken as round, 38 mm (2×) boards.
 
 All of these live in one zod-validated object, `ShopStandards` (`src/domain/standards.ts`, spec
 §6.4), which `computeDesign` takes as its last argument. There are no rule constants left in

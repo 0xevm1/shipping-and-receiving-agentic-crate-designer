@@ -215,3 +215,46 @@ describe("the print link", () => {
     expect(printableFromDesignFile("{", DEFAULT_STANDARDS, "imperial", NOW)).toMatchObject({ ok: false });
   });
 });
+
+describe("cradles (#6) in the build sheet", () => {
+  const shaft = getPart("PART-002");
+  const build = (quantity: number) => {
+    const plan = planShipment(shaft, { ...DEFAULT_SETTINGS, quantity }, null, DEFAULT_STANDARDS);
+    return { doc: buildPrintable({ part: shaft, plan, standards: DEFAULT_STANDARDS, units: "metric", generatedAt: NOW }), design: plan.crates[0].result.design! };
+  };
+
+  it("places floor cradles before the parts and stacking cradles and end stops after", () => {
+    const { doc, design } = build(4);
+    const steps = doc.crates[0].build.steps;
+    expect(steps[2].pieces.map((p) => p.piece)).toContain("Cradle");
+    expect(steps[2].text).toMatch(/Screw the 4 notched cradles to the floor .* 4 along each part/);
+    expect(steps[2].text).toContain("Cut each notch as a round seat of 86 mm radius, 43 mm deep and 149 mm across");
+    expect(steps[3].pieces.map((p) => p.piece)).toEqual(expect.arrayContaining(["Stacking cradle", "End stop"]));
+    expect(steps[3].text).toMatch(/stacking cradle/);
+    expect(steps.reduce((n, s) => n + s.pieces.reduce((m, p) => m + p.qty, 0), 0)).toBe(design.bom.reduce((n, l) => n + l.qty, 0));
+    expect(steps.reduce((n, s) => n + s.screws, 0)).toBe(design.screws);
+    expect(doc.crates[0].build.fasteners.map((f) => f.title)).toEqual(expect.arrayContaining(["Cradles to floor", "Stacking cradles through the side walls", "End stops"]));
+  });
+
+  it("shows the cradles in Section A–A and Section B–B, cut down through the notch", () => {
+    const { doc, design } = build(1);
+    const drawings = doc.crates[0].build.drawings;
+    const plan = drawings.find((d) => d.id === "section-plan")!;
+    expect(plan.title).toMatch(/cradles/);
+    const cradles = design.members.filter((m) => m.kind === "cradle");
+    for (const m of cradles) expect(plan.rects.some((r) => r.kind === "dunnage" && r.x === m.min[0] && r.w === m.size[0] && r.h === m.size[1])).toBe(true);
+    const side = drawings.find((d) => d.id === "section-side")!;
+    expect(side.title).toMatch(/cradles/);
+    const slot = design.layout.slots[0];
+    for (const m of cradles) {
+      const r = side.rects.find((x) => x.kind === "dunnage" && x.x === m.min[0] && x.w === m.size[0])!;
+      expect(r.y).toBe(0);
+      expect(r.h).toBeCloseTo(slot.min[2]); // the part rests on the notch bottom
+    }
+  });
+
+  it("keeps the general blocking titles for other parts", () => {
+    const plan = printable(4).crates[0].build.drawings.find((d) => d.id === "section-plan")!;
+    expect(plan.title).toBe("Section A–A: plan through the bottom layer, showing the blocking");
+  });
+});

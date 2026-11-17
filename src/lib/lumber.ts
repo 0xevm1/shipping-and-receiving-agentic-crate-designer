@@ -77,7 +77,7 @@ export function sectionText(a: number, b: number, mark = "″"): string {
 }
 
 /**
- * Lumber stock for the cut list: the nominal name ("4x4"). Blocking and bearers are cut to
+ * Lumber stock for the cut list: the nominal name ("4x4"). Blocking, bearers and cradles are cut to
  * the gap, so they read as their size and the stock they come from ("1 15/16″ × 3 1/2″ from
  * 4x4"). Any other size that isn't stock (custom shop standards) is fractional inches.
  */
@@ -86,7 +86,7 @@ export function lumberText(stockMm: readonly number[], kind: MemberKind, mark = 
   const name = nominalLumber(a, b);
   if (name) return name;
   const size = inches(...sorted(a, b), mark);
-  if (kind !== "blocking" && kind !== "bearer") return size;
+  if (kind !== "blocking" && kind !== "bearer" && kind !== "cradle") return size;
   const from = sourceStock(a, b);
   return from ? `${size} from ${from}` : size;
 }

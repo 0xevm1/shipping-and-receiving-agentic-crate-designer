@@ -79,6 +79,23 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    title: "Cradles",
+    fields: [
+      {
+        path: ["cradle", "slenderRatio"],
+        label: "Slender at length ÷ width",
+        unit: "×",
+        step: 0.1,
+        hint: "A part whose longest side is at least this many times its middle side sits in notched cradles.",
+      },
+      { path: ["cradle", "maxSpacingMm"], label: "Cradle spacing", unit: "mm" },
+      { path: ["cradle", "endOffsetMm"], label: "End cradles in from the ends", unit: "mm" },
+      { path: ["cradle", "notchDepth"], label: "Notch depth", unit: "%", scale: 100, hint: "Of the part's height." },
+      { path: ["cradle", "roundTolerance"], label: "Round within", unit: "%", scale: 100, hint: "Sections this close to square get a round seat." },
+      { path: ["cradle", "thickMm"], label: "Cradle thickness", unit: "mm" },
+    ],
+  },
+  {
     title: "Limits",
     fields: [
       { path: ["limits", "trailerMm", "interiorLength"], label: "Trailer floor length", unit: "mm" },

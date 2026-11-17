@@ -156,6 +156,21 @@ export const ShopStandardsSchema = z
       /** Static tip angle (CoG to the nearest base edge) below this, in degrees, is top-heavy. */
       minTipAngleDeg: z.number().finite().min(1).max(80),
     }),
+    /** Cradles for long, slender parts (#6, spec §7.5a). */
+    cradle: z.object({
+      /** A part is slender when its longest side ÷ its middle side is at least this. */
+      slenderRatio: z.number().finite().min(1.5).max(50),
+      /** Cradles along a slender part at most this far apart, centre to centre. */
+      maxSpacingMm: mm(100, 5000),
+      /** The end cradles' centre lines this far in from each end of the part. */
+      endOffsetMm: mm(0, 2000),
+      /** Notch depth as a fraction of the part's height. */
+      notchDepth: z.number().finite().min(0.05).max(0.45),
+      /** Cross-section sides within this fraction count as round: a circular seat instead of a flat pocket. */
+      roundTolerance: z.number().finite().min(0).max(0.5),
+      /** Cradle board thickness along the part (lumber). */
+      thickMm: mm(19, 300),
+    }),
   })
   .superRefine((s, ctx) => {
     const p = s.stock.panelPlywoodMm;
@@ -181,6 +196,9 @@ export const ShopStandardsSchema = z
       if (d.spreadMm.min < 2 * d.tineWidthMm) {
         ctx.addIssue({ code: "custom", path: ["handling", key, "spreadMm"], message: "The spread can't be less than two tines wide" });
       }
+    }
+    if (s.cradle.endOffsetMm > s.cradle.maxSpacingMm) {
+      ctx.addIssue({ code: "custom", path: ["cradle", "endOffsetMm"], message: "The end cradle offset can't be more than the cradle spacing" });
     }
     const t = s.limits.trailerMm;
     if (t.doorWidth > t.interiorWidth || t.doorHeight > t.interiorHeight) {
@@ -283,6 +301,12 @@ export const DEFAULT_STANDARDS: ShopStandards = deepFreeze({
     cogOffsetRatio: 0.1,
     minTipAngleDeg: 30,
   },
+  /**
+   * Cradles (#6): a slender part (longest ÷ middle ≥ 3) sits in notched saddles of 2× lumber
+   * (38 mm thick) at most 600 mm apart, the end ones 150 mm in from each end, with notches a
+   * quarter of the part's height deep. Sections within 10% of square are taken as round.
+   */
+  cradle: { slenderRatio: 3, maxSpacingMm: 600, endOffsetMm: 150, notchDepth: 0.25, roundTolerance: 0.1, thickMm: 38 },
 });
 
 /** Smallest interior on any axis: room for the top and bottom rails of a wall without overlap. */
