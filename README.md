@@ -223,6 +223,7 @@ src/state/         zustand store; per-frame animation values; checks for the UI
 src/components/    shell/ (overlays), island/ (tabs), viewer/ (three.js via react-three-fiber)
 src/data/          parts.json catalog
 public/parts/      GLB models
+public/            also site.webmanifest and its 192/512 icons (tab icons: src/app/icon.svg etc.)
 e2e/               Playwright end-to-end UI tests (bun run e2e)
 docs/              SPECIFICATION.md, DATA_STORE.md, schema.sql, design-handoff/
 ```
