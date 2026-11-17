@@ -3,7 +3,8 @@
 import dynamic from "next/dynamic";
 import { useRef, type Ref } from "react";
 import { allChecks } from "@/state/checks";
-import { useDesigner, type Tab } from "@/state/store";
+import { useDesigner, type ChangeSource, type Tab } from "@/state/store";
+import { ChangeNote } from "../shell/ChangeFeedback";
 import { useLoadFiles } from "../shell/useLoadFiles";
 import { ChecksTab } from "./ChecksTab";
 import { CutListTab } from "./CutListTab";
@@ -23,6 +24,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "rules", label: "Rules" },
   { id: "checks", label: "Checks" },
 ];
+
+const ISLAND_SOURCES: readonly ChangeSource[] = ["rules", "layout"];
 
 /**
  * The glass island: part name and loader, the part turning on its own, tabs,
@@ -62,6 +65,8 @@ export function Island({ ref }: { ref: Ref<HTMLElement> }) {
         <div aria-label="The part on its own. Drag to turn it, double-click to reset.">
           <PartView />
         </div>
+        {/* What a rules or layout edit moved, over the foot of the part view (#39). */}
+        <ChangeNote sources={ISLAND_SOURCES} className="island-note" />
         <nav className="seg tabs" role="tablist" aria-label="Sections">
           {TABS.map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>

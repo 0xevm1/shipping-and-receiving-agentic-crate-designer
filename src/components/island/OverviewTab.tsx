@@ -1,10 +1,12 @@
 "use client";
 
 import { ASSEMBLIES, type CrateDesign } from "@/domain/crate";
+import type { DesignField } from "@/domain/diff";
 import { ASSEMBLY_NAMES } from "@/domain/export";
 import { layoutName } from "@/lib/format";
 import { dims, dimsOther, fraction, lengthUnit, partWeight, volume, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
+import { Flash } from "../shell/ChangeFeedback";
 
 /** The answer at a glance: outside size, then how it is built, then where the weight is. */
 export function OverviewTab({ design }: { design: CrateDesign }) {
@@ -28,8 +30,9 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
       <h2>
         Crate for {quantity} × {part.name.toLowerCase()}
       </h2>
+      {/* Values an edit changed flash gold for 1.2 s (#39). */}
       <div className="big">
-        {dims(layout.external, units)}
+        <Flash on={["outside"]}>{dims(layout.external, units)}</Flash>
         <small>{lengthUnit(units)}</small>
       </div>
       <div className="line">Outside, length × width × height</div>
@@ -38,28 +41,32 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
       </div>
       <div className="line">
         Ships at <span className="mono">{volume(layout.externalVolumeM3, units)}</span>, gross{" "}
-        <span className="mono">{weight(design.grossKg, units)}</span>
+        <Flash on={["gross"]} className="mono">
+          {weight(design.grossKg, units)}
+        </Flash>
       </div>
 
       <ul className="chain">
-        <Step name="Parts" value={weight(design.payloadKg, units)}>
+        <Step name="Parts" value={weight(design.payloadKg, units)} flash={["payload"]}>
           {quantity} × {partWeight(part.mass_kg, units)}, {part.material ?? "material not given"}
         </Step>
-        <Step name="Layout" value={layout.counts.join(" × ")}>
+        <Step name="Layout" value={layout.counts.join(" × ")} flash={["grid"]}>
           {layoutName(layout)}. Inside is {dims(layout.interior, units)} {lengthUnit(units)}
         </Step>
-        <Step name="Walls and lid" value={`${mm(c.panelMm)} ply`}>
+        <Step name="Walls and lid" value={`${mm(c.panelMm)} ply`} flash={["panel"]}>
           {auto ? "Sized for the load" : "Set by hand"}, stiffened with {section(19, 89)} cleats
         </Step>
-        <Step name="Base" value={`${c.skidCount} skids`}>
-          {section(c.skid.wide, c.skid.tall)} skids under a {mm(c.floorMm)} floor, open for forklift tines
+        <Step name="Base" value={`${c.skidCount} skids`} flash={["skidCount"]}>
+          <Flash on={["skid"]}>{section(c.skid.wide, c.skid.tall)}</Flash> skids under a{" "}
+          <Flash on={["floor"]}>{mm(c.floorMm)}</Flash> floor, open for forklift tines
         </Step>
         <Step name="Blocking" value={`${posts} posts`}>
           {bearers} bearer{bearers === 1 ? "" : "s"} underneath
           {separators > 0 && `, ${separators} layer separator${separators === 1 ? "" : "s"}`}
         </Step>
-        <Step name="Gross weight" value={weight(design.grossKg, units)} end>
-          empty crate {weight(design.tareKg, units)}, ~{design.screws} screws, about ${Math.round(design.materialCostUsd)} of wood
+        <Step name="Gross weight" value={weight(design.grossKg, units)} flash={["gross"]} end>
+          empty crate <Flash on={["tare"]}>{weight(design.tareKg, units)}</Flash>, ~{design.screws} screws, about $
+          {Math.round(design.materialCostUsd)} of wood
         </Step>
       </ul>
 
@@ -84,11 +91,22 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
   );
 }
 
-function Step({ name, value, end, children }: { name: string; value: string; end?: boolean; children: React.ReactNode }) {
+interface StepProps {
+  name: string;
+  value: string;
+  /** Diff fields that make the value flash when an edit changes them. */
+  flash?: readonly DesignField[];
+  end?: boolean;
+  children: React.ReactNode;
+}
+
+function Step({ name, value, flash = [], end, children }: StepProps) {
   return (
     <li className={end ? "end" : undefined}>
       <b>{name}</b>
-      <span className="v">{value}</span>
+      <Flash on={flash} className="v">
+        {value}
+      </Flash>
       <small>{children}</small>
     </li>
   );
