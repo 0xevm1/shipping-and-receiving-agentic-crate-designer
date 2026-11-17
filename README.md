@@ -29,8 +29,11 @@ bun run dev          # → http://localhost:3000
   Next.js 16.4, three.js r187.
 - **Use `bun run test`, not `bun test`.** `bun test` runs Bun's own test runner instead of
   vitest.
-- **No Bun?** `npm install && npm run dev` also works. It resolves fresh versions because
-  there's no `package-lock.json`.
+- **No Bun?** `npm install && npm run dev` also works. There's no `package-lock.json`, but every
+  dependency is pinned to an exact version, so npm installs the same direct dependencies.
+- **Pinned versions:** `package.json` lists exact versions only (#23). `bunfig.toml` and
+  `.npmrc` make `bun add` / `npm install <pkg>` save exact versions too. To upgrade, bump the
+  version deliberately (`bun add three@0.188.0`), then run the tests, lint and build.
 - Nothing else is needed: no environment variables, backend or database. The sample GLBs are
   bundled in `public/parts/`.
 
