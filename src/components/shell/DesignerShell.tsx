@@ -116,7 +116,6 @@ export function DesignerShell() {
         <Tooltip />
       </section>
       <div className="loadrow">
-        <span className="loadhint">Drop a .glb file anywhere</span>
         <span className="loadmsg" role="status">
           {loadMessage}
         </span>

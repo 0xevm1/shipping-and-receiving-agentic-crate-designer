@@ -369,11 +369,6 @@ h1.brand {
   gap: 8px 14px;
   max-width: 46vw;
 }
-.loadhint {
-  color: var(--soft);
-  font-size: 14px;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
-}
 .loadmsg {
   color: var(--gold);
   font-size: 13px;
