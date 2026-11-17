@@ -127,6 +127,23 @@ export function withinSizeLimit(external: Vec3, standards: ShopStandards = DEFAU
 }
 
 /**
+ * The sides of a crate that are over the shop's size limit, each with its size and its limit, in the
+ * orientation that is over on the fewest (length and width may swap, as in `withinSizeLimit`; a tie
+ * keeps the crate as drawn). Empty when it is within the limit.
+ */
+export function sizeOverSides(
+  external: Vec3,
+  standards: ShopStandards = DEFAULT_STANDARDS,
+): { side: "length" | "width" | "height"; mm: number; maxMm: number }[] {
+  const { length, width, height } = standards.limits.perCrate.maxOutsideMm;
+  const [l, w, h] = external;
+  const over = (side: "length" | "width" | "height", v: number, max: number) => (max > 0 && v > max ? [{ side, mm: v, maxMm: max }] : []);
+  const asDrawn = [...over("length", l, length), ...over("width", w, width)];
+  const turned = [...over("length", w, length), ...over("width", l, width)];
+  return [...(turned.length < asDrawn.length ? turned : asDrawn), ...over("height", h, height)];
+}
+
+/**
  * True when a crate's outside size fits through the trailer door and on its floor (`limits.trailerMm`)
  * and is within the shop's own size limit (`limits.perCrate.maxOutsideMm`).
  */
@@ -235,15 +252,21 @@ export function planShipment(
   if (pickDesign && fitsLimits(pickDesign, total)) {
     return plan([{ label: "A", count: 1, quantity: total, result: { ...ranked(whole.result, total), design: pickDesign } }], null, standards);
   }
-  if (whole.fits || total === 1) {
+  if (whole.fits) {
     // One crate: exactly `computeDesign`, unless a layout had to be skipped for the trailer.
     const result = withLayout(ranked(whole.result, total), part, settings, layoutKey, standards);
     return plan([{ label: "A", count: 1, quantity: total, result }], null, standards);
   }
 
   if (!candidate(1).fits) {
-    const unmet = msg`One part alone is over the per-crate limit (${limitText(standards)}), so each part ships in its own crate.`;
-    const result = withLayout(ranked(candidate(1).result, 1), part, { ...settings, quantity: 1 }, layoutKey, standards);
+    // One part alone breaks a limit (#144): each part ships in its own crate and the check says so, even for a batch of one.
+    const one = candidate(1).result;
+    const alone =
+      total === 1
+        ? msg`This part's crate is over the per-crate limit (${limitText(standards)}).`
+        : msg`One part alone is over the per-crate limit (${limitText(standards)}), so each part ships in its own crate.`;
+    const unmet = parts(alone, " ", overText(one.design!, standards));
+    const result = withLayout(ranked(one, 1), part, { ...settings, quantity: 1 }, layoutKey, standards);
     return plan([{ label: "A", count: total, quantity: 1, result }], unmet, standards);
   }
 
@@ -313,7 +336,8 @@ function withLayout(result: DesignResult, part: DesignPart, settings: CrateSetti
 
 function plan(types: CrateType[], unmet: Message | null, standards: ShopStandards): ShipmentPlan {
   const split = types.reduce((n, t) => n + t.count, 0) > 1;
-  if (split) {
+  // A crate that can't meet the limits gets the caution even when it is the only one (#144).
+  if (split || unmet) {
     const text = describeShipment({ crates: types });
     for (const t of types) {
       const d = t.result.design;
@@ -339,6 +363,26 @@ function plan(types: CrateType[], unmet: Message | null, standards: ShopStandard
     unmet,
     problem: types[0].result.problem,
   };
+}
+
+/** What a crate of one part is over, as a sentence: the sides over the size limit (with the limit), the gross weight, the trailer. */
+function overText(d: CrateDesign, standards: ShopStandards): Message {
+  const [l, w, h] = d.layout.external;
+  const items: Message[] = [];
+  const sides = sizeOverSides(d.layout.external, standards);
+  if (sides.length) {
+    items.push(
+      msg`the ${joinMessages(
+        sides.map((s) => msg`${s.side} (${mm(s.mm)} against ${mm(s.maxMm)})`),
+        ", ",
+      )} is over the size limit`,
+    );
+  }
+  const maxGross = crateGrossLimitKg(d, standards);
+  if (d.grossKg > maxGross) items.push(msg`the gross weight ${kg(d.grossKg)} is over the ${kg(maxGross)} limit`);
+  const t = standards.limits.trailerMm;
+  if (l > t.interiorLength || w > t.doorWidth || h > t.doorHeight) items.push(parts("it does not fit the trailer door and floor"));
+  return items.length ? msg`The crate is ${dimsMessage([l, w, h])} outside and ${joinMessages(items, "; ")}.` : [];
 }
 
 /** "1,000 kg gross, 40 parts, 1,200 × 1,000 × 1,000 mm outside and the trailer door": the limits in force, for messages. */

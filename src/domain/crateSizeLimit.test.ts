@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getPart } from "./catalog";
 import { computeDesign } from "./design";
 import { parseStandards, standardsFromJson, standardsToJson, DEFAULT_STANDARDS, type ShopStandards } from "./standards";
-import { planShipment, sizeLimitText, withinOutsideLimits, withinSizeLimit } from "./shipment";
+import { planShipment, sizeLimitText, sizeOverSides, withinOutsideLimits, withinSizeLimit } from "./shipment";
 import { hardFailure, planTotal, sweepQuantities } from "./sweep";
 import { custom, metricText, settings } from "./testFixtures";
 
@@ -89,6 +89,34 @@ describe("planShipment under a size limit", () => {
     expect(check.level).toBe("caution");
   });
 
+  it("flags one part over the limit at quantity 1 as it does at quantity 2 (#144), naming the side", () => {
+    const tiny = limit(600, 400, 400);
+    for (const quantity of [1, 2]) {
+      const plan = planShipment(part, settings({ quantity }), null, tiny);
+      expect(plan.crates).toMatchObject([{ count: quantity, quantity: 1 }]);
+      const check = plan.crates[0].result.design!.checks.find((c) => c.id === "crate-limit")!;
+      expect(check.level).toBe("caution");
+      const text = metricText(check.detail);
+      expect(text).toContain("over the per-crate limit");
+      expect(text).toContain("600 mm × 400 mm × 400 mm outside");
+      expect(text).toMatch(/height \(\d[\d,]* mm against 400 mm\) is over the size limit/);
+    }
+  });
+
+  it("names only the side that is over, with length and width turned to fit", () => {
+    const external = [1000, 700, 900] as const;
+    expect(sizeOverSides([...external], limit(700, 1000, 1000))).toEqual([]);
+    expect(sizeOverSides([...external], limit(0, 0, 800))).toEqual([{ side: "height", mm: 900, maxMm: 800 }]);
+    // Turned, the 700 side takes the 900 length limit and only the 1,000 side is over the 600 width.
+    expect(sizeOverSides([...external], limit(900, 600, 0))).toEqual([{ side: "width", mm: 1000, maxMm: 600 }]);
+  });
+
+  it("leaves a single part that is within the limit with no crate-limit check", () => {
+    const plan = planShipment(part, settings({ quantity: 1 }), null, limit(5000, 5000, 5000));
+    expect(plan.unmet).toBeNull();
+    expect(plan.crates[0].result.design!.checks.some((c) => c.id === "crate-limit")).toBe(false);
+  });
+
   it("names the limit in the check as typed quantities, so the units toggle applies", () => {
     const plan = planShipment(part, settings({ quantity: 34 }), null, PALLET);
     const detail = plan.crates[0].result.design!.checks.find((c) => c.id === "crate-limit")!.detail;
@@ -118,6 +146,16 @@ describe("the sweep and the total split under a size limit", () => {
     const d = planShipment(part, settings({ quantity: 1 }), null, DEFAULT_STANDARDS).crates[0].result.design!;
     expect(hardFailure(d, 1, limit(250, 250, 250))).toMatchObject({ binding: "max-size" });
     expect(hardFailure(d, 1, DEFAULT_STANDARDS)).toBeNull();
+  });
+
+  it("fails quantity 1 on the size limit too: no recommendation, no total split, 'none recommended'", () => {
+    const tiny = sweepQuantities(part, settings(), limit(600, 400, 400));
+    expect(tiny.curve[0]).toMatchObject({ quantity: 1, ok: false, binding: "max-size" });
+    expect(metricText(tiny.curve[0].reason!)).toMatch(/on the (height|length|width)/);
+    expect(tiny.curve.every((p) => !p.ok)).toBe(true);
+    expect(tiny.recommendation).toBeNull();
+    expect(tiny.shortlist).toEqual([]);
+    expect(planTotal(tiny, 5)).toBeNull();
   });
 
   it("splits a total with every crate at a passing, within-limit quantity", () => {
