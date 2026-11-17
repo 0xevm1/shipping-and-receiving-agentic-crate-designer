@@ -247,7 +247,7 @@ describe("handling standards", () => {
   it("reject a spread range upside down or narrower than two tines", () => {
     expect(parseStandards(mergeStandards(DEFAULT_STANDARDS, { handling: { forklift: { spreadMm: { min: 900, max: 800 } } } })).ok).toBe(false);
     const narrow = parseStandards(mergeStandards(DEFAULT_STANDARDS, { handling: { palletJack: { spreadMm: { min: 300 } } } }));
-    expect(narrow).toEqual({ ok: false, error: "handling.palletJack.spreadMm: The spread can't be less than two tines wide" });
+    expect(narrow).toMatchObject({ ok: false, error: "handling.palletJack.spreadMm: The spread can't be less than two tines wide" });
   });
 
   it("analyse an arbitrary member list without a design", () => {

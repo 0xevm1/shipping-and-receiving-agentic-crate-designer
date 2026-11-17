@@ -40,6 +40,12 @@ export function documentDate(iso: string, timeZone?: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+/** A saved-on date for lists, in this device's locale ("Nov 16, 2026"); the raw text if it isn't a date. */
+export function savedDateText(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 /** Whole dollars with thousands separators: "$1,186". */
 export function usd(v: number): string {
   return `$${Math.round(v).toLocaleString("en-US")}`;

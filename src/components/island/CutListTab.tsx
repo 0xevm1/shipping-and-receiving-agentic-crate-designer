@@ -69,8 +69,8 @@ export function CutListTab({ design }: { design: CrateDesign }) {
         <>
           {plan.split && <CrateTypePicker />}
           <p className="lede">
-            {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}Point at a row to see where those boards go.
-            Click it to keep them lit.
+            {plan.split && `For one crate ${crateType.label}; build ${crateType.count}. `}Point at a row to see where those boards go. Click it to
+            keep them lit.
           </p>
         </>
       )}
@@ -95,7 +95,16 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                 {group.map((l) => {
                   const cells = (
                     <>
-                      <td>{l.label}</td>
+                      <td>
+                        {whole ? (
+                          l.label
+                        ) : (
+                          // The row's click is the mouse shortcut; this button is the keyboard and screen-reader control.
+                          <button type="button" className="pick" aria-pressed={pin === l.key}>
+                            {l.label}
+                          </button>
+                        )}
+                      </td>
                       <td className="nominal">{stockText(l, units)}</td>
                       <td>
                         {cutText(l, units)
@@ -120,19 +129,11 @@ export function CutListTab({ design }: { design: CrateDesign }) {
                       key={l.key}
                       ref={pin === l.key ? pinnedRow : undefined}
                       className={`row${hoverKey === l.key ? " hl" : ""}${pin === l.key ? " pin" : ""}`}
-                      tabIndex={0}
-                      aria-pressed={pin === l.key}
                       onMouseEnter={enter}
                       onMouseLeave={leave}
                       onFocus={enter}
                       onBlur={leave}
                       onClick={toggle}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          toggle();
-                        }
-                      }}
                     >
                       {cells}
                     </tr>

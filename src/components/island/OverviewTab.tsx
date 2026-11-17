@@ -105,7 +105,17 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
           const on = () => setHover({ assembly: a, source: "list" });
           const off = () => setHover(null);
           return (
-            <div key={a} className="barrow" tabIndex={0} onMouseEnter={on} onMouseLeave={off} onFocus={on} onBlur={off}>
+            <div
+              key={a}
+              className="barrow"
+              role="group"
+              aria-label={`${ASSEMBLY_NAMES[a]}, ${weight(kg, units)}`}
+              tabIndex={0}
+              onMouseEnter={on}
+              onMouseLeave={off}
+              onFocus={on}
+              onBlur={off}
+            >
               <span>{ASSEMBLY_NAMES[a]}</span>
               <span className="v">{weight(kg, units)}</span>
               <span className="track">

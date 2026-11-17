@@ -1030,6 +1030,25 @@ h1.brand {
 .cut .row {
   cursor: pointer;
 }
+/* The row's toggle: a real button that looks like the cell text. */
+.cut .pick {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.cut .pick:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.tabs .count.info {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+.actions.spaced {
+  margin-top: 16px;
+}
 .cut .row td {
   padding: 6px;
   border-bottom: 1px solid var(--hair);
