@@ -9,6 +9,7 @@ import { plywoodLabel } from "@/lib/lumber";
 import { length, lengthUnit, weight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { ChangeNote } from "../shell/ChangeFeedback";
+import { BestQuantity } from "./BestQuantity";
 import { ShopStandards } from "./ShopStandards";
 
 const MAX_QTY = 200;
@@ -68,6 +69,7 @@ export function RulesTab({ design }: { design: CrateDesign }) {
           ))}
         </div>
         <ChangeNote note={note} />
+        <BestQuantity design={design} />
         <small>{split ? "Too much for one crate: the Overview shows how the batch ships." : "One crate holds the whole batch."}</small>
       </div>
 
