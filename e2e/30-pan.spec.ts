@@ -7,7 +7,6 @@ import { crate, openApp, pollCrate, shot } from "./helpers";
  * idle turn brings it back to the middle. The touch gesture is in 30-pan.mobile.spec.ts.
  */
 
-const PAN_LIMIT = 0.75; // framing.ts: share of the crate's longest side
 type Vec = [number, number, number];
 
 const canvasBox = async (page: Page) => (await page.locator(".stage canvas").first().boundingBox())!;
@@ -35,9 +34,15 @@ async function choosePreset(page: Page, name: string) {
   await page.keyboard.press("Escape");
 }
 
-test("the view hint names the gestures", async ({ page }) => {
+test("the View popover names the gestures", async ({ page }) => {
   await openApp(page);
-  await expect(page.getByTestId("view-hint")).toContainText("right-drag to pan");
+  const view = page.getByRole("button", { name: "View", exact: true });
+  await expect(view).toHaveAttribute("title", /right-drag to pan/);
+  await view.click();
+  const pop = page.locator(`[id="${await view.getAttribute("aria-controls")}"]`);
+  await expect(pop).toContainText("right-drag to pan");
+  // Nothing floats over the stage.
+  await expect(page.getByTestId("view-hint")).toHaveCount(0);
 });
 
 test("a right-drag pans the view, and counts as deliberate input", async ({ page }) => {
@@ -54,20 +59,42 @@ test("a right-drag pans the view, and counts as deliberate input", async ({ page
   await shot(page, "30-panned");
 });
 
-test("panning is bounded: the crate can't be dragged out of sight", async ({ page }) => {
-  await openApp(page);
-  const outside = (await crate(page)).outside!;
-  for (let i = 0; i < 4; i++) await rightDrag(page, 700, 300);
-  const s = await crate(page);
-  const limit = (Math.max(...outside) / 1000) * PAN_LIMIT;
-  expect(distance(s.cameraTarget!, home(outside))).toBeLessThanOrEqual(limit + 1e-3);
-  expect(distance(s.cameraTarget!, home(outside)), "it did reach the limit").toBeGreaterThan(limit * 0.9);
-  // Some of the crate is still on screen.
-  const b = s.crateScreen!;
-  const canvas = await canvasBox(page);
-  expect(b.right).toBeGreaterThan(0);
-  expect(b.left).toBeLessThan(canvas.width);
-});
+for (const [width, height] of [
+  [1440, 900],
+  [1280, 720],
+]) {
+  test(`panning can't drag the crate under the island, the header or off screen (${width} × ${height})`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openApp(page);
+    const isl = (await page.getByRole("complementary").boundingBox())!;
+    // Drag hard in every direction, twice each: toward the island, away from it, up and down.
+    for (const [dx, dy] of [
+      [700, 0],
+      [700, 200],
+      [-700, 0],
+      [0, -500],
+      [0, 500],
+      [700, -300],
+    ]) {
+      await rightDrag(page, dx, dy);
+      await rightDrag(page, dx, dy);
+      await page.waitForTimeout(200);
+      const box = (await crate(page)).crateScreen!;
+      const cx = (box.left + box.right) / 2;
+      const cy = (box.top + box.bottom) / 2;
+      expect(cx, `after dragging by (${dx}, ${dy}): centre x ${Math.round(cx)} is left of the island at ${Math.round(isl.x)}`).toBeLessThan(isl.x);
+      expect(cx).toBeGreaterThan(0);
+      // The island starts at the top of the window, so the header side is the left and top edges.
+      expect(cy).toBeGreaterThan(0);
+      expect(cy).toBeLessThan(height);
+      expect(box.left, "not pushed off the left edge").toBeGreaterThan(-0.2 * width);
+      // A crate that fits the free area is wholly clear of the island, not just centred beside it.
+      if (box.right - box.left <= isl.x - 28 - 40) expect(box.right, `after (${dx}, ${dy}): box right ${Math.round(box.right)} is clear of the island`).toBeLessThanOrEqual(isl.x);
+    }
+    const final = await crate(page);
+    expect(final.idle).toBe(false);
+  });
+}
 
 test("a camera preset brings a panned view back to the middle", async ({ page }) => {
   await openApp(page);

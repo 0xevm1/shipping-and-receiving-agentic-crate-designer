@@ -16,13 +16,14 @@ import {
   pointer,
 } from "@/state/motion";
 import { currentMode, reducedMotion, useDesigner } from "@/state/store";
-import { approach, clampPan, fitGoal, homeTarget, shortestAngle, viewOffset, type Goal } from "./framing";
+import { approach, fitGoal, homeTarget, keepCrateInFreeArea, shortestAngle, viewOffset, type Goal } from "./framing";
 import { CAMERA_FAR_M } from "./scene";
 
 /** A pan smaller than this (m) counts as centred. */
 const PAN_SETTLED_M = 0.005;
 
 const tmp = new Vector3();
+const panHome = new Vector3();
 const sph = new Spherical();
 
 /**
@@ -69,13 +70,14 @@ export function Director({ active }: { active: boolean }) {
     const end = () => {
       dragging.current = false;
     };
-    // Panning moves the camera and the orbit target together; pull both back when the target
-    // strays too far from the crate, so it can't be panned out of sight.
+    // Panning moves the camera and the orbit target together. Once the view is panned, pull it
+    // back whenever the crate's box strays out of the free area, so no pan can put the crate under
+    // the island or the header, or off screen.
     const bound = () => {
       const s = useDesigner.getState();
       if (!s.result.design) return;
-      const delta = clampPan(controls.target, s.result.design, anim.explode);
-      if (delta) camera.position.add(delta);
+      if (controls.target.distanceTo(homeTarget(s.result.design, anim.explode, panHome)) <= PAN_SETTLED_M) return;
+      keepCrateInFreeArea(s.result.design, camera, controls.target, getThree().size, s.insets);
     };
     controls.addEventListener("start", start);
     controls.addEventListener("end", end);
@@ -85,7 +87,7 @@ export function Director({ active }: { active: boolean }) {
       controls.removeEventListener("end", end);
       controls.removeEventListener("change", bound);
     };
-  }, [controls, camera]);
+  }, [controls, camera, getThree]);
 
   // OrbitControls registers as the default controls after the first render, so the first fit
   // runs without them. `place` keeps the target here meanwhile, and the controls take it

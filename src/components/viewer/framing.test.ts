@@ -6,14 +6,16 @@ import { arrowReachMm } from "./forkArrows";
 import {
   approach,
   ARROWS_FIT_FROM,
-  clampPan,
+  keepCrateInFreeArea,
+  panShift,
+  PAN_TOLERANCE,
+  projectCrate,
   fitGoal,
   freeArea,
   homeTarget,
   keepInView,
   LABEL_HALF_PX,
   MODE_ZOOM,
-  PAN_LIMIT,
   PANELS_HIDDEN_ZOOM,
   PRESETS,
   shortestAngle,
@@ -178,29 +180,80 @@ describe("helpers", () => {
   });
 });
 
-describe("clampPan", () => {
+describe("panning stays in the free area", () => {
   const d = design();
-  const limit = (Math.max(...d.layout.external) / 1000) * PAN_LIMIT;
+  const free = { left: 40, top: 96, right: 980, bottom: 770 };
 
-  it("leaves a target near the crate alone", () => {
-    const t = homeTarget(d, 0).add(new Vector3(limit * 0.5, 0, 0));
-    const before = t.clone();
-    expect(clampPan(t, d, 0)).toBeNull();
-    expect(t).toEqual(before);
+  it("panShift leaves a box inside the free area alone", () => {
+    expect(panShift({ left: 100, top: 150, right: 600, bottom: 600 }, free)).toEqual({ dx: 0, dy: 0 });
   });
 
-  it("pulls a target that strayed back onto the limit, and returns how far it moved", () => {
-    const home = homeTarget(d, 0);
-    const t = home.clone().add(new Vector3(10, 4, -6));
-    const far = t.clone();
-    const delta = clampPan(t, d, 0)!;
-    expect(t.distanceTo(home)).toBeCloseTo(limit, 9);
-    // Same direction as it strayed in, and the delta is exactly the move made.
-    expect(far.clone().add(delta).distanceTo(t)).toBeCloseTo(0, 9);
-    expect(t.clone().sub(home).normalize().dot(far.sub(home).normalize())).toBeCloseTo(1, 9);
+  it("panShift moves a small box that strayed back inside (give or take the tolerance), on each side", () => {
+    const tol = PAN_TOLERANCE * (free.right - free.left);
+    const right = panShift({ left: 900, top: 200, right: 1200, bottom: 500 }, free);
+    expect(900 + right.dx + 300).toBeCloseTo(free.right + tol, 9);
+    const left = panShift({ left: -300, top: 200, right: -50, bottom: 500 }, free);
+    expect(-300 + left.dx).toBeCloseTo(free.left - tol, 9);
+    const below = panShift({ left: 200, top: 700, right: 400, bottom: 900 }, free);
+    expect(below.dy).toBeLessThan(0);
+    expect(below.dx).toBe(0);
   });
 
-  it("measures from the middle of the exploded crate when it is exploded", () => {
+  it("panShift puts a box bigger than the free area on its middle half", () => {
+    const wide = { left: -2000, top: 200, right: -500, bottom: 500 };
+    const { dx } = panShift(wide, free);
+    const mid = (wide.left + wide.right) / 2 + dx;
+    expect(mid).toBeCloseTo((free.left + free.right) / 2 - (free.right - free.left) / 4, 9);
+  });
+
+  const W = 1440;
+  const H = 900;
+  const insets = { left: 40, top: 96, right: 460, bottom: 130 };
+
+  function framed() {
+    const g = fitGoal(request({ width: W, height: H, insets }));
+    const cam = new PerspectiveCamera(FOV_DEG, W / H, 0.02, 1000);
+    const o = viewOffset(W, H, insets);
+    cam.setViewOffset(W, H, o.x, o.y, W, H);
+    cam.position.copy(g.target).add(new Vector3().setFromSpherical(new Spherical(g.radius, g.phi, g.theta)));
+    cam.lookAt(g.target);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    return { cam, target: g.target.clone() };
+  }
+
+  it("the framed crate is already inside the free area, so nothing moves", () => {
+    const { cam, target } = framed();
+    expect(keepCrateInFreeArea(d, cam, target, { width: W, height: H }, insets)).toBe(false);
+  });
+
+  it.each([
+    ["right, toward the island", 1, 0],
+    ["left", -1, 0],
+    ["up", 0, 1],
+    ["down", 0, -1],
+  ])("however far it is panned %s, the crate's box is brought back inside", (_, sx, sy) => {
+    const { cam, target } = framed();
+    // Pan by metres in the view plane, as a drag does: camera and target move together.
+    const right = new Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    const up = new Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+    const move = right.multiplyScalar(-sx * 6).addScaledVector(up, -sy * 6);
+    cam.position.add(move);
+    target.add(move);
+    cam.lookAt(target);
+    cam.updateMatrixWorld();
+    const size = { width: W, height: H };
+    expect(keepCrateInFreeArea(d, cam, target, size, insets)).toBe(true);
+    const box = projectCrate(d, cam, W, H);
+    const tolX = PAN_TOLERANCE * (W - insets.left - insets.right) + 2;
+    const tolY = PAN_TOLERANCE * (H - insets.top - insets.bottom) + 2;
+    expect(box.right).toBeLessThanOrEqual(W - insets.right + tolX);
+    expect(box.left).toBeGreaterThanOrEqual(insets.left - tolX);
+    expect(box.top).toBeGreaterThanOrEqual(insets.top - tolY);
+    expect(box.bottom).toBeLessThanOrEqual(H - insets.bottom + tolY);
+  });
+
+  it("measures home from the middle of the exploded crate when it is exploded", () => {
     expect(homeTarget(d, 1).y).toBeGreaterThan(homeTarget(d, 0).y);
   });
 });

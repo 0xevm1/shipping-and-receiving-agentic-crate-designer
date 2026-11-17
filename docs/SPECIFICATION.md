@@ -241,10 +241,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
 | `src/components/island/Scorecard.tsx` | The Overview's design scorecard (#17): crate cost, build time, freight class and density, dimensional weight, the shipment's totals, the time to design (`Scorecard.module.css`) |
 | `src/components/island/ShopStandards.tsx` | The Shop standards editor at the bottom of the Rules tab (`ShopStandards.module.css`) |
-| `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; the camera-gesture hint; releases a replaced part's GLB from drei's cache |
-| `src/components/viewer/CrateViewer.module.css` | The context-lost cover and the gesture hint |
+| `src/components/viewer/CrateViewer.tsx` | Main canvas (kept mounted whatever the design does); the Z-up → Y-up root transform; lights; loading overlay; the context-lost cover; releases a replaced part's GLB from drei's cache |
+| `src/components/viewer/CrateViewer.module.css` | The context-lost cover |
 | `src/components/viewer/Director.tsx` | Applies the framing: view offset, presets, eased moves, bounded panning, fades, idle auto-play |
-| `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), `clampPan` |
+| `src/components/viewer/framing.ts` | Pure camera maths: presets, mode zoom, `fitGoal`, what must stay on screen (`keepInView`), keeping a panned crate in the free area (`keepCrateInFreeArea`) |
 | `src/components/viewer/CrateModel.tsx` | One box per `Member` (a notched solid for cradles, #6); explode, fades, highlight, ghosting, picking |
 | `src/components/viewer/PartInstances.tsx` | GLB loaded once, cloned per slot, re-centred, measured, ghosted |
 | `src/components/viewer/DimensionLines.tsx` | Draws the size lines; positions the DOM labels each frame; shows the part's lines once the inside is open; drives the photon pulse |
@@ -1725,7 +1725,7 @@ open question for the user (see #20).
   exploded 1.0. Hide panels moves in a further ×0.82. Mode changes re-frame, so idle auto-play
   glides in and out with the modes.
 - **Framing maths:** `framing.ts` holds it as pure functions (`fitGoal`, `keepInView`,
-  `viewOffset`, `clampPan`), unit-tested; `Director` only applies the result and eases to it.
+  `viewOffset`, `keepCrateInFreeArea`), unit-tested; `Director` only applies the result and eases to it.
 - **Room for the size labels and fork arrows:** with size labels on, the fit also projects what
   must stay on screen (`keepInView`): the crate's three label anchors (moved out with the walls),
   each taken as about 88 × 28 px, and the tail of each fork arrow, which stands out past them
@@ -1735,9 +1735,13 @@ open question for the user (see #20).
   and, exploded on a 360 px phone, the arrows from being clipped at the edge.
 - **Panning:** the main canvas pans by right-drag (Ctrl- or Shift-drag also work, as three's
   OrbitControls defines them) and, on touch, a two-finger drag, which is also the pinch zoom.
-  - **Bounded:** the orbit target may stray at most 0.75 of the crate's longest side from its
-    middle (`PAN_LIMIT`, `clampPan`, applied on the controls' `change` event by moving the camera
-    and target together), so the crate can't be panned out of sight.
+  - **Bounded in screen terms:** once the view is panned, every controls `change` projects the
+    assembled crate's outside box and, if it has strayed out of the free area (the window minus the
+    insets), moves the camera and orbit target together, sideways in the view, just far enough to
+    bring it back (`keepCrateInFreeArea`, `panShift`). A box that fits the free area must stay
+    inside it give or take 2 % (`PAN_TOLERANCE`, under 20 px beside the island); one bigger than it (close zoom) keeps its middle
+    within the middle half. So no pan puts the crate under the island, the header block or off
+    screen. An unpanned view is never touched, so orbiting doesn't drift it.
   - **Deliberate input:** a pan is a `pointerdown`/`touchstart` plus a drag, so it stops idle
     auto-play like any drag, and clears the camera preset.
   - **Re-centring:** the view stays panned until the next fit: a rule or quantity change, a mode
@@ -1745,9 +1749,10 @@ open question for the user (see #20).
     When idle auto-play starts on a panned view it first eases the target back to the crate's
     middle (keeping the turn angle and zoom), so the turn is about the crate and the crate stays
     in the free area.
-  - **Hint:** a line at the foot of the stage names the gestures ("Drag to turn · right-drag to
-    pan · scroll to zoom", or the two-finger wording on touch screens); it fades with Hide
-    panels. The view has no keyboard controls, so none are added.
+  - **Hint:** the View popover's last line names the gestures ("Drag to turn, scroll to zoom,
+    right-drag to pan.", or the pinch and two-finger wording on touch screens), and the View
+    button's `title` says it too. Nothing floats over the stage. The view has no keyboard
+    controls, so none are added.
 - **First framing:** OrbitControls registers as the default controls one render after
   `Director` first frames the crate. `Director` keeps the orbit target it placed and hands it to
   the controls when they arrive, so the camera orbits the crate's middle from the first frame
@@ -2753,9 +2758,11 @@ HTML report as `playwright-report`.
     and 1280 × 720), and its centre stays in the free area after a reload that restores the last
     design, after Hide and Show panels, after a resize across the narrow breakpoint and back, and
     through the idle turn.
-  - `30-pan` (#96; desktop, plus `.mobile`): the hint names the gestures; a right-drag (on touch a
-    two-finger drag) pans, stops idle, and clears the preset; the pan is bounded by
-    `PAN_LIMIT`; View > 3D re-centres; the idle turn eases a panned view back to the middle.
+  - `30-pan` (#96; desktop, plus `.mobile`): the View popover and the View button's title name the
+    gestures (touch wording on phones) and nothing floats over the stage; a right-drag (on touch a
+    two-finger drag) pans, stops idle, and clears the preset; after hard drags in every direction at
+    1440 × 900 and 1280 × 720 the projected crate centre stays left of the island and on screen;
+    View > 3D re-centres; the idle turn eases a panned view back to the middle.
   - `21-idle-hover` (#64, with motion): after load, 8 s of hover-only movement (circles over
     the crate's boards, over empty canvas and over the island's weight bars) keeps `autoplay`
     and `idle` on and the camera turning, while it hovers at least one board and one bar; one

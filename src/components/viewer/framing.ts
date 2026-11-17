@@ -3,7 +3,7 @@
  * Pure maths (three.js vectors, no React, no store), so it is unit-tested directly; `Director`
  * applies the result and animates towards it.
  */
-import { MathUtils, Spherical, Vector3 } from "three";
+import { MathUtils, Spherical, Vector3, type PerspectiveCamera } from "three";
 import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
 import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/store";
@@ -155,27 +155,109 @@ export function homeTarget(design: CrateDesign, e: number, out = new Vector3()):
   return out.set(0, (design.layout.external[2] / 2 + (EXPLODE_LID_MM / 2) * e) * MM_TO_M, 0);
 }
 
-/** How far panning may take the orbit target from `homeTarget`, as a share of the crate's longest side. */
-export const PAN_LIMIT = 0.75;
+/** Share of the free area's size that a panned crate may overhang its edge by. */
+export const PAN_TOLERANCE = 0.02;
+
+export interface ScreenBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
 
 /**
- * Pulls a panned orbit `target` back to within `PAN_LIMIT` of the crate's longest side from
- * `homeTarget`, so the crate can't be panned out of sight. Moves `target` in place and returns
- * how far it had to move (a vector to add to the camera as well), or null when it was inside.
+ * How far (px) a box spanning `lo`..`hi` must move along one axis to sit in the free span
+ * `a`..`b`: wholly inside it (give or take `tol`) when it is smaller, with its middle in the
+ * middle half of the span when it is bigger.
  */
-export function clampPan(target: Vector3, design: CrateDesign, e: number): Vector3 | null {
-  const home = homeTarget(design, e, panHome);
-  const limit = Math.max(...design.layout.external) * MM_TO_M * PAN_LIMIT;
-  const away = panAway.copy(target).sub(home);
-  const d = away.length();
-  if (d <= limit) return null;
-  const clamped = home.add(away.multiplyScalar(limit / d));
-  const delta = clamped.clone().sub(target);
-  target.copy(clamped);
-  return delta;
+function axisShift(lo: number, hi: number, a: number, b: number, tol: number): number {
+  if (hi - lo <= b - a) {
+    if (lo < a - tol) return a - tol - lo;
+    if (hi > b + tol) return b + tol - hi;
+    return 0;
+  }
+  const mid = (lo + hi) / 2;
+  const centre = (a + b) / 2;
+  const band = (b - a) / 4;
+  if (mid < centre - band) return centre - band - mid;
+  if (mid > centre + band) return centre + band - mid;
+  return 0;
 }
-const panHome = new Vector3();
-const panAway = new Vector3();
+
+/** How far (px) to move the crate's screen box so it sits in the free area; zero when it already does. */
+export function panShift(box: ScreenBox, free: ScreenBox): { dx: number; dy: number } {
+  return {
+    dx: axisShift(box.left, box.right, free.left, free.right, PAN_TOLERANCE * (free.right - free.left)),
+    dy: axisShift(box.top, box.bottom, free.top, free.bottom, PAN_TOLERANCE * (free.bottom - free.top)),
+  };
+}
+
+const corners = new WeakMap<CrateDesign, Vector3[]>();
+
+/** The eight corners of the assembled crate's outside box, world metres. */
+export function crateCorners(design: CrateDesign): Vector3[] {
+  let list = corners.get(design);
+  if (!list) {
+    const { layout, construction } = design;
+    const edge = construction.panelMm + construction.cleat.thick;
+    const lo: Vec3 = [-edge, -edge, -construction.baseMm];
+    const o = sceneOrigin(design);
+    list = [];
+    for (const x of [0, 1])
+      for (const y of [0, 1])
+        for (const z of [0, 1]) {
+          const at: Vec3 = [lo[0] + x * layout.external[0] + o[0], lo[1] + y * layout.external[1] + o[1], lo[2] + z * layout.external[2] + o[2]];
+          list.push(domainToWorld(at, new Vector3()));
+        }
+    corners.set(design, list);
+  }
+  return list;
+}
+
+const corner = new Vector3();
+const shift = new Vector3();
+const basis = [new Vector3(), new Vector3(), new Vector3()];
+
+/** The crate's outside box projected through `camera` (with its view offset), px. */
+export function projectCrate(design: CrateDesign, camera: PerspectiveCamera, width: number, height: number): ScreenBox {
+  camera.updateMatrixWorld();
+  const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  for (const c of crateCorners(design)) {
+    corner.copy(c).project(camera);
+    const x = ((corner.x + 1) / 2) * width;
+    const y = ((1 - corner.y) / 2) * height;
+    box.left = Math.min(box.left, x);
+    box.right = Math.max(box.right, x);
+    box.top = Math.min(box.top, y);
+    box.bottom = Math.max(box.bottom, y);
+  }
+  return box;
+}
+
+/**
+ * Keeps a panned crate in the free area: if its projected box has strayed out of it (under the
+ * island or the header, or off screen), moves the camera and orbit `target` together, sideways in
+ * the view, just far enough to bring it back. Returns whether it moved them.
+ */
+export function keepCrateInFreeArea(
+  design: CrateDesign,
+  camera: PerspectiveCamera,
+  target: Vector3,
+  size: { width: number; height: number },
+  insets: Insets,
+): boolean {
+  const free = { left: insets.left, top: insets.top, right: size.width - insets.right, bottom: size.height - insets.bottom };
+  if (free.right <= free.left || free.bottom <= free.top) return false;
+  const { dx, dy } = panShift(projectCrate(design, camera, size.width, size.height), free);
+  if (!dx && !dy) return false;
+  // World metres per px at the target's depth; the crate moves with the screen, the camera against it.
+  const perPx = (2 * Math.tan(MathUtils.degToRad(camera.fov / 2)) * camera.position.distanceTo(target)) / size.height;
+  camera.matrixWorld.extractBasis(basis[0], basis[1], basis[2]);
+  shift.copy(basis[0]).multiplyScalar(-dx * perPx).addScaledVector(basis[1], dy * perPx);
+  camera.position.add(shift);
+  target.add(shift);
+  return true;
+}
 
 const UP = new Vector3(0, 1, 0);
 const axisX = new Vector3();

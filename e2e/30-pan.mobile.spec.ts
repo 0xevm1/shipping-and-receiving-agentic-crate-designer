@@ -35,7 +35,12 @@ test("a two-finger drag pans the view, and one finger still turns it", async ({ 
   await pollCrate(page, (s) => Math.abs(s.cameraAngles!.theta - turned)).toBeGreaterThan(0.1);
 });
 
-test("the view hint shows the touch wording", async ({ page }) => {
+test("the View popover shows the touch wording", async ({ page }) => {
   await openApp(page);
-  await expect(page.getByTestId("view-hint")).toContainText("two fingers");
+  const view = page.getByRole("button", { name: "View", exact: true });
+  await view.click();
+  const pop = page.locator(`[id="${await view.getAttribute("aria-controls")}"]`);
+  await expect(pop.locator(".hint-touch")).toBeVisible();
+  await expect(pop.locator(".hint-touch")).toContainText("two fingers to pan");
+  await expect(page.getByTestId("view-hint")).toHaveCount(0);
 });

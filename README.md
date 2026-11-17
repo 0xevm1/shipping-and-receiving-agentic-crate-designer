@@ -115,8 +115,9 @@ tab at a time.
    the **centre-of-gravity mark** stencilled on the outside faces. An arrow the crate hides from
    the current camera fades out, and the straight-on Top, Front and End views leave out the size
    line that points at you. In the open and exploded views the part's three sizes share one pill.
-   Drag to turn, right-drag (or two fingers on a touch screen) to pan, scroll to zoom; picking a
-   camera preset in **View** puts the view back. Left alone for 5 s, the crate slowly turns and
+   Drag to turn, right-drag (or two fingers on a touch screen) to pan, scroll to zoom (the **View**
+   menu says so); a pan never takes the crate out from the free area, and picking a camera preset in
+   **View** puts the view back. Left alone for 5 s, the crate slowly turns and
    cycles through the modes, easing back to the middle first if you had panned. If the browser takes
    the graphics away, a cover with a **Bring back the 3D view** button replaces the blank canvas.
 5. **Read off the build data:**
