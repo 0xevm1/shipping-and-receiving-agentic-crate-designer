@@ -192,6 +192,27 @@ test("resizing across 980 px and rotating to landscape switch cleanly", async ({
   await expectNoPageScroll(page);
 });
 
+test("all five tabs fit the drawer without scrolling or clipping, with a caution badge on Checks", async ({ page }) => {
+  await openApp(page);
+  await fileInput(page).setInputFiles(sampleFile(SHAFT));
+  await expect(tab(page, "Checks").getByTestId("caution-count")).toBeVisible();
+  await openDrawer(page);
+  const strip = drawer(page).getByRole("tablist");
+  const fits = await strip.evaluate((el) => {
+    const right = el.getBoundingClientRect().right;
+    return {
+      overflow: el.scrollWidth - el.clientWidth,
+      past: Math.max(...[...el.querySelectorAll("button")].map((b) => b.getBoundingClientRect().right)) - right,
+    };
+  });
+  expect(fits.overflow).toBeLessThanOrEqual(0);
+  expect(fits.past).toBeLessThanOrEqual(0);
+  await expectTouchSize(
+    page,
+    ["Overview", "Layouts", "Cut list", "Rules", "Checks"].map((name) => tab(page, name)),
+  );
+});
+
 test("scrolling the drawer folds the part thumbnail away and returns it at the top; the credit scrolls with the content", async ({ page }) => {
   await openApp(page);
   await openDrawer(page);

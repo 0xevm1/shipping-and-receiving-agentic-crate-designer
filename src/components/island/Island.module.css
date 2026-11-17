@@ -251,6 +251,25 @@
 }
 
 /*
+ * Phones (360 and 390 wide): all five tabs fit the drawer without scrolling or clipping, with a caution
+ * badge on Checks. A 44 px minimum width each; the padding and the badge give way, not the labels.
+ */
+@media (max-width: 400px) {
+  .tabs button {
+    min-width: var(--touch);
+    padding: 0 4px;
+    font-size: 12px;
+  }
+  .tabs .count {
+    min-width: 16px;
+    margin-left: 3px;
+    padding: 0 4px;
+    font-size: 10.5px;
+    line-height: 16px;
+  }
+}
+
+/*
  * Touch sizing: on a coarse pointer or below the drawer breakpoint, the controls inside
  * the island's panels have a hit area of at least 44 px (WCAG 2.5.5 target size). Desktop with a
  * mouse is unchanged. The visible glyphs stay the same size; the hit area grows around them.
