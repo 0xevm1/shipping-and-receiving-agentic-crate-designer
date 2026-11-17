@@ -14,6 +14,10 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  * `SWEEP_MAX_QUANTITY`, design the best few layouts of each, drop every crate that fails a hard
  * check, and score the rest by **cost per part moved** = (crate cost + freight cost) ÷ parts.
  *
+ * - **Candidates** (#133): given the part's suggested quantities, the recommendation, the shortlist,
+ *   what stopped a larger crate and the tie-breaks are decided among those quantities only. The
+ *   curve still covers every quantity (the chart, and total-quantity mode below, use all of it).
+ *
  * - **Hard checks first**, never traded for cost: the trailer door and floor, stability, every
  *   part blocked in, the base rating, and the per-crate size, gross and part limits (#25, #108). A quantity
  *   whose layouts all fail is never recommended, and its curve point says which rule stopped it.
@@ -29,6 +33,29 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 
 /** The largest quantity per crate the sweep tries; the quantity setting's own maximum. */
 export const SWEEP_MAX_QUANTITY = 200;
+
+/** The quantities suggested for a part that names none (`parts.json` without `suggested_quantities`, a loaded GLB, the API and CLI). */
+export const DEFAULT_SUGGESTED_QUANTITIES: readonly number[] = [1, 4, 8];
+
+/** A candidate list as the sweep reads it: whole numbers from 1 to `SWEEP_MAX_QUANTITY`, each once, ascending. May be empty. */
+export function normalizeCandidates(quantities: readonly number[]): number[] {
+  const valid = quantities.filter((q) => Number.isInteger(q) && q >= 1 && q <= SWEEP_MAX_QUANTITY);
+  return [...new Set(valid)].sort((a, b) => a - b);
+}
+
+/**
+ * The candidate quantities of a part with these suggested quantities (#133): normalised, and the
+ * defaults (1, 4, 8) when it has none or none is a quantity one crate can be set to.
+ */
+export function candidateQuantities(suggested?: readonly number[] | null): number[] {
+  const own = normalizeCandidates(suggested ?? []);
+  return own.length ? own : [...DEFAULT_SUGGESTED_QUANTITIES];
+}
+
+/** "1, 4 and 8": a list of quantities in words. */
+export function quantityList(qs: readonly number[]): string {
+  return qs.length > 1 ? `${qs.slice(0, -1).join(", ")} and ${qs[qs.length - 1]}` : (qs[0]?.toString() ?? "none");
+}
 
 /** Layouts designed per quantity, best first after the cheap hard checks (trailer, stable, blocking). */
 export const SWEEP_LAYOUTS_PER_QUANTITY = 3;
@@ -116,10 +143,11 @@ export interface SweepRecommendation {
   crate: SweepCrate;
   /**
    * What stopped a larger crate: the first quantity above the recommendation that fails a hard
-   * check and why, or null when every quantity up to the sweep's maximum passes.
+   * check and why, or null when every quantity up to the sweep's maximum passes. With
+   * candidates, only the candidates above it count.
    */
   stoppedBy: { quantity: number; binding: SweepConstraint; reason: Message } | null;
-  /** True when a larger quantity passes every check but costs more per part. */
+  /** True when a larger quantity (a larger candidate, with candidates) passes every check but costs more per part. */
   costLimited: boolean;
   /**
    * Set when the runner-up scores the same to the cent per part and the order between them was
@@ -136,9 +164,14 @@ export interface QuantitySweep {
   /** `crate-only` when no freight rates were given: no freight dollars anywhere. */
   basis: ScoreBasis;
   maxQuantity: number;
+  /**
+   * The quantities the recommendation chooses among, ascending (the part's suggested quantities,
+   * #133), or null when the sweep chose among every quantity on the curve.
+   */
+  candidates: number[] | null;
   /** Every quantity from 1 to `maxQuantity`, in order. Empty when there is a problem. */
   curve: SweepPoint[];
-  /** The best passing quantities, best first (at most `SWEEP_SHORTLIST_SIZE`). */
+  /** The best passing quantities (candidates only, when there are some), best first (at most `SWEEP_SHORTLIST_SIZE`). */
   shortlist: SweepPoint[];
   /** Null when no quantity passes, or there is a problem. */
   recommendation: SweepRecommendation | null;
@@ -149,6 +182,11 @@ export interface SweepOptions {
   maxQuantity?: number;
   freightRates?: FreightRates | null;
   layoutsPerQuantity?: number;
+  /**
+   * The quantities to recommend among (#133; see `candidateQuantities`). Absent or empty: every
+   * quantity on the curve. The curve is swept to at least the largest candidate.
+   */
+  candidates?: readonly number[] | null;
 }
 
 /** Whole cents per part: smaller differences are rounding, not a better crate. */
@@ -191,12 +229,14 @@ export function sweepQuantities(
   standards: ShopStandards = DEFAULT_STANDARDS,
   options: SweepOptions = {},
 ): QuantitySweep {
-  const maxQuantity = Math.max(1, Math.floor(options.maxQuantity ?? SWEEP_MAX_QUANTITY));
+  const listed = normalizeCandidates(options.candidates ?? []);
+  const candidates = listed.length ? listed : null;
+  const maxQuantity = Math.max(1, Math.floor(options.maxQuantity ?? SWEEP_MAX_QUANTITY), candidates?.[candidates.length - 1] ?? 0);
   const perQuantity = Math.max(1, options.layoutsPerQuantity ?? SWEEP_LAYOUTS_PER_QUANTITY);
   const rates = options.freightRates ? FreightRatesSchema.parse(options.freightRates) : null;
   const basis: ScoreBasis = rates ? "crate-and-freight" : "crate-only";
   const problem = inputProblem(part, { ...settings, quantity: 1 }, standards);
-  if (problem) return { basis, maxQuantity, curve: [], shortlist: [], recommendation: null, problem };
+  if (problem) return { basis, maxQuantity, candidates, curve: [], shortlist: [], recommendation: null, problem };
 
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
   const minGap = standards.construction.minBlockingGapMm;
@@ -268,12 +308,18 @@ export function sweepQuantities(
     );
   }
 
-  const shortlist = curve
+  const considered = consideredPoints({ curve, candidates });
+  const shortlist = considered
     .filter((p) => p.ok)
     .sort(compareSweepPoints)
     .slice(0, SWEEP_SHORTLIST_SIZE);
   const top = shortlist[0];
-  return { basis, maxQuantity, curve, shortlist, recommendation: top ? recommend(shortlist, curve, basis) : null, problem: null };
+  return { basis, maxQuantity, candidates, curve, shortlist, recommendation: top ? recommend(shortlist, considered, basis, candidates) : null, problem: null };
+}
+
+/** The curve points the recommendation chooses among: the candidates', or every point without candidates. */
+export function consideredPoints(sweep: Pick<QuantitySweep, "curve" | "candidates">): SweepPoint[] {
+  return sweep.candidates ? sweep.candidates.map((q) => sweep.curve[q - 1]) : sweep.curve;
 }
 
 const usd = (v: number) => `$${v.toFixed(2)}`;
@@ -284,22 +330,31 @@ export function tieBreakBetween(a: SweepPoint, b: SweepPoint | undefined): Sweep
   return a.quantity !== b.quantity ? "fewer-crates" : "denser-freight";
 }
 
-function recommend(shortlist: SweepPoint[], curve: SweepPoint[], basis: ScoreBasis): SweepRecommendation {
+function recommend(shortlist: SweepPoint[], considered: SweepPoint[], basis: ScoreBasis, candidates: number[] | null): SweepRecommendation {
   const top = shortlist[0];
   const crate = top.crate!;
-  const above = curve.slice(top.quantity);
+  const above = considered.filter((p) => p.quantity > top.quantity);
   const fail = above.find((p) => !p.ok);
   const stoppedBy = fail ? { quantity: fail.quantity, binding: fail.binding!, reason: fail.reason! } : null;
   const costLimited = above.some((p) => p.ok);
   const per = basis === "crate-only" ? "in crate cost (no freight rates given, so freight is not priced)" : "in crate and freight cost";
-  const head = msg`${top.quantity} per crate costs ${usd(crate.scoreUsdPerPart)} a part ${per}.`;
+  const head = candidates
+    ? candidates.length > 1
+      ? parts(`Of ${quantityList(candidates)} per crate, ${top.quantity} costs least per part: ${usd(crate.scoreUsdPerPart)} ${per}.`)
+      : parts(`The part's suggested ${top.quantity} per crate costs ${usd(crate.scoreUsdPerPart)} a part ${per}.`)
+    : parts(`${top.quantity} per crate costs ${usd(crate.scoreUsdPerPart)} a part ${per}.`);
+  const larger = candidates ? "Larger suggested quantities" : "Larger crates";
   const limit = stoppedBy
     ? costLimited
-      ? msg` Larger crates cost more per part; from ${stoppedBy.quantity} parts a crate fails a hard check: ${stoppedBy.reason}`
-      : msg` A crate of ${stoppedBy.quantity} fails a hard check: ${stoppedBy.reason}`
+      ? candidates
+        ? msg` ${larger} cost more per part, and ${stoppedBy.quantity} fails a hard check: ${stoppedBy.reason}`
+        : msg` ${larger} cost more per part; from ${stoppedBy.quantity} parts a crate fails a hard check: ${stoppedBy.reason}`
+      : msg` ${candidates ? `The suggested ${stoppedBy.quantity}` : `A crate of ${stoppedBy.quantity}`} fails a hard check: ${stoppedBy.reason}`
     : costLimited
-      ? parts(" Larger crates cost more per part.")
-      : parts(" Every quantity up to the sweep's maximum passes the checks.");
+      ? parts(` ${larger} cost more per part.`)
+      : candidates
+        ? parts("")
+        : parts(" Every quantity up to the sweep's maximum passes the checks.");
   return { quantity: top.quantity, crate, stoppedBy, costLimited, tieBreak: tieBreakBetween(top, shortlist[1]), rationale: parts(head, limit) };
 }
 
@@ -344,6 +399,9 @@ export function evenSplit(total: number, crates: number): { quantity: number; co
  * part alone fails a hard check, or the split needs crates larger than the sweep tried).
  */
 export function planTotal(sweep: QuantitySweep, total: number): TotalPlan | null {
+  // Reads the full curve, never the candidates (#133): how to pack N parts is a different question
+  // from which of the part's suggested quantities is cheapest, and limiting it to 1, 4 and 8 per
+  // crate would ship 10,000 parts as 1,250 crates of 8.
   const n = Math.floor(total);
   if (!(n >= 1) || sweep.problem) return null;
   const at = (q: number) => sweep.curve[q - 1];

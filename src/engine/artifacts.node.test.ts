@@ -153,7 +153,8 @@ describe("artifacts in Node", () => {
     expect(manifest.configurations.map((c) => c.inputHash)).toEqual(hashes);
     const rec = manifest.configurations.find((c) => c.recommended)!;
     expect(rec.quantity).toBe(manifest.recommendation!.quantity);
-    expect(manifest.recommendation!.stoppedBy?.constraint).toBeTruthy();
+    // The pick is the largest of the part's suggested quantities, so nothing larger was compared (#133).
+    expect(manifest.recommendation!.stoppedBy).toBeNull();
 
     // Every zipped file is in the manifest (and the manifest itself).
     const listed = [...manifest.files, ...manifest.configurations.flatMap((c) => c.files)].map((f) => f.path);
@@ -164,7 +165,8 @@ describe("artifacts in Node", () => {
     expect(comparison.startsWith("%PDF-")).toBe(true);
     for (const f of folders) expect(comparison).toContain(f);
     expect(comparison).toContain("Why this quantity");
-    expect(comparison).toContain("Constraint that stopped a larger crate");
+    // PART-002 recommends its largest suggested quantity (4), so no larger crate was compared and none stopped it (#133).
+    expect(comparison).not.toContain("Constraint that stopped a larger crate");
     expect(comparison).toContain("WHAT STOPPED A LARGER CRATE");
     expect(comparison).toContain("Freight is not priced");
     expect(comparison).toContain("placeholder");

@@ -3,7 +3,16 @@ import { describeFaces } from "./restingFaces";
 import type { CrateSettings } from "./schema";
 import { sizeLimitText } from "./shipment";
 import { costsArePlaceholder, DEFAULT_STANDARDS, PLACEHOLDER_COST_NOTE, type ShopStandards } from "./standards";
-import { SWEEP_CONSTRAINTS, type QuantitySweep, type ScoreBasis, type SweepConstraint, type SweepPoint, type SweepRecommendation } from "./sweep";
+import {
+  consideredPoints,
+  quantityList,
+  SWEEP_CONSTRAINTS,
+  type QuantitySweep,
+  type ScoreBasis,
+  type SweepConstraint,
+  type SweepPoint,
+  type SweepRecommendation,
+} from "./sweep";
 
 /**
  * Why the sweep recommends what it does (spec §7.16 "Explaining the recommendation"), in plain
@@ -61,6 +70,8 @@ export interface ExplanationCurvePoint {
   ok: boolean;
   scoreUsdPerPart: number | null;
   binding: SweepConstraint | null;
+  /** One of the quantities the recommendation chose among (always true without candidates). */
+  candidate: boolean;
 }
 
 export interface RecommendationExplanation {
@@ -131,9 +142,15 @@ export function explainRecommendation(
   const q = rec.quantity;
   const priced = sweep.basis === "crate-and-freight";
   const placeholderCosts = costsArePlaceholder(standards);
-  const passing = sweep.curve.filter((p) => p.ok);
-  const failing = sweep.curve.filter((p) => !p.ok);
-  const above = sweep.curve.slice(q);
+  const cand = sweep.candidates;
+  // The recommendation chose among the candidates (#133), or among every quantity without them;
+  // the chart still shows the whole curve.
+  const considered = consideredPoints(sweep);
+  const passing = considered.filter((p) => p.ok);
+  const failing = considered.filter((p) => !p.ok);
+  const above = considered.filter((p) => p.quantity > q);
+  const what = cand ? "suggested quantity" : "quantity";
+  const whats = cand ? "suggested quantities" : "quantities";
   const bestLarger = above.filter((p) => p.ok).sort((a, b) => a.crate!.scoreUsdPerPart - b.crate!.scoreUsdPerPart || b.quantity - a.quantity)[0] ?? null;
   const limit: RecommendationExplanation["limit"] = rec.costLimited
     ? { kind: "cost", quantity: bestLarger?.quantity ?? null, binding: null }
@@ -143,21 +160,23 @@ export function explainRecommendation(
   const stop = rec.stoppedBy;
 
   // What was compared.
-  const designed = sweep.curve.reduce((n, p) => n + p.layoutsDesigned, 0);
-  const passedLayouts = sweep.curve.reduce((n, p) => n + p.layoutsPassed, 0);
-  const skipped = sweep.curve.filter((p) => p.layoutsDesigned === 0).map((p) => p.quantity);
+  const designed = considered.reduce((n, p) => n + p.layoutsDesigned, 0);
+  const passedLayouts = considered.reduce((n, p) => n + p.layoutsPassed, 0);
+  const skipped = considered.filter((p) => p.layoutsDesigned === 0).map((p) => p.quantity);
   const byRule = SWEEP_CONSTRAINTS.map((id) => ({ id, n: failing.filter((p) => p.binding === id).length })).filter((r) => r.n > 0);
   const compared: Message[] = [
     parts(
-      `Every quantity per crate from 1 to ${sweep.maxQuantity}. For each, up to ${sweepLayoutsPerQuantity(sweep)} of the best layouts (ways to pack the parts) were designed in full: ${plural(designed, "crate")} in all, of which ${passedLayouts.toLocaleString("en-US")} passed every hard check.`,
+      `${cand ? `The part's suggested quantities: ${quantityList(cand)} per crate (any other quantity is a manual choice)` : `Every quantity per crate from 1 to ${sweep.maxQuantity}`}. For each, up to ${sweepLayoutsPerQuantity(sweep)} of the best layouts (ways to pack the parts) were designed in full: ${plural(designed, "crate")} in all, of which ${passedLayouts.toLocaleString("en-US")} passed every hard check.`,
     ),
     ...(skipped.length
       ? [parts(`${quantityRuns(skipped)} per crate were ruled out without designing: the parts alone break a limit (below), so no crate could pass.`)]
       : []),
     parts(
-      `${plural(passing.length, "quantity", "quantities")} passed (${quantityRuns(passing.map((p) => p.quantity))}); ${plural(failing.length, "quantity", "quantities")} failed`,
+      `${plural(passing.length, what, whats)} passed (${quantityRuns(passing.map((p) => p.quantity))}); ${plural(failing.length, what, whats)} failed`,
       byRule.length ? `: ${byRule.map((r) => `${r.n} the ${CONSTRAINT_TEXT[r.id]}`).join(", ")}.` : ".",
     ),
+    // With candidates there are few: each failure is named with its rule.
+    ...(cand ? failing.map((p) => msg`${p.quantity} per crate fails the ${CONSTRAINT_TEXT[p.binding!]}: ${p.reason!}`) : []),
   ];
 
   // How it is scored.
@@ -198,9 +217,9 @@ export function explainRecommendation(
       ? parts(`${q} per crate ties for the lowest cost per part, ${usd(crate.scoreUsdPerPart)}, with ${runner.quantity} per crate.`)
       : runner
         ? parts(
-            `${q} per crate has the lowest cost per part of every passing quantity: ${usd(crate.scoreUsdPerPart)}. The runner-up, ${runner.quantity} per crate, is ${usd(runner.crate!.scoreUsdPerPart)}.`,
+            `${q} per crate has the lowest cost per part of every passing ${what}: ${usd(crate.scoreUsdPerPart)}. The runner-up, ${runner.quantity} per crate, is ${usd(runner.crate!.scoreUsdPerPart)}.`,
           )
-        : parts(`${q} per crate is the only quantity that passes every hard check: ${usd(crate.scoreUsdPerPart)} a part.`),
+        : parts(`${q} per crate is the only ${what} that passes every hard check: ${usd(crate.scoreUsdPerPart)} a part.`),
     rec.tieBreak === "fewer-crates"
       ? parts(
           `${q} and ${runner!.quantity} per crate cost the same to the cent, so the tie went to fewer crates: ${q} per crate ships the same parts in fewer crates.`,
@@ -215,27 +234,40 @@ export function explainRecommendation(
     limit.kind === "cost"
       ? [
           parts(
-            `Larger crates pass the checks but cost more per part: the best of them, ${bestLarger!.quantity} per crate, is ${usd(bestLarger!.crate!.scoreUsdPerPart)} a part (${usd(bestLarger!.crate!.scoreUsdPerPart - crate.scoreUsdPerPart)} more).`,
+            `${cand ? "Larger suggested quantities" : "Larger crates"} pass the checks but cost more per part: the best of them, ${bestLarger!.quantity} per crate, is ${usd(bestLarger!.crate!.scoreUsdPerPart)} a part (${usd(bestLarger!.crate!.scoreUsdPerPart - crate.scoreUsdPerPart)} more).`,
           ),
           stop
-            ? msg`The first larger crate to fail a hard check is ${stop.quantity} per crate, on the ${CONSTRAINT_TEXT[stop.binding]}. ${stop.reason}`
-            : parts(`Nothing up to ${sweep.maxQuantity} per crate fails a hard check.`),
+            ? msg`The first larger ${cand ? "suggested quantity" : "crate"} to fail a hard check is ${stop.quantity} per crate, on the ${CONSTRAINT_TEXT[stop.binding]}. ${stop.reason}`
+            : parts(cand ? "No larger suggested quantity fails a hard check." : `Nothing up to ${sweep.maxQuantity} per crate fails a hard check.`),
         ]
       : limit.kind === "constraint"
-        ? [msg`The next size up, ${stop!.quantity} per crate, fails a hard check: the ${CONSTRAINT_TEXT[stop!.binding]}. ${stop!.reason}`]
-        : [parts(`Every quantity up to ${sweep.maxQuantity} per crate passes; none is cheaper per part.`)];
+        ? [
+            msg`The next ${cand ? "suggested quantity" : "size"} up, ${stop!.quantity} per crate, fails a hard check: the ${CONSTRAINT_TEXT[stop!.binding]}. ${stop!.reason}`,
+          ]
+        : [
+            parts(
+              cand
+                ? `${q} per crate is the largest of the suggested quantities (${quantityList(cand)}), so no larger crate was compared. Any larger quantity is a manual choice.`
+                : `Every quantity up to ${sweep.maxQuantity} per crate passes; none is cheaper per part.`,
+            ),
+          ];
 
   const considerations = considerationsOf(standards, rules, options);
   const headline = parts(
-    `${q} per crate: the lowest cost per part (${usd(crate.scoreUsdPerPart)}) of ${plural(passing.length, "quantity", "quantities")} that pass every hard check`,
+    cand
+      ? `${q} per crate: the lowest cost per part (${usd(crate.scoreUsdPerPart)}) of the part's suggested quantities (${quantityList(cand)}) that pass every hard check`
+      : `${q} per crate: the lowest cost per part (${usd(crate.scoreUsdPerPart)}) of ${plural(passing.length, "quantity", "quantities")} that pass every hard check`,
     limit.kind === "constraint"
       ? msg`; ${rec.stoppedBy!.quantity} fails the ${CONSTRAINT_TEXT[rec.stoppedBy!.binding]}.`
       : limit.kind === "cost"
-        ? "; larger crates cost more per part."
+        ? cand
+          ? "; larger suggested quantities cost more per part."
+          : "; larger crates cost more per part."
         : ".",
   );
 
-  const lastOk = passing[passing.length - 1]?.quantity ?? q;
+  // The chart shows the whole curve: how far it goes depends on where crates stop passing.
+  const lastOk = sweep.curve.findLast((p) => p.ok)?.quantity ?? q;
   const chartMax = Math.min(sweep.maxQuantity, Math.max(lastOk, rec.stoppedBy?.quantity ?? 0, q) + EXPLANATION_CURVE_TAIL);
   return {
     quantity: q,
@@ -259,18 +291,36 @@ export function explainRecommendation(
       vsPickUsdPerPart: p.crate!.scoreUsdPerPart - crate.scoreUsdPerPart,
       picked: p.quantity === q,
     })),
-    curve: sweep.curve.slice(0, chartMax).map(curvePoint),
+    curve: sweep.curve.slice(0, chartMax).map(curvePoint(sweep)),
     tieBreak: rec.tieBreak,
     limit,
   };
 }
 
-const curvePoint = (p: SweepPoint): ExplanationCurvePoint => ({
-  quantity: p.quantity,
-  ok: p.ok,
-  scoreUsdPerPart: p.crate?.scoreUsdPerPart ?? null,
-  binding: p.binding,
-});
+const curvePoint =
+  (sweep: QuantitySweep) =>
+  (p: SweepPoint): ExplanationCurvePoint => ({
+    quantity: p.quantity,
+    ok: p.ok,
+    scoreUsdPerPart: p.crate?.scoreUsdPerPart ?? null,
+    binding: p.binding,
+    candidate: !sweep.candidates || sweep.candidates.includes(p.quantity),
+  });
+
+/**
+ * Why a sweep has no recommendation, in plain words: when it chose among suggested quantities,
+ * each one with the rule it failed (#133); otherwise that no quantity passes. Null when it has a
+ * recommendation. A design problem is the caller's to show (`sweep.problem`).
+ */
+export function noRecommendationMessage(sweep: QuantitySweep): Message | null {
+  if (sweep.recommendation) return null;
+  if (!sweep.candidates || sweep.problem) return parts("No quantity per crate passes every hard check with these rules.");
+  const failed = consideredPoints(sweep).map((p) => msg`${p.quantity} per crate fails the ${CONSTRAINT_TEXT[p.binding!]}: ${p.reason!}`);
+  return parts(
+    `None of the part's suggested quantities (${quantityList(sweep.candidates)} per crate) passes every hard check with these rules, so none is recommended. `,
+    joinMessages(failed, " "),
+  );
+}
 
 /** The most layouts any quantity designed: the sweep's layouts per quantity. */
 const sweepLayoutsPerQuantity = (sweep: QuantitySweep) => Math.max(1, ...sweep.curve.map((p) => p.layoutsDesigned));

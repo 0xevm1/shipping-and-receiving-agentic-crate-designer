@@ -1,7 +1,7 @@
 import { CONSTRAINT_TEXT } from "@/domain/explainRecommendation";
 import { crateCostPerPart, type ShipmentPlan } from "@/domain/shipment";
 import { costsArePlaceholder } from "@/domain/standards";
-import { sweepQuantities, type QuantitySweep } from "@/domain/sweep";
+import { candidateQuantities, sweepQuantities, type QuantitySweep } from "@/domain/sweep";
 import { stampCsv } from "@/lib/csv";
 import type { Units } from "@/lib/units";
 import { cutList, designShipment, inputHash, stamp } from "./engine";
@@ -60,7 +60,8 @@ const sweepKey = (req: DesignRequest) => inputHash({ ...req, settings: { ...req.
 
 /** The quantity sweep (spec §7.16) for a request's part and rules. No freight rates, so no freight dollars. */
 export function sweepFor(req: DesignRequest): QuantitySweep {
-  return sweepQuantities(req.part, req.settings, req.standards);
+  // Among the part's suggested quantities, as the page's and the server's sweeps are (#133).
+  return sweepQuantities(req.part, req.settings, req.standards, { candidates: candidateQuantities(req.part.suggested_quantities) });
 }
 
 const done = (kind: ArtifactKind, bytes: Uint8Array, fileName: string, st: EngineStamp): Artifact => ({

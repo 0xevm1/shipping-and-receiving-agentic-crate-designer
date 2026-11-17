@@ -139,6 +139,8 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
     /** The part version this sweep is for: its results are stored as current only while it still is. */
     const sweptPart = job.designPartHash;
     const partHash = designPartHash(req.part);
+    // The recommendation and shortlist are among the part's suggested quantities (req.candidates);
+    // the total plan (req.total) still splits by the full curve (#133).
     const report = await pool.run("designs", req);
     // Stored like a configuration saved from the browser (docs/API.md): the whole DesignRequest, so
     // the server can rebuild it (artifacts, "Use"), and the engine's DesignSummary of it.

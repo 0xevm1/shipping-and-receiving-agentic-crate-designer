@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Next.js runs on Node; match the version the README is verified on.
+      # Next.js runs on Node; match the version docs/GUIDE.md is verified on.
       - uses: actions/setup-node@v7
         with:
           node-version: 24

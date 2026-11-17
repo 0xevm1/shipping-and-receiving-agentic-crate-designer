@@ -7,6 +7,7 @@ import { usableProfile, type PartProfile } from "@/domain/profile";
 import { encodeProfile } from "@/domain/profileCodec";
 import type { CatalogEntry, CrateSettings, Part, Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "@/domain/standards";
+import { DEFAULT_SUGGESTED_QUANTITIES } from "@/domain/sweep";
 import { checkFiles, type FileInput } from "./fileCheck";
 import { reportFor, verdict, type FileReport } from "./fileCheckReport";
 import { catalogPart, framePart, type LoadedPart } from "./part";
@@ -17,7 +18,7 @@ import type { Units } from "./units";
 
 /** Mass used for an unknown part until the user enters one. Never inferred from the mesh (spec §6.1). */
 const STAND_IN_MASS_KG = 10;
-const DEFAULT_QUANTITIES = [1, 4, 8];
+const DEFAULT_QUANTITIES = [...DEFAULT_SUGGESTED_QUANTITIES];
 
 // The file-name rules live in the domain so the upload API (#46) names a part the same way.
 export { idFromFile, nameFromFile };

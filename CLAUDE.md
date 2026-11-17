@@ -3,7 +3,7 @@
 # Crate Designer — session context
 
 - **What this is:** a Next.js 16 + three.js app that designs wooden shipping crates for batches
-  of identical parts. Read `README.md` for the overview and `docs/SPECIFICATION.md` for the
+  of identical parts. Read `README.md` and `docs/GUIDE.md` for the overview and `docs/SPECIFICATION.md` for the
   rules, algorithms and invariants before changing behaviour.
 - **Package manager:** Bun. Use `bun run test`, never `bun test`, because the tests are vitest.
   Also `bun run lint` and `bun run build`.
@@ -28,7 +28,7 @@
   the same change.
 - **CI:** `.github/workflows/ci.yml` runs install, format check, lint, typecheck, test and build (`checks`) on
   every PR to `main`. A green run is required before merging (not enforced by GitHub on this
-  private repo; see the README "Pull requests" note).
+  private repo; see the "Pull requests" section of `docs/GUIDE.md`).
 - **End-to-end tests are opt-in.** The Playwright suite (`e2e/`, spec §10) is slow, so it is not in
   the pre-commit hook, not in PR CI, and not a required local check. Don't run it as a routine
   step. It runs when the user asks: the manually triggered `E2E` workflow

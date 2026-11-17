@@ -315,6 +315,7 @@ describe("total-quantity mode (planTotal)", () => {
     const flat: QuantitySweep = {
       basis: "crate-only",
       maxQuantity: 10,
+      candidates: null,
       curve: Array.from({ length: 10 }, (_, i) => ({
         quantity: i + 1,
         ok: true,
