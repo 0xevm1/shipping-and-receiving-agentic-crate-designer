@@ -212,6 +212,12 @@ export interface DesignerState {
   /** Starts the time-to-design clock if it isn't running (called once after mount). */
   startDesignClock: (now?: number) => void;
   /**
+   * Marks the part on screen as waiting for its recommendation (`autoRecommend`), as `setPart`
+   * does for a new part: the preloaded default part, when startup finds nothing to restore
+   * (spec §7.16 "Recommended on load"). Called once, before anything can be edited.
+   */
+  recommendOnStartup: () => void;
+  /**
    * Records the time from the clock start to the first export or download of the design on screen.
    * Later exports don't move it; an edit clears it, and the next export records the new time.
    */
@@ -543,6 +549,10 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     },
     startDesignClock: (now = Date.now()) => {
       if (get().designStartedAt === null) set({ designStartedAt: now, designedInMs: null });
+    },
+    recommendOnStartup: () => {
+      const { part, autoRecommend } = get();
+      if (!autoRecommend) set({ autoRecommend: { modelUrl: part.modelUrl, applied: false } });
     },
     markExported: (now = Date.now()) => {
       const { designStartedAt, designedInMs } = get();

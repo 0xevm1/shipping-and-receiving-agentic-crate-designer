@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentDesignFile } from "@/lib/currentDesign";
+import { runSweep } from "@/engine/sweep";
+import { useSweep } from "./bestQuantity";
 import { beginLoad } from "./loadSequence";
 import { createStartup, type StartupDeps } from "./startup";
 import { useDesigner } from "./store";
@@ -82,5 +84,35 @@ describe("startup source", () => {
     });
     await createStartup(d)();
     expect(s().designStartedAt).toBeNull();
+  });
+
+  it("the default part opens at its recommendation when there is nothing to restore", async () => {
+    expect(await createStartup(deps())()).toBe("default");
+    expect(s().autoRecommend).toEqual({ modelUrl: s().part.modelUrl, applied: false });
+  });
+
+  it("the default part opens at its recommendation when the last design could not reopen", async () => {
+    await createStartup(deps({ savedDesign: savedCrate, restore: async () => false }))();
+    expect(s().autoRecommend).not.toBeNull();
+  });
+
+  it("a reopened crate or a share link keeps its own settings", async () => {
+    await createStartup(deps({ savedDesign: savedCrate }))();
+    expect(s().autoRecommend).toBeNull();
+    useDesigner.setState(initial, true);
+    await createStartup(deps({ hash: () => "#design=abc" }))();
+    expect(s().autoRecommend).toBeNull();
+  });
+
+  it("applies a sweep result for the default part that arrived before startup decided", async () => {
+    const part = s().part;
+    const { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } = s().settings;
+    const inputs = { part, standards: s().standards, rules: { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness } };
+    const { sweep } = runSweep({ ...inputs, standards: inputs.standards });
+    useSweep.setState({ inputs, done: { inputs, sweep } });
+    await createStartup(deps())();
+    expect(s().settings.quantity).toBe(sweep.recommendation!.quantity);
+    expect(s().layoutKey).toBe(sweep.recommendation!.crate.layoutKey);
+    useSweep.setState({ inputs: null, done: null });
   });
 });
