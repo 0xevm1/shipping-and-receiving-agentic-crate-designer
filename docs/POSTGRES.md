@@ -4,9 +4,10 @@ The shared store for parts, design jobs, configurations, generated files and eve
 replaces the earlier SQLite WASM plan. Postgres and an S3-compatible blob emulator run in
 Docker; the Next.js app runs on the host and reaches them through environment variables.
 
-**Status (slice 1):** infrastructure, migrations, the first tables and the org-scoped repository
-are in. Nothing in the UI reads or writes the database yet; the blob store's TypeScript client,
-the event framework (LISTEN/NOTIFY, SSE) and the jobs API are later slices of #46.
+**Status:** infrastructure, migrations, the first tables and the org-scoped repository (slice 1),
+and the event framework: LISTEN/NOTIFY, the SSE stream and the health check (slice 2, see
+[Events](#events)). Nothing in the UI reads or writes the database yet; the blob store's
+TypeScript client and the jobs API are later slices of #46.
 
 ## Quick start
 
@@ -114,8 +115,8 @@ The schema is `src/server/db/schema.ts`; `db/migrations/` is generated from it.
 | `shop_standard` | Rates and limits (#19) as JSON, versioned per org |
 | `idempotency_key` | Client-generated ids of changes already applied, with the request hash and the stored response, so an offline replay (slice 7a) applies a change once |
 
-Not in slice 1: the `pg_notify` trigger on `event` and the job-queue table come with the event
-and queue slices.
+The `event` table has an `AFTER INSERT` trigger that NOTIFYs `crate_events` (see
+[Events](#events)). The job-queue table comes with the queue slice.
 
 ### Org scoping
 
@@ -147,13 +148,14 @@ that reached it would fail the build.
 
 | File | Exports |
 |---|---|
-| `index.ts` | What route handlers use: `getRepository()`, `getDb()`, `closeDb()`, `inTransaction`, `DEFAULT_ORG`, `orgContext`, `OrgContext`, row types |
+| `index.ts` | What route handlers use: `getRepository()`, `getSystemQueries()`, `getDb()`, `closeDb()`, `inTransaction`, `DEFAULT_ORG`, `orgContext`, `OrgContext`, row types |
 | `client.ts` | The pooled postgres.js client and drizzle handle, created on first use (so `next build` needs no database) |
-| `repository.ts` | `createRepository(db)`: `parts`, `partModels`, `jobs` (with versioned `update`), `configurations` (content-addressed `save`), `events` (`append`, `listAfter`); `inTransaction(db, repo => …)` |
+| `repository.ts` | `createRepository(db)`: `parts`, `partModels`, `jobs` (with versioned `update`), `configurations` (content-addressed `save`), `events` (`append`, `listAfter`, `listForStream`); `inTransaction(db, repo => …)` |
 | `org.ts` | `OrgContext`, `orgContext(id)`, `DEFAULT_ORG`, `requireOrg` |
 | `schema.ts` | The drizzle tables |
 | `config.ts` | `databaseUrl()` (from `DATABASE_URL`, or `DB_PORT` / `DB_NAME`), `loadLocalEnv()` |
 | `migrate.ts` | `migrateDatabase(url)`, `ensureDatabase(url)`, `dropDatabase(url)` |
+| `system.ts` | `createSystemQueries(db)`: `ping`, `notificationQueueUsage`, `notify`. No table data, so no `OrgContext` |
 
 ```ts
 import { DEFAULT_ORG, getRepository } from "@/server/db";
@@ -163,6 +165,145 @@ const part = await repo.parts.create(DEFAULT_ORG, { name: "Bracket", massKg: 21.
 const job = await repo.jobs.create(DEFAULT_ORG, { partId: part.id, totalQuantity: 40 });
 const updated = await repo.jobs.update(DEFAULT_ORG, job.id, job.version, { status: "ready" }); // undefined → stale, answer 409
 ```
+
+## Events
+
+Live updates (#46 §3): a write that clients care about adds a row to the `event` outbox in its
+own transaction, Postgres NOTIFYs on commit, and each Next.js process fans that out to the
+browsers watching the job over Server-Sent Events.
+
+```
+route handler ── inTransaction: change + emitEvent ──▶ event row ──trigger──▶ pg_notify('crate_events')
+                                                                                   │ (on commit)
+browser ◀── SSE /api/v1/events?job=… ◀── hub (job id → subscribers) ◀── one LISTEN connection per process
+```
+
+### Writing: `emitEvent`
+
+```ts
+import { DEFAULT_ORG, getDb, inTransaction } from "@/server/db";
+import { emitEvent } from "@/server/events";
+
+await inTransaction(getDb(), async (tx) => {
+  const saved = await tx.configurations.save(DEFAULT_ORG, input);
+  await emitEvent(tx, DEFAULT_ORG, { jobId, type: "config.added", payload: { configurationId: saved.row.id, inputHash: input.inputHash } });
+});
+```
+
+- **Same transaction.** The trigger on `event` (`db/migrations/0002_event_notify.sql`) calls
+  `pg_notify`, which Postgres delivers only when the transaction commits: a rollback sends
+  nothing, a commit always sends.
+- **One event per user action**, written **last** in the transaction. `events.append` takes a
+  transaction-level advisory lock (`EVENT_ORDER_LOCK`) before the insert, so event-writing
+  transactions commit in id order. Without it, a transaction holding id 10 could commit after
+  one holding id 11, and a client already past 11 would never see 10. The lock is held until
+  commit, which is why the event goes last.
+- **Validated.** The payload is checked against its type's Zod schema and a 4 KB cap
+  (`src/lib/events.ts`); job-scoped types need a `jobId`. A bad event fails the transaction.
+
+### Channel and payload
+
+One channel, `crate_events`, for every org (`CRATE_EVENTS_CHANNEL`). The NOTIFY payload is
+`{"id", "orgId", "jobId", "type"}`, a few dozen bytes. Receivers read the row (and its payload)
+from the `event` table by id. Per-org channels are deferred with RLS (#60): every process
+receives every org's notifications and filters them in memory.
+
+### Event types
+
+| Type | Job | Payload (required fields; extra fields allowed) |
+|---|---|---|
+| `part.created` | optional | `partId` |
+| `job.created` | yes | `partId` |
+| `configs.ready` | yes | `count`: the sweep finished; shortlist and curve are saved |
+| `config.added` | yes | `configurationId`, `inputHash`: a user saved a configuration |
+| `recommendation.changed` | yes | `configurationId` (null when cleared) |
+| `artifact.ready` | yes | `artifactId`, `configurationId`, `kind` |
+| `job.error` | yes | `message` (safe to show) |
+| `engine.updated` | no (org-wide) | `engineVersion`: open tabs should reload |
+
+Events with no job (`engine.updated`, a job-less `part.created`) go to every stream of that org.
+
+### Listening: `EventBus`
+
+`src/server/events/` holds the `EventBus` interface (`start`, `stop`, `subscribe(jobId, subscriber)
+→ unsubscribe`, `status`) and its Postgres implementation, `createPgEventBus`.
+`getEventBus()` is the process-wide one, kept on `globalThis` (dev hot reloads reuse it) and
+started on first use.
+
+- **One dedicated connection per process**, outside the pool: postgres.js `sql.listen` on a
+  client of its own, `application_name = crate-events-listener` in `pg_stat_activity`.
+- **Reconnects.** postgres.js re-issues `LISTEN` once when the connection drops, but gives up
+  silently if that attempt fails (Postgres still restarting). So the bus probes itself: every
+  15 s it NOTIFYs a probe token through the pool and expects it back within 5 s. A missing
+  probe or a failed NOTIFY means the listener is dead or half-open; the bus opens a new one,
+  retrying with exponential backoff (250 ms doubling to 10 s, with jitter).
+- **No gaps after a drop.** Each LISTEN after the first tells every subscriber to resync: SSE
+  streams re-read the table from their cursor, picking up anything committed while nobody was
+  listening.
+- **Slow subscribers are dropped**, never waited for. Each subscriber has its own queue
+  (256 by default); one that falls that far behind is removed. The listener itself only
+  pushes to queues, so it keeps reading and the NOTIFY queue keeps draining.
+
+### `GET /api/v1/events?job=<id>`
+
+A Server-Sent Events stream (`text/event-stream`, Node.js runtime, never cached):
+
+1. **Org check first.** A job outside the caller's org answers 404, like a missing one, before
+   anything subscribes. (One default org until there are accounts.)
+2. **Subscribe, then replay.** The stream subscribes to the bus, then sends every event with
+   `id > Last-Event-ID` from the table (`events.listForStream`: the job's events and the org's
+   job-less ones), in pages of 500.
+3. **Live.** A notification with an id past the cursor (or a resync) reads the table again from
+   the cursor. Notifications only wake the stream; rows always come from the table, so replay
+   and live are one path, in id order, with nothing sent twice.
+
+Every message has `id: <event id>` and `data: {"id", "jobId", "type", "payload", "createdAt"}`
+(`JobEventMessageSchema`). The browser resends the last id as `Last-Event-ID` when it
+reconnects; `?lastEventId=` does the same for clients that can't set headers (the header wins).
+A `: heartbeat` comment goes out every 15 s, `retry: 2000` sets the reconnect delay, and the
+subscription ends when the client goes away. A client that stops reading is cut off after 1000
+queued messages and catches up when it reconnects.
+
+In the browser, `subscribeJobEvents(jobId, onEvent, { onOpen, onError })` (`src/lib/jobEvents.ts`)
+wraps EventSource, reopens it with `?lastEventId=` if it closes for good, and drops ids it has
+already delivered.
+
+### `GET /api/v1/health`
+
+`200 {"ok": true, "db": {"ok", "latencyMs"}, "notificationQueue": {"usage", "alert"}, "events": …}`
+when the database answers within 2 s, `503` with `ok: false` when it doesn't. `events` is this
+process's listener status (null until something subscribes). The offline queue (slice 7a) uses
+it as its liveness check.
+
+### Limits
+
+- **8 KB NOTIFY payloads.** Ours are ids only; event payloads are capped at 4 KB and read from
+  the table.
+- **Commits that NOTIFY are serialised.** Postgres takes a database-wide lock to commit a
+  transaction that notified, and `events.append` orders event commits as well. Keep those
+  transactions short and write one event per user action, not one per row.
+- **One shared NOTIFY queue** (8 GB by default). A listener that stops reading holds it; when it
+  fills, every NOTIFY, so every event write, fails. `pg_notification_queue_usage()` is in
+  `/api/v1/health` and read on every bus probe, with a warning logged at 50 %
+  (`NOTIFY_QUEUE_ALERT_RATIO`).
+- **No transaction-mode pooler.** LISTEN is session state: PgBouncer in transaction mode (and
+  similar proxies) breaks it. The listen connection must go straight to Postgres.
+- **Primary only.** A read replica doesn't receive the primary's notifications.
+- **Delivery isn't guaranteed**, and identical payloads in one transaction merge. Ids make every
+  payload distinct, and the `event` table is the source of truth: a client that misses
+  notifications catches up by id.
+- **Long-lived connections.** SSE needs a long-running Node server (no serverless or edge) and a
+  proxy that doesn't buffer and has an idle timeout above the 15 s heartbeat.
+
+### Tests
+
+`src/server/events/events.integration.test.ts` (with `bun run test:integration`): delivery after
+commit and none on rollback, one listen connection outside the pool, a slow subscriber dropped
+while others keep up, SSE replay after a reconnect with `Last-Event-ID` (small pages and writes
+racing the replay) giving every missed event exactly once, `?lastEventId=`, org-wide events,
+the org check, recovery after `pg_terminate_backend`, and recovery after the listener is locked
+out for a while (postgres.js's own retry fails; the probe and backoff bring it back). The hub,
+the event schemas and the browser helper have unit tests.
 
 ## Changing the schema
 
