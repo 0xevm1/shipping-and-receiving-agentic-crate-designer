@@ -1,0 +1,1 @@
+ALTER TABLE "design_job" ADD COLUMN "total_plan" jsonb;

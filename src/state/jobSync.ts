@@ -29,7 +29,7 @@ import { summarize } from "@/engine/engine";
 import { type ShopStandards, ShopStandardsSchema } from "@/domain/standards";
 import { DesignPartSchema, type DesignSummary, DesignSummarySchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
-import type { ConfigurationResponse, JobResponse, JobSnapshot, SaveConfigurationRequest } from "@/lib/api/jobs";
+import type { ConfigurationResponse, JobResponse, JobSnapshot, SaveConfigurationRequest, TotalPlanResponse } from "@/lib/api/jobs";
 import type { JobEventMessage } from "@/lib/events";
 import { subscribeJobEvents } from "@/lib/jobEvents";
 import { createLiveness, type Liveness } from "@/lib/liveness";
@@ -84,9 +84,11 @@ export interface JobSyncState {
   partKey: string | null;
   /** `job` and `configs` are the copy kept on this device, not yet confirmed by the server. */
   fromCache: boolean;
+  /** The server's plan for the job's total quantity (spec §7.16), or null: no total, or not planned yet. */
+  totalPlan: TotalPlanResponse | null;
 }
 
-const INITIAL: JobSyncState = { status: "off", note: "", job: null, configs: [], reloadNeeded: false, partKey: null, fromCache: false };
+const INITIAL: JobSyncState = { status: "off", note: "", job: null, configs: [], reloadNeeded: false, partKey: null, fromCache: false, totalPlan: null };
 
 export const useJobSync = create<JobSyncState>()(() => INITIAL);
 
@@ -118,6 +120,7 @@ function applySnapshot(snap: JobSnapshot): void {
   useJobSync.setState({
     job: snap.job,
     configs: snap.configurations.map(toSavedConfig),
+    totalPlan: snap.totalPlan,
     fromCache: false,
     ...(snap.engineVersion !== ENGINE_VERSION ? { reloadNeeded: true } : {}),
   });
@@ -465,7 +468,7 @@ export function startJobSync(deps: JobSyncDeps = {}): () => void {
       // Opened before? Show the copy kept on this device until the server answers.
       const cached = cachedJob(partKey);
       if (cached && !useJobSync.getState().job) {
-        useJobSync.setState({ job: cached.job, configs: cached.configurations.map(toSavedConfig), fromCache: true });
+        useJobSync.setState({ job: cached.job, configs: cached.configurations.map(toSavedConfig), totalPlan: cached.totalPlan ?? null, fromCache: true });
         assignJob(partKey, cached.job.id);
       }
     }

@@ -6,7 +6,7 @@
  * read and write goes through `persist.ts`, which never throws.
  */
 import { z } from "zod";
-import { ConfigurationSchema, JobSchema, type ConfigurationResponse, type JobResponse } from "@/lib/api/jobs";
+import { ConfigurationSchema, JobSchema, TotalPlanSchema, type ConfigurationResponse, type JobResponse, type TotalPlanResponse } from "@/lib/api/jobs";
 import { browserStorage, readJson, writeJson, type KeyValueStore } from "./persist";
 
 const CACHE_KIND = "crate-designer.job-cache";
@@ -21,6 +21,8 @@ const EntrySchema = z.object({
   savedAt: z.string(),
   job: JobSchema,
   configurations: z.array(ConfigurationSchema),
+  /** The server's total plan as last seen (absent in entries kept before it existed). */
+  totalPlan: TotalPlanSchema.nullable().optional(),
 });
 export type CachedJob = z.infer<typeof EntrySchema>;
 
@@ -57,12 +59,15 @@ export function cachedJob(partKey: string, storage: KeyValueStore | null = brows
 /** Keeps a job's snapshot for its part, as the newest entry. */
 export function cacheJob(
   partKey: string,
-  snap: { job: JobResponse; configurations: ConfigurationResponse[] },
+  snap: { job: JobResponse; configurations: ConfigurationResponse[]; totalPlan?: TotalPlanResponse | null },
   storage: KeyValueStore | null = browserStorage(),
   now = new Date(),
 ): boolean {
   const others = read(storage).filter((e) => e.partKey !== partKey && e.job.id !== snap.job.id);
-  return write([{ partKey, savedAt: now.toISOString(), job: snap.job, configurations: snap.configurations }, ...others], storage);
+  return write(
+    [{ partKey, savedAt: now.toISOString(), job: snap.job, configurations: snap.configurations, totalPlan: snap.totalPlan ?? null }, ...others],
+    storage,
+  );
 }
 
 /** Updates a cached job in place (a newer job row, a configuration added). No-op when it isn't cached. */

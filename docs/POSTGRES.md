@@ -118,7 +118,7 @@ The schema is `src/server/db/schema.ts`; `db/migrations/` is generated from it.
 | `org` | Organisations. The first migration seeds one, `DEFAULT_ORG_ID` (`00000000-0000-4000-8000-000000000001`, slug `default`) |
 | `part` | Name, material, density, mass (kg), bounding size (3 columns, mm), model sha256, source (`catalog` or `upload`), and for catalog parts the `catalog_id` (unique per org, so a catalog part is registered once) |
 | `part_model` | GLB metadata by content hash: sha256, size, object key, how it was validated. Keyed `(org_id, sha256)`. The bytes live in blob storage, never in Postgres |
-| `design_job` | One per part being crated: part, optional total quantity, created by, status (`open`, `running`, `ready`, `error`, `archived`), selected configuration, notes, and a `version` for optimistic concurrency |
+| `design_job` | One per part being crated: part, optional total quantity and its stamped plan (`total_plan`, written by the sweep job, API.md "Total quantity"), created by, status (`open`, `running`, `ready`, `error`, `archived`), selected configuration, notes, and a `version` for optimistic concurrency |
 | `configuration` | Content-addressed by the engine's `input_hash`, **unique per `(org_id, input_hash)`**: quantity per crate, layout, the whole `DesignRequest` as `settings` JSON (validated with `DesignRequestSchema` on read), result summary, score (crate cost per part, USD), engine version. Never updated. Not owned by a job: jobs that reach the same inputs share the row |
 | `job_configuration` | Which configurations a job has: `(org_id, job_id, configuration_id)` and how it got there, `origin` (`precomputed` by a sweep, or saved by a `user`). A job's `selected_configuration_id` references this table, so a job can only select one of its own |
 | `artifact` | A generated file for a configuration: kind (`glb`, `pdf`, `csv`, `zip`), sha256, size, object key, built by (`browser` or `server`). One per object key (`(org, object_key)` unique): the key is content-addressed, so a configuration has one row per file and engine version; a bundle (`zip`) row names its first configuration |
@@ -232,7 +232,7 @@ receives every org's notifications and filters them in memory.
 |---|---|---|
 | `part.created` | optional | `partId` |
 | `job.created` | yes | `partId` |
-| `configs.ready` | yes | `count`: the sweep finished; shortlist and curve are saved |
+| `configs.ready` | yes | `count`: the sweep finished; shortlist and curve are saved. `totalPlan`: with a total quantity, a hint of the plan it stored (`{ total, crates, perCrate, scoreUsdPerPart }`), or null |
 | `config.added` | yes | `configurationId`, `inputHash`: a user saved a configuration |
 | `recommendation.changed` | yes | `configurationId` (null when cleared) |
 | `artifact.ready` | yes | `artifactId`, `configurationId`, `kind`, plus `file` or `bundleId`: a server-built file is stored (docs/API.md "Artifacts") |

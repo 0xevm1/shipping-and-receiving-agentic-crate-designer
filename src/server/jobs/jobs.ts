@@ -23,9 +23,10 @@ import { createRepository, type Database, type DesignJobPatch, inTransaction, ty
 import { emitEvent } from "../events/emit";
 import { ApiFailure, readJson, requireId } from "../http";
 import { partResponse } from "../parts/create";
-import { runJobCreatedHooks } from "./hooks";
+import { runJobCreatedHooks, runTotalPlanNeededHooks } from "./hooks";
 import { idempotencyKey, once, type Outcome, requestHash, storedOutcome } from "./idempotency";
 import { artifactResponse, configurationResponse, jobResponse } from "./serialize";
+import { currentTotalPlan } from "./totalPlan";
 import { type RunCheck, verifyConfiguration } from "./verify";
 
 export type JobsDeps = { db: Database; org: OrgContext };
@@ -133,6 +134,7 @@ export async function getJobSnapshot(id: string, { db, org }: JobsDeps): Promise
     part: partResponse(part!),
     configurations: configurations.map(configurationResponse),
     artifacts: artifacts.map(artifactResponse),
+    totalPlan: currentTotalPlan(job),
     lastEventId,
     engineVersion: ENGINE_VERSION,
   };
@@ -193,6 +195,8 @@ export async function saveConfiguration(id: string, request: Request, { db, org,
  * `PATCH /api/v1/jobs/:id`: selection, status, notes, total quantity, at the `version` the client
  * read. A stale version gets 409 `version_conflict` with the job as it is now. A selection must be
  * one of the job's configurations (422). Emits `recommendation.changed` when the selection moves.
+ * A new total clears the stored plan and queues the sweep (deduplicated per job and total), whose
+ * `configs.ready` then carries the new plan.
  */
 export async function patchJob(id: string, request: Request, { db, org }: JobsDeps): Promise<Outcome<z.infer<typeof PatchJobResponseSchema>>> {
   const raw = await readJson(request);
@@ -213,9 +217,16 @@ export async function patchJob(id: string, request: Request, { db, org }: JobsDe
       if (changes.selectedConfigurationId !== undefined) patch.selectedConfigurationId = changes.selectedConfigurationId;
       if (changes.status !== undefined) patch.status = changes.status;
       if (changes.notes !== undefined) patch.notes = changes.notes;
-      if (changes.totalQuantity !== undefined) patch.totalQuantity = changes.totalQuantity;
+      // A new total drops the old plan at once (it is never served for the wrong total) and
+      // queues the sweep that plans the new one; the same total again changes nothing.
+      const newTotal = changes.totalQuantity !== undefined && changes.totalQuantity !== current.totalQuantity;
+      if (newTotal) {
+        patch.totalQuantity = changes.totalQuantity;
+        patch.totalPlan = null;
+      }
       const updated = await tx.jobs.update(org, jobId, version, patch);
       if (!updated) throw new Error("A locked job at the expected version failed to update.");
+      if (newTotal && updated.totalQuantity !== null) await runTotalPlanNeededHooks(tx, org, updated);
       const moved = selection !== undefined && selection !== current.selectedConfigurationId;
       return {
         status: 200,

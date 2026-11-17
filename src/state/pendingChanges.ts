@@ -236,13 +236,18 @@ export function changesFor(items: PendingChange[], jobId: string | null, partKey
 }
 
 /** The job as this device sees it: the server's, with the pending changes laid on top, oldest first. */
-export function effectiveJob(job: JobResponse | null, changes: PendingChange[]): { selected: Selection | undefined; notes: string | null | undefined } {
+export function effectiveJob(
+  job: JobResponse | null,
+  changes: PendingChange[],
+): { selected: Selection | undefined; notes: string | null | undefined; totalQuantity: number | null | undefined } {
   let selected: Selection | undefined = job ? (job.selectedConfigurationId ? { configurationId: job.selectedConfigurationId } : null) : undefined;
   let notes = job?.notes;
+  let totalQuantity = job?.totalQuantity;
   for (const c of changes) {
     if (c.kind !== "patch" || c.state === "rejected") continue;
     if (c.changes.select !== undefined) selected = c.changes.select;
     if (c.changes.notes !== undefined) notes = c.changes.notes;
+    if (c.changes.totalQuantity !== undefined) totalQuantity = c.changes.totalQuantity;
   }
-  return { selected, notes };
+  return { selected, notes, totalQuantity };
 }

@@ -132,6 +132,13 @@ export const designJob = pgTable(
      */
     selectedConfigurationId: uuid("selected_configuration_id"),
     notes: text("notes"),
+    /**
+     * The total-quantity plan the sweep job made for `total_quantity` (#46, spec §7.16): the
+     * stamped `StoredTotalPlan` JSON (src/server/jobs/totalPlan.ts). Written without a version
+     * bump, and only while the job's total is the one it was planned for; cleared when the total
+     * changes. Served only when its total and engine version are current.
+     */
+    totalPlan: jsonb("total_plan").$type<unknown>(),
     version: integer("version").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

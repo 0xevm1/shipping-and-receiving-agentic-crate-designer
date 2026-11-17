@@ -26,6 +26,7 @@ import { CrateSettingsSchema } from "@/domain/schema";
 import { RANKINGS, type Ranking } from "@/domain/design";
 import styles from "./SharedJob.module.css";
 import { SavedConfigFiles, SharedJobDownloads } from "./SharedJobFiles";
+import { TotalQuantity } from "./TotalQuantity";
 
 const TITLE_ID = "shared-job-title";
 
@@ -249,6 +250,8 @@ export function SharedJob() {
           ))}
         </ul>
       )}
+
+      <TotalQuantity />
 
       {rows.length > 0 && (
         <ul className={styles.list} aria-label="Configurations saved to this job">

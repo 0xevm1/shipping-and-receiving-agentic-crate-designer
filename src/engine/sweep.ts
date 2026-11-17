@@ -4,6 +4,7 @@ import { CrateSettingsSchema } from "@/domain/schema";
 import { ShopStandardsSchema } from "@/domain/standards";
 import { FreightRatesSchema, planTotal, SWEEP_MAX_QUANTITY, sweepQuantities, type QuantitySweep, type TotalPlan } from "@/domain/sweep";
 import type { DesignsResponse, RankedConfiguration } from "@/lib/api/designs";
+import { explainTotalPlan } from "@/domain/totalPlan";
 import { metricText } from "@/lib/message";
 import { canonicalJson } from "./canonical";
 import { designPartOf, designShipment } from "./engine";
@@ -81,6 +82,11 @@ export function sweepDesignRequest(req: SweepRequest, quantity: number, layoutKe
   return { part: req.part, settings: { ...req.rules, quantity }, standards: req.standards, layoutKey, ranking: "cost" };
 }
 
+function totalRationale(sweep: QuantitySweep, total: TotalPlan) {
+  const message = explainTotalPlan(sweep, total.total, total);
+  return { rationale: metricText(message), rationaleMessage: [...message] };
+}
+
 /**
  * The headless answer (`POST /api/v1/designs`, the CLI, the queue's sweep job): the sweep, then
  * every shortlisted quantity designed in full with the layout the sweep chose, ranked best first.
@@ -135,6 +141,7 @@ export function rankConfigurations(req: SweepRequest, swept: SweepResponse = run
           crateCostUsd: total.crateCostUsd,
           freightUsd: total.freightUsd,
           scoreUsdPerPart: total.scoreUsdPerPart,
+          ...totalRationale(sweep, total),
         }
       : null,
     curve: sweep.curve.map((p) => ({ quantity: p.quantity, ok: p.ok, binding: p.binding, scoreUsdPerPart: p.crate?.scoreUsdPerPart ?? null })),

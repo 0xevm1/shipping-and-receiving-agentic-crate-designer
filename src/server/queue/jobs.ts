@@ -5,7 +5,11 @@
  * - `sweep`: for a design job, run the quantity sweep on the engine pool with the org's shop
  *   standards (`shop_standard`, the defaults when it has none), save the shortlist as
  *   `precomputed` configurations, select the recommendation, and emit `configs.ready`, all in one
- *   transaction. Dead-lettered: the job goes to `error` and `job.error` is emitted.
+ *   transaction. With a total quantity it also plans the total (`planTotal`, spec §7.16): each
+ *   crate type of the plan is saved and linked as `precomputed` too, and the stamped plan is
+ *   stored on the job (`design_job.total_plan`) if the job's total is still the one planned.
+ *   Deduplicated per job and total. Dead-lettered: the job goes to `error` and `job.error` is
+ *   emitted.
  * - `bundle`: the server-built `bundle.zip` (slice 6). Its handler is `createBundleHandler` in
  *   src/server/artifacts, passed in as `createJobHandlers({ …, bundle })` (it needs blob storage).
  */
@@ -18,6 +22,13 @@ import { createRepository, type Database, inTransaction, type Repository } from 
 import { readOrgStandards } from "../standards";
 import type { EnginePool } from "../workers/pool";
 import { type JobHandler, PermanentJobError } from "./runner";
+import type { TotalPlanResponse } from "@/lib/api/jobs";
+import { totalPlanRecord } from "../jobs/totalPlan";
+
+/** What `configs.ready` says of a stored total plan: enough for a log line or a toast. */
+function totalPlanHint(p: TotalPlanResponse) {
+  return { total: p.total, crates: p.plan?.crates ?? null, perCrate: p.plan?.perCrate ?? null, scoreUsdPerPart: p.plan?.scoreUsdPerPart ?? null };
+}
 
 export const SweepJobPayloadSchema = z.object({ jobId: z.uuid() });
 export type SweepJobPayload = z.infer<typeof SweepJobPayloadSchema>;
@@ -44,10 +55,28 @@ async function requireJob(repo: Repository, ctx: OrgContext, jobId: string) {
  * already queued or running for the job is returned, not doubled.
  */
 export async function enqueueSweep(ctx: OrgContext, jobId: string, repo: Repository): Promise<QueueJob> {
-  await requireJob(repo, ctx, jobId);
+  const job = await requireJob(repo, ctx, jobId);
   const payload: SweepJobPayload = { jobId };
-  const { job } = await repo.queue.enqueue(ctx, { kind: "sweep", payload, dedupeKey: jobId });
-  return job;
+  const { job: queued } = await repo.queue.enqueue(ctx, { kind: "sweep", payload, dedupeKey: sweepDedupeKey(jobId, job.totalQuantity) });
+  return queued;
+}
+
+/**
+ * One sweep queued or running per job and total: the job id alone without a total, and
+ * `<jobId>:total:<n>` with one. A sweep already running for an old total doesn't absorb a new
+ * total's (it would plan the old one), so a total changed mid-sweep still gets its plan.
+ */
+export const sweepDedupeKey = (jobId: string, total: number | null): string => (total === null ? jobId : `${jobId}:total:${total}`);
+
+/**
+ * After a new engine starts: queues the sweep for every job of the org whose total has no plan
+ * from this engine (`announceEngineVersion`'s per-org step). A stale plan is never served, so
+ * this is what brings it back. Returns how many were queued.
+ */
+export async function replanTotals(repo: Repository, ctx: OrgContext, engineVersion: string): Promise<number> {
+  const jobs = await repo.jobs.needingTotalPlan(ctx, engineVersion);
+  for (const job of jobs) await enqueueSweep(ctx, job.id, repo);
+  return jobs.length;
 }
 
 /**
@@ -70,12 +99,15 @@ export interface JobHandlerDeps {
 
 /** What a sweep job stores as its queue result: small, and enough to draw the curve. */
 export interface SweepJobResult {
+  /** Configurations saved: the shortlist, and the total plan's crate types not on it. */
   count: number;
   recommendedConfigurationId: string | null;
   inputHash: string;
   engineVersion: string;
   curve: { quantity: number; ok: boolean; binding: string | null; scoreUsdPerPart: number | null }[];
-  total: unknown;
+  /** The total the sweep planned (null without one), and whether its plan was stored (false when the job's total changed meanwhile). */
+  total: number | null;
+  totalPlanStored: boolean;
 }
 
 export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<JobKind, JobHandler> {
@@ -105,7 +137,16 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
     // Stored like a configuration saved from the browser (docs/API.md): the whole DesignRequest, so
     // the server can rebuild it (artifacts, "Use"), and the engine's DesignSummary of it.
     const requests = report.configurations.map((c) => sweepDesignRequest(req, c.quantityPerCrate, c.layoutKey));
-    const designs = await Promise.all(requests.map((r) => pool.run("design", r)));
+    // The total plan's crate types that aren't on the shortlist are designed and saved too, so
+    // each has a configuration (files, "Use").
+    const shortlisted = (t: { quantity: number; layoutKey: string }) =>
+      report.configurations.findIndex((c) => c.quantityPerCrate === t.quantity && c.layoutKey === t.layoutKey);
+    const planTypes = (report.total?.types ?? []).filter((t) => shortlisted(t) < 0);
+    const planRequests = planTypes.map((t) => sweepDesignRequest(req, t.quantity, t.layoutKey));
+    const [designs, planDesigns] = await Promise.all([
+      Promise.all(requests.map((r) => pool.run("design", r))),
+      Promise.all(planRequests.map((r) => pool.run("design", r))),
+    ]);
     signal.throwIfAborted();
 
     return inTransaction(db, async (tx) => {
@@ -123,6 +164,31 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
         await tx.configurations.link(org, job.id, row.id, "precomputed");
         ids.push(row.id);
       }
+      const planIds = new Map<string, string>();
+      for (const [i, t] of planTypes.entries()) {
+        const d = planDesigns[i]!;
+        const { row } = await tx.configurations.save(org, {
+          inputHash: d.inputHash,
+          quantityPerCrate: t.quantity,
+          layout: t.layoutKey,
+          settings: planRequests[i],
+          resultSummary: d.summary,
+          score: report.curve[t.quantity - 1]?.scoreUsdPerPart ?? null,
+          engineVersion: report.engineVersion,
+        });
+        await tx.configurations.link(org, job.id, row.id, "precomputed");
+        planIds.set(`${t.quantity}:${t.layoutKey}`, row.id);
+      }
+      let totalPlan: TotalPlanResponse | null = null;
+      let totalPlanStored = false;
+      if (req.total) {
+        totalPlan = totalPlanRecord(report, req.total, (t) => {
+          const k = shortlisted(t);
+          return k >= 0 ? (ids[k] ?? null) : (planIds.get(`${t.quantity}:${t.layoutKey}`) ?? null);
+        });
+        // Only while the job's total is still the one planned: a newer total has its own sweep queued.
+        totalPlanStored = await tx.jobs.setTotalPlan(org, job.id, req.total, totalPlan);
+      }
       const recommendedConfigurationId = ids[0] ?? null;
       const current = await tx.jobs.get(org, job.id);
       // The job moves on only from open/running, and a selection someone already made is kept.
@@ -135,15 +201,23 @@ export function createJobHandlers({ db, pool, bundle }: JobHandlerDeps): Record<
       await emitEvent(tx, org, {
         jobId: job.id,
         type: "configs.ready",
-        payload: { count: ids.length, recommendedConfigurationId, inputHash: report.inputHash, ...(report.problem ? { problem: report.problem.title } : {}) },
+        payload: {
+          count: ids.length + planIds.size,
+          recommendedConfigurationId,
+          inputHash: report.inputHash,
+          // A hint (clients read the plan from the snapshot): the total planned and its split.
+          totalPlan: totalPlanStored && totalPlan ? totalPlanHint(totalPlan) : null,
+          ...(report.problem ? { problem: report.problem.title } : {}),
+        },
       });
       const result: SweepJobResult = {
-        count: ids.length,
+        count: ids.length + planIds.size,
         recommendedConfigurationId,
         inputHash: report.inputHash,
         engineVersion: report.engineVersion,
         curve: report.curve,
-        total: report.total,
+        total: req.total ?? null,
+        totalPlanStored,
       };
       return result;
     });

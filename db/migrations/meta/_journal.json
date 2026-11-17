@@ -57,6 +57,13 @@
       "when": 1794937301929,
       "tag": "0007_part_frame",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794938606140,
+      "tag": "0008_job_total_plan",
+      "breakpoints": true
     }
   ]
 }

@@ -233,7 +233,11 @@ describe("the sweep job", () => {
       expect(DesignSummarySchema.parse(c.resultSummary).totals.crates).toBe(1);
     }
     expect(result.curve).toHaveLength(200);
-    expect(result.total).toMatchObject({ total: 40 });
+    expect(result).toMatchObject({ total: 40, totalPlanStored: true });
+    const stored = (await t.repo.jobs.get(DEFAULT_ORG, job.id))!.totalPlan as { total: number; plan: { types: { configurationId: string }[] } };
+    expect(stored.total).toBe(40);
+    // Every crate type of the plan is one of the job's precomputed configurations.
+    for (const type of stored.plan.types) expect(configs.some((c) => c.id === type.configurationId)).toBe(true);
 
     const after = (await t.repo.jobs.get(DEFAULT_ORG, job.id))!;
     expect(after.status).toBe("ready");
@@ -243,7 +247,12 @@ describe("the sweep job", () => {
 
     const events = await t.repo.events.listAfter(DEFAULT_ORG, job.id);
     expect(events.map((e) => e.type)).toEqual(["configs.ready"]);
-    expect(events[0]!.payload).toMatchObject({ count: configs.length, recommendedConfigurationId: best.id, inputHash: result.inputHash });
+    expect(events[0]!.payload).toMatchObject({
+      count: configs.length,
+      recommendedConfigurationId: best.id,
+      inputHash: result.inputHash,
+      totalPlan: { total: 40 },
+    });
   });
 
   it("every new design job queues its sweep in the job's own transaction (onJobCreated)", async () => {

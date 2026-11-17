@@ -3,7 +3,7 @@ import { getPart } from "@/domain/catalog";
 import { designShipment, inputHash } from "@/engine/engine";
 import { DesignRequestSchema } from "@/engine/schemas";
 import { ENGINE_VERSION } from "@/engine/version";
-import type { ConfigurationResponse, JobResponse, JobSnapshot } from "@/lib/api/jobs";
+import type { ConfigurationResponse, JobResponse, JobSnapshot, TotalPlanResponse } from "@/lib/api/jobs";
 import { catalogPart, framePart } from "@/lib/part";
 import { LIVENESS_MAX_DELAY_MS, LIVENESS_MIN_DELAY_MS } from "@/lib/liveness";
 import {
@@ -19,7 +19,7 @@ import {
   useJobSync,
 } from "./jobSync";
 import { cacheJob } from "./jobCache";
-import { memoryPendingStore, setPendingStore, usePendingChanges } from "./pendingChanges";
+import { changesFor, effectiveJob, memoryPendingStore, setPendingStore, usePendingChanges } from "./pendingChanges";
 import { useDesigner } from "./store";
 
 const JOB = "00000000-0000-4000-8000-0000000000aa";
@@ -73,6 +73,7 @@ const snapshot = (configurations: ConfigurationResponse[] = [], over: Partial<Jo
   part: part as JobSnapshot["part"],
   configurations,
   artifacts: [],
+  totalPlan: null,
   lastEventId: 41,
   engineVersion: ENGINE_VERSION,
   ...over,
@@ -116,6 +117,7 @@ function fakeServer() {
   const s = {
     up: true,
     job: { ...job } as JobResponse,
+    totalPlan: null as TotalPlanResponse | null,
     configs: new Map<string, ConfigurationResponse>(),
     keys: new Map<string, { status: number; body: unknown }>(),
     saveDirect(c: ConfigurationResponse) {
@@ -135,7 +137,7 @@ function fakeServer() {
       };
       if (url === "/api/v1/health") return json(200, { ok: true });
       if (url === "/api/v1/jobs" && method === "POST") return json(200, { job: s.job, created: false });
-      if (url === `/api/v1/jobs/${JOB}` && method === "GET") return json(200, snapshot([...s.configs.values()], { job: s.job }));
+      if (url === `/api/v1/jobs/${JOB}` && method === "GET") return json(200, snapshot([...s.configs.values()], { job: s.job, totalPlan: s.totalPlan }));
       if (url === `/api/v1/jobs/${JOB}/configs` && method === "POST") {
         const body = JSON.parse(String(init!.body));
         const existing = s.configs.get(body.inputHash);
@@ -360,6 +362,67 @@ describe("startJobSync", () => {
       expect(usePendingChanges.getState().items).toEqual([]);
       expect(server.job.notes).toBe("offline note");
       expect(useJobSync.getState().fromCache).toBe(false);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("changes the total offline on a kept job, sends it once when the server is back, and takes the server's plan from the next snapshot", async () => {
+    vi.useFakeTimers();
+    const map = new Map<string, string>();
+    const localStorage = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+      removeItem: (k: string) => void map.delete(k),
+    };
+    vi.stubGlobal("window", { localStorage, addEventListener: () => {}, removeEventListener: () => {} });
+    try {
+      const partKey = `catalog:${useDesigner.getState().part.id}`;
+      cacheJob(partKey, { job, configurations: [] });
+      const server = fakeServer();
+      server.up = false;
+      const stop = startJobSync({ api: { fetch: server.fetch }, EventSourceImpl: FakeEventSource as unknown as typeof EventSource, refreshDelayMs: 0 });
+      await vi.waitFor(() => expect(useJobSync.getState().status).toBe("offline"));
+
+      expect(updateJob({ totalQuantity: 40 }).kind).toBe("queued");
+      const mine = () => changesFor(usePendingChanges.getState().items, JOB, partKey);
+      // The total is in effect on this device at once (the browser plans it), marked unsynced.
+      expect(effectiveJob(useJobSync.getState().job, mine()).totalQuantity).toBe(40);
+      expect(mine()).toMatchObject([{ kind: "patch", state: "pending", changes: { totalQuantity: 40 } }]);
+      expect(server.job.totalQuantity).toBeNull();
+
+      server.up = true;
+      await vi.advanceTimersByTimeAsync(LIVENESS_MAX_DELAY_MS + 100);
+      expect(usePendingChanges.getState().items).toEqual([]);
+      expect(server.job).toMatchObject({ totalQuantity: 40, version: 2 });
+      // Applied once: one PATCH, under the change's idempotency key.
+      expect(server.keys.size).toBe(1);
+      expect(useJobSync.getState().job).toMatchObject({ totalQuantity: 40 });
+      expect(useJobSync.getState().totalPlan).toBeNull();
+
+      // The server's sweep planned it: configs.ready, and the snapshot carries the plan.
+      const plan: TotalPlanResponse = {
+        total: 40,
+        engineVersion: ENGINE_VERSION,
+        inputHash: "a".repeat(64),
+        basis: "crate-only",
+        computedAt: T,
+        plan: {
+          crates: 2,
+          perCrate: 20,
+          types: [{ label: "A", count: 2, quantity: 20, layoutKey: "k", configurationId: CONFIG }],
+          crateCostUsd: 800,
+          freightUsd: null,
+          scoreUsdPerPart: 20,
+        },
+        rationale: ["40 parts ship as 2 crates × 20."],
+      };
+      server.totalPlan = plan;
+      await vi.waitFor(() => expect(FakeEventSource.instances.length).toBeGreaterThan(0));
+      FakeEventSource.instances.at(-1)!.emit(50, "configs.ready", { count: 1, totalPlan: { total: 40, crates: 2, perCrate: 20, scoreUsdPerPart: 20 } });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(useJobSync.getState().totalPlan).toEqual(plan);
       stop();
     } finally {
       vi.useRealTimers();

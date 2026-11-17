@@ -3,15 +3,16 @@
  * Handlers and the browser (src/state/jobApi.ts); docs/API.md is the reference.
  *
  *   POST  /api/v1/jobs                 open a job for a part (or reuse the part's open one)
- *   GET   /api/v1/jobs/:id             snapshot: job, part, configurations, artifacts, lastEventId
+ *   GET   /api/v1/jobs/:id             snapshot: job, part, configurations, artifacts, total plan, lastEventId
  *   POST  /api/v1/jobs/:id/configs     save a configuration made in the browser (server-verified)
- *   PATCH /api/v1/jobs/:id             selection, status, notes; optimistic on `version`
+ *   PATCH /api/v1/jobs/:id             selection, status, notes, total quantity; optimistic on `version`
  *
  * lib sits below the engine (eslint layers), so the engine's own types appear here as plain JSON
  * objects: the server parses `request` with `DesignRequestSchema` and recomputes `summary`, and
  * the browser parses a saved `summary` with `DesignSummarySchema` (src/engine/schemas.ts).
  */
 import { z } from "zod";
+import { MessageSchema } from "./designs";
 import { ApiErrorSchema, PartResponseSchema } from "./parts";
 
 const id = z.uuid();
@@ -99,6 +100,48 @@ const ArtifactSchema = z.object({
 });
 
 /**
+ * The job's total-quantity plan (spec §7.16): how `total` parts ship, split evenly by `planTotal`
+ * over the server's sweep with the job's standards and the default packing rules. Stamped with
+ * the engine and the sweep's `inputHash`; a snapshot only ever carries one whose `total` is the
+ * job's `totalQuantity` and whose `engineVersion` is the server's.
+ */
+export const TotalPlanSchema = z.object({
+  total: z.int().positive(),
+  engineVersion: z.string().min(1),
+  /** The sweep request's hash (part, rules, standards, total). */
+  inputHash: z.string(),
+  basis: z.enum(["crate-and-freight", "crate-only"]),
+  computedAt: datetime,
+  /** Null when no even split passes (one part alone fails a hard check). */
+  plan: z
+    .object({
+      crates: z.int().positive(),
+      /** The most parts in any crate. */
+      perCrate: z.int().positive(),
+      /** One or two crate types; their quantities differ by at most one. */
+      types: z.array(
+        z.object({
+          /** "A" for the fuller crates, "B" for those with one part fewer. */
+          label: z.string(),
+          count: z.int().positive(),
+          quantity: z.int().positive(),
+          layoutKey: z.string(),
+          /** The job's `precomputed` configuration for this crate (files, "Use"); null if it couldn't be saved. */
+          configurationId: id.nullable(),
+        }),
+      ),
+      crateCostUsd: z.number(),
+      freightUsd: z.number().nullable(),
+      /** (crate cost + freight) ÷ total parts. */
+      scoreUsdPerPart: z.number(),
+    })
+    .nullable(),
+  /** Why this many crates (`explainTotalPlan`): render with the client's units. */
+  rationale: MessageSchema,
+});
+export type TotalPlanResponse = z.infer<typeof TotalPlanSchema>;
+
+/**
  * `GET /api/v1/jobs/:id`. `lastEventId` is read before the rest, so subscribing with
  * `subscribeJobEvents(id, …, { lastEventId })` misses nothing; an event may repeat what the
  * snapshot already shows, never the other way round.
@@ -108,6 +151,11 @@ export const JobSnapshotSchema = z.object({
   part: PartResponseSchema,
   configurations: z.array(ConfigurationSchema),
   artifacts: z.array(ArtifactSchema),
+  /**
+   * The plan for the job's `totalQuantity`, or null: no total, or the server is still planning
+   * it (a new total, or a plan made by another engine version, is never served as current).
+   */
+  totalPlan: TotalPlanSchema.nullable(),
   lastEventId: z.int().nonnegative(),
   /** The server's `ENGINE_VERSION`; a client with another one should reload before saving. */
   engineVersion: z.string(),

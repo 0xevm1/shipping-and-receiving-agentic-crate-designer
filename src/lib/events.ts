@@ -22,8 +22,24 @@ export const EVENT_PAYLOADS = {
   "part.created": z.looseObject({ partId: id }),
   /** A design job was opened for a part. */
   "job.created": z.looseObject({ partId: id }),
-  /** The quantity sweep finished: the shortlist and curve are saved. */
-  "configs.ready": z.looseObject({ count: z.int().nonnegative() }),
+  /**
+   * The quantity sweep finished: the shortlist and curve are saved. With a total quantity it also
+   * planned the total (spec §7.16): `totalPlan` is a hint of the stored plan (`{ total, crates,
+   * perCrate, scoreUsdPerPart }`), null when there is none or the total changed meanwhile; the
+   * plan itself is in the job's snapshot (`totalPlan`).
+   */
+  "configs.ready": z.looseObject({
+    count: z.int().nonnegative(),
+    totalPlan: z
+      .object({
+        total: z.int().positive(),
+        crates: z.int().positive().nullable(),
+        perCrate: z.int().positive().nullable(),
+        scoreUsdPerPart: z.number().nullable(),
+      })
+      .nullable()
+      .optional(),
+  }),
   /** A user changed a parameter and saved the configuration. */
   "config.added": z.looseObject({ configurationId: id, inputHash: z.string().min(1) }),
   /** The job's selected (recommended) configuration changed; null when cleared. */
