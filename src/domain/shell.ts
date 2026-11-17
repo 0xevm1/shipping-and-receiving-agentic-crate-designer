@@ -1,7 +1,9 @@
 import type { Construction } from "./construction";
+import { skidsRunAcross } from "./forkEntry";
 import type { Layout } from "./packing";
 import type { AddMember, Tag } from "./members";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
+import type { Backer } from "./sheets";
 import { addSplicePanel, type PanelFace } from "./splice";
 import { frameCount } from "./structure";
 
@@ -30,6 +32,7 @@ export interface SpliceReport {
 
 /** The centres and widths of boards laid out by `spread`. */
 const centres = (starts: number[], width: number) => starts.map((x) => ({ center: x + width / 2, width }));
+type Interval = readonly [number, number];
 const spans = (starts: number[], width: number) => starts.map((x) => [x, x + width] as const);
 
 /** Adds the base, walls and lid of a crate with this interior and construction; says which panels it had to splice. */
@@ -43,7 +46,7 @@ export function addShell(interior: Layout["interior"], c: Construction, add: Add
     else if (r.seams > 0) report.spliced.push({ name, sizeMm, pieces: r.pieces, seams: r.seams });
     report.seams += r.seams;
   };
-  const { panelMm: t, floorMm, cleat, skid, skidCount, joist, baseMm } = c;
+  const { panelMm: t, floorMm, cleat, skid, skidCount, joist, baseMm, lift } = c;
   const { thick: ct, wide: cw } = cleat;
   const [L, W, H] = interior;
   const extL = L + 2 * (t + ct);
@@ -54,10 +57,20 @@ export function addShell(interior: Layout["interior"], c: Construction, add: Add
 
   // Base: floor sheet over the full footprint, floor joists across the skids, skids underneath.
   const baseTag = (label: string): Tag => ({ assembly: "base", face: "base", label });
-  const joistXs = joist ? spread(x0, extL, joist.wide, joist.count) : [];
-  const skidYs = spread(y0, extW, skid.wide, skidCount);
-  // Under the floor sit the joists when there are any (the skids are below them), else the skids.
-  // A seam across the crate wants a joist behind it, a seam along it a skid; the others are cleat stock between them.
+  // Side entry (#112) turns the base a quarter turn: skids across the width, joists along the length.
+  const across = skidsRunAcross(c.forkEntry);
+  const joistStarts = joist ? (across ? spread(y0, extW, joist.wide, joist.count) : spread(x0, extL, joist.wide, joist.count)) : [];
+  const skidStarts = across ? spread(x0, extL, skid.wide, skidCount) : spread(y0, extW, skid.wide, skidCount);
+  // Under the floor sit the joists when there are any (the skids are below them), else the skids. Boards running along
+  // `underRun` stand at positions along the other axis: a seam across that axis wants one behind it (a backer), and a seam
+  // across `underRun` is crossed by them (blocked); the others are cleat stock between them.
+  const underRun = joist ? (across ? 0 : 1) : across ? 1 : 0;
+  const underPos = 1 - underRun;
+  const [underStarts, underWide] = joist ? [joistStarts, joist.wide] : [skidStarts, skid.wide];
+  const backers: [Backer[], Backer[]] = [[], []];
+  backers[underPos] = centres(underStarts, underWide);
+  const blocked: [Interval[], Interval[]] = [[], []];
+  blocked[underRun] = spans(underStarts, underWide);
   panel("Floor", {
     kind: "floor",
     tag: baseTag("Floor"),
@@ -67,17 +80,32 @@ export function addShell(interior: Layout["interior"], c: Construction, add: Add
     normal: 2,
     cleatMin: -floorMm - ct,
     cleatKind: "cleat",
-    backers: joist ? [centres(joistXs, joist.wide), []] : [[], centres(skidYs, skid.wide)],
+    backers,
     run: [
       [y0, y0 + extW],
       [x0, x0 + extL],
     ],
-    blocked: joist ? [[], spans(joistXs, joist.wide)] : [spans(skidYs, skid.wide), []],
+    blocked,
   });
   if (joist) {
-    joistXs.forEach((x) => add("joist", "lumber", baseTag("Floor joist"), [x, y0, -floorMm - joist.tall], [joist.wide, extW, joist.tall]));
+    joistStarts.forEach((v) =>
+      across
+        ? add("joist", "lumber", baseTag("Floor joist"), [x0, v, -floorMm - joist.tall], [extL, joist.wide, joist.tall])
+        : add("joist", "lumber", baseTag("Floor joist"), [v, y0, -floorMm - joist.tall], [joist.wide, extW, joist.tall]),
+    );
   }
-  skidYs.forEach((y) => add("skid", "lumber", baseTag("Skid"), [x0, y, -baseMm], [extL, skid.wide, skid.tall]));
+  // Four-way entry lifts the skids on a block under each end, so forks also go under them from the sides.
+  const liftMm = lift?.tall ?? 0;
+  skidStarts.forEach((v) => {
+    if (across) {
+      add("skid", "lumber", baseTag("Skid"), [v, y0, -baseMm], [skid.wide, extW, skid.tall]);
+      return;
+    }
+    add("skid", "lumber", baseTag("Skid"), [x0, v, -baseMm + liftMm], [extL, skid.wide, skid.tall]);
+    if (lift) {
+      for (const x of [x0, x0 + extL - lift.long]) add("lift-block", "lumber", baseTag("Lifting block"), [x, v, -baseMm], [lift.long, skid.wide, lift.tall]);
+    }
+  });
 
   // Long side walls (−Y and +Y). Panels run the full outside length of the end walls.
   for (const side of [-1, 1] as const) {

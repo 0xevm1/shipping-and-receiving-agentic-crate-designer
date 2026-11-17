@@ -8,7 +8,7 @@ import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
 import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/viewStore";
 import { crateLabelAnchors, labelOffsetMm } from "./sizeLines";
-import { arrowReachMm } from "./forkArrows";
+import { arrowReachMm, forkEnds } from "./forkArrows";
 import { domainToWorld, EXPLODE_LID_MM, EXPLODE_WALL_MM, FOV_DEG, MM_TO_M, sceneOrigin } from "./scene";
 
 /** three.js spherical angles: θ around Y from +Z toward +X, φ down from +Y. Domain front (−Y) faces +Z. */
@@ -76,13 +76,16 @@ export function keepInView(design: CrateDesign, e: number): Keep[] {
   if (e < ARROWS_FIT_FROM) return keep;
   const ext = design.layout.external;
   const edge = design.construction.panelMm + design.construction.cleat.thick;
-  const reach = arrowReachMm(ext);
   const out = EXPLODE_WALL_MM * e;
   const z = design.handling.groundZ;
-  for (const o of design.handling.openings) {
-    const y = o.y + o.width / 2;
-    keep.push({ at: [-edge - reach - out, y, z], halfPx: ARROW_HALF_PX });
-    keep.push({ at: [-edge + ext[0] + reach + out, y, z], halfPx: ARROW_HALF_PX });
+  for (const end of forkEnds(design)) {
+    const reach = arrowReachMm(ext, end.axis);
+    for (const o of end.openings) {
+      const across = o.y + o.width / 2;
+      // The tail's far point: past the low face (at -edge) or the high one (at -edge + the outside size), and out with the wall.
+      const along = end.outward < 0 ? -edge - reach - out : -edge + ext[end.axis] + reach + out;
+      keep.push({ at: end.axis === 0 ? [along, across, z] : [across, along, z], halfPx: ARROW_HALF_PX });
+    }
   }
   return keep;
 }

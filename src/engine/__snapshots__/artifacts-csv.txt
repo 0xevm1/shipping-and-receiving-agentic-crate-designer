@@ -1,10 +1,10 @@
-==> crate-PART-001-x8.csv 0094166758dd384055bb7b115891bd33fa482e9a5ef05f319c563af236994992
+==> crate-PART-001-x8.csv 1945899706b0c2245b339ab50aede76b0ac44e279a2f8ba9d578a44f0f53abf8
 # Crate for 8 x PART-001 Machined steel bracket
 # Part 4140 steel, 47.4 lb each
 # External 36.9 x 25.9 x 32.4 in, gross 548 lb
 # Layout 2 x 2 x 2, As modeled
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 0094166758dd384055bb7b115891bd33fa482e9a5ef05f319c563af236994992
+# Engine <engine>, input 1945899706b0c2245b339ab50aede76b0ac44e279a2f8ba9d578a44f0f53abf8
 component,material,stock,cut_in,qty
 Base: Floor,plywood,3/4 in,36 15/16 in x 25 7/8 in,1
 Base: Skid,lumber,4x4,36 15/16 in,2
@@ -25,13 +25,13 @@ Plywood sheets (approx),plywood,5/8 in,48 1/16 in x 96 1/16 in,2
 Plywood sheets (approx),plywood,3/4 in,48 1/16 in x 96 1/16 in,1
 Wood screws (approx),fastener,,,258
 
-==> crate-PART-002-x4.csv 8467cfad412d30d03d12b9190701fa0888497850ac7828fa9a729f4090920854
+==> crate-PART-002-x4.csv ad788b8d4c67e0607ab96ca93eeab55163024caaa11ef6d4b085208a919e8e31
 # Crate for 4 x PART-002 Long steel shaft
 # Part 4140 steel, 59.52 lb each
 # External 66.6 x 21.9 x 25.4 in, gross 397 lb
 # Layout 1 x 2 x 2, As modeled
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 8467cfad412d30d03d12b9190701fa0888497850ac7828fa9a729f4090920854
+# Engine <engine>, input ad788b8d4c67e0607ab96ca93eeab55163024caaa11ef6d4b085208a919e8e31
 component,material,stock,cut_in,qty
 Base: Floor,plywood,3/4 in,66 5/8 in x 21 7/8 in,1
 Base: Skid,lumber,4x4,66 5/8 in,2
@@ -51,13 +51,13 @@ Plywood sheets (approx),plywood,1/2 in,48 1/16 in x 96 1/16 in,2
 Plywood sheets (approx),plywood,3/4 in,48 1/16 in x 96 1/16 in,1
 Wood screws (approx),fastener,,,272
 
-==> crate-PART-003-x8.csv 22d237d32212d71f4ff1513c154494b4c20efc7ba6bab0dc9114fdc3c5cbf997
+==> crate-PART-003-x8.csv f156f2be0230d783b0e8efa3eee9c79175e8383ffca291560291e281b5a3a476
 # Crate for 8 x PART-003 Irregular aluminum housing
 # Part 6061-T6 aluminum, 26.01 lb each
 # External 43.4 x 42.6 x 31.9 in, gross 430 lb
 # Layout 2 x 2 x 2, Turned 90°
 # Units: inches (cuts to the nearest 1/16) and pounds; lumber by nominal size
-# Engine <engine>, input 22d237d32212d71f4ff1513c154494b4c20efc7ba6bab0dc9114fdc3c5cbf997
+# Engine <engine>, input f156f2be0230d783b0e8efa3eee9c79175e8383ffca291560291e281b5a3a476
 component,material,stock,cut_in,qty
 Base: Floor,plywood,3/4 in,43 3/8 in x 42 5/8 in,1
 Base: Skid,lumber,4x4,43 3/8 in,3

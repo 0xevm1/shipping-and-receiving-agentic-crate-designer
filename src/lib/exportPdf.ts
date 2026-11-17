@@ -16,7 +16,7 @@
 import { jsPDF } from "jspdf";
 import type { DimLine, Drawing, DrawingRect } from "./drawings";
 import type { ExplanationText } from "./explanation";
-import type { PrintableCrate, PrintableDesign, PrintableLabel, PrintableQuantity, PrintableStamp, Row } from "./printable";
+import type { LabelView, PrintableCrate, PrintableDesign, PrintableLabel, PrintableQuantity, PrintableStamp, Row } from "./printable";
 
 /** US Letter in points, with the print route's 0.5″ margins. */
 const PAGE_W = 612;
@@ -520,7 +520,9 @@ function shippingLabel(w: Writer, l: PrintableLabel) {
   cy += w.textAt("THIS SIDE UP", cy, { x: ix, w: inner, size: 34, style: "bold", align: "center" }) + 14;
 
   const bottomY = y + PAGE_H - 2 * M - FOOT - 60;
-  endMarks(w, l, ix + 20, cy, inner - 40, bottomY - cy);
+  // One view for end or side entry, the end and the side next to each other for four-way.
+  const viewW = (inner - 40 - 20 * (l.views.length - 1)) / l.views.length;
+  l.views.forEach((v, i) => viewMarks(w, v, l.views.length > 1, ix + 20 + i * (viewW + 20), cy, viewW, bottomY - cy));
   w.textAt(l.forkEntry.toUpperCase(), bottomY + 18, { x: ix, w: inner, size: 15, style: "bold", align: "center" });
 }
 
@@ -536,31 +538,32 @@ function upArrows(w: Writer, x: number, y: number, size: number) {
   pdf.rect(x + 6 * s, y + 74 * s, 68 * s, 6 * s, "F");
 }
 
-/** The crate's end: skids, fork arrows between them, and the centre of gravity. */
-function endMarks(w: Writer, l: PrintableLabel, x0: number, y0: number, boxW: number, boxH: number) {
+/** One view of the crate (end or side): what stands on the ground, fork arrows between, and the centre of gravity. */
+function viewMarks(w: Writer, v: LabelView, caption: boolean, x0: number, y0: number, boxW: number, boxH: number) {
   const { pdf } = w;
-  const s = Math.min(boxW / l.widthMm, (boxH - 50) / l.heightMm);
-  const W = l.widthMm * s;
-  const H = l.heightMm * s;
-  const skidH = l.skidTallMm * s;
+  const s = Math.min(boxW / v.widthMm, (boxH - 50) / v.heightMm);
+  const W = v.widthMm * s;
+  const H = v.heightMm * s;
+  const baseH = v.baseMm * s;
   const x = x0 + (boxW - W) / 2;
   const y = y0;
   pdf.setDrawColor(0);
   pdf.setLineWidth(2);
-  pdf.rect(x, y, W, H - skidH, "S");
+  pdf.rect(x, y, W, H - baseH, "S");
   pdf.setFillColor(0, 0, 0);
-  for (const k of l.skids) pdf.rect(x + k.y * s, y + H - skidH, k.w * s, skidH, "F");
+  for (const f of v.feet) pdf.rect(x + f.y * s, y + H - (f.z + f.h) * s, f.w * s, f.h * s, "F");
+  if (caption) w.textAt(`${v.name.toUpperCase()} VIEW`, y + H + 52, { x: x0, w: boxW, size: 10, style: "bold", align: "center" });
   // The openings the handling checks measured, so the arrows match them.
-  const gaps = l.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
+  const gaps = v.openings.map((o) => ({ from: o.y * s, to: (o.y + o.w) * s })).filter((g) => g.to - g.from > 4);
   for (const g of gaps) {
     const cx = x + (g.from + g.to) / 2;
     pdf.setFillColor(0, 0, 0);
-    pdf.triangle(cx, y + H - skidH / 2, cx - 10, y + H + 6, cx + 10, y + H + 6, "F");
+    pdf.triangle(cx, y + H - v.tipMm * s, cx - 10, y + H + 6, cx + 10, y + H + 6, "F");
     pdf.rect(cx - 4, y + H + 6 - 0.2, 8, 20, "F");
     w.textAt("FORKS", y + H + 30, { x: cx - 40, w: 80, size: 11, style: "bold", align: "center" });
   }
-  const cx = x + l.cogEnd.y * s;
-  const cy = y + H - l.cogEnd.z * s;
+  const cx = x + v.cog.y * s;
+  const cy = y + H - v.cog.z * s;
   const r = 12;
   const K = 0.5523 * r;
   pdf.setFillColor(255, 255, 255);

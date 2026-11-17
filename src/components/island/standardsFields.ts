@@ -269,7 +269,7 @@ export const STANDARD_GROUPS: Group[] = [
         label: "Forklift: clear under the floor",
         unit: "mm",
         dim: "length",
-        hint: "Forks enter between the skids from the ends.",
+        hint: "Forks enter under the crate: between the skids, or under them on lifting blocks.",
       },
       { path: ["handling", "forklift", "tineWidthMm"], label: "Forklift: tine width", unit: "mm", dim: "length" },
       {

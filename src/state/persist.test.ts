@@ -140,6 +140,7 @@ describe("stored data from before persist.ts still loads", () => {
     const stored = JSON.parse(fixture("shop-standards.v1.json"));
     stored.standards.limits.perCrate.maxOutsideMm = { length: 0, width: 0, height: 0 };
     stored.standards.handling.handCarryMaxKg = 23;
+    stored.standards.handling.forkEntry = "ends";
     stored.standards.stock.sheetMm = { width: 1220, length: 2440 };
     stored.standards.stock.maxLumberLengthMm = 4880;
     expect(JSON.parse(store.data.get(STANDARDS_STORAGE_KEY)!)).toEqual(stored);

@@ -105,9 +105,9 @@ describe("fork openings", () => {
 
   it("follow the design: one opening between two skids, the skid height clear", () => {
     const d = design("PART-001", { quantity: 4 });
-    expect(d.handling.openings).toHaveLength(d.construction.skidCount - 1);
-    expect(d.handling.openings[0].clearMm).toBe(d.construction.skid.tall);
-    expect(d.handling.openings[0].width).toBeCloseTo(d.layout.external[1] - 2 * d.construction.skid.wide, 6);
+    expect(d.handling.entries[0].openings).toHaveLength(d.construction.skidCount - 1);
+    expect(d.handling.entries[0].openings[0].clearMm).toBe(d.construction.skid.tall);
+    expect(d.handling.entries[0].openings[0].width).toBeCloseTo(d.layout.external[1] - 2 * d.construction.skid.wide, 6);
   });
 });
 
@@ -219,7 +219,7 @@ describe("handling checks", () => {
   it("follow the skids the construction builds (heavy skids are taller)", () => {
     const s = custom({ construction: { heavySkidOverKg: 0 }, handling: { palletJack: { minClearMm: 120 } } });
     const d = design("PART-003", { quantity: 8 }, s);
-    expect(d.handling.openings[0].clearMm).toBe(140);
+    expect(d.handling.entries[0].openings[0].clearMm).toBe(140);
     expect(check(d.checks, "pallet-jack").level).toBe("ok");
   });
 });
@@ -235,6 +235,7 @@ describe("offsetText", () => {
 describe("handling standards", () => {
   it("default to the documented equipment sizes and thresholds", () => {
     expect(DEFAULT_STANDARDS.handling).toEqual({
+      forkEntry: "ends",
       forklift: { minClearMm: 75, tineWidthMm: 100, spreadMm: { min: 250, max: 1100 } },
       palletJack: { minClearMm: 85, tineWidthMm: 180, spreadMm: { min: 520, max: 690 } },
       cogOffsetRatio: 0.1,
@@ -253,7 +254,7 @@ describe("handling standards", () => {
     const floor = board("floor", [0, 0, -19], [1000, 800, 19]);
     const skids = [0, 700].map((y) => board("skid", [0, y, -119], [1000, 100, 100]));
     const h = analyseHandling([floor, ...skids], { slots: [], cellSize: [1, 1, 1] }, 0);
-    expect(h.openings).toEqual([{ y: 100, width: 600, clearMm: 100 }]);
-    expect(h.devices.map((d) => d.fits)).toEqual([true, true]);
+    expect(h.entries[0].openings).toEqual([{ y: 100, width: 600, clearMm: 100 }]);
+    expect(h.entries[0].devices.map((d) => d.fits)).toEqual([true, true]);
   });
 });

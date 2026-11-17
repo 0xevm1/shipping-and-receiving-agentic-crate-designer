@@ -96,6 +96,7 @@ export interface ScrewLine {
   id:
     | "skids"
     | "joists"
+    | "lift-blocks"
     | "side-cleats"
     | "end-cleats"
     | "floor-joints"
@@ -129,7 +130,7 @@ const line = (id: ScrewLine["id"], assembly: Assembly, title: string, everyMm: n
   qty,
 });
 
-/** Screws per bearer and per blocking post. */
+/** Screws per bearer, blocking post and lifting block. */
 const SCREWS_PER_BLOCK = 2;
 /** Screws where a floor joist crosses a skid. */
 const SCREWS_PER_JOIST_CROSSING = 2;
@@ -178,6 +179,7 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
       "along each joist, plus 1",
       along((m) => m.kind === "joist", every.skid),
     ),
+    line("lift-blocks", "base", "Lifting blocks to skids", null, `${SCREWS_PER_BLOCK} per block`, count("lift-block") * SCREWS_PER_BLOCK),
     line("side-cleats", "sides", "Side wall cleats to panels", every.cleat, alongPlusOne, along(cleatOf("sides"), every.cleat)),
     line("end-cleats", "ends", "End wall cleats to panels", every.cleat, alongPlusOne, along(cleatOf("ends"), every.cleat)),
     line("walls-to-floor", "sides", "Walls to floor", every.panelJoint, "around the base", joint),

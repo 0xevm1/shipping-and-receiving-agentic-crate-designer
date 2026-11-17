@@ -1,5 +1,6 @@
 import { catalog } from "@/domain/catalog";
 import { DEFAULT_SETTINGS, type Ranking } from "@/domain/design";
+import type { ForkEntry } from "@/domain/forkEntry";
 import { DEFAULT_STANDARDS } from "@/domain/standards";
 import { planTotal, sweepQuantities } from "@/domain/sweep";
 import { catalogPart } from "@/lib/part";
@@ -21,6 +22,8 @@ export interface ParityCase {
   total?: number;
   /** Set on a case run under a per-crate size limit (#108); absent for the default standards. */
   sizeLimitMm?: { length: number; width: number; height: number };
+  /** Set on a case run with side or four-way fork entry (#112); absent for the default, end entry. */
+  forkEntry?: ForkEntry;
   quantity: number;
   inputHash: string;
   summary: DesignSummary;
@@ -51,6 +54,14 @@ const TOTAL_CASES = [
 /** A pallet-position limit that splits a batch of 8 of PART-003, which one crate would not fit (#108). */
 const SIZE_LIMIT_CASE = { part: "PART-003", quantity: 8, sizeLimitMm: { length: 1200, width: 800, height: 1000 } } as const;
 
+/** Side and four-way fork entry, on a crate a pallet jack fits (PART-003 x 8) and one only a forklift does (PART-001 x 1) (#112). */
+const FORK_ENTRY_CASES = [
+  { part: "PART-003", quantity: 8, forkEntry: "sides" },
+  { part: "PART-003", quantity: 8, forkEntry: "fourWay" },
+  { part: "PART-001", quantity: 1, forkEntry: "sides" },
+  { part: "PART-001", quantity: 1, forkEntry: "fourWay" },
+] as const;
+
 /** Long crates whose floor, walls and lid are bigger than a 4 × 8 ft sheet, so the engine splices them (#107). */
 const SPLICE_CASES = [
   { part: "PART-002", quantity: 42 },
@@ -58,26 +69,30 @@ const SPLICE_CASES = [
 ] as const;
 
 export function parityCases(): ParityCase[] {
-  const runs = [
-    ...catalog.parts.flatMap((p) => p.suggested_quantities.map((quantity) => ({ part: p.id, quantity, sizeLimitMm: undefined }))),
+  type Run = { part: string; quantity: number; total?: number; sizeLimitMm?: (typeof SIZE_LIMIT_CASE)["sizeLimitMm"]; forkEntry?: ForkEntry };
+  const runs: Run[] = [
+    ...catalog.parts.flatMap((p) => p.suggested_quantities.map((quantity) => ({ part: p.id, quantity }))),
     SIZE_LIMIT_CASE,
-    ...SPLICE_CASES.map((c) => ({ ...c, sizeLimitMm: undefined })),
+    ...SPLICE_CASES,
+    ...FORK_ENTRY_CASES,
+    ...TOTAL_CASES.map(({ part, total }) => ({ part, quantity: total, total })),
   ];
-  const totals = TOTAL_CASES.map(({ part, total }) => ({ part, quantity: total, total, sizeLimitMm: undefined }));
-  return [...runs.map((r) => ({ ...r, total: undefined })), ...totals].map(({ part, quantity, sizeLimitMm, total }) => {
+  return runs.map(({ part, quantity, sizeLimitMm, forkEntry, total }) => {
     const base = total ? totalParityRequest(part, total) : parityRequest(part, quantity);
-    const req = sizeLimitMm
+    const sized = sizeLimitMm
       ? {
           ...base,
           standards: { ...base.standards, limits: { ...base.standards.limits, perCrate: { ...base.standards.limits.perCrate, maxOutsideMm: sizeLimitMm } } },
         }
       : base;
+    const req = forkEntry ? { ...sized, standards: { ...sized.standards, handling: { ...sized.standards.handling, forkEntry } } } : sized;
     const out = designShipment(req);
     const csv = (units: "imperial" | "metric", scope: "crate" | "shipment" = "crate") => cutList({ ...req, units, scope, crateIndex: 0 }, out.plan).csv;
     return {
       part,
       ...(total ? { total } : {}),
       ...(sizeLimitMm ? { sizeLimitMm } : {}),
+      ...(forkEntry ? { forkEntry } : {}),
       quantity,
       inputHash: out.inputHash,
       summary: out.summary,

@@ -11,6 +11,8 @@ import type { Vec3 } from "./schema";
 
 export type MemberKind =
   | "skid"
+  /** Four-way fork entry (#112): a block under each end of a skid, lifting it off the ground. */
+  | "lift-block"
   | "floor"
   | "side"
   | "end"

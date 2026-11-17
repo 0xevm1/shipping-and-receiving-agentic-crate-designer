@@ -151,7 +151,7 @@ describe("keepInView", () => {
 
   it("exploded: the three labels, then both fork arrow tails for each opening", () => {
     const keep = keepInView(d, 1);
-    expect(keep).toHaveLength(3 + 2 * d.handling.openings.length);
+    expect(keep).toHaveLength(3 + 2 * d.handling.entries[0].openings.length);
     expect(keep.slice(0, 3).every((k) => k.halfPx === LABEL_HALF_PX)).toBe(true);
     const tails = keep.slice(3).map((k) => k.at[0]);
     const reach = arrowReachMm(d.layout.external);
@@ -304,7 +304,7 @@ describe("fork arrows stay in the free area, at every size and view", () => {
     const free = arrowFreeRect(insets, width, height);
     const label = crateLabelAnchors(d, 0)[1];
     const placed = layoutArrows(d, out, project, free, { at: [label[0] + out, label[1], label[2]], halfPx: LABEL_HALF_PX });
-    expect(placed.length).toBe(d.handling.openings.length * 2);
+    expect(placed.length).toBe(d.handling.entries[0].openings.length * 2);
     for (const a of placed) {
       if (a.scale === 0) continue;
       expect(a.scale).toBeGreaterThanOrEqual(MIN_ARROW_SCALE);
