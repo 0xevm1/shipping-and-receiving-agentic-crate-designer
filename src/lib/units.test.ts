@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cut, dims, dimsOther, fraction, groupDigits, length, partWeight, volume, weight, weightFromLb, weightWhole } from "./units";
+import { editUnit, cut, dims, dimsOther, fraction, groupDigits, length, partWeight, volume, weight, weightFromLb, weightWhole } from "./units";
 
 describe("units", () => {
   it("formats overall sizes", () => {
@@ -64,5 +64,43 @@ describe("units", () => {
     expect(weight(6131.6, "imperial")).toBe("13,518 lb");
     expect(weightFromLb(13518, "imperial")).toBe("13,518 lb");
     expect(weightFromLb(100, "metric")).toBe("45.4 kg");
+  });
+
+  describe("editing standards in the selected units", () => {
+    it("shows stock by its nominal inches and stores the metric size it is", () => {
+      const lumber = editUnit("lumber", "imperial");
+      expect([19, 38, 89, 140].map(lumber.show)).toEqual([0.75, 1.5, 3.5, 5.5]);
+      expect([0.75, 1.5, 3.5, 5.5].map(lumber.store)).toEqual([19, 38, 89, 140]);
+      const ply = editUnit("plywood", "imperial");
+      expect([12, 15, 19, 18, 16].map(ply.show)).toEqual([0.5, 0.625, 0.75, 0.75, 0.625]);
+      expect([0.5, 0.625, 0.75].map(ply.store)).toEqual([12, 15, 19]);
+    });
+
+    it("leaves metric and dimensionless fields exactly as stored", () => {
+      for (const dim of ["length", "lumber", "plywood", "mass", "density", "cost"] as const) {
+        const m = editUnit(dim, "metric");
+        expect([m.unit, m.show(123.456), m.store(123.456)]).toEqual([null, 123.456, 123.456]);
+      }
+      expect(editUnit(undefined, "imperial").unit).toBeNull();
+    });
+
+    it.each([
+      ["length", [0.25, 1.97, 31.5, 100.98, 630, 0.01]],
+      ["lumber", [0.75, 3.5, 3.504, 3.938, 5.25]],
+      ["plywood", [0.5, 0.625, 0.75, 0.8, 1.25]],
+      ["mass", [0.1, 33.07, 330.69, 1102.31, 2204.62, 55.55]],
+      ["density", [37.46, 30, 41.25]],
+      ["cost", [18.4, 31.15, 25]],
+    ] as const)("a %s typed in imperial reads back the same after saving", (dim, typed) => {
+      const u = editUnit(dim, "imperial");
+      for (const v of typed) {
+        const stored = u.store(v);
+        // Through JSON, as the standards file and local storage keep it.
+        const reloaded = JSON.parse(JSON.stringify(stored)) as number;
+        expect(u.show(reloaded), `${v}`).toBe(v);
+        // Showing and storing again is stable: the second save doesn't move the metric value.
+        expect(u.store(u.show(reloaded))).toBe(reloaded);
+      }
+    });
   });
 });

@@ -81,7 +81,8 @@ buildable crate design and cut list in under a minute, without needing CAD.
 - **Units in the UI (#15):** **imperial (in / lb) is the default**, for a domestic US shop floor;
   metric (mm / kg) is one toggle away and the choice is saved per browser (§9). The toggle
   changes only formatting (`src/lib/units.ts`, `src/lib/lumber.ts`): the domain, the design file
-  and the shop standards stay in mm and kg; the mass field shows and accepts the selected unit
+  and the shop standards stay in mm and kg (the Shop standards editor shows and accepts the selected
+  units, §6.4); the mass field shows and accepts the selected unit
   and stores kg; the CSV follows the selected units (§7.6). **One rule for a mass shown to
   people (#62):** in the displayed unit, one decimal under 100 ("47.4 lb", "8 kg", a trailing
   .0 dropped) and whole numbers from 100 ("297 lb"). It lives once in `weight` / `partWeight`
@@ -552,6 +553,23 @@ text is a valid standard; invalid text is outlined in gold with the reason and r
 A changed field is tinted and says its default. A **Customised** tag shows when anything
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
 standards** sit at the bottom. Ratios are shown as % (`volumeTolerance`, `lowUtilization`).
+
+**Units in the editor (#62).** The stored standards, the standards JSON file and the validation are
+always metric; the editor converts at the edge with `editUnit(dimension, units)` in
+`src/lib/units.ts`. Each field in `standardsFields.ts` has a `dim`: `length` (mm to inches, 2
+decimals, step 1/4″), `lumber` (a stock side: nominal actual inches, so 3.5 in is exactly the 89
+mm a 2x4 is; 3 decimals otherwise), `plywood` (the sheet as sold: 12 / 15 / 19 mm read and type as
+1/2, 5/8, 3/4; the 16 and 18 mm sheets read as 5/8 and 3/4), `mass` (lb, 2 decimals, step 1),
+`density` (lb/ft³) and `cost` ($/ft³). Stock fields name the section ("The section is 1x4.") and
+the plywood fields say what it is sold as. The "Default …" note and the hint sentences follow the
+units. A value typed in inches is stored as mm to 3 decimals and shows as the same inches
+after a save and a reload (`units.test.ts`). **Kept as they are**, in both unit systems, because
+the app has no imperial convention for them: minutes, $/h, $/100 screws, %, ×, degrees, counts,
+in³/lb (already imperial), and MPa (the app shows no stress anywhere else, and the shipped
+values are not the round psi figures the hint quotes, so a psi column would only add a second set
+of numbers to check). A field where 0 is stored for "none" (`zero` in the table: max parts per
+crate, stacked on the lid) shows an empty box with the placeholder "no limit" / "none"; clearing
+the box stores 0.
 
 ### 6.5 Design file (`DesignFileSchema`, #28)
 
@@ -2534,7 +2552,10 @@ check of PART-001/002/003 at quantities 1, 8 and 40 leaves "mm" or "kg" in imper
 `src/lib/units.test.ts` also pins the one mass rule (one decimal under 100, whole from 100).
 **`src/lib/units.test.ts`** checks formatting and 1/16″ fractions, including the edges (0, under
 and exactly 1/32″, 15/16″, just under an inch, whole inches, carrying into the next inch) and the
-CSV's ` in` mark. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
+CSV's ` in` mark, and the standards editor's conversions (`editUnit`, #62): nominal stock both ways
+(3.5 in is 89 mm, 3/4 is 19 mm), metric as stored, and a value typed in inches in every dimension
+reading back the same after a JSON round trip. `standardsFields.test.ts` checks every field's dimension and that
+every default shows in imperial and stores back a valid value. **`src/lib/lumber.test.ts`** checks the nominal-name table (1x4, 2x4, 4x4,
 4x6, …, either order and 1 mm of rounding, no name for non-stock), plywood by sold thickness with
 the fraction fallback, blocking "from 4x4" and the fractional-inch fallback.
 **`src/lib/csv.test.ts`** checks the CSV in both units: the imperial header (lb, in, the
@@ -2686,7 +2707,7 @@ copies chosen shots there on request.
   - `idle-autoplay`: hover never stops auto-play, a click, drag, wheel or key does, it resumes after 5 s, and the tooltip follows
     the turning crate. `dimension-pulse`: a pulse fires after framing, splits at the witness lines and ends; none with size
     labels off or reduced motion.
-  - `shop-standards`: collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
+  - `shop-standards` (also in imperial: inches, lb and plywood fractions, a value typed in inches surviving a reload, and the "no limit" placeholder): collapsed by default with every group; a plywood rate reaches the Overview cost, survives a reload and
     resets; a lower threshold switches the plywood; bad input is flagged. `scorecard`: the Overview card, the Layouts deltas and
     ranking toggle, the labour rate, "Designed in" after the first export.
   - `design-file`: Download design (.json) and reopen it (catalog, custom with and without its model, stale layout, newer

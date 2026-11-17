@@ -292,7 +292,7 @@ The values below are the **shipped shop standards** (`DEFAULT_STANDARDS` in
   nesting. Blocking, though, is shaped to the part's measured outline once the model has been
   analysed (#16).
 - **Units:** a domestic US shop floor, so the app opens in inches and pounds and names stock the
-  way a crew does. Metric is one toggle away. The shop standards are still entered in mm and kg.
+  way a crew does. Metric is one toggle away. The shop standards editor follows the units too (inches, lb, lb/ft³, $/ft³; stock by its nominal size, plywood as 1/2, 5/8, 3/4) and stores metric; minutes, rates, percentages and MPa stay as they are.
 - **Lumber sizes** are nominal US sizes, with actual dimensions in mm:
   - 1x4 cleats are 19 × 89
   - 4x4 skids are 89 × 89
