@@ -138,8 +138,15 @@ test("a loaded (custom) part exports, and its design reopens with the GLB", asyn
   expect(design.part).toMatchObject({ source: "custom", model: "widget_v2.glb", massAssumed: true });
   expect(text(files["README.txt"])).toContain("load widget_v2.glb with it");
 
-  await openApp(page);
+  // Change the crate, then reopen the exported design with its GLB. (Not a reload: since #71 a
+  // reload brings back the last crate, which would hide whether the file did the work.)
+  await openTab(page, "Rules");
+  await panel(page).getByLabel("Quantity").fill(String(design.settings.quantity + 3));
+  await pollCrate(page, (s) => s.quantity).toBe(design.settings.quantity + 3);
+  // Rules has its own file input (Load standards); leave it for Load a part's.
+  await openTab(page, "Overview");
   await reimport(page, files["design.json"], [sampleFile(model, "widget_v2.glb")]);
+  await pollCrate(page, (s) => s.quantity).toBe(design.settings.quantity);
   await pollCrate(page, (s) => s.outside?.map(Math.round)).toEqual(before);
 });
 
