@@ -344,22 +344,18 @@ h1.brand {
   color: var(--muted);
 }
 .credit-person {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.credit-person svg {
   display: block;
   overflow: visible;
 }
+.credit-signature {
+  font-family: var(--signature);
+  fill: var(--text);
+}
 .credit-role {
-  margin-top: -3px;
-  padding-left: 8px;
   font: 500 13px/1 var(--wide);
   font-stretch: 62%;
-  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--muted);
+  fill: var(--muted);
 }
 
 .loadrow {

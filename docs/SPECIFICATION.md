@@ -448,7 +448,7 @@ The canvas fills the window. Four regions float above it:
 |---|---|
 | Top left (no glass) | "Crate Designer", the tagline, then two mono lines: id · material · mass each; measured size · model check. Unknown parts get an editable mass field and a stand-in warning |
 | Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px); the tabs; the selected tab's panel, which is the only thing that scrolls |
-| Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a cursive signature drawn in fine horizontal lines (`Credit.tsx`: the text is a clip path over hairlines, plus a faint solid underlay so the thin script stays legible) and "Interview Candidate" in narrow Archivo beneath. Above it, "Drop a .glb file anywhere" and any load message |
+| Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads). Above it, "Drop a .glb file anywhere" and any load message |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb), View popover, Hide panels |
 
 - **Crate centring:** the crate is centred in the area the overlays leave free, not in the
