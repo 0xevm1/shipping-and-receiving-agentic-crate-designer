@@ -19,6 +19,8 @@ import { EXPLODE_LID_MM, EXPLODE_WALL_MM } from "./scene";
 
 export const FOV_DEG = 34;
 const MM_TO_M = 0.001;
+/** Far clipping plane in m (the canvas default), pushed out for very large crates. */
+const FAR_M = 200;
 
 /** three.js spherical angles: θ around Y from +Z toward +X, φ down from +Y. Domain front (−Y) faces +Z. */
 const PRESETS: Record<CameraPreset, { theta: number; phi: number }> = {
@@ -58,6 +60,7 @@ const sph = new Spherical();
 export function Director() {
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const getThree = useThree((s) => s.get);
   const size = useThree((s) => s.size);
   const insets = useDesigner((s) => s.insets);
   const fit = useDesigner((s) => s.fit);
@@ -111,6 +114,13 @@ export function Director() {
     const s = useDesigner.getState();
     const g = fitGoal(s, size.height, size.width, currentAngles());
     if (!g) return;
+    // Keep a very large crate and its floor grid inside the far plane.
+    const far = Math.max(FAR_M, g.radius * 4);
+    const cam = getThree().camera as PerspectiveCamera;
+    if (cam.far !== far) {
+      cam.far = far;
+      cam.updateProjectionMatrix();
+    }
     if (fit.instant || reducedMotion()) {
       goal.current = null;
       place(g);
