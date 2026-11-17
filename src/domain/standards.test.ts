@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { getPart } from "./catalog";
-import { CARDBOARD_LIMITS, DRY_VAN_53FT_MM, LTL_EXCESSIVE_LENGTH_MM, MIN_INTERIOR_MM } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, settingsFromStandards, type DesignPart } from "./design";
 import type { CrateSettings } from "./schema";
 import {
   DEFAULT_STANDARDS,
   mergeStandards,
+  minInteriorMm,
   parseStandards,
   sameStandards,
   ShopStandardsSchema,
@@ -86,11 +86,8 @@ describe("ShopStandardsSchema", () => {
     expect("baseRatingKg" in s.limits).toBe(false);
   });
 
-  it("keeps the old exports as views of the defaults", () => {
-    expect(MIN_INTERIOR_MM).toBe(178);
-    expect(DRY_VAN_53FT_MM).toBe(DEFAULT_STANDARDS.limits.trailerMm);
-    expect(LTL_EXCESSIVE_LENGTH_MM).toBe(DEFAULT_STANDARDS.limits.ltlExcessiveLengthMm);
-    expect(CARDBOARD_LIMITS).toBe(DEFAULT_STANDARDS.limits.cardboard);
+  it("derives the smallest interior and the default settings from the defaults", () => {
+    expect(minInteriorMm(DEFAULT_STANDARDS)).toBe(178);
     expect(DEFAULT_SETTINGS).toEqual(settingsFromStandards(DEFAULT_STANDARDS));
   });
 
@@ -173,7 +170,7 @@ describe("computeDesign with custom standards", () => {
     const d = design("PART-001", custom({ construction: { heavySkidOverKg: 50 } }));
     expect(d.construction.skid).toEqual({ wide: 89, tall: 140 });
     expect(check(d, "base-rating")!).toMatchObject({ level: "ok" });
-    expect(metric(d.checks.find((c) => c.id === "base-rating")!.detail)).toContain("4×6 skids");
+    expect(metric(d.checks.find((c) => c.id === "base-rating")!.detail)).toContain("4x6 skids");
   });
 
   it("a plywood rate change changes the cost and nothing else", () => {

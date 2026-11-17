@@ -1,4 +1,7 @@
-import { designCrate, type BomLine, type Check, type CrateDesign } from "./crate";
+import type { BomLine } from "./bom";
+import type { Check } from "./check";
+import { designCrate } from "./crate";
+import type { CrateDesign } from "./crateDesign";
 import { computeDesign, rankByObjective, rankLayouts, type DesignProblem, type DesignResult, type Ranking } from "./design";
 import { joinMessages, kg, msg, parts, type Message } from "./message";
 import type { Layout } from "./packing";
@@ -249,10 +252,11 @@ function plan(types: CrateType[], unmet: Message | null, standards: ShopStandard
 /** "1,000 kg gross, 40 parts and the trailer door": the limits in force, for messages. */
 function limitText(standards: ShopStandards): Message {
   const { maxGrossKg, maxParts } = standards.limits.perCrate;
-  return joinMessages([msg`${kg(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []), parts("the trailer door and floor")], ", ");
+  const limits = [msg`${kg(maxGrossKg)} gross or the base rating`, ...(maxParts > 0 ? [parts(`${maxParts} parts`)] : []), parts("the trailer door and floor")];
+  return joinMessages(limits, ", ");
 }
 
-function crateLimitCheck(text: string, unmet: Message | null, standards: ShopStandards): Check {
+function crateLimitCheck(text: string, unmet: Message | null, standards: ShopStandards): Check<"crate-limit"> {
   return unmet
     ? { id: "crate-limit", level: "caution", title: "Over the per-crate limit", detail: unmet }
     : {

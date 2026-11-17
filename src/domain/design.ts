@@ -1,4 +1,6 @@
-import { designCrate, resolveConstruction, structureAllowance, structureMaterials, type CrateDesign } from "./crate";
+import { resolveConstruction, structureAllowance, structureMaterials } from "./construction";
+import { designCrate } from "./crate";
+import type { CrateDesign } from "./crateDesign";
 import { enumerateLayouts, type Layout } from "./packing";
 import { CrateSettingsSchema, type CrateSettings, type DesignPart } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, ShopStandardsSchema, type ShopStandards } from "./standards";

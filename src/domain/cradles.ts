@@ -1,4 +1,5 @@
-import type { AddMember, Member, Tag } from "./crate";
+import { insideTag, placementKey } from "./dunnage";
+import { sortDesc, type AddMember, type Member, type MemberVariant, type Notch } from "./members";
 import type { Layout, Slot } from "./packing";
 import type { CrateSettings, Vec3 } from "./schema";
 import type { ShopStandards } from "./standards";
@@ -15,32 +16,7 @@ import type { ShopStandards } from "./standards";
  * use `isSlender` so exactly one path handles any part.
  */
 
-export type NotchShape = "round" | "flat";
-
-/** A cut-out in a cradle, across the board's length. */
-export interface Notch {
-  /** Centre along the board's length axis (`CradleProfile.axis`), in crate-interior mm. */
-  center: number;
-  /** Opening width at the board face, mm. */
-  width: number;
-  /** Depth into the board from the face, mm. */
-  depth: number;
-  /** `round`: a circular seat of the part's radius; `flat`: a square-sided pocket. */
-  shape: NotchShape;
-  /** Seat radius for a round notch, mm (0 for flat). */
-  radius: number;
-  /** `top`: the part above sits in it; `bottom`: it fits over the part below (stacking cradle). */
-  face: "top" | "bottom";
-}
-
-/** What makes a cradle more than a box: the axis it spans and its notches. */
-export interface CradleProfile {
-  /** The board's length axis (across the part): 1 = Y when the part lies along X. */
-  axis: 0 | 1;
-  notches: Notch[];
-}
-
-const sortDesc = (v: readonly number[]) => [...v].sort((p, q) => q - p);
+export type { CradleProfile, Notch, NotchShape } from "./members";
 
 /**
  * True when a part is long and slender: its longest side ÷ its middle side is at least
@@ -105,8 +81,6 @@ export const CRADLE_LABEL = "Cradle";
 export const STACKING_CRADLE_LABEL = "Stacking cradle";
 export const END_STOP_LABEL = "End stop";
 
-const insideTag = (label: string): Tag => ({ assembly: "inside", face: "inside", label });
-
 /**
  * Dunnage for a slender part lying flat, in place of bearers, separators and side blocking:
  *
@@ -140,14 +114,14 @@ export function addCradleDunnage(layout: Layout, settings: CrateSettings, standa
 
   const notchesFor = (slots: Slot[], face: Notch["face"]): Notch[] =>
     slots.map((s) => ({ ...shape, center: s.min[v] + wid / 2, face })).sort((p, q) => p.center - q.center);
-  const board = (at: number, z0: number, z1: number, label: string, notches: Notch[]) => {
+  const board = (at: number, z0: number, z1: number, label: string, notches: Notch[], variant?: MemberVariant) => {
     const min: Vec3 = [0, 0, z0];
     const size: Vec3 = [0, 0, z1 - z0];
     min[u] = at - thick / 2;
     size[u] = thick;
     min[v] = 0;
     size[v] = span;
-    add("cradle", "lumber", insideTag(label), min, size, { axis: v, notches });
+    add("cradle", "lumber", insideTag(label, variant), min, size, { axis: v, notches });
   };
 
   for (const [, slots] of [...rows].sort((p, q) => p[0] - q[0])) {
@@ -158,7 +132,8 @@ export function addCradleDunnage(layout: Layout, settings: CrateSettings, standa
       for (let k = 0; k + 1 < nz; k++) {
         const upper = inLayer(k + 1);
         if (!upper.length) continue;
-        board(at, layerZ[k] + c - d, layerZ[k + 1] + d, STACKING_CRADLE_LABEL, [...notchesFor(inLayer(k), "bottom"), ...notchesFor(upper, "top")]);
+        const notches = [...notchesFor(inLayer(k), "bottom"), ...notchesFor(upper, "top")];
+        board(at, layerZ[k] + c - d, layerZ[k + 1] + d, STACKING_CRADLE_LABEL, notches, "stacking-cradle");
       }
     }
   }
@@ -189,7 +164,7 @@ export function addCradleDunnage(layout: Layout, settings: CrateSettings, standa
       size[u] = g;
       min[v] = s.min[v] + wid / 2 - bw / 2;
       size[v] = bw;
-      const key = [...min, ...size].map((x) => Math.round(x)).join(",");
+      const key = placementKey(min, size);
       if (placed.has(key)) continue;
       placed.add(key);
       add("blocking", "lumber", insideTag(END_STOP_LABEL), min, size);

@@ -1,4 +1,6 @@
-import type { Check, Member } from "./crate";
+import type { Check, HandlingCheckId } from "./check";
+import { memberKg } from "./materials";
+import { memberBounds, type Member } from "./members";
 import { joinMessages, mm, msg, parts, shopMm, type Message } from "./message";
 import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
@@ -68,8 +70,7 @@ const centre = (m: Pick<Member, "min" | "size">): Vec3 => [m.min[0] + m.size[0] 
 
 /** Each board's mass at its centre: volume × the standard wood density (the tare model of spec §7.6). */
 export function memberMasses(members: Member[], standards: ShopStandards = DEFAULT_STANDARDS): MassPoint[] {
-  const density = standards.rates.densityKgM3;
-  return members.map((m) => ({ at: centre(m), kg: ((m.size[0] * m.size[1] * m.size[2]) / 1e9) * density[m.material] }));
+  return members.map((m) => ({ at: centre(m), kg: memberKg(m, standards) }));
 }
 
 /**
@@ -168,19 +169,14 @@ export function analyseHandling(
   standards: ShopStandards = DEFAULT_STANDARDS,
 ): Handling {
   const cogMm = centreOfGravity([...memberMasses(members, standards), ...partMasses(layout, partKg)]);
-  const lo = [0, 1, 2].map((i) => Math.min(...members.map((m) => m.min[i])));
-  const hi = [0, 1, 2].map((i) => Math.max(...members.map((m) => m.min[i] + m.size[i])));
+  const { min: lo, max: hi } = memberBounds(members);
   const footprintMm: [number, number] = [hi[0] - lo[0], hi[1] - lo[1]];
   const offsetMm: [number, number] = [cogMm[0] - (lo[0] + hi[0]) / 2, cogMm[1] - (lo[1] + hi[1]) / 2];
 
   // The base the crate stands on: the skids' outline (or the whole footprint without skids).
   const skids = members.filter((m) => m.kind === "skid");
   const base = skids.length ? skids : members;
-  const bx0 = Math.min(...base.map((m) => m.min[0]));
-  const bx1 = Math.max(...base.map((m) => m.min[0] + m.size[0]));
-  const by0 = Math.min(...base.map((m) => m.min[1]));
-  const by1 = Math.max(...base.map((m) => m.min[1] + m.size[1]));
-  const groundZ = Math.min(...base.map((m) => m.min[2]));
+  const { min: [bx0, by0, groundZ], max: [bx1, by1] } = memberBounds(base);
   const heightMm = cogMm[2] - groundZ;
   const toEnd = Math.max(0, Math.min(cogMm[0] - bx0, bx1 - cogMm[0]));
   const toSide = Math.max(0, Math.min(cogMm[1] - by0, by1 - cogMm[1]));
@@ -217,9 +213,9 @@ const DEVICE_NAME: Record<Device, string> = { forklift: "Forklift", "pallet-jack
  * The CoG and handling checks (spec §7.7, §7.14), in this order: `cog-offset`, `cog-tip`,
  * `forklift`, `pallet-jack`. Thresholds are the shop standards' `handling` group.
  */
-export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_STANDARDS): Check[] {
+export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_STANDARDS): Check<HandlingCheckId>[] {
   const s = standards.handling;
-  const checks: Check[] = [];
+  const checks: Check<HandlingCheckId>[] = [];
 
   const [L, W] = h.footprintMm;
   const limX = s.cogOffsetRatio * L;

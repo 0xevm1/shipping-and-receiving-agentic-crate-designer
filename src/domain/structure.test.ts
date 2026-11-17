@@ -181,7 +181,7 @@ describe("lid", () => {
     const d = design(getPart("PART-001"), { quantity: 8 }, custom({ structure: { lidStackKg: 500 } }));
     const lid = d.checks.find((c) => c.id === "lid")!;
     expect(lid.level).toBe("ok");
-    expect(metric(lid.detail)).toMatch(/^Sized for 500 kg stacked on top; rated [\d,]+ kg, with \d+ 2×4 joists on edge\.$/);
+    expect(metric(lid.detail)).toMatch(/^Sized for 500 kg stacked on top; rated [\d,]+ kg, with \d+ 2x4 joists on edge\.$/);
     expect(d.bom.some((l) => l.label === "Lid joist" && l.stock === "38 × 89")).toBe(true);
     // The lid is taller, and the crate with it.
     const nominal = design(getPart("PART-001"), { quantity: 8 });
@@ -246,7 +246,7 @@ describe("designCrate with structural sizing", () => {
     expect(check.title).toBe("Within the base rating");
     expect(metric(check.detail)).toBe(
       `Base rated ${rated} kg; this crate's payload is 645 kg (${Math.round((645 / heavy.structure.ratedPayloadKg) * 100)}%). ` +
-        "3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).",
+        "3 × 4x6 skids, 7 2x4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).",
     );
     expect(rated).toBe(859);
   });

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { parts } from "./catalog";
-import { MIN_INTERIOR_MM, type CrateDesign } from "./crate";
+import type { CrateDesign } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, MAX_PART_MM, type DesignPart } from "./design";
 import { CrateSettingsSchema, normalizeSettings, settingsAdjustments, type CrateSettings, type Vec3 } from "./schema";
+import { DEFAULT_STANDARDS, minInteriorMm } from "./standards";
+
+const MIN_INTERIOR_MM = minInteriorMm(DEFAULT_STANDARDS);
 
 /** Edge cases and bad input (#10): extremes must give a crate or a clear reason, never a crash. */
 

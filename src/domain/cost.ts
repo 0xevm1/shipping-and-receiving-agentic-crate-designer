@@ -1,4 +1,4 @@
-import type { BomLine } from "./crate";
+import type { BomLine } from "./bom";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
 import { IN3_PER_FT3, LB_PER_KG, MM_PER_IN } from "./units";
@@ -40,7 +40,7 @@ export interface LabourEstimate {
 
 /** Build time and labour cost for one crate. */
 export function estimateLabour(
-  bom: readonly (Pick<BomLine, "material" | "stock" | "cut" | "qty"> & Partial<Pick<BomLine, "notches">>)[],
+  bom: readonly Pick<BomLine, "material" | "stock" | "cut" | "qty" | "notches">[],
   screws: number,
   layers: number,
   standards: ShopStandards = DEFAULT_STANDARDS,

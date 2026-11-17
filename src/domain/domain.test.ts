@@ -2,10 +2,13 @@ import { Box3, Euler, Matrix4, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { metricText as metric } from "@/lib/message";
 import { getPart, parts } from "./catalog";
-import { ASSEMBLIES, CARDBOARD_LIMITS, DRY_VAN_53FT_MM, LTL_EXCESSIVE_LENGTH_MM } from "./crate";
+import { ASSEMBLIES } from "./crate";
 import { computeDesign, DEFAULT_SETTINGS, explainLayout, type DesignPart } from "./design";
 import { ORIENTATIONS, rotatedSize } from "./orientations";
 import type { CrateSettings, Vec3 } from "./schema";
+import { DEFAULT_STANDARDS } from "./standards";
+
+const { trailerMm: DRY_VAN_53FT_MM, ltlExcessiveLengthMm: LTL_EXCESSIVE_LENGTH_MM, cardboard: CARDBOARD_LIMITS } = DEFAULT_STANDARDS.limits;
 
 const design = (partId: string, patch: Partial<CrateSettings> = {}) =>
   computeDesign(getPart(partId), { ...DEFAULT_SETTINGS, ...patch });
