@@ -2,13 +2,13 @@
 
 import { renderMessage } from "@/lib/message";
 import type { CheckItem } from "@/lib/checks";
-import { useDesigner } from "@/state/store";
+import { useView } from "@/state/viewStore";
 import styles from "./ChecksTab.module.css";
 import { CrateTypePicker } from "./CrateTypePicker";
 
 /** Every rule of thumb, passed ones included, cautions first. */
 export function ChecksTab({ checks }: { checks: readonly CheckItem[] }) {
-  const units = useDesigner((s) => s.units);
+  const units = useView((s) => s.units);
   return (
     <>
       <h2>Checks</h2>

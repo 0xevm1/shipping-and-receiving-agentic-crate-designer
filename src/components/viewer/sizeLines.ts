@@ -6,7 +6,7 @@
 import type { CrateDesign } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
 import { length, lengthUnit, type Units } from "@/lib/units";
-import type { CameraPreset } from "@/state/store";
+import type { CameraPreset } from "@/state/viewStore";
 import { EXPLODE_WALL_MM } from "./scene";
 
 export type Seg = [Vec3, Vec3];

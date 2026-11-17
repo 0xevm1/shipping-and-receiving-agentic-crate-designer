@@ -60,12 +60,12 @@ describe("last-opened crate", () => {
 
   it("builds the entry from the store state, or null when there is no crate", () => {
     const s = useDesigner.getState();
-    const d = lastDesignOf(s)!;
-    expect(d.tab).toBe(s.tab);
+    const d = lastDesignOf(s, "rules")!;
+    expect(d.tab).toBe("rules");
     expect(d.ranking).toBe(s.ranking);
     expect(d.design.part).toMatchObject({ source: "catalog", id: "PART-001" });
     expect(d.design.settings).toEqual(s.settings);
-    expect(lastDesignOf({ ...s, result: { ...s.result, design: null } })).toBeNull();
+    expect(lastDesignOf({ ...s, result: { ...s.result, design: null } }, "rules")).toBeNull();
   });
 
   it("gives null when nothing is saved or storage is unavailable", () => {

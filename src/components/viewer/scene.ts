@@ -1,7 +1,7 @@
 import { Color, type Material, type Vector3 } from "three";
 import type { CrateDesign, Member } from "@/domain/crate";
 import type { Vec3 } from "@/domain/schema";
-import type { DesignerState, ViewState } from "@/state/store";
+import type { ViewState, ViewStoreState } from "@/state/viewStore";
 import { anim } from "@/state/motion";
 
 /**
@@ -76,7 +76,7 @@ export function memberAlpha(m: Member, view: ViewState): number {
  * Whether a board is lit: its row is pinned or hovered, or its whole assembly is hovered from
  * the weight bars. Allocation-free, as it runs for every board each frame.
  */
-export function isLit(s: Pick<DesignerState, "pin" | "hover">, m: Member): boolean {
+export function isLit(s: Pick<ViewStoreState, "pin" | "hover">, m: Member): boolean {
   const { pin, hover } = s;
   return pin === m.bomKey || hover?.key === m.bomKey || (!!hover?.assembly && m.assembly === hover.assembly);
 }
@@ -85,7 +85,7 @@ export function isLit(s: Pick<DesignerState, "pin" | "hover">, m: Member): boole
  * Whether the scene is "focused": a pinned row or a cut-list / weight-bar hover draws the lit
  * boards solid and ghosts everything else. A 3D hover only tints.
  */
-export function hasFocus(s: Pick<DesignerState, "pin" | "hover">): boolean {
+export function hasFocus(s: Pick<ViewStoreState, "pin" | "hover">): boolean {
   return !!s.pin || s.hover?.source === "list";
 }
 

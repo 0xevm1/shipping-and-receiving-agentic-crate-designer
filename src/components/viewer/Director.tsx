@@ -4,8 +4,9 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Spherical, Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { anim, autoplay, EASE_FAST, EASE_SLOW, IDLE_LEAD, IDLE_SEQUENCE, IDLE_TURN_RATE, isIdle, pointer } from "@/state/motion";
-import { currentMode, reducedMotion, useDesigner } from "@/state/store";
+import { anim, autoplay, EASE_FAST, EASE_SLOW, IDLE_LEAD, IDLE_SEQUENCE, IDLE_TURN_RATE, isIdle, pointer, reducedMotion } from "@/state/motion";
+import { useDesigner } from "@/state/store";
+import { currentMode, useView } from "@/state/viewStore";
 import { approach, fitGoal, homeTarget, keepCrateInFreeArea, shortestAngle, viewOffset, type Goal } from "./framing";
 import { CAMERA_FAR_M } from "./scene";
 
@@ -31,8 +32,8 @@ export function Director({ active }: { active: boolean }) {
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const getThree = useThree((s) => s.get);
   const size = useThree((s) => s.size);
-  const insets = useDesigner((s) => s.insets);
-  const fit = useDesigner((s) => s.fit);
+  const insets = useView((s) => s.insets);
+  const fit = useView((s) => s.fit);
   const goal = useRef<Goal | null>(null);
   /** The orbit target last placed, kept for when the controls aren't registered yet. */
   const aim = useRef(new Vector3());
@@ -54,8 +55,8 @@ export function Director({ active }: { active: boolean }) {
     const start = () => {
       dragging.current = true;
       goal.current = null;
-      const s = useDesigner.getState();
-      if (s.view.camera) s.setView({ camera: null });
+      const v = useView.getState();
+      if (v.view.camera) v.setView({ camera: null });
     };
     const end = () => {
       dragging.current = false;
@@ -67,7 +68,7 @@ export function Director({ active }: { active: boolean }) {
       const s = useDesigner.getState();
       if (!s.result.design) return;
       if (controls.target.distanceTo(homeTarget(s.result.design, anim.explode, panHome)) <= PAN_SETTLED_M) return;
-      keepCrateInFreeArea(s.result.design, camera, controls.target, getThree().size, s.insets);
+      keepCrateInFreeArea(s.result.design, camera, controls.target, getThree().size, useView.getState().insets);
     };
     controls.addEventListener("start", start);
     controls.addEventListener("end", end);
@@ -107,12 +108,13 @@ export function Director({ active }: { active: boolean }) {
 
   useEffect(() => {
     const s = useDesigner.getState();
+    const v = useView.getState();
     if (!active || !s.result.design) return;
     const g = fitGoal({
       design: s.result.design,
-      view: s.view,
-      panelsHidden: s.panelsHidden,
-      insets: s.insets,
+      view: v.view,
+      panelsHidden: v.panelsHidden,
+      insets: v.insets,
       width: size.width,
       height: size.height,
       now: currentAngles(),
@@ -138,17 +140,18 @@ export function Director({ active }: { active: boolean }) {
   useFrame((_, rawDt) => {
     const dt = Math.min(0.1, rawDt);
     const s = useDesigner.getState();
+    const v = useView.getState();
     const reduce = reducedMotion();
 
-    if (s.result.design && !reduce && !dragging.current && !s.pin && !s.drawerOpen && (autoplay.on || isIdle())) {
+    if (s.result.design && !reduce && !dragging.current && !v.pin && !v.drawerOpen && (autoplay.on || isIdle())) {
       if (!autoplay.on || autoplay.step < 0) {
         autoplay.on = true;
         autoplay.turned = 0;
         autoplay.fired = false;
-        autoplay.step = Math.max(0, IDLE_SEQUENCE.indexOf(currentMode(s.view) ?? "closed"));
+        autoplay.step = Math.max(0, IDLE_SEQUENCE.indexOf(currentMode(v.view) ?? "closed"));
         // The crate turns about the crate: if the view was panned, ease the target back first,
         // keeping the turn angle and zoom the user left.
-        const home = homeTarget(s.result.design, s.view.explode);
+        const home = homeTarget(s.result.design, v.view.explode);
         const at = currentAngles();
         if (!goal.current && at.target.distanceTo(home) > PAN_SETTLED_M) goal.current = { target: home, theta: at.theta, phi: at.phi, radius: at.radius };
       }
@@ -160,7 +163,7 @@ export function Director({ active }: { active: boolean }) {
       if (!autoplay.fired && autoplay.turned > Math.PI - IDLE_LEAD) {
         autoplay.fired = true;
         autoplay.slow = true;
-        s.setMode(IDLE_SEQUENCE[(autoplay.step + 1) % IDLE_SEQUENCE.length]);
+        v.setMode(IDLE_SEQUENCE[(autoplay.step + 1) % IDLE_SEQUENCE.length]);
       }
       if (autoplay.turned >= Math.PI) {
         autoplay.turned = 0;
@@ -174,12 +177,17 @@ export function Director({ active }: { active: boolean }) {
         sincePick.current = 0;
         getThree().events.update?.();
       }
+    } else if (autoplay.on) {
+      // Held (a pinned row, the open drawer, a drag) without any input on the view: auto-play is off
+      // until the hold ends, and then starts again from the mode on screen.
+      autoplay.on = false;
+      autoplay.slow = false;
     }
 
     const k = reduce ? 1 : 1 - Math.exp(-dt * (autoplay.slow ? EASE_SLOW : EASE_FAST));
-    anim.lidAlpha = approach(anim.lidAlpha, s.view.lid ? 1 : 0, k, 0.01);
-    anim.frontAlpha = approach(anim.frontAlpha, s.view.front ? 1 : 0, k, 0.01);
-    anim.explode = approach(anim.explode, s.view.explode, k, 0.004);
+    anim.lidAlpha = approach(anim.lidAlpha, v.view.lid ? 1 : 0, k, 0.01);
+    anim.frontAlpha = approach(anim.frontAlpha, v.view.front ? 1 : 0, k, 0.01);
+    anim.explode = approach(anim.explode, v.view.explode, k, 0.004);
 
     const g = goal.current;
     if (g) {

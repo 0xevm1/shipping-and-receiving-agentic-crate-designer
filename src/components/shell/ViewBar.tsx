@@ -2,7 +2,9 @@
 
 import type { ReactNode } from "react";
 import { autoplay } from "@/state/motion";
-import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
+import { useDesigner } from "@/state/store";
+import { currentMode, type CameraPreset, type Mode, type ViewState } from "@/state/viewStore";
+import { useView } from "@/state/viewStore";
 import { usePopover } from "./usePopover";
 import styles from "./ViewBar.module.css";
 
@@ -24,10 +26,10 @@ const SWITCHES: { key: keyof ViewState; label: string }[] = [
 
 /** Bottom right: how the crate is shown. */
 export function ViewBar() {
-  const view = useDesigner((s) => s.view);
-  const units = useDesigner((s) => s.units);
-  const panelsHidden = useDesigner((s) => s.panelsHidden);
-  const { setMode, setUnits, togglePanels, requestFit } = useDesigner.getState();
+  const view = useView((s) => s.view);
+  const units = useView((s) => s.units);
+  const panelsHidden = useView((s) => s.panelsHidden);
+  const { setMode, requestFit, setUnits, togglePanels } = useView.getState();
   const mode = currentMode(view);
   const next = MODES[(MODES.indexOf(mode ?? "exploded") + 1) % MODES.length];
   const title = `${mode ? `${MODE_NAME[mode]} view` : "Custom view"}. Click for ${MODE_NAME[next].toLowerCase()}.`;
@@ -73,15 +75,15 @@ export function ViewBar() {
 
 /** "Showing 4 × side rail" while a cut-list group is pinned. */
 function PinBar() {
-  const pin = useDesigner((s) => s.pin);
-  const line = useDesigner((s) => s.result.design?.bom.find((l) => l.key === s.pin));
+  const pin = useView((s) => s.pin);
+  const line = useDesigner((s) => (pin ? s.result.design?.bom.find((l) => l.key === pin) : undefined));
   if (!pin || !line) return null;
   return (
     <div className={styles.pinBar} data-view-input>
       <span>
         Showing {line.qty} × {line.label.toLowerCase()}
       </span>
-      <button type="button" onClick={() => useDesigner.getState().setPin(null)}>
+      <button type="button" onClick={() => useView.getState().setPin(null)}>
         Show everything
       </button>
     </div>
@@ -89,10 +91,10 @@ function PinBar() {
 }
 
 function ViewPopover() {
-  const view = useDesigner((s) => s.view);
-  const units = useDesigner((s) => s.units);
+  const view = useView((s) => s.view);
+  const units = useView((s) => s.units);
   const { open, toggle, wrapProps, triggerRef } = usePopover();
-  const { setView, requestFit } = useDesigner.getState();
+  const { setView, requestFit } = useView.getState();
 
   return (
     <div className={`${styles.viewWrap} ${styles.hideable}`} data-view-input {...wrapProps}>
