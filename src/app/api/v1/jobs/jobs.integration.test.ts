@@ -288,7 +288,7 @@ describe("PATCH /api/v1/jobs/:id", () => {
 });
 
 describe("events on the SSE route", () => {
-  it("delivers config.added to a subscriber of the job", async () => {
+  it("delivers config.added to a subscriber of the job within 1 s of the save (another tab's stream)", async () => {
     const job = await newJob();
     const abort = new AbortController();
     const res = await eventsGET(new Request(`${BASE}/events?job=${job.id}`, { signal: abort.signal }));
@@ -311,6 +311,7 @@ describe("events on the SSE route", () => {
       }
     })();
     await vi.waitFor(() => expect(got.some((m) => m.type === "job.created")).toBe(true), { timeout: 5000 });
+    const t0 = performance.now();
     const saved = SaveConfigurationResponseSchema.parse(await (await save(job.id, saveBody(10))).json());
     await vi.waitFor(
       () =>
@@ -322,6 +323,8 @@ describe("events on the SSE route", () => {
         timeout: 5000,
       },
     );
+    // Save (recompute, insert, NOTIFY) to the event on the stream: the acceptance bound is 1 s.
+    expect(performance.now() - t0).toBeLessThan(1000);
     abort.abort();
     await reader.cancel().catch(() => {});
     await reading;
