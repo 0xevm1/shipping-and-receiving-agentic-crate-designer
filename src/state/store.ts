@@ -129,10 +129,18 @@ export interface DesignerState {
   designStartedAt: number | null;
   /** Milliseconds from loading the part to its first export (CSV, design JSON or GLB); null until then. */
   designedInMs: number | null;
+  /** True while the last-opened crate (#71) is being reopened after mount; the scene waits for it. */
+  restoring: boolean;
 
   setPart: (part: LoadedPart) => void;
   /** Opens a saved design: the part with its own settings and layout (null = recommended). */
   loadDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex?: number) => void;
+  /**
+   * Reopens the last-opened crate after a reload (#71): like `loadDesign`, plus its tab and
+   * ranking. The time-to-design clock stays stopped (no "Designed in" note) until a new part loads.
+   */
+  restoreDesign: (part: LoadedPart, settings: CrateSettings, layoutKey: string | null, crateIndex: number, ui: { tab: Tab; ranking: Ranking }) => void;
+  setRestoring: (restoring: boolean) => void;
   /** Shows another crate type of a split batch. Out-of-range indexes are ignored. */
   setCrateIndex: (index: number) => void;
   setMeasured: (size: Vec3) => void;
@@ -294,6 +302,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     ranking: "volume",
     designStartedAt: null,
     designedInMs: null,
+    restoring: false,
 
     setPart: (part) =>
       recompute({
@@ -306,6 +315,22 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       }),
     loadDesign: (part, settings, layoutKey, crateIndex = 0) =>
       recompute({ ...newDesignClock(), part, measured: null, pin: null, layoutKey, crateIndex, settings: normalizeSettings(settings, DEFAULT_SETTINGS) }),
+    restoreDesign: (part, settings, layoutKey, crateIndex, { tab, ranking }) =>
+      recompute({
+        designStartedAt: null,
+        designedInMs: null,
+        part,
+        measured: null,
+        pin: null,
+        layoutKey,
+        crateIndex,
+        tab,
+        ranking,
+        settings: normalizeSettings(settings, DEFAULT_SETTINGS),
+      }),
+    setRestoring: (restoring) => {
+      if (get().restoring !== restoring) set({ restoring });
+    },
     setCrateIndex: (index) => {
       const { plan, crateIndex, fit } = get();
       if (index === crateIndex || !Number.isInteger(index) || index < 0 || index >= plan.crates.length) return;

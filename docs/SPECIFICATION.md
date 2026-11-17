@@ -189,7 +189,10 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/components/shell/ChangeFeedback.tsx` | `ChangeNote` (what an edit moved, `role="status"`) and `Flash` (gold highlight on a changed value) |
 | `src/components/shell/ViewBar.tsx` | Bottom right: pin bar, mode icon, units, View popover (with the GLB download), Hide panels |
 | `src/components/shell/useLoadFiles.ts` | Turns picked / dropped files into the current part, or opens a design; `openDesignFile()` for the library and share links |
-| `src/components/shell/SavedStateLoader.tsx` | Applies the saved units, shop standards and design library once the app has mounted, then opens a share link (`shareLinkLoader.ts`) |
+| `src/components/shell/SavedStateLoader.tsx` | Applies the saved units, shop standards and design library once the app has mounted, then opens a share link (`shareLinkLoader.ts`) or else the last-opened crate (`lastDesignLoader.ts`) |
+| `src/components/shell/lastDesignLoader.ts` | `restoreLastDesign()` and `watchLastDesign()`: reopens the last-opened crate, and saves it (debounced) plus a custom GLB's bytes (§9, #71) |
+| `src/state/lastDesignStorage.ts` | The last-opened crate in `localStorage`: envelope, validation, precedence, debounced saver (§9) |
+| `src/state/glbCache.ts` | The last custom GLB's bytes in IndexedDB, one record, 50 MB cap (§9) |
 | `src/components/shell/shareLinkLoader.ts` | `openShareLink()`: reads `#design=…`, opens it or explains why not, tidies the URL (§9) |
 | `src/components/island/*.tsx` | The island and its five tabs |
 | `src/components/island/SavedDesigns.tsx` | "Saved designs" at the bottom of the Overview (#14): save, list, reuse, rename, delete with undo, library file, share link (`SavedDesigns.module.css`) |
@@ -993,7 +996,8 @@ Labour 2.709 h × $35 = **$94.82**; wood $75.16 + screws 202 / 100 × $8 = $16.1
 297.5 / 11.13 = **26.7 lb/ft³ → class 65**.
 
 **Time to design.** The store records `designStartedAt` when the app mounts with the preloaded
-part and again on every `setPart` / `loadDesign`, and `designedInMs` at the first export or
+part (unless the last-opened crate is reopened, which leaves the clock stopped, §9) and again on
+every `setPart` / `loadDesign`, and `designedInMs` at the first export or
 download after that (Download or Copy cut list, Download design (.json), Download 3D model
 (.glb), the Export pill's .zip); later exports don't move it. The Overview shows "Designed in 1 m 12 s". The manual
 baseline it compares with is an assumption in the README.
@@ -1415,6 +1419,60 @@ written to a server log.
 - **Tidy URL:** the hash is removed with `history.replaceState` as soon as it is read, so the
   address bar is clean and a reload doesn't re-open the link over later edits.
 
+**The last-opened crate** (#71) is saved under `crate-designer.last-design.v1`
+(`src/state/lastDesignStorage.ts`, wired in `src/components/shell/lastDesignLoader.ts`), so a
+refresh or a reopened tab brings back the crate on screen:
+
+```jsonc
+{
+  "kind": "crate-designer.last-design",
+  "version": 1,                       // LAST_DESIGN_VERSION, also in the key
+  "tab": "layouts",                   // the open tab
+  "ranking": "cost",                  // the #17 ranking
+  "design": { "kind": "crate-design", "schemaVersion": 1, … } // the §6.5 design file, as is
+}
+```
+
+- **Saving:** every change to the part, rules, layout, crate type, ranking or tab schedules a
+  save, written `LAST_DESIGN_SAVE_DELAY_MS` (400 ms) after the changes stop, so typing in a field
+  doesn't write on each key. A pending save is written at once when the page is hidden
+  (`pagehide`, `visibilitychange`), so a quick reload keeps the last edit. A state with no crate
+  (a `DesignProblem`) isn't saved; the last crate is kept. Saving starts only after the startup
+  decision below, so the default crate never overwrites the saved one.
+- **A custom part's GLB** lives only as an object URL, which dies on reload, so its bytes are
+  kept in **IndexedDB** (`src/state/glbCache.ts`: database `crate-designer`, store `glb`, one
+  record under the key `last`: `{ name, bytes: ArrayBuffer, savedAt }`). Whenever a part with a
+  `blob:` model that isn't a bundled catalog part comes on screen (picked or dropped, reused from
+  the library, a shared custom design), its bytes are read back from the object URL and replace
+  the record. Files over `MAX_CACHED_GLB_BYTES` (50 MB) aren't kept, and the older record is
+  dropped. Catalog parts need nothing kept: they restore from the bundled catalog.
+- **Load precedence** (`startupSource`, in `SavedStateLoader` after the saved units, standards
+  and library are applied, so the crate is rebuilt with them): (1) a share link in the URL wins,
+  even a damaged one (which says the default crate is shown); (2) else the last-opened crate;
+  (3) else the default part. A share link that opens is saved as the last-opened crate.
+- **Reopening** goes through `loadDesign` (§6.5), the same path as a design file. A custom part
+  uses the kept GLB when its name matches the saved `model`. When it doesn't (never kept, over
+  the cap, IndexedDB unavailable), the default part opens, the load row says "Your last crate
+  (2 × Widget) wasn't reopened: this browser didn't keep widget.glb (models over 50 MB aren't
+  kept). Load widget.glb to reopen it.", and loading that file reopens the design (the pending
+  design of a shared custom link). The §6.5 notes (layout no longer fits, different size) show
+  as "Your last crate reopened. …"; otherwise the reopen is silent.
+- **Safe load:** an entry that isn't JSON, has the wrong kind or version, an unknown tab or
+  ranking, or a design that fails `parseDesignFile` (bad settings, newer format) is ignored with
+  a `console.warn` and the default part opens. So does a design that no longer makes a crate, a
+  kept GLB that can't be read, or any error on the way. `localStorage` or IndexedDB that is
+  missing, blocked or full is treated as empty and a refused save is a warning, never an error.
+- **No flash and no hydration mismatch:** the restore runs in an effect after mount. While it
+  runs, the store's `restoring` flag holds the 3D scene back (`CrateViewer` renders nothing), so
+  the default crate doesn't flash before the remembered one.
+- **Time to design (#17):** a reopened crate isn't newly designed, so `restoreDesign` leaves the
+  clock stopped (`designStartedAt` null): no "Designed in" note appears for it, and an export
+  records nothing. Loading a new part or design (any `setPart` / `loadDesign`) starts the clock
+  as usual. When nothing is reopened (the default part, a share link, a failed restore), the
+  clock starts at mount as before.
+- **Starting fresh:** there is no "clear" control. Loading another part, design file, library
+  design or share link replaces the remembered crate, because whatever is on screen is saved.
+
 **Next: SQLite.** Everything else lives in memory. When designs outgrow `localStorage` (about
 5 MB, one browser, no queries), the plan is SQLite WASM with the `opfs-sahpool` VFS, in a Web
 Worker, behind a typed repository: see `DATA_STORE.md` and `schema.sql`. The library's entries
@@ -1422,7 +1480,7 @@ map to a designs table (part key, name, notes, saved at, the design JSON), and t
 stays the import / export format. Shop standards could move there (one row per shop) when
 accounts exist.
 
-The ranking option (#17) and the time-to-design clock are in memory only.
+The ranking option (#17) is saved only as part of the last-opened crate; the time-to-design clock is in memory only.
 
 ## 10. Invariants and tests
 
@@ -1585,6 +1643,18 @@ nothing is saved and nothing stored when empty; unreadable JSON, another kind or
 fall back to empty with one warning; good entries survive bad ones; throwing storage) and
 `useLibrary` (save and reload, per-part listing, a required name, rename, delete and undo saving
 each time, export and import with duplicates and bad entries counted).
+
+**`src/state/lastDesignStorage.test.ts`** checks the last-opened crate (#71): the versioned
+key and envelope round trip, the entry built from the store (null without a crate), nothing
+saved or blocked storage giving null, nine kinds of bad or old data each ignored with a warning,
+a refused save, the load precedence (share link, even a damaged one, then the last crate, then
+the default) and the debounced saver (one write of the latest value; flush and cancel).
+**`src/state/glbCache.test.ts`** checks the IndexedDB wrapper with `fake-indexeddb`: one record
+(the last saved), the 50 MB cap (not kept, the older record dropped), bad records ignored with a
+warning, and IndexedDB missing or throwing. **`src/components/shell/lastDesignLoader.test.ts`**
+reopens a catalog crate with its rules, layout, tab and ranking and the clock stopped (an export
+records nothing; a new part starts it), and without the custom part's kept GLB (or with a
+damaged one) keeps the default part, naming the file and holding the design until it is loaded.
 
 **`src/lib/currentDesign.test.ts`** checks that the design on screen (PART-001 × 4) is written as
 a design file that survives a share-link round trip and restores with no notes, and gives null
@@ -1759,6 +1829,14 @@ HTML report as `playwright-report`.
     projects): save and reuse inside the drawer with 44 px targets and no page scroll.
     Screenshots `14-saved-designs-list`, `14-saved-designs-island`, `14-share-link-restored`,
     `14-share-link-invalid`, `14-<project>-drawer-saved-designs`.
+  - `20-last-design` (#71): quantity 8, two layers, a 40 mm gap, Rank by Crate cost, a picked
+    layout and the Layouts tab in metric survive a reload (same outside size, no load message,
+    no "Designed in"); a custom `widget_v2.glb` with a 12.5 kg mass at quantity 2 comes back from
+    IndexedDB, and damaged kept bytes open PART-001 with no page error; a 51 MB GLB isn't kept,
+    so the reload opens PART-001 and says "Load big_part.glb to reopen it."; a corrupt entry
+    opens PART-001 × 4 on Overview with a warning; a share link wins over a remembered crate and
+    becomes the remembered one. Screenshots go to `docs/screenshots/71-last-design/`.
+    `17-design-library` now expects the reload to reopen the last crate (quantity 1).
   - `09-part-header` (#40, #39): a catalog part reads as the same sentence with no fields; each
     field edited by keyboard in Tab order, with the stand-in (dashed) showing and clearing, no
     box, the sky focus underline and ↑ / Shift+↓ steps; an invalid mass shows its reason (gold,
