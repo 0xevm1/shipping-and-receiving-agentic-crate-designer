@@ -2,6 +2,7 @@ import { crateCost, estimateLabour, freightTerms, type CrateCost, type FreightTe
 import type { Layout } from "./packing";
 import type { CrateSettings, DesignPart, Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, minInteriorMm, type ShopStandards } from "./standards";
+import { frameCount, planStructure, type LaidSection, type StructureMaterials, type StructurePlan } from "./structure";
 
 /**
  * Turns a packing layout into a buildable wooden crate: every board as an
@@ -31,7 +32,9 @@ export type MemberKind =
   | "lid-cleat"
   | "separator"
   | "bearer"
-  | "blocking";
+  | "blocking"
+  /** Floor joists across the skids, under the floor (#7). */
+  | "joist";
 
 export type WoodMaterial = "plywood" | "lumber";
 
@@ -65,7 +68,16 @@ export interface Construction {
   /** Cleat section for the wall and lid frames. */
   cleat: { thick: number; wide: number };
   skidCount: number;
+  /** Floor joists across the skids (#7): section as laid (`wide` along X, `tall`) and count; null when none. */
+  joist: { wide: number; tall: number; count: number } | null;
+  /** Lid edge and cross members (#7): section as laid, cross-member count, and whether they are joists on edge. */
+  lid: { wide: number; tall: number; count: number; joists: boolean };
+  /** Bottom of the skids to the top of the floor, mm: skids + joists + floor. */
+  baseMm: number;
 }
+
+/** What `resolveConstruction` picks from the payload alone; `skid` is the smallest skid allowed. */
+export type ConstructionMaterials = Pick<Construction, "panelMm" | "floorMm" | "skid" | "cleat">;
 
 export interface BomLine {
   /** Unique per line; equals `bomKey` on its members. */
@@ -86,7 +98,7 @@ export interface BomLine {
 }
 
 export interface Check {
-  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "utilization" | "cardboard" | "crate-limit";
+  id: "door" | "oversize" | "blocking" | "stack" | "stable" | "base-rating" | "lid" | "utilization" | "cardboard" | "crate-limit";
   /** `ok` = rule passed, `caution` = needs attention, `info` = worth knowing. */
   level: "ok" | "caution" | "info";
   title: string;
@@ -120,16 +132,21 @@ export interface CrateDesign {
   densityLbFt3: number;
   /** `freight.dimWeightLb`. */
   dimWeightLb: number;
+  /** Structural sizing (#7, spec §7.14): the base and lid plan, the dead load and the base rating. */
+  structure: StructurePlan;
   /** Every rule, passed or not, in a fixed order. */
   checks: Check[];
 }
 
-/** Choose board sizes from payload mass, using the shop's stock and thresholds. */
+/**
+ * Choose board sizes from payload mass, using the shop's stock and thresholds. The skid here is
+ * the smallest allowed for the payload; `planStructure` sizes the skids, joists and lid (#7).
+ */
 export function resolveConstruction(
   settings: CrateSettings,
   payloadKg: number,
   standards: ShopStandards = DEFAULT_STANDARDS,
-): Omit<Construction, "skidCount"> {
+): ConstructionMaterials {
   const { stock, construction: rule } = standards;
   const ply = stock.panelPlywoodMm;
   const panelMm =
@@ -144,10 +161,20 @@ export function resolveConstruction(
   return { panelMm, floorMm: stock.floorPlywoodMm, skid: { ...skid }, cleat: { ...stock.cleatMm } };
 }
 
-/** What the structure adds to the interior on each axis — fed to the packer. */
-export function structureAllowance(c: Omit<Construction, "skidCount">): Vec3 {
+/** The materials `planStructure` sizes from: skid stock from the resolved skid up, by strength. */
+export function structureMaterials(c: ConstructionMaterials, standards: ShopStandards = DEFAULT_STANDARDS): StructureMaterials {
+  const modulus = (k: LaidSection) => k.wide * k.tall * k.tall;
+  const { standard, heavy } = standards.stock.skidMm;
+  const skids = [standard, heavy]
+    .filter((k) => modulus(k) >= modulus(c.skid))
+    .sort((a, b) => modulus(a) - modulus(b) || a.wide * a.tall - b.wide * b.tall);
+  return { panelMm: c.panelMm, floorMm: c.floorMm, cleat: c.cleat, skids: skids.map((k) => ({ wide: k.wide, tall: k.tall })) };
+}
+
+/** What the structure adds to the interior on each axis — fed to the packer, per layout (#7). */
+export function structureAllowance(c: Pick<Construction, "panelMm" | "cleat">, plan: Pick<StructurePlan, "baseMm" | "lid">): Vec3 {
   const wall = 2 * (c.panelMm + c.cleat.thick);
-  return [wall, wall, c.skid.tall + c.floorMm + c.panelMm + c.cleat.thick];
+  return [wall, wall, plan.baseMm + c.panelMm + plan.lid.member.tall];
 }
 
 export function designCrate(
@@ -157,28 +184,43 @@ export function designCrate(
   standards: ShopStandards = DEFAULT_STANDARDS,
 ): CrateDesign {
   const payloadKg = part.mass_kg * settings.quantity;
-  const base = resolveConstruction(settings, payloadKg, standards);
+  const materials = resolveConstruction(settings, payloadKg, standards);
+  const structure = planStructure(layout, structureMaterials(materials, standards), payloadKg, settings.partGapMm, standards);
+  const { base: plan, lid: lidPlan } = structure;
+  const base = { ...materials, skid: plan.skid };
   const t = base.panelMm;
   const ct = base.cleat.thick;
   const cw = base.cleat.wide;
   const [L, W, H] = layout.interior;
   const extW = W + 2 * (t + ct);
-  const skidCount = Math.max(2, Math.ceil(extW / standards.construction.skidSpacingMm) + 1);
-  const verticalCount = (span: number) => Math.max(2, Math.ceil(span / standards.construction.maxCleatSpacingMm) + 1);
-  const construction: Construction = { ...base, skidCount };
+  const skidCount = plan.skidCount;
+  const verticalCount = (span: number) => frameCount(span, standards);
+  const construction: Construction = {
+    ...base,
+    skidCount,
+    joist: plan.joist ? { ...plan.joist, count: plan.joistCount } : null,
+    lid: { ...lidPlan.member, count: lidPlan.count, joists: lidPlan.joists },
+    baseMm: structure.baseMm,
+  };
 
   const members: Member[] = [];
   const add: AddMember = (kind, material, tag, min, size) => {
     if (size.every((s) => s > 0.5)) members.push({ kind, material, ...tag, bomKey: "", min, size });
   };
 
-  // Base: floor sheet over the full footprint, skids underneath.
+  // Base: floor sheet over the full footprint, floor joists across the skids (#7), skids underneath.
   const x0 = -t - ct;
   const y0 = -t - ct;
   const extL = L + 2 * (t + ct);
   const baseTag = (label: string): Tag => ({ assembly: "base", face: "base", label });
   add("floor", "plywood", baseTag("Floor"), [x0, y0, -base.floorMm], [extL, extW, base.floorMm]);
-  const skidZ = -base.floorMm - base.skid.tall;
+  const joist = construction.joist;
+  if (joist) {
+    spread(x0, extL, joist.wide, joist.count).forEach((x) =>
+      add("joist", "lumber", baseTag("Floor joist"), [x, y0, -base.floorMm - joist.tall], [joist.wide, extW, joist.tall]),
+    );
+  }
+  const skidZ = -structure.baseMm;
   spread(y0, extW, base.skid.wide, skidCount).forEach((y) =>
     add("skid", "lumber", baseTag("Skid"), [x0, y, skidZ], [extL, base.skid.wide, base.skid.tall]),
   );
@@ -210,13 +252,16 @@ export function designCrate(
     );
   }
 
-  // Lid: panel plus a cleat frame on top, screwed down (removable for unpacking).
+  // Lid: panel plus a cleat frame on top, screwed down (removable for unpacking). When crates
+  // are stacked (#7) the frame is sized for the load, possibly as joists on edge.
   const lidTag = (label: string): Tag => ({ assembly: "lid", face: "lid", label });
+  const { wide: lw, tall: lt, count: lidCount, joists: lidJoists } = construction.lid;
+  const [edgeLabel, crossLabel] = lidJoists ? ["Lid edge joist", "Lid joist"] : ["Lid edge cleat", "Lid cross cleat"];
   add("lid", "plywood", lidTag("Lid panel"), [-t, -t, H], [L + 2 * t, W + 2 * t, t]);
-  add("lid-cleat", "lumber", lidTag("Lid edge cleat"), [-t, -t, H + t], [L + 2 * t, cw, ct]);
-  add("lid-cleat", "lumber", lidTag("Lid edge cleat"), [-t, W + t - cw, H + t], [L + 2 * t, cw, ct]);
-  spread(-t, L + 2 * t, cw, verticalCount(L + 2 * t)).forEach((x) =>
-    add("lid-cleat", "lumber", lidTag("Lid cross cleat"), [x, -t + cw, H + t], [cw, W + 2 * t - 2 * cw, ct]),
+  add("lid-cleat", "lumber", lidTag(edgeLabel), [-t, -t, H + t], [L + 2 * t, lw, lt]);
+  add("lid-cleat", "lumber", lidTag(edgeLabel), [-t, W + t - lw, H + t], [L + 2 * t, lw, lt]);
+  spread(-t, L + 2 * t, lw, lidCount).forEach((x) =>
+    add("lid-cleat", "lumber", lidTag(crossLabel), [x, -t + lw, H + t], [lw, W + 2 * t - 2 * lw, lt]),
   );
 
   addDunnage(layout, settings, t, standards, add);
@@ -262,6 +307,7 @@ export function designCrate(
     freightClass: freight.freightClass,
     densityLbFt3: freight.densityLbFt3,
     dimWeightLb: freight.dimWeightLb,
+    structure,
     checks: [],
   };
   design.checks = evaluateChecks(design, part, settings, standards);
@@ -375,7 +421,7 @@ function buildBom(members: Member[]): BomLine[] {
 
 /** One line of the fastener schedule (#26): where the screws go, how they are spaced, how many. */
 export interface ScrewLine {
-  id: "skids" | "side-cleats" | "end-cleats" | "walls-to-floor" | "corners" | "bearers" | "blocking" | "lid-cleats" | "lid-to-walls";
+  id: "skids" | "joists" | "side-cleats" | "end-cleats" | "walls-to-floor" | "corners" | "bearers" | "blocking" | "lid-cleats" | "lid-to-walls";
   /** The sub-assembly the screws are driven in, for the build order. */
   assembly: Assembly;
   /** "Floor to skids". */
@@ -400,8 +446,12 @@ export function screwSchedule(members: Member[], interior: Vec3, standards: Shop
   const count = (kind: MemberKind) => members.filter((m) => m.kind === kind).length;
   const joint = Math.ceil((2 * (L + W)) / every.panelJoint);
   const cleatOf = (a: Assembly) => (m: Member) => (m.kind === "cleat" || m.kind === "lid-cleat") && m.assembly === a;
+  const joists = count("joist");
   const lines: ScrewLine[] = [
-    { id: "skids", assembly: "base", title: "Floor to skids", everyMm: every.skid, rule: "along each skid, plus 1", qty: along((m) => m.kind === "skid", every.skid) },
+    joists > 0
+      ? { id: "skids", assembly: "base", title: "Floor joists to skids", everyMm: null, rule: "2 where each joist crosses a skid", qty: joists * count("skid") * 2 }
+      : { id: "skids", assembly: "base", title: "Floor to skids", everyMm: every.skid, rule: "along each skid, plus 1", qty: along((m) => m.kind === "skid", every.skid) },
+    { id: "joists", assembly: "base", title: "Floor to joists", everyMm: every.skid, rule: "along each joist, plus 1", qty: along((m) => m.kind === "joist", every.skid) },
     { id: "side-cleats", assembly: "sides", title: "Side wall cleats to panels", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("sides"), every.cleat) },
     { id: "end-cleats", assembly: "ends", title: "End wall cleats to panels", everyMm: every.cleat, rule: "along each cleat, plus 1", qty: along(cleatOf("ends"), every.cleat) },
     { id: "walls-to-floor", assembly: "sides", title: "Walls to floor", everyMm: every.panelJoint, rule: "around the base", qty: joint },
@@ -453,6 +503,47 @@ function smallestSideGap(layout: Layout, partGapMm: number): { mm: number; where
   return gaps.reduce((a, b) => (b.mm < a.mm ? b : a));
 }
 
+const kgText = (v: number) => `${Math.round(v).toLocaleString("en-US")} kg`;
+
+/**
+ * The computed base rating (#7, spec §7.14): "Base rated 1,240 kg; this crate's payload is 820 kg
+ * (66%)", with the skids, joists and floor, and what governs.
+ */
+function baseRatingCheck(d: CrateDesign, standards: ShopStandards): Check {
+  const c = d.construction;
+  const { ratedPayloadKg: rated, base } = d.structure;
+  const pct = rated > 0 ? `${Math.round((d.payloadKg / rated) * 100)}%` : "over";
+  const head = `Base rated ${kgText(Math.floor(rated))}; this crate's payload is ${kgText(d.payloadKg)} (${pct}).`;
+  const joists = c.joist ? `, ${c.joist.count} ${sectionName(c.joist.wide, c.joist.tall)} floor joists` : "";
+  const built = `${c.skidCount} × ${sectionName(c.skid.wide, c.skid.tall)} skids${joists} and a ${c.floorMm} mm floor`;
+  const governs = `${base.governing.label} governs`;
+  return base.ok && d.payloadKg <= rated
+    ? {
+        id: "base-rating",
+        level: "ok",
+        title: "Within the base rating",
+        detail: `${head} ${built}, sized for ${standards.structure.loadFactor}× the load (${governs}).`,
+      }
+    : {
+        id: "base-rating",
+        level: "caution",
+        title: "Over the base rating",
+        detail: `${head} Even ${built} can't carry it (${governs}). Split the batch, or add heavier skid or joist stock.`,
+      };
+}
+
+/** Only when crates may be stacked (`structure.lidStackKg` > 0): whether the lid carries it. */
+function lidRatingCheck(d: CrateDesign): Check | null {
+  const lid = d.structure.lid;
+  if (lid.stackKg <= 0 || lid.capacityKg === null) return null;
+  const c = d.construction.lid;
+  const frame = `${c.count} ${c.joists ? sectionName(c.wide, c.tall) : sectionName(c.tall, c.wide)} ${c.joists ? "joists on edge" : "cross cleats"}`;
+  const head = `Sized for ${kgText(lid.stackKg)} stacked on top; rated ${kgText(lid.capacityKg)}`;
+  return lid.ok
+    ? { id: "lid", level: "ok", title: "Lid carries the stacking load", detail: `${head}, with ${frame}.` }
+    : { id: "lid", level: "caution", title: "Lid can't take the stacking load", detail: `${head} even with ${frame}. Don't stack on this crate, or add heavier joist stock.` };
+}
+
 /** Every rule of thumb, reported whether it passes or not. Order is fixed; the UI sorts. */
 function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSettings, standards: ShopStandards): Check[] {
   const checks: Check[] = [];
@@ -500,13 +591,9 @@ function evaluateChecks(d: CrateDesign, part: DesignPart, settings: CrateSetting
     );
   }
 
-  const skidName = sectionName(d.construction.skid.wide, d.construction.skid.tall);
-  const rating = `${lim.baseRatingKg.toLocaleString("en-US")} kg`;
-  checks.push(
-    d.grossKg > lim.baseRatingKg
-      ? { id: "base-rating", level: "caution", title: `Over ${rating} gross`, detail: "Needs heavier skids and floor joists than this design includes." }
-      : { id: "base-rating", level: "ok", title: "Within the standard base rating", detail: `Gross weight is under ${rating}, so ${skidName} skids and a ${d.construction.floorMm} mm floor are enough.` },
-  );
+  checks.push(baseRatingCheck(d, standards));
+  const lidCheck = lidRatingCheck(d);
+  if (lidCheck) checks.push(lidCheck);
 
   if (eL > lim.ltlExcessiveLengthMm) {
     const ft = Math.round((lim.ltlExcessiveLengthMm / 304.8) * 10) / 10;

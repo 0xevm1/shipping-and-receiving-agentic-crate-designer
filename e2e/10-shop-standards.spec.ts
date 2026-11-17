@@ -30,7 +30,7 @@ test("Shop standards is collapsed by default and lists every group", async ({ pa
   await expect(standards(page)).not.toHaveAttribute("open", "");
   await expect(standards(page)).toContainText("house rules for every crate");
   await openStandards(page);
-  for (const group of ["Stock on hand", "Defaults", "Construction", "Limits", "Rates"]) {
+  for (const group of ["Stock on hand", "Defaults", "Construction", "Limits", "Structure", "Rates"]) {
     await expect(standards(page).getByRole("region", { name: group })).toBeVisible();
   }
   await expect(standards(page).getByLabel("Plywood cost")).toHaveValue("1100");

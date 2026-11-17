@@ -68,7 +68,8 @@ export function OverviewTab({ design }: { design: CrateDesign }) {
         </Step>
         <Step name="Base" value={`${c.skidCount} skids`} flash={["skidCount"]}>
           <Flash on={["skid"]}>{section(c.skid.wide, c.skid.tall)}</Flash> skids under a{" "}
-          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines
+          {c.joist && `${c.joist.count} ${section(c.joist.wide, c.joist.tall)} joists and a `}
+          <Flash on={["floor"]}>{ply(c.floorMm)}</Flash> floor, open for forklift tines. Rated {weight(design.structure.ratedPayloadKg, units)} of parts
         </Step>
         <Step name="Blocking" value={`${posts} posts`}>
           {bearers} bearer{bearers === 1 ? "" : "s"} underneath

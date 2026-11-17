@@ -150,6 +150,7 @@ parts.json ──zod──▶ catalog.ts          GLB file ──▶ lib/loadPar
 | `src/domain/packing.ts` | `enumerateLayouts()`, `compareLayouts()` |
 | `src/domain/crate.ts` | `resolveConstruction`, `structureAllowance`, `designCrate`, dunnage, BOM, screws, checks; `ASSEMBLIES`; `MIN_INTERIOR_MM`, `DRY_VAN_53FT_MM`, `LTL_EXCESSIVE_LENGTH_MM` and `CARDBOARD_LIMITS` as read-only views of the defaults |
 | `src/domain/cost.ts` | Labour estimate, crate cost, LTL freight terms and the NMFC density scale (`estimateLabour`, `crateCost`, `freightTerms`, `freightClassFor`, `NMFC_DENSITY_SCALE`; §7.12, #17) |
+| `src/domain/structure.ts` | Structural sizing (§7.14, #7): `planStructure()` sizes the skids, floor joists and lid from the load and spans, and rates the base (`sizeBase`, `sizeLid`, `estimateDeadLoad`, the member checks) |
 | `src/domain/shipment.ts` | `planShipment()`: one crate, or N identical crates plus a remainder when one crate would break a per-crate limit (§7.10); `shipmentBom()`, `describeShipment()` |
 | `src/domain/design.ts` | `computeDesign()`, `rankLayouts()` and its input checks (`DesignProblem`, `MAX_PART_MM`), `explainLayout()`, `settingsFromStandards()`, `DEFAULT_SETTINGS` |
 | `src/domain/export.ts` | `bomToCsv()` and `shipmentToCsv()` in the selected units (an export edge, formatted with `src/lib`), `downloadText()`, `ASSEMBLY_NAMES` |
@@ -348,7 +349,8 @@ one zod-validated object in `src/domain/standards.ts`, and `computeDesign(part, 
 layoutKey?, standards = DEFAULT_STANDARDS)` passes it down to `resolveConstruction`,
 `enumerateLayouts`, `designCrate`, the dunnage, the screw estimate and the checks. Nothing in
 the domain reads a rule from a module constant. **With `DEFAULT_STANDARDS`, every design is
-exactly what it was before** (the 18-case baseline in §10 is unchanged).
+exactly what it was before** (the 18-case baseline in §10 is unchanged, including after the
+structural sizing of #7, §7.14).
 
 Units are fixed per field (mm, kg, kg/m³, USD/m³, USD per 100 screws, minutes, USD/h, in³/lb),
 whatever the display units.
@@ -357,18 +359,19 @@ whatever the display units.
 |---|---|---|
 | **`stock`** — what the shop keeps on hand | | |
 | `cleatMm {thick, wide}` | 19 × 89 (1×4) | Wall and lid frames; wall allowance; minimum interior = 2 × `wide` (§7.2) |
-| `skidMm.standard {wide, tall}` | 89 × 89 (4×4) | Skids up to `construction.heavySkidOverKg` |
-| `skidMm.heavy {wide, tall}` | 89 × 140 (4×6) | Skids above it |
+| `skidMm.standard {wide, tall}` | 89 × 89 (4×4) | Skids: structural sizing tries it first (§7.14) |
+| `skidMm.heavy {wide, tall}` | 89 × 140 (4×6) | Skids when the standard section fails, and always above `construction.heavySkidOverKg` |
 | `floorPlywoodMm` | 19 | The floor |
 | `panelPlywoodMm {light, medium, heavy}` | 12 / 15 / 19 | Auto wall, lid and separator plywood (§7.3) |
 | `blockWidthMm` | 89 | Blocking posts and bearers (§7.5) |
+| `joistMm {thick, wide}` | 38 × 89 (2×4) | Floor joists on edge across the skids, and lid joists when crates are stacked (§7.14, #7) |
 | **`defaults`** — what a new crate starts with | | |
 | `partGapMm`, `wallClearanceMm`, `maxLayers` | 50, 50, 2 | Settings defaults (§6.2); same ranges as the settings |
 | `volumeTolerance` | 0.03 | Layout volumes within 3% tie, and the lower crate wins (§7.2, §7.8) |
 | **`construction`** — when to use which stock | | |
 | `panelLightMaxKg`, `panelMediumMaxKg` | 150, 500 | Auto panel thresholds by payload (§7.3) |
-| `heavySkidOverKg` | 700 | Heavy skids above this payload |
-| `skidSpacingMm` | 800 | Skid count = `max(2, ceil(extW / spacing) + 1)` |
+| `heavySkidOverKg` | 700 | Heavy skids at least, above this payload (sizing may pick them sooner) |
+| `skidSpacingMm` | 800 | Fewest skids = `max(2, ceil(extW / spacing) + 1)`; sizing may add more (§7.14) |
 | `maxCleatSpacingMm` | 600 | Wall uprights and lid cross cleats (§7.4) |
 | `minBlockingGapMm` | 19 | Smallest gap that gets a blocking post; the `blocking` check |
 | **`limits`** — what the checks test (§7.7) | | |
@@ -376,10 +379,9 @@ whatever the display units.
 | `ltlExcessiveLengthMm` | 2438 (8 ft) | `oversize` |
 | `cardboard {partKg, payloadKg, boxDimSumMm}` | 15, 25, 1905 | `cardboard` |
 | `stackKg` | 100 | `stack` |
-| `baseRatingKg` | 1000 | `base-rating` |
 | `stableHeightRatio` | 1.5 | `Layout.stable`, ranking and the `stable` check |
 | `lowUtilization` | 0.25 | `utilization` |
-| `perCrate.maxGrossKg` | 1000 (the base rating) | Shipment planning (§7.10): a heavier crate is split |
+| `perCrate.maxGrossKg` | 1000 (a handling limit) | Shipment planning (§7.10): a heavier crate is split. The computed base rating (§7.14) also applies |
 | `perCrate.maxParts` | 0 (no limit) | Shipment planning: most parts in one crate |
 | **`rates`** — material properties, prices and fastening (§7.6) | | |
 | `densityKgM3 {plywood, lumber}` | 600, 480 | Tare weight |
@@ -393,6 +395,17 @@ whatever the display units.
 | `screwMin` | 0.15 | Minutes per screw (9 s) |
 | `assemblyStepMin` | 6 | Minutes per assembly step: base, four walls, lid, dunnage per layer |
 | `handlingMin` | 15 | Minutes per crate: moving, marking, staging |
+| **`structure`** — structural sizing (§7.14, #7) | | |
+| `lumberBendingMPa` | 7.8 | Allowable bending stress Fb of the lumber: SPF No. 2, 875 psi × size factor 1.3 |
+| `lumberShearMPa` | 0.93 | Allowable shear Fv: SPF No. 2, 135 psi |
+| `lumberBearingMPa` | 2.93 | Allowable bearing across the grain Fc⊥: SPF No. 2, 425 psi |
+| `plywoodBendingMPa` | 6.0 | Allowable bending of the floor and lid plywood, on its gross section (about 870 psi) |
+| `loadFactor` | 1.5 | Design load = this × the weight carried (handling shocks, uneven support) |
+| `supportLengthMm` | 100 | Length of skid on each end support, for bearing |
+| `minForkOpeningMm` | 200 | Skids are never added past this clear gap between them |
+| `joistOverKg` | 450 | Payload above this always gets floor joists |
+| `maxJoistSpacingMm` | 400 | Floor joists at most this far apart, centre to centre |
+| `lidStackKg` | 0 (not stacked) | Weight on the lid it is sized for; 0 keeps the nominal lid |
 | **`freight`** — LTL terms (§7.12, #17) | | |
 | `dimDivisorIn3PerLb` | 139 | Dimensional weight = outside in³ / divisor |
 
@@ -400,7 +413,9 @@ whatever the display units.
 100–5000 mm, so a typo can't make thousands of boards). Across fields: panel plywood must go
 `light ≤ medium ≤ heavy`, `panelLightMaxKg ≤ panelMediumMaxKg`, the trailer door can't be
 bigger than the trailer inside, and blocking can't be wider than the minimum interior (two
-cleats), or a bearer would poke through a wall. `parseStandards` returns the first problem as
+cleats), or a bearer would poke through a wall. The structure group (#7) has ranges too: a load
+factor of 1–5, stresses above zero, joist spacing 100–2000 mm and a stacking load of 0 or more.
+`parseStandards` returns the first problem as
 `"path: message"`.
 
 **What is deliberately not a standard:** geometry that keeps the model consistent rather than a
@@ -425,8 +440,8 @@ the defaults (so a file can hold only the house's differences), and rejects inva
 different `version`, or an invalid value.
 
 **In the UI.** Rules → **Shop standards · house rules for every crate**, a `<details>` section
-collapsed by default. Seven groups (Stock on hand, Defaults, Construction, Limits, Rates, Labour,
-Freight) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
+collapsed by default. Eight groups (Stock on hand, Defaults, Construction, Limits, Structure,
+Rates, Labour, Freight) of number fields with units, laid out like the other `.rule` rows. A field applies as soon as its
 text is a valid standard; invalid text is outlined in gold with the reason and reverts on blur.
 A changed field is tinted and says its default. A **Customised** tag shows when anything
 differs from `DEFAULT_STANDARDS`; **Reset to defaults**, **Download standards** and **Load
@@ -596,15 +611,20 @@ Values are the defaults; the standards field is in brackets (§6.4).
 |---|---|
 | Panel plywood (walls, lid, separators) | Auto: payload ≤ 150 kg [`construction.panelLightMaxKg`] → **12 mm** [`stock.panelPlywoodMm.light`]; ≤ 500 kg [`panelMediumMaxKg`] → **15 mm** [`medium`]; otherwise **19 mm** [`heavy`]. Overridable by hand with 12 / 15 / 19 |
 | Floor plywood | Always **19 mm** [`stock.floorPlywoodMm`] |
-| Skids | Payload ≤ 700 kg [`construction.heavySkidOverKg`] → **89 × 89** (4×4) [`stock.skidMm.standard`]; otherwise **89 × 140** (4×6, tall) [`stock.skidMm.heavy`] |
-| Skid count | `max(2, ceil(externalWidth / 800) + 1)` [`construction.skidSpacingMm`], evenly spread across the width |
+| Skids | Sized per layout from the load and spans (§7.14, #7): the smallest of **89 × 89** (4×4) [`stock.skidMm.standard`] and **89 × 140** (4×6) [`stock.skidMm.heavy`] that passes. Payload over 700 kg [`construction.heavySkidOverKg`] starts at 4×6 |
+| Skid count | At least `max(2, ceil(externalWidth / 800) + 1)` [`construction.skidSpacingMm`], more if no section passes (§7.14), evenly spread across the width |
+| Floor joists | 2×4 on edge [`stock.joistMm`] across the skids, when the payload is over 450 kg or the floor fails over the skids (§7.14) |
 | Cleats | **19 × 89** (1×4) [`stock.cleatMm`], returned as `construction.cleat` |
 
 **`structureAllowance`** is what the structure adds to the interior. Here `t` is the panel
-thickness and `ct` is the cleat thickness (19, `construction.cleat.thick`):
+thickness and `ct` is the cleat thickness (19, `construction.cleat.thick`). Since #7 it is worked
+out per layout, because the base is sized for that layout's spans: the packer calls
+`planStructure` for each grid (§7.14) and `designCrate` makes the same call, so the boards'
+bounds still equal `layout.external`.
 
 ```
-[ 2(t + ct),  2(t + ct),  skid.tall + floor + t + ct ]
+[ 2(t + ct),  2(t + ct),  baseMm + t + lid.tall ]
+baseMm = skid.tall + (joists ? joist.tall : 0) + floor     (lid.tall = ct for the nominal lid)
 ```
 
 ### 7.4 Crate geometry (`designCrate`)
@@ -615,21 +635,22 @@ All coordinates are relative to the interior origin, with `cw = 89` (cleat width
 | Member | Min corner → size |
 |---|---|
 | Floor | x, y from `−t−ct`, spanning the full external footprint; z ∈ [−floor, 0] |
-| Skids | Under the floor, full external length along X; z ∈ [−floor−skid.tall, −floor] |
+| Floor joists (#7) | When the base has them: on edge across the full external width (Y), spread evenly along X from end to end; z ∈ [−floor−joist.tall, −floor] |
+| Skids | Under the floor (or the joists), full external length along X; z ∈ [−baseMm, −baseMm + skid.tall] |
 | Side walls (±Y) | Panel x ∈ [−t, L+t], thickness t, outside y ∈ [0, W], height H |
 | Side cleats | Outside each side panel. Top and bottom horizontals, plus verticals at ≤ 600 mm spacing (`construction.maxCleatSpacingMm`) |
 | End walls (±X) | Panel spans y ∈ [0, W], fitted between the side panels |
 | End cleats | Outside each end panel. They span the full external width, so they wrap the corners over the side cleats |
-| Lid | Panel over x ∈ [−t, L+t], y ∈ [−t, W+t] at z = H. Two long edge cleats on top, plus cross-cleats at ≤ 600 mm |
+| Lid | Panel over x ∈ [−t, L+t], y ∈ [−t, W+t] at z = H. Two long edge cleats on top, plus cross-cleats at ≤ 600 mm. When crates may be stacked (#7) the frame is sized for the load: more cleats, or 2×4 joists on edge (§7.14) |
 
 Each member is tagged where it is created:
 
 | Assembly | Face | Labels |
 |---|---|---|
-| `base` | `base` | Floor, Skid |
+| `base` | `base` | Floor, Floor joist (kind `joist`, #7), Skid |
 | `sides` | `side-` (front) / `side+` (back) | Side panel, Side rail (top and bottom cleats), Side upright (vertical cleats) |
 | `ends` | `end-` / `end+` | End panel, End rail, End upright |
-| `lid` | `lid` | Lid panel, Lid edge cleat, Lid cross cleat |
+| `lid` | `lid` | Lid panel, Lid edge cleat, Lid cross cleat (Lid edge joist, Lid joist when stacking needs joists) |
 | `inside` | `inside` | Bearer, Layer separator, Blocking post |
 
 **Invariant:** the bounding box of all members equals `layout.external`, which is tested.
@@ -671,13 +692,14 @@ Each member is tagged where it is created:
   Overview's "$ of wood"); `cost` adds screws and labour (§7.12).
 - **Screws** (spacings from `rates.screwSpacingMm`: `cleat` 150, `skid` 300, `panelJoint` 200):
   - each cleat: `ceil(len/150)+1`
-  - each skid: `ceil(len/300)+1`
+  - each skid: `ceil(len/300)+1`; with floor joists (#7) instead 2 where each joist crosses a
+    skid, plus `ceil(len/300)+1` along each joist (floor to joists)
   - each block or bearer: 2
   - walls-to-floor plus lid-to-walls: `2·ceil(2(L+W)/200)`
   - corners: `4·ceil(H/200)`
   - `screwSchedule(members, interior, standards)` returns these line by line (floor to skids,
     side and end wall cleats, walls to floor, corners, bearers, blocking, lid cleats, lid to
-    walls), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
+    walls; with joists, joists to skids and floor to joists), each with its assembly and spacing, for the build sheet's fastener schedule (#26);
     `screws` is its sum, so the estimate is unchanged.
 - **BOM:** members are grouped by `(assembly, label, stock, cut)`; that string is the line's
   `key` and each member's `bomKey`.
@@ -712,7 +734,8 @@ lumber, ocean containers, air freight) are out of scope, so there is no export c
 | `stable` | Stable footprint | caution: Tip-over risk | `layout.stable` (H ≤ 1.5 × short side, `limits.stableHeightRatio`) |
 | `blocking` | Every part is blocked in ("… The smallest gap is 50 mm, between parts.") | caution: Parts are not restrained ("The 10 mm gap between parts is under the 19 mm that blocking needs. …") | The smallest side gap in the drawn crate ≥ 19 mm (`construction.minBlockingGapMm`). The side gaps are `layout.clearance` on X and Y (more than the setting when a tiny crate was padded, §7.2) and the part gap only when there is more than one part along X or Y. The text names the smallest gap and where it is: between parts, to the walls, to the end walls (X) or to the side walls (Y) (#36) |
 | `stack` | Stack load is light | caution: Heavy stack on the bottom layer | mass × (nz − 1) ≤ 100 kg (`limits.stackKg`); only reported when nz > 1 |
-| `base-rating` | Within the standard base rating | caution: Over 1,000 kg gross | gross ≤ 1000 kg (`limits.baseRatingKg`; the title quotes the limit). The pass text names the skids ("4×4", "4×6", or the size in mm for non-standard stock) |
+| `base-rating` | Within the base rating ("Base rated 859 kg; this crate's payload is 645 kg (75%). 3 × 4×6 skids, 7 2×4 floor joists and a 19 mm floor, sized for 1.5× the load (skid bending governs).") | caution: Over the base rating ("… Even 3 × 4×6 skids … can't carry it (skid bending governs). Split the batch, or add heavier skid or joist stock.") | payload ≤ the computed base rating (§7.14, #7; it replaced the fixed 1,000 kg `limits.baseRatingKg`). Sections are named "4×4", "4×6", "2×4", or in mm for non-standard stock |
+| `lid` | Lid carries the stacking load | caution: Lid can't take the stacking load | Only when `structure.lidStackKg` > 0 (§7.14): the lid's rated stacking load ≥ `lidStackKg` |
 | `oversize` | — | info: LTL length surcharge likely | external L > 2438 mm (8 ft, `limits.ltlExcessiveLengthMm`; the text gives the limit in feet) |
 | `utilization` | — | info: Mostly empty space | utilization < 25% (`limits.lowUtilization`) |
 | `cardboard` | — | info: A cardboard box may be enough | part mass ≤ 15 kg, payload ≤ 25 kg and interior L + W + H ≤ 1905 mm (`limits.cardboard`) |
@@ -797,8 +820,10 @@ needs "this batch ships as N crates", each buildable, handleable and within limi
 
 **Limits per crate** (shop standards, §6.4):
 
-- gross ≤ `limits.perCrate.maxGrossKg` (1,000 kg, the standard base rating, until structural
-  sizing #7 replaces it);
+- gross ≤ the smaller of `limits.perCrate.maxGrossKg` (1,000 kg, a handling limit) and the
+  crate's computed base rating as a gross weight, `structure.ratedPayloadKg + tareKg`
+  (`crateGrossLimitKg`; #7, §7.14). Each candidate crate is designed anyway, so this costs
+  nothing extra, and the bisection still terminates;
 - outside L ≤ `trailerMm.interiorLength`, W ≤ `doorWidth`, H ≤ `doorHeight` (the `door` check's
   limits, `withinOutsideLimits`);
 - parts ≤ `limits.perCrate.maxParts`, when it is above 0.
@@ -820,7 +845,9 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
    the trailer limits but others aren't, the ones that fit are ranked ahead (each in its usual
    order) and the best of them is recommended.
 3. **Largest crate:** `kMax`, the most parts that fit one crate, by bisection over
-   `1 … min(Q − 1, maxParts, floor(maxGross / part mass))` (fit is taken to fall as k grows).
+   `1 … min(Q − 1, maxParts, floor(maxGross / part mass))` (fit is taken to fall as k grows;
+   with #7 the base grows with k, so the rating usually rises with it, and only runs out when
+   the stock does).
 4. **Fewest crates:** `N = ceil(Q / kMax)`. Every k from `ceil(Q / N)` to `kMax` ships in N
    crates, as `floor(Q / k)` identical crates of k plus at most one remainder crate of
    `r = Q − floor(Q / k)·k < k` parts.
@@ -836,7 +863,8 @@ and (#17) total crate cost (`costUsd`), build time (`labourHours`) and dimension
 7. **Layout picks:** `layoutKey` applies to the first crate type that has that layout; the
    split itself always uses the recommended layouts.
 
-On a split, every crate type gets the `crate-limit` check (§7.7). `shipmentBom(plan)` merges the
+On a split, every crate type gets the `crate-limit` check (§7.7); its text names the limits as
+"1,000 kg gross or the base rating, the trailer door and floor". `shipmentBom(plan)` merges the
 cut lists for the whole shipment (each type's quantities × its count; equal pieces merged by
 `BomLine.key`, each piece's sizes kept together), with summed plywood, lumber and screws;
 `shipmentToCsv` writes it with a "# Shipment of …" header. `describeShipment` gives
@@ -899,7 +927,8 @@ programmatic PDF export (#51) can build the same model and lay it out itself.
      its running length (lumber) or area (plywood). Plywood, lumber and screw totals follow.
    - **Fasteners:** `screwSchedule` line by line, with each spacing in the selected units, and
      the total (equal to the screw estimate).
-   - **Assembly order:** 1 Base, 2 Walls, 3 Load the parts (bearers first), 4 Blocking and
+   - **Assembly order:** 1 Base (with floor joists, #7: "screw 7 2x4 floor joists on edge across
+     them … and screw the floor to the joists", and "The base is rated for … of parts"), 2 Walls, 3 Load the parts (bearers first), 4 Blocking and
      separators (layer by layer when stacked), 5 Lid. Each step has a sentence, the pieces it
      uses and its screws. Every cut-list piece is in exactly one step, and the steps' screws
      sum to the schedule's total.
@@ -1066,6 +1095,117 @@ pill: one shared run and state (`src/components/shell/exportRun.ts`), so either 
 "Exporting…" and the same "Downloaded …" note, and a second click while busy does nothing. It
 replaced #27's "Download 3D model (.glb)" and its "Include parts" switch; the zip's GLB always
 includes the parts.
+
+### 7.14 Structural sizing (`src/domain/structure.ts`, #7)
+
+Before #7 the base was picked from mass thresholds: 4×4 skids, 4×6 above 700 kg of payload, a
+skid every 800 mm, and a flat "1,000 kg base rating" that only produced a warning. Now the skids,
+the floor joists and (when crates are stacked) the lid are sized from the load and the spans,
+with simple, documented, conservative timber rules, and the base is **rated** from its members.
+Everything is wood and wood screws: no metal plates, brackets or bolts.
+
+**Where it runs.** `planStructure(grid, materials, payloadKg, partGap, standards)` is pure. The
+packer calls it for every candidate layout (through `structureAllowance`, §7.3), because the
+base height depends on the spans; `designCrate` calls it with the chosen layout, gets the same
+answer, and builds the members from it. The result is `CrateDesign.structure`:
+`{ base, lid, dead, baseMm, ratedPayloadKg }`, and `construction` carries `skid`, `skidCount`,
+`joist {wide, tall, count} | null`, `lid {wide, tall, count, joists}` and `baseMm`.
+
+**Allowable stresses** (shop standards, `structure`, §6.4). Spruce-Pine-Fir No. 2, NDS
+Supplement (2018) Table 4A reference values, allowable-stress design:
+
+| Value | psi | MPa (standard) | Note |
+|---|---|---|---|
+| Bending Fb | 875 × 1.3 = 1,137 | 7.8 (`lumberBendingMPa`) | 1.3 is the NDS size factor for a 4×6, the lowest of the stock sections (4×4 and 2×4 are 1.5); no repetitive-member or load-duration increase |
+| Shear Fv | 135 | 0.93 (`lumberShearMPa`) | |
+| Bearing across the grain Fc⊥ | 425 | 2.93 (`lumberBearingMPa`) | |
+| Plywood bending | about 870 | 6.0 (`plywoodBendingMPa`) | On the gross section, a conservative figure for sheathing-grade plywood bent across its supports; check it against the supplier's panel values |
+
+On top of the allowable stresses (which already carry the design-value margin), every load is
+multiplied by `loadFactor` (1.5) for handling shocks and uneven support. A shop with other
+lumber (Southern Pine, Douglas Fir-Larch) enters its own values.
+
+**Loads.** `f` = `loadFactor`, g = 9.81 N/kg; everything in N and mm, so stresses are MPa.
+
+- **Dead load** (`estimateDeadLoad`): the crate's weight above the skids, worked out from the
+  layout before the crate is drawn (the packer has no members yet): the plywood (floor, walls,
+  lid, separators) and the wall and lid framing exactly, and the dunnage as an upper bound (four
+  full-height posts as thick as the widest gap, and two bearers, per part). `contents` is the
+  part of it inside the crate (separators and dunnage). It is never below the drawn crate's
+  weight, which is tested, so the rating errs low.
+- **Skids carry everything:** `W = f g (payload + dead)`.
+- **Floor and joists carry the contents:** `W_c = f g (payload + contents)`, spread over the
+  interior footprint `A = L × W`, a pressure `q = W_c / A`. The walls stand on the floor's edge,
+  over the outer skids.
+
+**Members and checks.** Each check is linear in its load, so it gives the most load the member
+carries; less the dead weight on that member, it is the payload the member allows. The smallest
+is the **base rating**, `ratedPayloadKg`, and that check **governs**.
+
+| Member | Model | Checks |
+|---|---|---|
+| Skid, `b` wide × `h` tall, `n` skids | Simply supported at its two ends (on blocks, uneven ground, or fork tines near the ends), span `L = extL`. An inner skid carries its share of the floor either side, `W_s = W / (n − 1)`; with 2 skids each carries `W / 2` | bending `W_s L / 8 ≤ Fb · b h² / 6`; shear `1.5 (W_s / 2) / (b h) ≤ Fv`; bearing `(W_s / 2) / (b · supportLength) ≤ Fc⊥` |
+| Floor plywood, `t` thick | A simple span `s`, centre to centre of its supports (a conservative choice: the sheet is continuous). Without joists `s` is the skid spacing across the width; with joists, the joist spacing along the length | `q s² / 8 ≤ Fb_ply · t² / 6` per mm of width |
+| Floor joist, 2×4 on edge (`t` = 38 along X, `h` = 89) | Across the skids under the floor, simply supported over the skid spacing `ss`, carrying a strip of floor `sj` (the joist spacing) wide | bending `q sj ss² / 8 ≤ Fb · t h² / 6`; shear `1.5 (q sj ss / 2) / (t h) ≤ Fv`; bearing on an inner skid `q sj ss / (t b) ≤ Fc⊥` |
+
+**Choosing the base** (`sizeBase`):
+
+1. **Skid count** starts at the spacing rule, `max(2, ceil(extW / skidSpacingMm) + 1)`, as
+   before #7, and goes up to the most skids that keep `minForkOpeningMm` (200 mm) clear between
+   neighbours, `floor((extW + 200) / (skid.wide + 200))`. Sizing never adds a skid past that, so
+   it never narrows the fork entry below the minimum (#8 checks forklift entry itself). A crate
+   too narrow for two skids and the opening keeps two skids at its edges.
+2. **Skid section:** at each count, the smallest section from stock (`stock.skidMm.standard`,
+   then `heavy`, by section modulus) that passes; with none, add a skid. Above
+   `construction.heavySkidOverKg` only the heavy section is offered, as before.
+3. **Floor joists** when the payload is over `joistOverKg` (450 kg) or the floor fails over the
+   skids. They start at most `maxJoistSpacingMm` (400 mm) apart, `max(2, ceil(extL / 400) + 1)`
+   evenly spread from end to end, and are closed up until the floor and joist checks pass (the
+   pitch is solved directly: the floor's capacity falls as 1 / pitch², the joists' as 1 / pitch),
+   keeping at least a joist's width clear between them. If they can't pass, the next skid count
+   is tried.
+4. **When nothing passes** (the most skids of the heaviest section, joists as close as they go),
+   the strongest base tried is built, `base.ok` is false, and the `base-rating` check is a
+   caution with the rating it does have. Shipment planning (§7.10) then splits the batch.
+
+Light crates are unchanged: every sample part at its suggested quantities keeps the 4×4 skids,
+the spacing-rule count and no joists, so the 18-case baseline (§10) holds.
+
+**Lid** (`sizeLid`). Crates aren't stacked by default (`lidStackKg` 0): the lid is the nominal
+frame, as before (1×4 cleats laid flat, two edge cleats and cross cleats at most 600 mm apart),
+and there is no `lid` check. With a stacking load the lid carries `f g × lidStackKg` spread over
+the lid; the cross members span the lid's width `lidW` and the plywood spans between them:
+member bending `q p lidW² / 8 ≤ Fb · b h² / 6` and panel bending `q p² / 8 ≤ Fb_ply t² / 6` at
+member pitch `p`. It tries flat cleats from the nominal count down to half the nominal spacing,
+then 2×4 joists on edge (`stock.joistMm`) from the nominal count up, keeping a member's width
+clear between them. Joists make the lid, and the crate, 70 mm taller; the edge members match
+them, so the top stays flat for the crate above. The `lid` check reports the rated stacking load.
+
+**Worked example** (`structure.test.ts`): a base 1200 × 1000 mm outside, interior 1100 × 900,
+800 kg of payload, 150 kg of crate above the skids of which 40 kg is inside, 19 mm floor,
+default standards.
+
+| Step | Working | Result |
+|---|---|---|
+| Skid count | `max(2, ceil(1000 / 800) + 1)` = 3; most for a 200 mm opening `floor(1200 / 289)` = 4 | 3, centres 455.5 apart, 366.5 clear |
+| 4×4 skid bending | S = 89 × 89² / 6 = 117,495 mm³; `W = 8 × 7.8 × 117,495 / (1200 × ½)` = 12,220 N = 830 kg at f = 1.5; less 150 kg dead | **680 kg < 800: fails** |
+| 4×6 skid bending | S = 89 × 140² / 6 = 290,733 mm³ → 30,236 N = 2,055 kg; less 150 | 1,905 kg: passes. Shear 1,950 kg, bearing 6,939 kg |
+| Joists? | 800 kg > 450 kg | yes: `ceil(1200 / 400) + 1` = 4 joists, pitch (1200 − 38) / 3 = 387.3 mm |
+| Floor bending | `8 × 6.0 × (19² / 6) × 990,000 / 387.3²` = 19,058 N = 1,295 kg; less 40 inside | **1,255 kg** |
+| Joist bending, shear, bearing | ss = 455.5; S = 38 × 89² / 6 = 50,166 mm³ | 2,581 / 1,559 / 3,739 kg |
+| **Base rating** | the smallest: floor bending governs | **1,255 kg; 800 kg is 64%** |
+
+And in the app, **PART-001 × 30** (645 kg of brackets in a 2176 × 936 mm crate): 3 × 4×6 skids
+(4×4 would allow less than 645 kg over a 2.2 m span), 7 2×4 joists (over 450 kg), and "Base
+rated 859 kg; this crate's payload is 645 kg (75%) … (skid bending governs)". The default
+**PART-001 × 4** (86 kg) keeps 2 × 4×4 skids and no joists, rated 299 kg (29%), with the floor
+governing.
+
+**What it doesn't model** (kept simple on purpose; an engineer reviews unusual loads): deflection
+(only strength), screw withdrawal and shear at the joints, point loads from a single heavy part
+(the payload is taken as spread over the floor), racking of the walls, and the floor or joists
+bearing on fork tines between the skids (#8 checks fork entry). The skid support is the
+conservative end-supported case even when the crate sits flat on a trailer floor.
 
 ## 8. UI
 
@@ -1608,8 +1748,8 @@ The ranking option (#17) is saved only as part of the last-opened crate; the tim
 - `computeDesign` with custom standards: passing the defaults equals passing nothing; a lower
   light-panel threshold gives 15 mm panels; plywood on hand (18 mm) shows in the cut list; a
   lower heavy-skid threshold gives 4×6 skids; a plywood rate change changes only the cost, by
-  exactly the plywood volume × the rate change; a density change changes the weights; a lower
-  base rating, stack limit, trailer length or LTL length flips `base-rating`, `stack`, `door`
+  exactly the plywood volume × the rate change; a density change changes the weights; weak
+  lumber (#7), a lower stack limit, trailer length or LTL length flips `base-rating`, `stack`, `door`
   and `oversize`; a wider minimum blocking gap removes the posts; tighter cleat and screw
   spacing add uprights and screws; a wider skid spacing uses fewer skids; a bigger cleat grows
   the wall allowance and the minimum interior; the stability ratio and volume tolerance change
@@ -1640,6 +1780,27 @@ lower max gross gives more crates; a layout pick applies to its crate type; spli
 `crate-limit` check and single crates don't; a part over the limit alone ships one per crate with
 a caution; 200 parts plan fast; the shipment cut list multiplies, merges and groups pieces, and
 its CSV has the plan header.
+
+**`src/domain/structure.test.ts`** checks structural sizing (§7.14, #7): each formula (skid
+bending, shear and bearing; floor bending, falling with the span squared; joist bending, shear
+and bearing) against a hand calculation; the load shares (half on two skids, `1 / (n − 1)` on an
+inner skid); the worked example step by step; the skid section kept exactly at its limit and
+upgraded just over it; a skid added when no section passes, never past the 200 mm fork opening;
+`ok: false` with the most skids of the heaviest section when nothing passes; heavy skids above
+the heavy-skid payload; joists not at 450 kg and at 450.01 kg; joists for a floor that fails
+over widely spaced skids; joists closed up until every check passes, and one fewer failing; the
+nominal lid when crates aren't stacked; a lid sized for 50 kg and for 500 kg (joists on edge), its
+check text, its 70 mm taller crate, and a caution when it can't be done; PART-001 × 30's joists
+(members, cut list, bounding box, screw lines) and its exact base-rating text; the dead-load
+estimate never below the drawn crate's weight for every sample part × suggested quantity (and 30)
+× keep-upright; every sample part at its suggested quantities on the nominal base; the per-crate
+limit as the smaller of the gross limit and the rating; a split decided by the rating (weaker
+lumber, no gross limit) with every crate within it, and stronger lumber giving fewer crates; and
+the PART-001 × 200 split unchanged. **`standards.test.ts`** also checks the structure defaults,
+rejects a load factor under 1, a zero or NaN stress, a negative stacking load, a tiny joist
+spacing and a paper-thin joist, shows weaker plywood lowering the rating and weak stock turning
+the check into a caution, and loads a standards file saved before #7 (its `baseRatingKg` is
+dropped).
 
 **`src/domain/cost.test.ts`** checks cost, labour and freight (#17, §7.12): the labour sum (cuts by
 material, set-ups once per size across assemblies, screws, steps, handling) and the labour
@@ -1928,11 +2089,18 @@ HTML report as `playwright-report`.
     cut-list download shows "Designed in …". Crops are saved to `e2e/screenshots/crops/17-*`.
     `02-tabs` and `11-design-json` find layout cards as `button.opt`, since the toggle also has
     pressed buttons.
-  - `10-shop-standards`: the section is collapsed by default and shows all seven groups when
+  - `10-shop-standards`: the section is collapsed by default and shows all eight groups when
     opened; changing the plywood cost to 2200 shows "Customised" and raises the Overview's
     "$ of wood", which survives a reload; Reset to defaults restores the cost (also after a
     reload); a light-panel threshold of 50 kg switches the Overview to 15 mm ply; a negative
     density is flagged and reverts on blur.
+  - `24-structure` (#7): the default batch keeps 4x4 skids and no floor joists, and Checks shows
+    "Base rated … kg; this crate's payload is 86 kg". 30 brackets are one crate with 3 4x6 skids
+    and 7 2x4 floor joists in the cut list (pinning the joists lights them in 3D), the exact
+    base-rating text ("Base rated 859 kg; this crate's payload is 645 kg (75%)…"), the Overview's
+    joists and rating, the exploded and end views, and a build sheet with the joists, their screw
+    lines, the base step and the rating. Screenshots `24-structure-cutlist`, `-checks`,
+    `-exploded`, `-end` and `-build-sheet`.
   - `13-batch-split` (#25): PART-001 × 8 is one crate with no Shipment block; × 200 splits into
     two crate types totalling 200 with "Ships as … crate A (k each) + 1 × crate B (r)"; picking
     Crate B changes the crate on screen (outside size, parts), the heading and the Checks
@@ -2021,6 +2189,11 @@ HTML report as `playwright-report`.
 | The Export pill's PDF is drawn with jsPDF from `PrintableDesign`, drawings included, without svg2pdf (#51) | One model for print and PDF; the drawings are only rectangles and lines, so drawing them directly keeps the code DOM-free and unit-testable in Node, with one dependency | Built-in Helvetica only (non-WinAnsi characters are spelled out); the PDF's page layout is its own, not `/print`'s |
 | The Export pill keeps the separate downloads (#51) | Someone who wants one file (an engineer wanting only the GLB) and the print-to-paper path stay one click away | Two ways to get each file |
 | The print route gets the design as a design file in the URL hash, not through `sessionStorage` | Works on reload and when opened directly, never leaves the browser, and reuses the #28 format a share link can use | It uses the printing browser's saved shop standards, not the opener's in-memory ones (in the same browser these are the same) |
+| Structural sizing by allowable-stress hand formulas, SPF No. 2, with a 1.5 load factor (#7, §7.14) | A shop can follow and check every number, change the species in the standards, and the rules fit in one pure module; the base rating replaces a fixed 1,000 kg | No deflection, joint or point-load checks; the end-supported skid is conservative for a crate sitting flat |
+| The base is sized per layout, inside the packer's allowance (#7) | The base height depends on the spans, so each layout's outside size must include its own skids and joists, or the boards' bounds wouldn't equal `layout.external` | The packer calls `planStructure` for every candidate (cheap arithmetic, no members), and the dead load is an estimate from the layout |
+| Floor joists across the skids, under the floor, rather than more skids or joists between them (#7) | Fork tines enter from the ends between the skids, so the gaps must stay open; joists on top of the skids leave the openings clear and give the tines something to lift | The base gets 89 mm taller when it has joists |
+| Joists are a new member kind, `joist`, not `bearer` (#7) | `bearer` is the dunnage under each part, inside the crate, with its own screws, drawings and labour step; a structural member in the base needs different handling | One more kind in every switch over kinds |
+| The per-crate gross limit stays at 1,000 kg, now as a handling limit, alongside the computed rating (#7, #25) | Keeps today's splits and the forklift-sized crates the shop is used to; the rating only splits earlier when the base can't carry the load | Two limits to explain; a stronger base doesn't on its own allow heavier crates |
 | Manual panel thickness stays 12 / 15 / 19 | `CrateSettingsSchema` and its tests fix those literals; only Auto reads `stock.panelPlywoodMm` | A shop with 18 mm stock gets it from Auto, not from the manual buttons |
 
 ## 12. Known limitations and roadmap
@@ -2035,7 +2208,7 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 | #4 | Capture and export LLM logs (a deliverable) |
 | #5 | Architecture and decision notes for the on-site walkthrough |
 | #6 | Cradles for long or cylindrical parts. Today the shaft is held only by flat bearers and one post per side |
-| #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds |
+| #7 | Structural sizing rules for skids, floor and lid, replacing the mass thresholds (§7.14) |
 | #8 | Centre of gravity and forklift handling |
 | #9 | Printable shop-floor build sheet (superseded by #26) |
 | #26 | Export bundle: the crate spec, build sheet and shipping label as a printable PDF (§7.11). A one-click PDF file is #51 |
@@ -2053,8 +2226,9 @@ These are tracked in [GitHub issues](https://github.com/0xevm1/shipping-ui/issue
 
 Other known gaps:
 
-- Batch splitting (#25, §7.10) offers only N identical crates plus one remainder, and the
-  per-crate gross limit is the flat 1,000 kg base rating until structural sizing (#7).
+- Batch splitting (#25, §7.10) offers only N identical crates plus one remainder.
+- Structural sizing (#7, §7.14) checks strength only: no deflection, joint, point-load or racking
+  checks, and the lid is sized only when a stacking load is entered.
 - The GLB download and the view bar name the file by the batch quantity, not the crate type on
   screen.
 - No top hold-down blocking under the lid.

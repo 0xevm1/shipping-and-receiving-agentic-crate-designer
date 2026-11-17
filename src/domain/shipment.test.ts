@@ -134,7 +134,7 @@ describe("planShipment: splitting a batch", () => {
     const p = getPart("PART-002");
     const s = settings({ quantity: 40 });
     const small = custom({
-      limits: { perCrate: { maxGrossKg: 100000 }, baseRatingKg: 100000, trailerMm: { interiorLength: 3000, doorWidth: 1500 } },
+      limits: { perCrate: { maxGrossKg: 100000 }, trailerMm: { interiorLength: 3000, doorWidth: 1500 } },
     });
     // No layout of 40 shafts fits the smaller trailer.
     expect(computeDesign(p, s, null, small).layouts.some((l) => withinOutsideLimits(l.external, small))).toBe(false);
