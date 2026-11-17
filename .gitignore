@@ -20,6 +20,10 @@
 /blob-report/
 /playwright/.cache/
 
+# PR screenshots stay local; only the README's images are tracked
+/docs/screenshots/*
+!/docs/screenshots/readme/
+
 # next.js
 /.next/
 /out/
