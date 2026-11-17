@@ -68,6 +68,33 @@ describe('the job\'s design part (#46 "same inputs")', () => {
     expect(partToStore(job, row, { ...browserPart, dimensions_mm: [100, 100, 100] })!.designPart.profile).toBeUndefined();
   });
 
+  it("stores the part's centre of gravity (#110) and designs the job from it", () => {
+    const cog = { offsetMm: [-38.3, 0, -48.6] as [number, number, number], source: "estimated" as const };
+    const stored = partToStore(empty, row, { ...browserPart, cog })!;
+    expect(stored.designPart.cog).toEqual(cog);
+    expect(stored.hash).toBe(designPartHash({ ...browserPart, cog }));
+    // It is an input: the same part without it is another version.
+    expect(stored.hash).not.toBe(designPartHash(browserPart));
+    expect(jobDesignPart({ designPart: stored.designPart }, row).cog).toEqual(cog);
+  });
+
+  it("keeps an estimated centre for the same part sent before the browser has estimated it, but not a supplied one", () => {
+    const estimated = partToStore(empty, row, { ...browserPart, cog: { offsetMm: [10, 0, 0], source: "estimated" } })!;
+    const job = { designPart: estimated.designPart, designPartHash: estimated.hash };
+    expect(partToStore(job, row, browserPart)).toBeNull();
+    expect(partToStore(job, row, { ...browserPart, mass_kg: 30 })!.designPart.cog).toEqual({ offsetMm: [10, 0, 0], source: "estimated" });
+    // Another size is another part: the estimate isn't carried over.
+    expect(partToStore(job, row, { ...browserPart, dimensions_mm: [100, 100, 100] })!.designPart.cog).toBeUndefined();
+
+    const supplied = partToStore(empty, row, { ...browserPart, cog: { offsetMm: [10, 0, 0], source: "supplied" } })!;
+    const suppliedJob = { designPart: supplied.designPart, designPartHash: supplied.hash };
+    // Cleared by the person: the job goes back to the box centre.
+    expect(partToStore(suppliedJob, row, browserPart)).not.toBeNull();
+    expect(partToStore(suppliedJob, row, browserPart)!.designPart.cog).toBeUndefined();
+    // Edited to another centre.
+    expect(partToStore(suppliedJob, row, { ...browserPart, cog: { offsetMm: [20, 0, 0], source: "supplied" } })!.designPart.cog?.offsetMm).toEqual([20, 0, 0]);
+  });
+
   it("serves a person's configurations always, and a sweep's only for the current part", () => {
     expect(isCurrentConfiguration({ origin: "user", partHash: "old" }, "new")).toBe(true);
     expect(isCurrentConfiguration({ origin: "precomputed", partHash: "old" }, "new")).toBe(false);

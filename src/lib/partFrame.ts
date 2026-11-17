@@ -15,6 +15,8 @@ export {
   framedSizeMm,
   guessedFrame,
   guessUnits,
+  cogFromFile,
+  reframeOffset,
   INCHES_FILE_MAX,
   METRES_FILE_MAX,
   MM_PER_UNIT,

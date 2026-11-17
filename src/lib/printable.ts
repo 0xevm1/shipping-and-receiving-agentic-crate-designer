@@ -565,6 +565,7 @@ export function printableFromDesignFile(text: string, standards: ShopStandards, 
     dimensions_mm: p.dimensions_mm,
     massAssumed: p.massAssumed,
     profile: fileProfile(file),
+    cog: p.cog,
   };
   const { ranking } = file;
   const plan = planShipment(part, file.settings, file.layoutKey, standards, ranking);

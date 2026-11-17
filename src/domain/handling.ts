@@ -1,7 +1,9 @@
 import type { Check, HandlingCheckId } from "./check";
+import { cogBasisOf, cogOffsetOf, type CogBasis, type PartCog } from "./cog";
 import { memberKg } from "./materials";
 import { memberBounds, type Member } from "./members";
 import { joinMessages, kg, mm, msg, parts, shopMm, type Message } from "./message";
+import { ORIENTATIONS, rotatedOffset } from "./orientations";
 import type { Layout } from "./packing";
 import type { Vec3 } from "./schema";
 import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
@@ -15,6 +17,9 @@ import { DEFAULT_STANDARDS, type ShopStandards } from "./standards";
  * corner on top of the floor, Z up, X along the length (skids run along X, so forks enter
  * from the ends, −X and +X). The ground is the bottom of the skids, at negative Z.
  */
+
+/** What the part placements need of a layout. The orientation turns the part's centre of gravity; without one the part is as modelled. */
+type HandlingLayout = Pick<Layout, "slots" | "cellSize"> & Partial<Pick<Layout, "orientation">>;
 
 /** A point mass. */
 interface MassPoint {
@@ -49,6 +54,8 @@ interface DeviceFit {
 export interface Handling {
   /** Combined centre of gravity of the crate and the parts, crate-interior mm. */
   cogMm: Vec3;
+  /** Where the part's own centre of gravity came from: supplied, estimated from the mesh, or assumed at the middle of its box (#110). */
+  cogBasis: CogBasis;
   /** CoG minus the middle of the outside footprint, [X, Y] mm (+X toward the right end, +Y toward the back). */
   offsetMm: [number, number];
   /** Outside length and width the offset is judged against. */
@@ -76,12 +83,14 @@ export function memberMasses(members: Member[], standards: ShopStandards = DEFAU
 }
 
 /**
- * Each part's mass at the centre of its packed bounding box. Without analysing the mesh, a part's
- * own centre of gravity is assumed to be its bounding-box centre.
+ * Each part's mass at its own centre of gravity: the middle of its packed bounding box plus the
+ * part's offset (`PartCog`) turned by the layout's orientation, so a lopsided part's weight moves
+ * with the part. With no `cog` the centre is assumed to be the bounding-box centre.
  */
-export function partMasses(layout: Pick<Layout, "slots" | "cellSize">, partKg: number): MassPoint[] {
+export function partMasses(layout: HandlingLayout, partKg: number, cog?: PartCog): MassPoint[] {
   const [a, b, c] = layout.cellSize;
-  return layout.slots.map((s) => ({ at: [s.min[0] + a / 2, s.min[1] + b / 2, s.min[2] + c / 2], kg: partKg }));
+  const [dx, dy, dz] = rotatedOffset(cogOffsetOf({ cog }), layout.orientation ?? ORIENTATIONS[0]);
+  return layout.slots.map((s) => ({ at: [s.min[0] + a / 2 + dx, s.min[1] + b / 2 + dy, s.min[2] + c / 2 + dz], kg: partKg }));
 }
 
 /** Mass-weighted mean position. */
@@ -166,11 +175,12 @@ function fit(device: Device, openings: Opening[], cogY: number, d: DeviceStandar
 /** Centre of gravity and handling of a finished crate holding `layout.slots.length` parts of `partKg`. */
 export function analyseHandling(
   members: Member[],
-  layout: Pick<Layout, "slots" | "cellSize">,
+  layout: HandlingLayout,
   partKg: number,
   standards: ShopStandards = DEFAULT_STANDARDS,
+  cog?: PartCog,
 ): Handling {
-  const masses = [...memberMasses(members, standards), ...partMasses(layout, partKg)];
+  const masses = [...memberMasses(members, standards), ...partMasses(layout, partKg, cog)];
   const cogMm = centreOfGravity(masses);
   const grossKg = masses.reduce((sum, p) => sum + p.kg, 0);
   const { min: lo, max: hi } = memberBounds(members);
@@ -193,6 +203,7 @@ export function analyseHandling(
   const h = standards.handling;
   return {
     cogMm,
+    cogBasis: cogBasisOf({ cog }),
     offsetMm,
     footprintMm,
     grossKg,
@@ -214,6 +225,14 @@ export function offsetText([dx, dy]: [number, number]): Message | null {
   return found.length ? joinMessages(found, " and ") : null;
 }
 
+/** The sentence that says where the part's own centre of gravity came from (#110). */
+const COG_BASIS_TEXT: Record<CogBasis, string> = {
+  supplied: "The part's own centre of gravity is the one supplied.",
+  estimated: "The part's own centre of gravity is estimated from the model's mesh (uniform density).",
+  assumed:
+    "The part's own centre of gravity is assumed at the middle of its bounding box: none was supplied, and the mesh could not give one. Enter it in the part details for a lopsided part.",
+};
+
 const DEVICE_NAME: Record<Device, string> = { forklift: "Forklift", "pallet-jack": "Pallet jack" };
 
 /**
@@ -230,19 +249,20 @@ export function handlingChecks(h: Handling, standards: ShopStandards = DEFAULT_S
   const pct = `${Math.round(s.cogOffsetRatio * 100)}%`;
   const where = offsetText(h.offsetMm);
   const off = Math.abs(h.offsetMm[0]) > limX || Math.abs(h.offsetMm[1]) > limY;
+  const basis = COG_BASIS_TEXT[h.cogBasis];
   checks.push(
     off
       ? {
           id: "cog-offset",
           level: "caution",
           title: "Off-centre centre of gravity",
-          detail: msg`Centre of gravity is ${where ?? []}; mark it on the crate. The limit is ${pct} of the length (${mm(limX)}) and width (${mm(limY)}).`,
+          detail: msg`Centre of gravity is ${where ?? []}; mark it on the crate. The limit is ${pct} of the length (${mm(limX)}) and width (${mm(limY)}). ${basis}`,
         }
       : {
           id: "cog-offset",
           level: "ok",
           title: "Centre of gravity near the middle",
-          detail: msg`${where ? msg`It is ${where}` : "It is on both centre lines"}, within ${pct} of the length (${mm(limX)}) and width (${mm(limY)}). ${mm(h.heightMm)} above the ground.`,
+          detail: msg`${where ? msg`It is ${where}` : "It is on both centre lines"}, within ${pct} of the length (${mm(limX)}) and width (${mm(limY)}). ${mm(h.heightMm)} above the ground. ${basis}`,
         },
   );
 

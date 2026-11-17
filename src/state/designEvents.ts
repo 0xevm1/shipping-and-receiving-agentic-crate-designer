@@ -4,7 +4,7 @@ import type { DesignResult } from "@/domain/design";
  * Which input an edit came from, so the change note can sit by it. `recommended`: the quantity
  * sweep's recommendation, applied for a newly loaded part (spec §7.16).
  */
-export type ChangeSource = "name" | "material" | "mass" | "frame" | "rules" | "layout" | "recommended";
+export type ChangeSource = "name" | "material" | "mass" | "cog" | "frame" | "rules" | "layout" | "recommended";
 
 /**
  * What a design action did, told to the view store (`viewStore.ts`) once the design store has

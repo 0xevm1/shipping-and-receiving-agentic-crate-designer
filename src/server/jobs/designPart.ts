@@ -79,6 +79,11 @@ export function partToStore(
     // Another change (a mass, say) keeps the outline the model was measured with, when the size is the same.
     if (stored.dimensions_mm.every((v, i) => v === next.dimensions_mm[i])) next = withOutline;
   }
+  // The same for a centre of gravity estimated from the mesh (#110): a fact of the model that a browser which
+  // hasn't estimated it yet sends none of. A supplied one is the person's and is sent (or cleared) explicitly.
+  if (!next.cog && stored?.cog?.source === "estimated" && stored.dimensions_mm.every((v, i) => v === next.dimensions_mm[i])) {
+    next = { ...next, cog: stored.cog };
+  }
   const hash = designPartHash(next);
   return hash === jobPartHash(job, part) ? null : { designPart: JSON.parse(JSON.stringify(next)) as DesignPart, hash };
 }

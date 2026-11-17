@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { catalog } from "@/domain/catalog";
 import { DEFAULT_SETTINGS, settingsFromStandards, type DesignResult, type Ranking } from "@/domain/design";
+import { cogInsideBox, type CogFallback } from "@/domain/cog";
 import { cleanPartDetails, type PartDetailsInput } from "@/domain/partDetails";
 import type { PartProfile } from "@/domain/profile";
 import type { ShipmentPlan } from "@/domain/shipment";
@@ -11,6 +12,7 @@ import { designRequestFor } from "@/engine/request";
 import type { DesignResponse, EngineStamp } from "@/engine/schemas";
 import { canSetFrame, catalogPart, framePart, type LoadedPart } from "@/lib/part";
 import { models } from "@/lib/modelRegistry";
+import type { CogOutcome } from "@/lib/partCog";
 import type { PartFrame } from "@/lib/partFrame";
 import { emitDesignEdit, type ChangeSource, type DesignEdit } from "./designEvents";
 import { engine } from "./engineClient";
@@ -46,6 +48,12 @@ export interface DesignerState {
    * Web Worker: an edit shows in its control at once, and the design follows.
    */
   designedFrom: Designed;
+  /**
+   * Why the part has no centre of gravity of its own (#110): its mesh isn't closed, the answer was
+   * unreliable or the estimate failed, so it is assumed at the box centre. Set by `setPartCog` for the
+   * model it names; Part details says so. Not an input of the design.
+   */
+  cogFallback: { modelUrl: string; reason: CogFallback | "failed" } | null;
   /** Extra catalog entries from a dropped parts.json. */
   extraParts: CatalogEntry[];
   /** The shop's house rules every design is built to. Saved in localStorage. */
@@ -93,6 +101,19 @@ export interface DesignerState {
    * loaded since, or the part already has a profile. Null (analysis failed) changes nothing.
    */
   setPartProfile: (modelUrl: string, profile: PartProfile | null) => void;
+  /**
+   * Stores the centre of gravity estimated from the mesh of the model at `modelUrl` (#110) as the
+   * part's own, and re-designs. A fallback outcome (open or unreliable mesh) is kept as the reason the
+   * centre is assumed. Ignored if another model has been loaded since, or the part already has a
+   * centre (supplied by a file or by the person, which an estimate never replaces).
+   */
+  setPartCog: (modelUrl: string, outcome: CogOutcome) => void;
+  /**
+   * The person's own centre of gravity: an offset from the middle of the part's box in mm (Z up),
+   * stored as supplied. Null clears it, so the mesh estimate (or the box centre) applies again.
+   * Returns an error (and changes nothing) for a catalog part or an offset outside the box.
+   */
+  setPartCogOffset: (offsetMm: Vec3 | null) => string | null;
   /**
    * Name, material and mass for a part loaded without catalog data. Validated;
    * returns an error message (and changes nothing) if the input is invalid or the
@@ -260,6 +281,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     ranking: "volume",
     autoRecommend: null,
     onRecommendation: false,
+    cogFallback: null,
 
     setPart: (part) =>
       recompute(
@@ -328,6 +350,32 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       // Shaped blocks change the cut list, so the view may hold a pin or hover on a line that is gone.
       redesign({ part: { ...current, profile } }, (prev, next) => ({ type: "refined", source: null, prev, next }));
     },
+    setPartCog: (modelUrl, outcome) => {
+      const current = get().part;
+      if (current.modelUrl !== modelUrl || current.cog) return;
+      if ("fallback" in outcome) {
+        set({ cogFallback: { modelUrl, reason: outcome.fallback } });
+        return;
+      }
+      set({ cogFallback: null });
+      redesign({ part: { ...current, cog: { offsetMm: outcome.offsetMm, source: "estimated" } } }, (prev, next) => ({
+        type: "refined",
+        source: null,
+        prev,
+        next,
+      }));
+    },
+    setPartCogOffset: (offsetMm) => {
+      const current = get().part;
+      if (current.catalogDims) return "Catalog parts can't be edited.";
+      if (offsetMm && !cogInsideBox(offsetMm, current.dimensions_mm)) return "The centre of gravity has to be inside the part's box.";
+      const part: LoadedPart = { ...current };
+      if (offsetMm) part.cog = { offsetMm, source: "supplied" };
+      else delete part.cog;
+      set({ ...EDITED, cogFallback: null });
+      redesign({ part }, (prev, next) => ({ type: "refined", source: "cog", prev, next }));
+      return null;
+    },
     setPartDetails: (input) => {
       const current = get().part;
       if (current.catalogDims) return "Catalog parts can't be edited.";
@@ -359,6 +407,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (frame.units === current.modelUnits && frame.up === current.upAxis) return null;
       // The person has looked at how the file is read, so the units are no longer just a guess.
       const part = framePart(current, frame);
+      set({ cogFallback: null });
       // A part whose rules are still the recommendation's (spec §7.16) waits for the one for its new
       // size: a quantity swept for a misread size means nothing. A part the person has edited keeps their rules.
       const autoRecommend = get().onRecommendation ? { modelUrl: part.modelUrl, applied: false } : null;

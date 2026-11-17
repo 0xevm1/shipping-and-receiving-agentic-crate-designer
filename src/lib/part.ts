@@ -1,5 +1,6 @@
 import type { Part, DesignPart, Vec3 } from "@/domain/schema";
-import { framedSizeMm, MM_PER_UNIT, type ModelUnits, type PartFrame, type UpAxis } from "./partFrame";
+import { clampToBox } from "@/domain/cog";
+import { framedSizeMm, MM_PER_UNIT, reframeOffset, type ModelUnits, type PartFrame, type UpAxis } from "./partFrame";
 
 /** The part being crated: catalog metadata or a GLB loaded at runtime. */
 export interface LoadedPart extends DesignPart {
@@ -57,13 +58,21 @@ export function catalogPart(p: Part, url = modelUrl(p)): LoadedPart {
 export function framePart(part: LoadedPart, frame: PartFrame, guessed = false): LoadedPart {
   const rest: LoadedPart = { ...part };
   delete rest.profile;
+  delete rest.cog;
+  const dimensions_mm = framedSizeMm(part.rawSize, frame);
+  // The centre of gravity is a point of the part: the same point (in the file's own numbers) in the new frame (#110).
+  const cog = part.cog && {
+    ...part.cog,
+    offsetMm: clampToBox(reframeOffset(part.cog.offsetMm, { units: part.modelUnits, up: part.upAxis }, frame), dimensions_mm),
+  };
   return {
     ...rest,
+    ...(cog ? { cog } : {}),
     modelUnits: frame.units,
     upAxis: frame.up,
     unitsGuessed: guessed,
     mmPerUnit: MM_PER_UNIT[frame.units],
-    dimensions_mm: framedSizeMm(part.rawSize, frame),
+    dimensions_mm,
   };
 }
 

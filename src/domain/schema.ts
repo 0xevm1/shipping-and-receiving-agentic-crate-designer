@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PartCog } from "./cog";
 import { ANY_FACES, AS_MODELLED_FACES, canonicalFaces, RESTING_FACES } from "./orientations";
 import type { PartProfile } from "./profile";
 
@@ -37,6 +38,12 @@ export type Part = z.infer<typeof PartSchema>;
 export type CatalogEntry = Pick<Part, "id" | "name" | "model" | "mass_kg"> &
   Partial<Pick<Part, "material" | "density_kg_m3" | "dimensions_mm" | "suggested_quantities">> & {
     model_units?: "m" | "mm" | "in";
+    /**
+     * The part's centre of gravity: a point in the model's own axes and origin, in mm like `dimensions_mm`
+     * (#110). The file check keeps it only when it lies inside the model's box; the loader turns it into an
+     * offset from the box centre in the design frame (`cogFromFile`).
+     */
+    cog_mm?: Vec3;
   };
 
 export const PartsCatalogSchema = z.object({
@@ -56,6 +63,11 @@ export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm">
   material?: string;
   /** The measured outline (spec §7.5b). Absent until the model is analysed: blocking then follows the bounding box. */
   profile?: PartProfile;
+  /**
+   * The part's own centre of gravity (spec §7.14, #110): supplied in parts.json or Part details, or
+   * estimated from the mesh. Absent means assumed at the middle of the bounding box.
+   */
+  cog?: PartCog;
   /**
    * The quantities the part is usually shipped in (#133): the sweep recommends among these. Not a
    * design input, but part of the engine's part because the PDF's quantity rationale and the

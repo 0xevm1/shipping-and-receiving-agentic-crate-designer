@@ -3,7 +3,8 @@ import { MAX_PART_MM } from "@/domain/design";
 import { dimsMessage, kg, mm, msg, parts, type Message } from "@/domain/message";
 import type { CatalogEntry, Vec3 } from "@/domain/schema";
 import { GLB_MESSAGES, glbProblemMessage, readGlb } from "@/domain/glb";
-import { fitFrame, framedSizeMm, guessUnits, UNITS_LABEL, type ModelUnits, type PartFrame } from "./partFrame";
+import { cogInsideBox } from "@/domain/cog";
+import { cogFromFile, fitFrame, framedSizeMm, guessUnits, UNITS_LABEL, type ModelUnits, type PartFrame } from "./partFrame";
 
 /**
  * The file check (#106): one pure function that reads everything the user picked or dropped and says
@@ -89,6 +90,11 @@ interface OpenedGlb {
   guessed: boolean;
   /** The entry that names this file, when one does. */
   entry?: CatalogEntry;
+  /**
+   * The entry's `cog_mm` as an offset from the middle of the model's box in the design frame (mm, Z up),
+   * when it has one that lies inside the box (#110). Converted here, once, so nothing after knows the file's origin.
+   */
+  cog?: Vec3;
 }
 
 /** One parts.json's outcome, for the one-line verdict. */
@@ -222,7 +228,7 @@ export function parseModelUnits(value: unknown): ModelUnits | null {
   return null;
 }
 
-const ENTRY_FIELDS = ["id", "name", "model", "material", "density_kg_m3", "mass_kg", "dimensions_mm", "suggested_quantities", "model_units"];
+const ENTRY_FIELDS = ["id", "name", "model", "material", "density_kg_m3", "mass_kg", "dimensions_mm", "cog_mm", "suggested_quantities", "model_units"];
 const TOP_FIELDS = ["schema_version", "coordinate_system", "model_units", "metadata_note", "parts"];
 
 /** What each required field is, for the "should be" half of a message. */
@@ -407,6 +413,11 @@ function checkCatalog(file: string, json: unknown, out: Finding[]): Catalog {
         }
       } else optional("dimensions_mm", "three numbers above 0, [x, y, z] in mm", ", and the size comes from the model");
     }
+    if (e.cog_mm !== undefined) {
+      const c = e.cog_mm;
+      if (Array.isArray(c) && c.length === 3 && c.every((v) => typeof v === "number" && Number.isFinite(v))) entry.cog_mm = c as Vec3;
+      else optional("cog_mm", "three numbers, [x, y, z] in mm in the model's own axes", ", and the centre of gravity is estimated from the model");
+    }
     if (e.suggested_quantities !== undefined) {
       const q = e.suggested_quantities;
       if (Array.isArray(q) && q.length > 0 && q.every((v) => Number.isInteger(v) && v > 0)) entry.suggested_quantities = q as number[];
@@ -540,6 +551,20 @@ export function checkFiles(files: readonly FileInput[], { known = [] }: CheckOpt
           `The model's units aren't given, so it is read as ${UNITS_LABEL[chosen.frame.units]} from its size. If that is wrong, set the file's units at the top left, or give model_units in parts.json.`,
         ),
       );
+    }
+    if (entry?.cog_mm) {
+      const cog = cogFromFile(entry.cog_mm, pick.center!, chosen.frame);
+      if (cogInsideBox(cog, size)) opened.cog = cog;
+      else {
+        add(
+          "warning",
+          "cog-outside",
+          t(
+            `${entry.id}: cog_mm [${entry.cog_mm.join(", ")}] is outside the model's box, so it was ignored and the centre of gravity is estimated from the model. cog_mm is in mm, in the model's own axes and origin (model_units says how the file's numbers are read).`,
+          ),
+          `${entry.id}.cog_mm`,
+        );
+      }
     }
     const sorted = [...size].sort((a, b) => a - b);
     if (sorted[0] < sorted[2] * SLIVER_RATIO) {

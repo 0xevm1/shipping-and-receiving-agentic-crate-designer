@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CrateDesign } from "./crate";
 import { RANKINGS, type Ranking } from "./design";
+import { cogInsideBox, PartCogSchema } from "./cog";
 import { hasKind, readEnvelope, writeEnvelope } from "./envelope";
 import { kg, mm, msg, type Message } from "./message";
 import { MODEL_UNITS, UP_AXES } from "./partFrame";
@@ -56,6 +57,12 @@ const DesignFilePartSchema = z.object({
    * had not been measured when the file was saved, and in files from before format 2.
    */
   outline: EncodedProfileSchema.refine((p) => decodeProfile(p) !== null, "the part outline is damaged").optional(),
+  /**
+   * The part's own centre of gravity (spec §7.14, #110): an offset from the middle of the bounding box,
+   * mm, Z up, and who gave it. Absent when there was none: the file then opens with the mesh estimate,
+   * or the box centre. An optional field, so format 3 files without it stay valid and older readers ignore it.
+   */
+  cog: PartCogSchema.optional(),
 });
 export type DesignFilePart = z.infer<typeof DesignFilePartSchema>;
 
@@ -220,7 +227,11 @@ export function restoreDesign(file: DesignFile, part: DesignPart, standards: Sho
   const { settings } = file;
   const notes: Message[] = [];
   const saved = fileProfile(file);
-  const shaped: DesignPart = part.profile || !saved ? part : { ...part, profile: saved };
+  const withOutline: DesignPart = part.profile || !saved ? part : { ...part, profile: saved };
+  // The saved centre of gravity too, for a part the caller didn't already give one.
+  const savedCog = file.part.cog;
+  const shaped: DesignPart =
+    withOutline.cog || !savedCog || !cogInsideBox(savedCog.offsetMm, part.dimensions_mm) ? withOutline : { ...withOutline, cog: savedCog };
   const plan = planShipment(shaped, settings, file.layoutKey, standards, file.ranking);
   // The summary describes the crate type that was on screen: find it by its part count.
   const crateIndex = Math.max(

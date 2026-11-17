@@ -144,6 +144,20 @@ describe('browser and server sweep the same part (#46 "same inputs")', () => {
     });
   }
 
+  it("a part with its own centre of gravity (#110): the server designs with the same centre as the browser", async () => {
+    // A supplied centre far toward one end of the long shaft, and the mesh's own estimate for the bracket.
+    const cog = { offsetMm: [-600, 0, 0] as [number, number, number], source: "supplied" as const };
+    const { sweep, part } = await browserSweep({ ...catalogPart(getPart("PART-002")), cog }, profiles.get("PART-002")!);
+    expect(part.cog).toEqual(cog);
+    const job = await open({ catalogId: "PART-002", totalQuantity: TOTAL, designPart: designPartBody(part) });
+    expect(job.partHash).toBe(designPartHash(part));
+    expect(job.partHash).not.toBe(designPartHash(catalogPart(getPart("PART-002"))));
+    await drain();
+    const { snap } = await expectSameAnswer(job.id, sweep);
+    // What the server stored is the part with its centre: it is an input, not a note.
+    expect(snap.job.partHash).toBe(designPartHash(part));
+  });
+
   it("a part with its own suggested quantities (2 and 6): the server recommends among them, as the browser does", async () => {
     const { sweep, part } = await browserSweep({ ...catalogPart(getPart("PART-001")), suggested_quantities: [2, 6] }, null);
     expect(sweep.candidates).toEqual([2, 6]);

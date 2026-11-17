@@ -3,6 +3,7 @@ import { idFromFile, nameFromFile } from "@/domain/glb";
 import { fileProfile, parseDesignFile, restoreDesign, type DesignFile, type DesignFilePart } from "@/domain/designFile";
 import type { Ranking } from "@/domain/design";
 import type { Message } from "@/domain/message";
+import { cogInsideBox } from "@/domain/cog";
 import { usableProfile, type PartProfile } from "@/domain/profile";
 import { encodeProfile } from "@/domain/profileCodec";
 import type { CatalogEntry, CrateSettings, Part, Vec3 } from "@/domain/schema";
@@ -60,7 +61,7 @@ export interface LoadOutcome {
 }
 
 /** The part for a .glb that an entry names: the entry's details, in the frame the check chose. */
-function entryPart(entry: CatalogEntry, url: string, raw: Vec3, frame: PartFrame, guessed: boolean): LoadedPart {
+function entryPart(entry: CatalogEntry, url: string, raw: Vec3, frame: PartFrame, guessed: boolean, cog?: Vec3): LoadedPart {
   const dims = entry.dimensions_mm;
   const framed = framePart(
     {
@@ -84,7 +85,9 @@ function entryPart(entry: CatalogEntry, url: string, raw: Vec3, frame: PartFrame
     guessed,
   );
   // An entry with a size designs the crate on that size; the model check says when the file differs.
-  return dims ? { ...framed, dimensions_mm: dims } : framed;
+  const sized = dims ? { ...framed, dimensions_mm: dims } : framed;
+  // The centre of gravity the entry supplied, already an offset in the design frame (`checkFiles`).
+  return cog ? { ...sized, cog: { offsetMm: cog, source: "supplied" } } : sized;
 }
 
 /**
@@ -140,7 +143,7 @@ export async function loadPartFiles(
   const { url, hold } = models.adopt(new Blob([inputs[index].content as ArrayBuffer], { type: "model/gltf-binary" }));
   const { raw, frame, guessed, entry } = opened;
   const report = reportFor(check, true);
-  if (entry) return { catalogAdditions, message: said, report, hold, part: entryPart(entry, url, raw, frame, guessed) };
+  if (entry) return { catalogAdditions, message: said, report, hold, part: entryPart(entry, url, raw, frame, guessed, opened.cog) };
   return {
     catalogAdditions,
     message: said,
@@ -198,6 +201,8 @@ export async function loadDesign(
   let hold: ModelHold | undefined;
 
   const savedProfile = fileProfile(file);
+  // The saved centre of gravity belongs to the model it was saved with: a file that is a different size doesn't keep it.
+  let sameModel = true;
   if (entry) {
     part = catalogPart(entry);
   } else {
@@ -216,6 +221,7 @@ export async function loadDesign(
     const frame: PartFrame = { up: saved.up ?? "z", units: saved.units ?? fitted?.units ?? guessedFrame(read.raw).units };
     const size = framedSizeMm(read.raw, frame);
     const same = size.every((v, i) => Math.abs(v - saved.dimensions_mm[i]) < SAME_MODEL_SIZE_MM);
+    sameModel = same;
     if (!same) notes.push(`${glb.name} is a different size from the saved part, so the crate follows the file.`);
     part = framePart(
       {
@@ -243,6 +249,7 @@ export async function loadDesign(
 
   // The saved outline is only for the model it was measured on. When it fits, the part has it
   // from the start, and the viewer's own measurement (which would match) is not needed.
+  if (saved.cog && sameModel && cogInsideBox(saved.cog.offsetMm, part.dimensions_mm)) part = { ...part, cog: saved.cog };
   if (savedProfile && usableProfile({ dimensions_mm: part.dimensions_mm, profile: savedProfile })) part = { ...part, profile: savedProfile };
   let restored: ReturnType<typeof restoreDesign>;
   try {
@@ -281,6 +288,7 @@ export function designFilePart(part: LoadedPart, bundled: Part[] = catalog.parts
     ...(part.unitsGuessed ? { unitsGuessed: true } : {}),
     model,
     ...(outline ? { outline } : {}),
+    ...(part.cog ? { cog: part.cog } : {}),
   };
 }
 

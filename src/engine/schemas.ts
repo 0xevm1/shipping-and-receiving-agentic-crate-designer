@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cogInsideBox, PartCogSchema } from "@/domain/cog";
 import { RANKINGS } from "@/domain/design";
 import { FACE_IDS } from "@/domain/profile";
 import { CrateSettingsSchema, PartSchema, Vec3Schema } from "@/domain/schema";
@@ -28,12 +29,19 @@ export const PartProfileSchema = z.object({
 });
 
 /** `DesignPart`: what the engine needs to know about a part. A catalog part or a loaded GLB's facts. */
-export const DesignPartSchema = PartSchema.pick({ id: true, name: true, mass_kg: true, dimensions_mm: true }).extend({
-  material: z.string().optional(),
-  profile: PartProfileSchema.optional(),
-  /** The quantities the part is usually shipped in (#133); the sweep recommends among them. */
-  suggested_quantities: z.array(z.int().positive()).optional(),
-});
+export const DesignPartSchema = PartSchema.pick({ id: true, name: true, mass_kg: true, dimensions_mm: true })
+  .extend({
+    material: z.string().optional(),
+    profile: PartProfileSchema.optional(),
+    /** The quantities the part is usually shipped in (#133); the sweep recommends among them. */
+    suggested_quantities: z.array(z.int().positive()).optional(),
+    /** The part's own centre of gravity (#110): an offset from the box centre, inside the box. Absent: assumed at the centre. */
+    cog: PartCogSchema.optional(),
+  })
+  .refine((p) => !p.cog || cogInsideBox(p.cog.offsetMm, p.dimensions_mm), {
+    path: ["cog"],
+    message: "the centre of gravity is outside the part's bounding box",
+  });
 
 export const RankingSchema = z.enum(RANKINGS);
 export const UnitsSchema = z.enum(["imperial", "metric"]);

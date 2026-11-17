@@ -86,6 +86,47 @@ describe('the one request builder (#46 "same inputs")', () => {
     expect(d(stored).inputHash).toBe(d(loaded).inputHash);
   });
 
+  it("sends the part's centre of gravity (#110) with every request, and it is an input of the hashes", () => {
+    const loaded = catalogPart(getPart("PART-001"));
+    const cog = { offsetMm: [-38.3, 0, -48.6] as [number, number, number], source: "estimated" as const };
+    const withCog = { ...loaded, cog };
+    const rules = { part: withCog, rules: DEFAULT_SETTINGS, standards: DEFAULT_STANDARDS };
+    const sweep = sweepRequestFor(rules);
+    expect(sweep.part.cog).toEqual(cog);
+    expect(SweepRequestSchema.parse(sweep)).toEqual(sweep);
+    const design = (part: typeof loaded) =>
+      designRequestFor({ part, settings: DEFAULT_SETTINGS, standards: DEFAULT_STANDARDS, layoutKey: null, ranking: "volume" });
+    expect(DesignRequestSchema.parse(design(withCog)).part.cog).toEqual(cog);
+    // Another source, another offset, or none at all: another request and another hash.
+    expect(sweepInputHash(sweepRequestFor({ ...rules, part: { ...loaded } }))).not.toBe(sweepInputHash(sweep));
+    expect(designShipment(design(withCog)).inputHash).not.toBe(designShipment(design(loaded)).inputHash);
+    expect(designShipment(design({ ...withCog, cog: { ...cog, source: "supplied" } })).inputHash).not.toBe(designShipment(design(withCog)).inputHash);
+    expect(designPartHash(withCog)).not.toBe(designPartHash(loaded));
+    expect(designPartHash(JSON.parse(JSON.stringify(withCog)))).toBe(designPartHash(withCog));
+    // A part without one has no `cog` key at all, as before.
+    expect(Object.keys(sweepRequestFor({ ...rules, part: loaded }).part)).not.toContain("cog");
+    // The browser and the server (the stored JSON) design the same crate from it.
+    const stored = JSON.parse(JSON.stringify(sweep.part));
+    expect(designShipment(design(stored)).inputHash).toBe(designShipment(design(withCog)).inputHash);
+  });
+
+  it("rejects a centre of gravity outside the part's box or not finite when a request arrives", () => {
+    const loaded = catalogPart(getPart("PART-001"));
+    const parse = (offsetMm: number[]) =>
+      DesignRequestSchema.safeParse(
+        designRequestFor({
+          part: { ...loaded, cog: { offsetMm: offsetMm as [number, number, number], source: "supplied" } },
+          settings: DEFAULT_SETTINGS,
+          standards: DEFAULT_STANDARDS,
+          layoutKey: null,
+          ranking: "volume",
+        }),
+      );
+    expect(parse([180, 110, 129]).success).toBe(true); // on the faces of 360 × 220 × 258
+    expect(parse([181, 0, 0]).success).toBe(false);
+    expect(parse([0, 0, Number.POSITIVE_INFINITY]).success).toBe(false);
+  });
+
   it("hashes a part by its design fields: the outline counts, the model URL doesn't", () => {
     const loaded = catalogPart(getPart("PART-001"));
     const base = designPartHash(loaded);
