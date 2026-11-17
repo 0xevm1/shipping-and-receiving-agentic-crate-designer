@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { openApp, openTab, panel, shot } from "./helpers";
 
-// Desktop project (1440 × 900); the stacked layout is in 08-layout.narrow.spec.ts.
+// Desktop project (1440 × 900); the narrow drawer layout is in 08-layout.narrow.spec.ts and 12-mobile.mobile.spec.ts.
 test("at 1440 × 900 only the island panel scrolls", async ({ page }) => {
   await openApp(page);
   await openTab(page, "Cut list");

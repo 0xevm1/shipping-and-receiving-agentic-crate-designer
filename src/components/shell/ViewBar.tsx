@@ -156,7 +156,8 @@ function ViewPopover() {
           </div>
           <GlbDownload />
           <span className="lab">
-            Drag to turn, scroll to zoom, right-drag to move. Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
+            <span className="hint-mouse">Drag to turn, scroll to zoom, right-drag to move.</span>
+            <span className="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to move.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
           </span>
         </div>
       )}

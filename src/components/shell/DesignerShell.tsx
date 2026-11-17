@@ -1,11 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { dims, lengthUnit, weight } from "@/lib/units";
 import { markInput } from "@/state/motion";
 import { useDesigner } from "@/state/store";
-import { Island } from "../island/Island";
+import { Island, ISLAND_ID } from "../island/Island";
 import { SizeLabels } from "../viewer/SizeLabels";
+import { Flash } from "./ChangeFeedback";
 import { Credit } from "./Credit";
 import { PartHeader } from "./PartHeader";
 import { useLoadFiles } from "./useLoadFiles";
@@ -17,32 +19,75 @@ const CrateViewer = dynamic(() => import("../viewer/CrateViewer"), {
   loading: () => <div className="stage-msg">Starting 3D view…</div>,
 });
 
+/** Below this the island is a drawer (#42). Must match the `max-width: 980px` media queries in globals.css. */
 const NARROW = "(max-width: 980px)";
 /** Margins around the free area, matching the prototype's freeArea(). */
 const FREE_LEFT = 40;
 const FREE_TOP = 96;
 const FREE_BOTTOM = 130;
 const ISLAND_GAP = 56;
+/** Narrow screens: side margins, and the gap kept between the crate and the header or the foot. */
+const NARROW_SIDE = 12;
+const NARROW_GAP = 8;
+
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function subscribeNarrow(onChange: () => void) {
+  const mq = window.matchMedia(NARROW);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+/** True below the 980 px breakpoint; false on the server, so the first paint is the desktop markup. */
+function useNarrow() {
+  return useSyncExternalStore(
+    subscribeNarrow,
+    () => window.matchMedia(NARROW).matches,
+    () => false,
+  );
+}
 
 /**
  * Full-bleed layout: the 3D stage fills the window and four overlay regions
  * float above it — part title (top left), the island (upper right), the load
- * hint (bottom left) and the view bar (bottom right).
+ * hint and credit (bottom left) and the view bar (bottom right).
+ *
+ * Narrow screens (#42): the stage still fills the window; the island becomes a right-side
+ * drawer behind a hamburger, a summary chip shows the answer above a compact view bar, and the
+ * credit moves to the foot of the drawer.
  */
 export function DesignerShell() {
   const panelsHidden = useDesigner((s) => s.panelsHidden);
+  const drawerOpen = useDesigner((s) => s.drawerOpen);
   const loadMessage = useDesigner((s) => s.loadMessage);
+  const narrow = useNarrow();
   const islandRef = useRef<HTMLElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const footRef = useRef<HTMLDivElement>(null);
+  const burgerRef = useRef<HTMLButtonElement>(null);
   const loadFiles = useLoadFiles();
   const [dragging, setDragging] = useState(false);
+  const drawer = narrow && drawerOpen;
 
-  // Any input anywhere stops idle auto-play; Escape clears a pinned cut-list row.
+  const openDrawer = useCallback(() => {
+    const s = useDesigner.getState();
+    // A board tapped on a touch screen leaves its tooltip and hover behind.
+    s.setTooltip(null);
+    s.setHover(null);
+    s.setDrawerOpen(true);
+  }, []);
+  const closeDrawer = useCallback(() => useDesigner.getState().setDrawerOpen(false), []);
+
+  // Any input anywhere stops idle auto-play. Escape closes the drawer, or else clears a pinned row.
   useEffect(() => {
     const events = ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"] as const;
     const opts = { passive: true, capture: true };
     events.forEach((e) => window.addEventListener(e, markInput, opts));
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && useDesigner.getState().pin) useDesigner.getState().setPin(null);
+      if (e.key !== "Escape") return;
+      const s = useDesigner.getState();
+      if (s.drawerOpen) s.setDrawerOpen(false);
+      else if (s.pin) s.setPin(null);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -51,13 +96,77 @@ export function DesignerShell() {
     };
   }, []);
 
+  // Crossing the breakpoint: the drawer never stays open on desktop, and Hide panels (desktop
+  // only, with no "Show panels" pill on narrow screens) never stays on in the drawer layout.
+  useEffect(() => {
+    const s = useDesigner.getState();
+    if (!narrow) s.setDrawerOpen(false);
+    else if (s.panelsHidden) s.togglePanels();
+  }, [narrow]);
+
+  // Narrow screens: tapping a board pins its row (CrateModel switches to Cut list); open the
+  // drawer so the row shows. Rows pinned from the list itself are already in the open drawer.
+  useEffect(() => {
+    if (!narrow) return;
+    return useDesigner.subscribe((s, prev) => {
+      if (s.pin && s.pin !== prev.pin && !s.drawerOpen) openDrawer();
+    });
+  }, [narrow, openDrawer]);
+
+  // The drawer is modal: focus moves into it, Tab cycles inside it, and closing returns focus
+  // to the hamburger.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const island = islandRef.current;
+    if (!drawer || !island) {
+      if (wasOpen.current && narrow) burgerRef.current?.focus();
+      wasOpen.current = false;
+      return;
+    }
+    wasOpen.current = true;
+    island.querySelector<HTMLElement>(".drawer-close")?.focus();
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const items = [...island.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (el) => !el.hasAttribute("disabled") && !el.hidden && el.getClientRects().length > 0,
+      );
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (!island.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trap);
+    return () => document.removeEventListener("keydown", trap);
+  }, [drawer, narrow]);
+
   // The crate is centred in the space the overlays leave free.
   useEffect(() => {
-    const narrow = window.matchMedia(NARROW);
+    const mq = window.matchMedia(NARROW);
     const measure = () => {
       const island = islandRef.current;
       const s = useDesigner.getState();
-      if (narrow.matches || !island) {
+      if (mq.matches) {
+        // Narrow: the full width, between the header and the summary and view bar at the foot.
+        const header = shellRef.current?.querySelector("header")?.getBoundingClientRect();
+        const foot = footRef.current?.getBoundingClientRect();
+        const H = window.innerHeight;
+        s.setInsets({
+          left: NARROW_SIDE,
+          top: Math.round(header ? header.bottom + NARROW_GAP : 0),
+          right: NARROW_SIDE,
+          bottom: Math.round(foot ? H - foot.top + NARROW_GAP : 0),
+        });
+      } else if (!island) {
         s.setInsets({ left: 0, top: 0, right: 0, bottom: 0 });
       } else if (s.panelsHidden) {
         // Only the credit remains, bottom left; keep the crate above it.
@@ -69,10 +178,15 @@ export function DesignerShell() {
     measure();
     const ro = new ResizeObserver(measure);
     if (islandRef.current) ro.observe(islandRef.current);
-    narrow.addEventListener("change", measure);
+    const header = shellRef.current?.querySelector("header");
+    if (header) ro.observe(header);
+    if (footRef.current) ro.observe(footRef.current);
+    mq.addEventListener("change", measure);
+    window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
-      narrow.removeEventListener("change", measure);
+      mq.removeEventListener("change", measure);
+      window.removeEventListener("resize", measure);
     };
   }, [panelsHidden]);
 
@@ -108,27 +222,86 @@ export function DesignerShell() {
   }, [loadFiles]);
 
   return (
-    <div className={`shell${panelsHidden ? " hud-off" : ""}`}>
+    <div className={`shell${panelsHidden ? " hud-off" : ""}${drawer ? " drawer-open" : ""}`} ref={shellRef}>
       <PartHeader />
+      {/* Narrow screens only (hidden by CSS above 980 px). */}
+      <button
+        ref={burgerRef}
+        type="button"
+        className="glass hamburger"
+        aria-label="Crate details"
+        aria-expanded={drawer}
+        aria-controls={ISLAND_ID}
+        onClick={openDrawer}
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
       <section className="stage" aria-label="3D view of the crate">
         <CrateViewer />
         <SizeLabels />
         <Tooltip />
       </section>
-      <div className="loadrow">
-        <span className="loadmsg" role="status">
-          {loadMessage}
-        </span>
+      {/* The load message, the summary chip (narrow) and the view bar; a column at the foot on narrow screens. */}
+      <div className="foot" ref={footRef}>
+        <div className="loadrow">
+          <span className="loadmsg" role="status">
+            {loadMessage}
+          </span>
+        </div>
+        <Summary
+          onOpen={() => {
+            useDesigner.getState().setTab("overview");
+            openDrawer();
+          }}
+        />
+        <ViewBar />
       </div>
-      <ViewBar />
-      <Credit />
-      <Island ref={islandRef} />
+      {!narrow && <Credit />}
+      {narrow && <div className="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
+      <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} footer={narrow ? <Credit /> : undefined} />
       {dragging && (
         <div className="dropveil">
           <div className="glass card">Drop a .glb file to load the part</div>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Narrow screens: the answer (outside size and gross weight, in amber) while the drawer is
+ * closed. Tapping it opens the drawer on Overview. Hidden by CSS above 980 px.
+ */
+function Summary({ onOpen }: { onOpen: () => void }) {
+  const design = useDesigner((s) => s.result.design);
+  const problem = useDesigner((s) => s.result.problem);
+  const units = useDesigner((s) => s.units);
+  return (
+    <button type="button" className="glass summary" onClick={onOpen}>
+      {design ? (
+        <>
+          <span>
+            <span className="summary-lab">Outside</span>
+            <Flash on={["outside"]} className="summary-val">
+              {dims(design.layout.external, units)} {lengthUnit(units)}
+            </Flash>
+          </span>
+          <span>
+            <span className="summary-lab">Gross</span>
+            <Flash on={["gross"]} className="summary-val">
+              {weight(design.grossKg, units)}
+            </Flash>
+          </span>
+        </>
+      ) : (
+        <span>
+          <span className="summary-lab">No crate</span>
+          <span className="summary-val">{problem?.title ?? "No crate to show"}</span>
+        </span>
+      )}
+    </button>
   );
 }
 
