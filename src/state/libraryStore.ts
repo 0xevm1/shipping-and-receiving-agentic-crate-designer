@@ -13,7 +13,7 @@ import {
   type SavedDesign,
 } from "@/domain/designLibrary";
 import { loadLibrary, saveLibrary } from "./libraryStorage";
-import { browserStorage, type KeyValueStore } from "./standardsStorage";
+import { browserStorage, type KeyValueStore } from "./persist";
 
 /**
  * The design library (#14): saved designs per part, kept in localStorage. Its own small store,

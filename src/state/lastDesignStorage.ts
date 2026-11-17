@@ -2,17 +2,17 @@ import { RANKINGS, type Ranking } from "@/domain/design";
 import { parseDesignFile, type DesignFile } from "@/domain/designFile";
 import { readShareHash } from "@/domain/shareLink";
 import { currentDesignFile } from "@/lib/currentDesign";
-import { browserStorage, type KeyValueStore } from "./standardsStorage";
+import { browserStorage, readJson, writeJson, type KeyValueStore } from "./persist";
 import type { DesignerState, Tab } from "./store";
 
 /**
- * The last-opened crate (#71, spec §9): the design on screen, saved so a reload or a reopened
- * tab brings it back. The design is a #28 design file (§6.5), so it goes through the same
- * versions, migrations and validation as a picked file; the tab and the ranking (#17) ride along.
+ * The last-opened crate (spec §9): the design on screen, saved so a reload or a reopened
+ * tab brings it back. The design is a design file (§6.5), so it goes through the same
+ * versions, migrations and validation as a picked file; the tab and the ranking ride along.
  * A custom part's GLB bytes are kept separately, in IndexedDB (`glbCache.ts`).
  */
-export const LAST_DESIGN_KIND = "crate-designer.last-design";
-export const LAST_DESIGN_VERSION = 1;
+const LAST_DESIGN_KIND = "crate-designer.last-design";
+const LAST_DESIGN_VERSION = 1;
 export const LAST_DESIGN_STORAGE_KEY = `crate-designer.last-design.v${LAST_DESIGN_VERSION}`;
 /** Edits are written this long after they stop, so typing in a field doesn't write on every key. */
 export const LAST_DESIGN_SAVE_DELAY_MS = 400;
@@ -57,31 +57,12 @@ export function parseLastDesign(text: string): { ok: true; value: LastDesign } |
 
 /** The saved entry, or null. Bad or old data is ignored with a `console.warn`. */
 export function loadLastDesign(storage: KeyValueStore | null = browserStorage()): LastDesign | null {
-  let text: string | null = null;
-  try {
-    text = storage?.getItem(LAST_DESIGN_STORAGE_KEY) ?? null;
-  } catch {
-    // Treated as nothing saved.
-  }
-  if (text === null) return null;
-  const r = parseLastDesign(text);
-  if (!r.ok) {
-    console.warn(`Last-opened crate ignored, opening the default part. ${r.error}`);
-    return null;
-  }
-  return r.value;
+  return readJson<LastDesign | null>(storage, LAST_DESIGN_STORAGE_KEY, parseLastDesign, null, "Last-opened crate ignored, opening the default part.");
 }
 
 /** Saves the entry. False when storage is missing or refused it (e.g. quota); never throws. */
 export function saveLastDesign(d: LastDesign, storage: KeyValueStore | null = browserStorage()): boolean {
-  if (!storage) return false;
-  try {
-    storage.setItem(LAST_DESIGN_STORAGE_KEY, lastDesignToJson(d));
-    return true;
-  } catch (e) {
-    console.warn("Couldn't save the last-opened crate.", e);
-    return false;
-  }
+  return writeJson(storage, LAST_DESIGN_STORAGE_KEY, lastDesignToJson(d), "Couldn't save the last-opened crate.");
 }
 
 /**
