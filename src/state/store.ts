@@ -76,6 +76,9 @@ interface Insets {
 }
 
 /** Which input an edit came from, so the change note can sit by it. */
+/** How the load row shows its message: a note goes by itself, an error waits to be dismissed. */
+export type LoadMessageKind = "note" | "error";
+
 export type ChangeSource = "name" | "material" | "mass" | "rules" | "layout";
 
 /** What the last input change did to the design; cleared after `CHANGE_NOTE_MS`. */
@@ -119,6 +122,8 @@ export interface DesignerState {
   panelsHidden: boolean;
   insets: Insets;
   loadMessage: string;
+  /** An error stays until dismissed or the next load; a note goes by itself. */
+  loadMessageKind: LoadMessageKind;
   /** Bumped whenever the camera should re-frame the crate. */
   fit: { nonce: number; instant: boolean };
   /** The last edit's effect on the design. Units changes and loading a part don't set it. */
@@ -187,7 +192,7 @@ export interface DesignerState {
   setLabels: (l: SizeLabel[]) => void;
   togglePanels: () => void;
   setInsets: (i: Insets) => void;
-  setLoadMessage: (m: string) => void;
+  setLoadMessage: (m: string, kind?: LoadMessageKind) => void;
   requestFit: (instant?: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
   /** Re-ranks the layouts by volume, crate cost or freight; resets the layout pick. */
@@ -329,6 +334,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
     panelsHidden: false,
     insets: { left: 0, top: 0, right: 0, bottom: 0 },
     loadMessage: "",
+    loadMessageKind: "note",
     fit: { nonce: 0, instant: true },
     lastChange: null,
     drawerOpen: false,
@@ -458,7 +464,7 @@ export const useDesigner = create<DesignerState>()((set, get) => {
         set({ insets, fit: { nonce: get().fit.nonce + 1, instant: true } });
       }
     },
-    setLoadMessage: (loadMessage) => set({ loadMessage }),
+    setLoadMessage: (loadMessage, loadMessageKind = "note") => set({ loadMessage, loadMessageKind }),
     requestFit: (instant = false) => set({ fit: { nonce: get().fit.nonce + 1, instant } }),
     setDrawerOpen: (drawerOpen) => {
       if (get().drawerOpen !== drawerOpen) set({ drawerOpen });

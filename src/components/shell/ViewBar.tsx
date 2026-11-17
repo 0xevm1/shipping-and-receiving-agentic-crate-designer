@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { autoplay } from "@/state/motion";
 import { currentMode, useDesigner, type CameraPreset, type Mode, type ViewState } from "@/state/store";
+import { usePopover } from "./usePopover";
 
 const MODES: Mode[] = ["closed", "open", "exploded"];
 const MODE_NAME: Record<Mode, string> = { closed: "Closed", open: "Open", exploded: "Exploded" };
@@ -88,22 +89,13 @@ function PinBar() {
 function ViewPopover() {
   const view = useDesigner((s) => s.view);
   const units = useDesigner((s) => s.units);
-  const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
+  const { open, toggle, wrapProps, triggerRef } = usePopover();
   const { setView, requestFit } = useDesigner.getState();
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [open]);
-
   return (
-    <div className="viewwrap hideable" ref={wrap}>
-      <button type="button" className="glass pillbtn" aria-expanded={open} aria-controls="view-pop" onClick={() => setOpen(!open)}>
+    <div className="viewwrap hideable" {...wrapProps}>
+      {/* aria-controls only while the popover exists, so it never points at a missing id. */}
+      <button ref={triggerRef} type="button" className="glass pillbtn" aria-expanded={open} aria-controls={open ? "view-pop" : undefined} onClick={toggle}>
         View
       </button>
       {open && (
@@ -123,7 +115,7 @@ function ViewPopover() {
               </button>
             ))}
           </div>
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="pop-switches">
             {SWITCHES.map((sw) => (
               <label key={sw.key}>
                 {sw.label}

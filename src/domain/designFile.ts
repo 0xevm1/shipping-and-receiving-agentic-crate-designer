@@ -194,27 +194,25 @@ export function restoreDesign(file: DesignFile, part: DesignPart, standards: Sho
   const crateIndex = Math.max(0, plan.crates.findIndex((c) => c.quantity === file.summary.quantity));
   const result = plan.crates[crateIndex].result;
   const found = result.layouts.some((l) => l.key === file.layoutKey);
-  if (!found) notes.push([`The saved layout (${file.summary.layout}) no longer fits, so the recommended layout is shown.`]);
+  if (!found) notes.push([`The saved layout (${file.summary.layout}) no longer fits, so the recommended one is shown.`]);
   const was = file.summary.shipment ?? [{ count: 1, quantity: settings.quantity }];
   const same = was.length === plan.crates.length && was.every((c, i) => c.count === plan.crates[i].count && c.quantity === plan.crates[i].quantity);
   if (!same) {
     const text = describeShipment({ crates: was.map((c, i) => ({ ...c, label: String.fromCharCode(65 + i) })) });
-    notes.push([`The batch now ships as ${describeShipment(plan)} (saved: ${text}).`]);
+    notes.push([`The batch now ships as ${describeShipment(plan)} (was ${text}).`]);
   }
   const design = result.design;
   if (design && same) {
     const now = summarize(design);
     const sizeDiffers = now.outsideMm.some((v, i) => v !== file.summary.outsideMm[i]);
     const grossDiffers = Math.abs(now.grossKg - file.summary.grossKg) > 0.1;
-    if ((sizeDiffers || grossDiffers) && file.summary.shapeUnknown && !usableProfile(shaped)) {
-      // An older file does not carry the part's shape. Blocking then follows the bounding box
-      // until the model is measured, so the totals can differ without anything being wrong.
-      notes.push([
-        "This design was saved before the part's shape was kept in the file, so sizes and weights can differ slightly from the saved ones until the model is measured.",
-      ]);
-    } else {
-      if (sizeDiffers) notes.push(msg`The crate is now ${sizeMessage(now.outsideMm)} outside (saved: ${sizeMessage(file.summary.outsideMm)}).`);
-      if (grossDiffers) notes.push(msg`Gross is now ${kg(now.grossKg)} (saved: ${kg(file.summary.grossKg)}).`);
+    // An older file does not carry the part's shape. Blocking then follows the bounding box until
+    // the viewer measures the model (every loaded part has one), which moves the totals to the
+    // saved ones: saying so now would only be noise.
+    const settling = file.summary.shapeUnknown && !usableProfile(shaped);
+    if (!settling) {
+      if (sizeDiffers) notes.push(msg`The crate is now ${sizeMessage(now.outsideMm)} outside (was ${sizeMessage(file.summary.outsideMm)}).`);
+      if (grossDiffers) notes.push(msg`Gross is now ${kg(now.grossKg)} (was ${kg(file.summary.grossKg)}).`);
     }
   }
   return { settings, layoutKey: found ? file.layoutKey : null, ranking: file.ranking, notes, crateIndex };

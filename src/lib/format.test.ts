@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cautionVerdict, densityDelta, densityText, documentDate, elapsedText, hoursText, savedDateText, usd, usdDelta } from "./format";
+import { cautionNote, cautionVerdict, densityDelta, densityText, documentDate, elapsedText, hoursText, modelNote, savedDateText, usd, usdDelta } from "./format";
 
 describe("cautionVerdict", () => {
   it("is empty without cautions", () => {
@@ -77,5 +77,22 @@ describe("savedDateText", () => {
   it("shows a saved-on date for people, and anything unreadable as it came", () => {
     expect(savedDateText("2026-11-16T12:00:00.000Z")).toMatch(/2026/);
     expect(savedDateText("last Tuesday")).toBe("last Tuesday");
+  });
+});
+
+describe("modelNote", () => {
+  it("says what the measurement was compared with", () => {
+    expect(modelNote(true, false)).toBe("model matches catalog");
+    expect(modelNote(false, true)).toBe("model does not match catalog");
+    expect(modelNote(null, true)).toBe("file read as millimetres");
+    expect(modelNote(null, undefined)).toBe("size measured from the file");
+  });
+});
+
+describe("cautionNote", () => {
+  it("counts cautions and points at Checks", () => {
+    expect(cautionNote(0)).toBe("");
+    expect(cautionNote(1)).toBe("1 caution, see Checks");
+    expect(cautionNote(3)).toBe("3 cautions, see Checks");
   });
 });
