@@ -1,4 +1,5 @@
-// Copies chosen e2e screenshots into the committed docs/screenshots/ folders. Opt-in: the specs never write
+// Copies chosen e2e screenshots into docs/screenshots/. Only docs/screenshots/readme/ is tracked; the other
+// folders are git-ignored, so use `git add -f` to commit a shot for a PR. Opt-in: the specs never write
 // there, so a normal `bun run e2e` leaves the repo clean. Run the specs first (`bun run e2e`), then:
 //
 //   bun run e2e:docs-shots                      the default set below
