@@ -14,6 +14,7 @@ export function bomToCsv(part: DesignPart, design: CrateDesign): string {
   const { layout } = design;
   const header = [
     `# Crate for ${layout.slots.length} x ${part.id} ${part.name}`,
+    `# Part ${part.material ?? "material not given"}, ${+part.mass_kg.toFixed(2)} kg each`,
     `# External ${layout.external.map(Math.round).join(" x ")} mm, gross ${Math.round(design.grossKg)} kg`,
     `# Layout ${layout.counts.join(" x ")}, ${layout.orientation.label}`,
     "component,material,stock,cut_mm,qty",

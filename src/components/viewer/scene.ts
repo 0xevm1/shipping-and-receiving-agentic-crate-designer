@@ -1,5 +1,6 @@
 import { Color, MeshStandardMaterial, Mesh, type Material, type Object3D } from "three";
 import type { Member, MemberKind } from "@/domain/crate";
+import { partFinish } from "@/domain/partDetails";
 import type { Vec3 } from "@/domain/schema";
 import type { DesignerState, ViewState } from "@/state/store";
 import { anim } from "@/state/motion";
@@ -85,9 +86,12 @@ export function setOpacity(m: Material, opacity: number) {
   m.depthWrite = !transparent;
 }
 
-/** Neutral metal for parts. Moderate metalness: there is no environment map to reflect. */
+/**
+ * Neutral metal for parts, lighter for aluminum (see `partFinish`: text containing "alum"),
+ * steel for anything else. Moderate metalness: there is no environment map to reflect.
+ */
 export function partMaterial(material: string | undefined) {
-  const aluminum = /alum/i.test(material ?? "");
+  const aluminum = partFinish(material) === "aluminum";
   return new MeshStandardMaterial({
     color: aluminum ? "#d4dae1" : "#a7b2be",
     metalness: 0.25,

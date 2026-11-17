@@ -69,7 +69,10 @@ tab at a time.
    click **Load a part** or drop a `.glb` anywhere on the page.
    - If the file name matches a catalog entry (`src/data/parts.json`), its mass, material and
      usual quantities fill in, and the model's size is checked against the catalog.
-   - For an unknown file, enter the mass. A 10 kg stand-in is used, with a warning, until you do.
+   - For an unknown file, enter its name, material and mass in the top-left header. The
+     material field suggests common alloys and takes any text; aluminum draws lighter than
+     steel. A 10 kg stand-in mass is used, with a warning, until you enter one. Mass is never
+     guessed from the mesh.
 2. **Set the quantity and packing rules** in the **Rules** tab: quantity, keep upright, most
    layers, gap between parts, clearance to walls, and plywood thickness (or Auto).
 3. **Get the best layout automatically.** The app tries every orientation and grid that holds
@@ -112,7 +115,8 @@ tab at a time.
 - **Metal hardware** (brackets, banding, lag bolts).
 - **Persistence and accounts.** Nothing is saved yet. The plan is in
   [`docs/DATA_STORE.md`](docs/DATA_STORE.md).
-- **Entering a material for unknown parts.** Mass can be entered; material can't yet (see #3).
+- **Material properties.** An entered material sets the part's look and labels only. It doesn't
+  change the mass or any rule.
 
 ## Conventions
 
@@ -139,7 +143,8 @@ tab at a time.
 - **Densities and cost are placeholders:** plywood 600 kg/m³ and lumber 480 kg/m³. Cost uses
   $1,100/m³ for plywood and $650/m³ for lumber. It's only good for comparing layouts, not for
   quoting.
-- **Part masses** come from the catalog as given, or from the user for unknown files. They are
+- **Part masses** come from the catalog as given, or from the user for unknown files (as do
+  their name and material). They are
   never derived from mesh volume.
 - **Stability:** a crate counts as "stable" if its outside height is at most 1.5× its narrowest
   base side.
