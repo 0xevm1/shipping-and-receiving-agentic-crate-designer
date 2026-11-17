@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 64" width="64" height="64"><title>Gear with crate cutout, blue and gold</title><polygon points="32,15.2 46.6,23.6 32,32 17.4,23.6" fill="#d9a938"></polygon><g class="b" fill="#0c2548">
+    <path fill-rule="evenodd" d="M8 32a24 24 0 1 0 48 0a24 24 0 1 0-48 0ZM32 15.2L46.6 23.6V40.4L32 48.8L17.4 40.4V23.6Z"></path>
+    <rect id="t" x="26.5" y="1.5" width="11" height="12" rx="2.5"></rect>
+    <use xlink:href="#t" href="#t" transform="rotate(45 32 32)"></use>
+    <use xlink:href="#t" href="#t" transform="rotate(90 32 32)"></use>
+    <use xlink:href="#t" href="#t" transform="rotate(135 32 32)"></use>
+    <use xlink:href="#t" href="#t" transform="rotate(180 32 32)"></use>
+    <use xlink:href="#t" href="#t" transform="rotate(225 32 32)"></use>
+    <use xlink:href="#t" href="#t" transform="rotate(270 32 32)"></use>
+    <use xlink:href="#t" href="#t" transform="rotate(315 32 32)"></use>
+  </g><path class="s" d="M32 32L17.4 23.6M32 32L46.6 23.6M32 32V48.8" stroke="#0c2548" stroke-width="3.5" stroke-linecap="round" fill="none"></path></svg>
