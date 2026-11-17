@@ -28,6 +28,7 @@ import { bomToCsv, shipmentToCsv } from "./csv";
 import { documentDate } from "./format";
 import { renderMessage } from "./message";
 import { designFilePart } from "./loadPart";
+import { models } from "./modelRegistry";
 import { framedScene } from "./partFrame";
 import { buildPrintable, type PrintableDesign } from "./printable";
 import type { Units } from "./units";
@@ -188,14 +189,15 @@ export function zipBundle(files: BundleFile[], at: Date): Uint8Array {
 }
 
 /**
- * The real makers, for the browser: GLBs through `exportCrateGlb` with the part model (loaded
- * once, usually from the viewer's cache), and the PDF through a lazily loaded jsPDF.
+ * The real makers, for the browser: GLBs through `exportCrateGlb` with the part model (parsed
+ * once by the model registry, usually already by the viewer), and the PDF through a lazily loaded jsPDF.
  */
 export async function browserMakers(part: LoadedPart): Promise<BundleMakers> {
-  const { exportCrateGlb, loadPartScene } = await import("./exportGlb");
+  const { exportCrateGlb } = await import("./exportGlb");
   return {
     glb: async (design) => {
-      const scene = framedScene(await loadPartScene(part.modelUrl), part.upAxis);
+      // The registry's parsed model, shared with the viewer; the caller holds it for the whole run.
+      const scene = framedScene(await models.scene(part.modelUrl), part.upAxis);
       return exportCrateGlb(design, { scene, mmPerUnit: part.mmPerUnit, material: part.material });
     },
     pdf: async (doc) => (await import("./exportPdf")).printableToPdf(doc),

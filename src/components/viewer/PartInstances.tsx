@@ -1,28 +1,27 @@
 "use client";
 
-import { useGLTF } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { Box3, Vector3 } from "three";
 import type { Layout } from "@/domain/packing";
-import { framedScene, roundSizeMm } from "@/lib/partFrame";
+import { roundSizeMm } from "@/lib/partFrame";
 import { scheduleProfile } from "@/lib/partProfile";
 import { partWeight } from "@/lib/units";
 import { useDesigner } from "@/state/store";
 import { useView } from "@/state/viewStore";
 import { cloneWithMaterial, GHOST_PART, hasFocus, partMaterial, setOpacity } from "./scene";
 import { type LoadedPart } from "@/lib/part";
+import { useModelScene } from "./useModelScene";
 
 /**
- * Loads the part GLB once and places a copy in every filled slot.
+ * Takes the part's model from the registry (`useModelScene`) and places a copy in every filled slot.
  *
  * The model is turned to Z up (the part's up axis, `framedScene`), scaled (model units → mm) and
  * re-centred on its bounding box: the source models are not centred on their origin, however far
  * from it they sit.
  */
 export function PartInstances({ part, layout }: { part: LoadedPart; layout: Layout }) {
-  const { scene: loaded } = useGLTF(part.modelUrl);
-  const scene = useMemo(() => framedScene(loaded, part.upAxis), [loaded, part.upAxis]);
+  const scene = useModelScene(part.modelUrl, part.upAxis);
   const setMeasured = useDesigner((s) => s.setMeasured);
 
   const { center, sizeMm } = useMemo(() => {

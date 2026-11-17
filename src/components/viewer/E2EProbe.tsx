@@ -77,6 +77,11 @@ export interface CrateSnapshot {
   /** Milliseconds the last part analysis took in this page; null before any. */
   profileMs: number | null;
   /**
+   * GPU resources the renderers hold (`renderer.info.memory`): the 3D view's, and the island thumbnail's
+   * (null before it is created). Counts that keep growing as parts are loaded are a leak.
+   */
+  gpu: { geometries: number; textures: number; thumbnail: { geometries: number; textures: number } | null } | null;
+  /**
    * Centre of gravity: the design's, crate-interior mm, and what the 3D view draws (`marker` is
    * the CoG mark's position, null while hidden; `arrows` the fork-entry arrows mounted and
    * `arrowsShown` those the crate isn't hiding).
@@ -171,6 +176,15 @@ function snapshot(): CrateSnapshot {
     photonsActive: probeStats.photonsActive,
     shapedBlocking: !!s.result.design?.shapedBlocking,
     profileMs: lastProfileMs(),
+    gpu: three
+      ? {
+          geometries: three.gl.info.memory.geometries,
+          textures: three.gl.info.memory.textures,
+          thumbnail: probeStats.thumbnail
+            ? { geometries: probeStats.thumbnail.info.memory.geometries, textures: probeStats.thumbnail.info.memory.textures }
+            : null,
+        }
+      : null,
     cog: s.result.design
       ? {
           mm: [...s.result.design.handling.cogMm],

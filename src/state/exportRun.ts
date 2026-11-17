@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { downloadBytes } from "@/lib/exportGlb";
+import { models } from "@/lib/modelRegistry";
 import { useDesigner } from "./store";
 import { useView } from "./viewStore";
 
@@ -40,6 +41,8 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       // The design as it is now, whatever is edited while the files are made.
       const at = new Date();
+      // The part's model is held for the whole run: the part may be replaced while the files are made.
+      const hold = models.acquire(s.part.modelUrl);
       try {
         const work = (async () => {
           const { browserMakers, buildBundle, zipBundle } = await import("@/lib/exportBundle");
@@ -63,6 +66,8 @@ export const useExportRun = create<{ state: ExportState; run: () => Promise<void
       } catch (e) {
         console.error("Export failed", e);
         show({ kind: "error", message: e instanceof Error && e.name === "NoCrateError" ? e.message : ERROR_TEXT }, ERROR_NOTE_MS);
+      } finally {
+        hold.release();
       }
     },
   };

@@ -7,6 +7,7 @@ import { planShipment, type ShipmentPlan } from "@/domain/shipment";
 import { normalizeSettings, type CatalogEntry, type CrateSettings, type Vec3 } from "@/domain/schema";
 import { DEFAULT_STANDARDS, mergeStandards, panelOptions, parseStandards, type DeepPartial, type ShopStandards } from "@/domain/standards";
 import { canSetFrame, catalogPart, framePart, type LoadedPart } from "@/lib/part";
+import { models } from "@/lib/modelRegistry";
 import type { PartFrame } from "@/lib/partFrame";
 import { emitDesignEdit, type ChangeSource } from "./designEvents";
 import { loadStandards, saveStandards } from "./standardsStorage";
@@ -243,4 +244,20 @@ export const useDesigner = create<DesignerState>()((set, get) => {
       if (ranking !== get().ranking) recompute({ ranking, layoutKey: null }, "layout");
     },
   };
+});
+
+/**
+ * The part on screen holds its model (`modelRegistry.ts`) for as long as it is the part. Replacing the
+ * part (by any path: a load, a design, a restore) takes the new hold before letting go of the old, so
+ * whatever else still holds the old model (the viewer until it swaps, an export, the saver) keeps it alive.
+ * A frame, profile or detail edit keeps the same model and changes nothing here.
+ */
+let heldUrl = useDesigner.getState().part.modelUrl;
+let partHold = models.acquire(heldUrl);
+useDesigner.subscribe(({ part }) => {
+  if (part.modelUrl === heldUrl) return;
+  const previous = partHold;
+  heldUrl = part.modelUrl;
+  partHold = models.acquire(heldUrl);
+  previous.release();
 });
