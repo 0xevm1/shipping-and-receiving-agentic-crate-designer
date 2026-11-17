@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DEFAULT_SETTINGS } from "@/domain/design";
 import { explainRecommendation } from "@/domain/explainRecommendation";
-import { CrateSettingsSchema } from "@/domain/schema";
+import { CrateSettingsFields, readSettings } from "@/domain/schema";
 import { ShopStandardsSchema } from "@/domain/standards";
 import { FreightRatesSchema, normalizeCandidates, planTotal, SWEEP_MAX_QUANTITY, sweepQuantities, type QuantitySweep, type TotalPlan } from "@/domain/sweep";
 import type { DesignsResponse, RankedConfiguration } from "@/lib/api/designs";
@@ -23,7 +23,7 @@ import { ENGINE_VERSION } from "./version";
  */
 
 /** The packing rules a sweep holds fixed: every setting but the quantity, which it varies. */
-export const SweepRulesSchema = CrateSettingsSchema.omit({ quantity: true });
+export const SweepRulesSchema = z.preprocess(readSettings, CrateSettingsFields.omit({ quantity: true }));
 
 /** The app's default packing rules: what a headless sweep (API, queue, CLI) uses. */
 export const DEFAULT_SWEEP_RULES: z.infer<typeof SweepRulesSchema> = SweepRulesSchema.parse(DEFAULT_SETTINGS);

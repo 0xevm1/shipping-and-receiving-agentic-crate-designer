@@ -1,8 +1,9 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { getPart, parts } from "./catalog";
 import { designCrate } from "./crate";
 import { DEFAULT_SETTINGS, rankLayouts, type DesignPart } from "./design";
-import { CrateSettingsSchema } from "./schema";
+import { CrateSettingsFields } from "./schema";
 import { planShipment } from "./shipment";
 import { DEFAULT_STANDARDS } from "./standards";
 import {
@@ -22,17 +23,19 @@ import {
   type SweepCrate,
   type SweepPoint,
 } from "./sweep";
-import { custom, loadAwareBudget, metricText, settings } from "./testFixtures";
+import { custom, loadAwareBudget, metricText, settings, facesFor } from "./testFixtures";
 
 const cents = (v: number) => Math.round(v * 100);
 const RATES: FreightRates = { usdPerCwtByClass: { "50": 20, "65": 30, "85": 40, "125": 60, "400": 150 }, minimumUsd: 90 };
 
 // One sweep per sample part and keep-upright, shared by the tests that only read it.
-const sweeps = parts.flatMap((p) => [true, false].map((keepUpright) => ({ p, keepUpright, sweep: sweepQuantities(p, settings({ keepUpright })) })));
+const sweeps = parts.flatMap((p) =>
+  [true, false].map((keepUpright) => ({ p, keepUpright, sweep: sweepQuantities(p, settings({ restingFaces: facesFor(keepUpright) })) })),
+);
 
 describe("sweepQuantities: the curve", () => {
   it("the maximum quantity is the quantity setting's maximum", () => {
-    expect(SWEEP_MAX_QUANTITY).toBe(CrateSettingsSchema.shape.quantity.maxValue);
+    expect(SWEEP_MAX_QUANTITY).toBe(CrateSettingsFields.shape.quantity.maxValue);
   });
 
   it.each(sweeps)("$p.id (upright $keepUpright) has one point per quantity, each passing or saying why not", ({ sweep }) => {
@@ -63,7 +66,7 @@ describe("sweepQuantities: the curve", () => {
 
   it("each passing point is the cheapest passing crate among the layouts it designed", () => {
     const p = getPart("PART-001");
-    const s = settings({ keepUpright: false });
+    const s = settings({ restingFaces: ANY_FACES });
     const sweep = sweepQuantities(p, s);
     for (const q of [1, 4, 12, 20]) {
       const point = sweep.curve[q - 1];
@@ -104,7 +107,7 @@ describe("the sweep and the shipment plan agree (§7.16, §7.10)", () => {
   // and the layout; the plan must ship exactly that crate, once, with no split.
   it.each(sweeps)("$p.id (upright $keepUpright): the recommendation and shortlist each plan as that one crate", ({ p, keepUpright, sweep }) => {
     for (const point of [{ quantity: sweep.recommendation!.quantity, crate: sweep.recommendation!.crate }, ...sweep.shortlist]) {
-      const plan = planShipment(p, settings({ keepUpright, quantity: point.quantity }), point.crate!.layoutKey);
+      const plan = planShipment(p, settings({ restingFaces: facesFor(keepUpright), quantity: point.quantity }), point.crate!.layoutKey);
       expect(plan.split).toBe(false);
       expect(plan.totals.parts).toBe(point.quantity);
       expect(plan.crates[0].result.design!.layout.key).toBe(point.crate!.layoutKey);
@@ -118,7 +121,7 @@ describe("sweepQuantities: hard checks filter first", () => {
     const r = sweep.recommendation!;
     const point = sweep.curve[r.quantity - 1];
     expect(point.ok).toBe(true);
-    const s = settings({ keepUpright, quantity: r.quantity });
+    const s = settings({ restingFaces: facesFor(keepUpright), quantity: r.quantity });
     const layout = rankLayouts(p, s).find((l) => l.key === r.crate.layoutKey)!;
     const d = designCrate(p, s, layout);
     expect(hardFailure(d, r.quantity)).toBeNull();
@@ -242,7 +245,7 @@ describe("ties", () => {
     expect(tieBreakBetween(point(4, 10), undefined)).toBeNull();
   });
   it("PART-003 lying down: 42 and 36 per crate cost the same to the cent, so 42 (fewer crates) wins", () => {
-    const rec = sweepQuantities(getPart("PART-003"), settings({ keepUpright: false })).recommendation!;
+    const rec = sweepQuantities(getPart("PART-003"), settings({ restingFaces: ANY_FACES })).recommendation!;
     expect(rec.quantity).toBe(42);
     expect(rec.tieBreak).toBe("fewer-crates");
   });
@@ -342,7 +345,7 @@ describe("speed", () => {
     const budget = loadAwareBudget(1500, 400);
     for (const p of parts) {
       const t0 = performance.now();
-      sweepQuantities(p, settings({ keepUpright: false }));
+      sweepQuantities(p, settings({ restingFaces: ANY_FACES }));
       expect(performance.now() - t0).toBeLessThan(budget);
     }
   });

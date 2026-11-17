@@ -5,6 +5,7 @@ import type { CheckItem } from "@/lib/checks";
 import { useView } from "@/state/viewStore";
 import styles from "./ChecksTab.module.css";
 import { CrateTypePicker } from "./CrateTypePicker";
+import { LayDownOffer } from "./LayDownOffer";
 
 /** Every rule of thumb, passed ones included, cautions first. */
 export function ChecksTab({ checks }: { checks: readonly CheckItem[] }) {
@@ -14,6 +15,7 @@ export function ChecksTab({ checks }: { checks: readonly CheckItem[] }) {
       <h2>Checks</h2>
       <p className="lede">Rules of thumb for a first pass. Heavy or unusual loads still need an engineering review.</p>
       <CrateTypePicker />
+      <LayDownOffer />
       {checks.map((c) => (
         <div key={c.id} className={c.level === "ok" ? styles.check : `${styles.check} ${styles[c.level]}`} data-testid="check" data-level={c.level}>
           <i />

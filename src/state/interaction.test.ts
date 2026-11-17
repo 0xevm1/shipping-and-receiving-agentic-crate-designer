@@ -1,3 +1,4 @@
+import { ANY_FACES } from "@/domain/orientations";
 // "Interaction stays instant" (#46 acceptance, spec §5.1): a quantity, layout or rule change is
 // designed and lands in the store's callback well under 100 ms, with no network round trip.
 //
@@ -64,7 +65,7 @@ describe.each(catalog.parts.map((p) => p.id))("%s: an edit lands without a netwo
       ["quantity 200", { ...base, settings: { ...base.settings, quantity: 200 } }],
       ["another layout", { ...base, layoutKey: (layouts[1] ?? layouts[0]!).key }],
       ["a wider part gap", { ...base, settings: { ...base.settings, partGapMm: base.settings.partGapMm + 25 } }],
-      ["laid down", { ...base, settings: { ...base.settings, keepUpright: !base.settings.keepUpright } }],
+      ["laid down", { ...base, settings: { ...base.settings, restingFaces: ANY_FACES } }],
       ["cost ranking", { ...base, ranking: "cost" }],
     ];
     for (const [what, req] of edits) {

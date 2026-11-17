@@ -1,3 +1,4 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { getPart } from "./catalog";
 import { crateCost, estimateLabour, FIXED_ASSEMBLY_STEPS, freightClassFor, freightTerms, NMFC_DENSITY_SCALE } from "./cost";
@@ -186,8 +187,8 @@ describe("ranking option", () => {
       ["PART-003", 4],
       ["PART-003", 50],
     ] as const) {
-      const r = computeDesign(getPart(id), settings({ quantity: q, keepUpright: false }), null, DEFAULT_STANDARDS, "cost");
-      const scores = scoreLayouts(getPart(id), settings({ quantity: q, keepUpright: false }), r.layouts);
+      const r = computeDesign(getPart(id), settings({ quantity: q, restingFaces: ANY_FACES }), null, DEFAULT_STANDARDS, "cost");
+      const scores = scoreLayouts(getPart(id), settings({ quantity: q, restingFaces: ANY_FACES }), r.layouts);
       const ok = r.layouts.filter((l) => l.stable);
       const cheapest = Math.min(...ok.map((l) => scores.get(l.key)!.costUsd));
       expect(r.design!.layout.stable).toBe(true);
@@ -224,7 +225,7 @@ describe("ranking option", () => {
   it("never trades stability for cost: an unstable layout never beats a stable one", () => {
     const part = getPart("PART-002");
     for (const ranking of ["cost", "density"] as const) {
-      const r = computeDesign(part, settings({ quantity: 8, keepUpright: false, maxLayers: 4 }), null, DEFAULT_STANDARDS, ranking);
+      const r = computeDesign(part, settings({ quantity: 8, restingFaces: ANY_FACES, maxLayers: 4 }), null, DEFAULT_STANDARDS, ranking);
       const firstUnstable = r.layouts.findIndex((l) => !l.stable);
       if (firstUnstable >= 0) expect(r.layouts.slice(firstUnstable).every((l) => !l.stable)).toBe(true);
     }

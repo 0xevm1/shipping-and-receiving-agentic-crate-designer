@@ -1,0 +1,26 @@
+{
+  "kind": "crate-designer.last-design",
+  "version": 1,
+  "tab": "checks",
+  "ranking": "volume",
+  "design": {
+    "kind": "crate-design",
+    "schemaVersion": 3,
+    "app": { "name": "crate-designer", "version": "0.1.0" },
+    "savedAt": "2026-11-17T09:00:00.000Z",
+    "part": {
+      "source": "custom",
+      "id": "bracket-y-up",
+      "name": "Bracket y up",
+      "mass_kg": 21.5,
+      "dimensions_mm": [360, 220, 258],
+      "units": "m",
+      "up": "y",
+      "model": "bracket-y-up.glb"
+    },
+    "settings": { "quantity": 4, "keepUpright": false, "maxLayers": 2, "partGapMm": 50, "wallClearanceMm": 50, "panelThickness": "auto" },
+    "ranking": "volume",
+    "layoutKey": "u:870x590x358:221",
+    "summary": { "quantity": 4, "layout": "2 × 2 × 1, As modeled", "outsideMm": [932, 652, 497], "grossKg": 134.9 }
+  }
+}

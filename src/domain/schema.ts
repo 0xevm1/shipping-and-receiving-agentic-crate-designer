@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ANY_FACES, AS_MODELLED_FACES, canonicalFaces, RESTING_FACES } from "./orientations";
 import type { PartProfile } from "./profile";
 
 /**
@@ -67,10 +68,21 @@ export type DesignPart = Pick<Part, "id" | "name" | "mass_kg" | "dimensions_mm">
 /** The plywood thicknesses the app accepts, in mm (shop standards and the Rules tab stay inside it). */
 export const PLYWOOD_MM = { min: 6, max: 50 } as const;
 
-export const CrateSettingsSchema = z.object({
+/** The faces of the part's bounding box it may rest on, in the canonical order (`canonicalFaces`), at least one. */
+const RestingFacesSchema = z
+  .array(z.enum(RESTING_FACES))
+  .min(1)
+  .refine((faces) => canonicalFaces(faces)?.join() === faces.join(), "list each face once, in the order -z, +z, -y, +y, -x, +x")
+  .readonly();
+
+export const CrateSettingsFields = z.object({
   quantity: z.number().int().min(1).max(200),
-  /** Restrict to rotations about Z, so the part's modeled "up" stays up. */
-  keepUpright: z.boolean(),
+  /**
+   * Which faces of the part (its bounding box in the loaded model's frame) it may rest on; every
+   * layout rests it on one of them. `["-z"]` keeps the model as it sits, all six let any face be
+   * down. Replaces `keepUpright` (true was `["-z"]`, false all six); see `CrateSettingsSchema`.
+   */
+  restingFaces: RestingFacesSchema,
   /** Max number of stacked layers (each extra layer adds a plywood separator). */
   maxLayers: z.number().int().min(1).max(6),
   /** Clear space between adjacent parts, filled with wood blocking. */
@@ -84,7 +96,31 @@ export const CrateSettingsSchema = z.object({
    */
   panelThickness: z.union([z.literal("auto"), z.number().finite().min(PLYWOOD_MM.min).max(PLYWOOD_MM.max)]),
 });
-export type CrateSettings = z.infer<typeof CrateSettingsSchema>;
+export type CrateSettings = z.infer<typeof CrateSettingsFields>;
+
+/**
+ * Settings written before `restingFaces`: `keepUpright: true` is "as modelled" and `false` is
+ * "any face". An object with neither (an API caller that leaves the rule out) gets the old default,
+ * "as modelled"; one with both keeps `restingFaces`. Faces listed out of order or twice are put
+ * in the canonical order, so equal rules hash the same. Anything else is left for the schema to refuse.
+ */
+export function readSettings(input: unknown): unknown {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
+  const { keepUpright, ...rest } = input as Record<string, unknown>;
+  let faces: unknown = rest.restingFaces;
+  if (faces === undefined) {
+    if (keepUpright === undefined || typeof keepUpright === "boolean") faces = keepUpright === false ? ANY_FACES : AS_MODELLED_FACES;
+  } else if (Array.isArray(faces)) {
+    faces = canonicalFaces(faces) ?? faces;
+  }
+  return faces === undefined ? rest : { ...rest, restingFaces: faces };
+}
+
+/**
+ * The settings as read from anywhere they arrive: a design file, a share link, the library, a
+ * stored server row, an API call. Old shapes (`keepUpright`) are accepted and read as above.
+ */
+export const CrateSettingsSchema = z.preprocess(readSettings, CrateSettingsFields);
 
 const NUMERIC_SETTINGS = ["quantity", "maxLayers", "partGapMm", "wallClearanceMm"] as const;
 
@@ -100,7 +136,7 @@ const NUMERIC_SETTINGS = ["quantity", "maxLayers", "partGapMm", "wallClearanceMm
  */
 export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateSettings, stocked?: readonly number[]): CrateSettings {
   const next: CrateSettings = { ...current };
-  const shape = CrateSettingsSchema.shape;
+  const shape = CrateSettingsFields.shape;
   for (const key of NUMERIC_SETTINGS) {
     const v: unknown = patch[key];
     if (typeof v !== "number" || !Number.isFinite(v)) continue;
@@ -108,12 +144,14 @@ export function normalizeSettings(patch: Partial<CrateSettings>, current: CrateS
     const n = field.isInt ? Math.round(v) : v;
     next[key] = Math.min(field.maxValue ?? n, Math.max(field.minValue ?? n, n));
   }
-  if (typeof patch.keepUpright === "boolean") next.keepUpright = patch.keepUpright;
+  // The faces a part may rest on: a list of known faces, at least one; anything else keeps the current rule.
+  const faces = Array.isArray(patch.restingFaces) ? canonicalFaces(patch.restingFaces) : null;
+  if (faces) next.restingFaces = faces;
   const panel = patch.panelThickness;
   if (shape.panelThickness.safeParse(panel).success && (stocked === undefined || panel === "auto" || stocked.includes(panel as number))) {
     next.panelThickness = panel!;
   }
-  return CrateSettingsSchema.parse(next);
+  return CrateSettingsFields.parse(next);
 }
 
 type NumericSetting = (typeof NUMERIC_SETTINGS)[number];
@@ -135,7 +173,7 @@ export interface SettingsAdjustment {
  */
 export function settingsAdjustments(patch: Partial<CrateSettings>, current: CrateSettings): SettingsAdjustment[] {
   const next = normalizeSettings(patch, current);
-  const shape = CrateSettingsSchema.shape;
+  const shape = CrateSettingsFields.shape;
   const out: SettingsAdjustment[] = [];
   for (const key of NUMERIC_SETTINGS) {
     if (!(key in patch)) continue;

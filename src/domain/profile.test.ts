@@ -1,3 +1,4 @@
+import { ANY_FACES } from "./orientations";
 import { describe, expect, it } from "vitest";
 import { parts } from "./catalog";
 import { isSlender, usesCradles } from "./cradles";
@@ -145,7 +146,7 @@ describe("shaped blocking", () => {
     expect(flatShaped.members).toEqual(flat.members);
     expect(flatShaped.shapedBlocking).toBeUndefined();
     // Stood on end (a layout the user can pick): general blocking, shaped to the part.
-    const settings = { ...DEFAULT_SETTINGS, quantity: 1, keepUpright: false };
+    const settings = { ...DEFAULT_SETTINGS, quantity: 1, restingFaces: ANY_FACES };
     const onEnd = computeDesign(shaft, settings).layouts.find((l) => l.cellSize[2] > Math.max(l.cellSize[0], l.cellSize[1]))!;
     expect(usesCradles(shaft.dimensions_mm, onEnd, DEFAULT_STANDARDS)).toBe(false);
     expect(designCrate({ ...shaft, profile }, settings, onEnd).shapedBlocking).toBeDefined();

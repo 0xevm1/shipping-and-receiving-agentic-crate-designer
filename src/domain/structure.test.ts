@@ -21,7 +21,7 @@ import {
   skidShare,
   type BaseInput,
 } from "./structure";
-import { custom, designOf, metricText as metric } from "./testFixtures";
+import { custom, designOf, metricText as metric, facesFor } from "./testFixtures";
 
 const design = designOf;
 
@@ -254,7 +254,7 @@ describe("designCrate with structural sizing", () => {
     for (const p of parts) {
       for (const quantity of [...p.suggested_quantities, 30]) {
         for (const keepUpright of [true, false]) {
-          const d = design(p, { quantity, keepUpright });
+          const d = design(p, { quantity, restingFaces: facesFor(keepUpright) });
           const onSkids = d.members
             .filter((m) => m.kind !== "skid")
             .reduce((kg, m) => kg + ((m.size[0] * m.size[1] * m.size[2]) / 1e9) * DEFAULT_STANDARDS.rates.densityKgM3[m.material], 0);
