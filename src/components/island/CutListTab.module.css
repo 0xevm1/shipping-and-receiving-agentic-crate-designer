@@ -92,11 +92,14 @@
   color: var(--text);
 }
 
-/* The drawer (`max-width: 980px`): the row toggle is a touch target, and the cells are tighter so the Qty column keeps its room. */
-@media (max-width: 980px) {
+/* The row toggle is a touch target by the same rule as every other control: the drawer layout or a coarse pointer. */
+@media (max-width: 980px), (pointer: coarse) {
   .cut .pick {
     min-height: var(--touch);
   }
+}
+/* The drawer (`max-width: 980px`): the cells are tighter so the Qty column keeps its room. */
+@media (max-width: 980px) {
   .cut .row td,
   .cut th {
     padding-left: 4px;

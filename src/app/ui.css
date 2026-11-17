@@ -251,8 +251,9 @@
   }
 
   /*
-   * Wording for the input in use: the mouse hint by default, the touch hint on a coarse pointer.
-   * (The mouse hint also goes where there is no hover.)
+   * Wording for the input in use: the mouse hint by default, and the touch hint wherever there is no
+   * hover or the pointer is coarse. One condition decides both, so exactly one of them always shows
+   * (a stylus is fine but cannot hover: it gets "Tap").
    */
   .hint-touch {
     display: none;
@@ -261,8 +262,6 @@
     .hint-mouse {
       display: none;
     }
-  }
-  @media (pointer: coarse) {
     .hint-touch {
       display: inline;
     }
