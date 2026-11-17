@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "preinstall": "node scripts/require-bun.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",
