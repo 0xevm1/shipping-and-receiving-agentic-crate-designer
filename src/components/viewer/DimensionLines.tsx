@@ -6,47 +6,53 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Vector3, type Group } from "three";
 import type { Line2, LineSegments2 } from "three-stdlib";
 import type { CrateDesign } from "@/domain/crate";
-import type { Vec3 } from "@/domain/schema";
-import { length, lengthUnit, type Units } from "@/lib/units";
-import { anim, pulse } from "@/state/motion";
-import { reducedMotion, useDesigner } from "@/state/store";
-import { buildLines, createPulseClock, dimensionPulses, PULSE_DURATION_S, tickPulse, type Where } from "./dimensionPulse";
+import { anim } from "@/state/motion";
+import { reducedMotion } from "@/state/store";
+import { buildLines, separatePills, type Axis, type PillBox, type Where } from "./sizeLines";
+import { createPulseClock, dimensionPulses, PULSE_DURATION_S, tickPulse } from "./dimensionPulse";
 import { PhotonLayer } from "./PhotonLayer";
+import { PROBE, probeStats } from "./probeStats";
 import { EXPLODE_WALL_MM } from "./scene";
 import { labelElements } from "./SizeLabels";
 
 const LINE = "#e6eef7";
 const PART_LINE = "#70b8fd";
 const LINE_OPACITY = 0.65;
-/** How much a pulse brightens the lines it runs along, at its peak (#65). */
+/** How much a pulse brightens the lines it runs along, at its peak. */
 const LINE_GLOW = 0.25;
 const WHERE: Where[] = ["front", "right", "part"];
+const NO_PULSES: never[] = [];
 
 const v = new Vector3();
+/** Per-frame scratch for the label pass: which labels show, and the pill boxes in priority order. */
+const shown: boolean[] = [];
+const pills: PillBox[] = [];
+const pillOf: number[] = [];
 
 /**
- * Size lines, in crate-interior mm. Crate: length along the front bottom edge,
- * width along the right bottom edge, height at the back right corner. They
- * slide out with the walls when exploded but keep the assembled numbers.
- * Part: one part (top layer, front row, rightmost) in ice blue, only once the
- * inside is on show. Lines skip depth testing so they are never buried; the
- * labels are DOM elements (see SizeLabels) positioned here every frame.
+ * Size lines, in crate-interior mm. Crate: length along the front bottom edge, width along the
+ * right bottom edge, height at the back right corner. They slide out with the walls when exploded
+ * but keep the assembled numbers. Part: one part (top layer, front row, rightmost) in ice blue,
+ * shown once the inside is on show. `hide` leaves out the dimension whose axis points at the
+ * camera in a straight-on preset. Lines skip depth testing so they are never buried; the labels
+ * are DOM elements (see `SizeLabels`) positioned here every frame.
  *
- * Every 10 s (first 2 s after mounting) a photon pulse leaves each label and runs out along its
- * dimension, splitting at every vertex (#65; paths in `dimensionPulse.ts`, drawn by
- * `PhotonLayer`). It is ambient: never with reduced motion, restarted (not queued) after the tab
- * was hidden, and it never counts as input.
+ * The part's lines are always built and the group is shown or hidden in the frame loop, so
+ * opening the crate never rebuilds geometry mid-frame.
+ *
+ * Every 10 s (first 2 s after mounting) a photon pulse leaves each dimension and runs out along
+ * it, splitting at every vertex (paths in `dimensionPulse.ts`, drawn by `PhotonLayer`). It is
+ * ambient: never with reduced motion, restarted (not queued) after the tab was hidden, and it
+ * never counts as input.
  */
-export function DimensionLines({ design, units, showParts }: { design: CrateDesign; units: Units; showParts: boolean }) {
+export function DimensionLines({ design, showParts, hide }: { design: CrateDesign; showParts: boolean; hide: Axis | null }) {
   const frontRef = useRef<Group>(null);
   const rightRef = useRef<Group>(null);
   const partRef = useRef<Group>(null);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
-  const setLabels = useDesigner((s) => s.setLabels);
-  const [insideShown, setInsideShown] = useState(false);
 
-  const { lines, anchors } = useMemo(() => buildLines(design, showParts && insideShown), [design, showParts, insideShown]);
+  const { lines, anchors, labels } = useMemo(() => buildLines(design, showParts, hide), [design, showParts, hide]);
   const pulses = useMemo(() => {
     const all = dimensionPulses(lines, anchors);
     return { front: all.filter((p) => p.where === "front"), right: all.filter((p) => p.where === "right"), part: all.filter((p) => p.where === "part") };
@@ -57,29 +63,33 @@ export function DimensionLines({ design, units, showParts }: { design: CrateDesi
   const wasHidden = useRef(false);
 
   useEffect(() => {
-    const onVisibility = () => void (document.hidden && (wasHidden.current = true));
+    const onVisibility = () => {
+      if (document.hidden) wasHidden.current = true;
+    };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       for (const w of WHERE) layers[w].dispose();
-      pulse.active = 0;
+      if (PROBE) probeStats.photonsActive = 0;
     };
   }, [layers]);
-
-  useEffect(() => {
-    setLabels(anchors.map((a) => ({ text: `${length(a.value, units)} ${lengthUnit(units)}`, inner: a.where === "part" })));
-  }, [anchors, units, setLabels]);
-  useEffect(() => () => setLabels([]), [setLabels]);
 
   useFrame((state, dt) => {
     // A hidden tab, or reduced motion, restarts the clock: no burst of queued pulses on return.
     const on = !reducedMotion() && !document.hidden && !wasHidden.current;
     wasHidden.current = false;
     const tick = tickPulse(clock.current, dt, on);
-    if (tick.fired) pulse.fired++;
+
+    // The part's lines show once the inside is on show: open or exploded.
+    const partShown = showParts && (anim.lidAlpha < 0.5 || anim.explode > 0.5);
+    if (partRef.current) partRef.current.visible = partShown;
+
     let active = 0;
-    for (const w of WHERE) active += layers[w].update(pulses[w], tick.since, state.viewport.dpr);
-    pulse.active = active;
+    for (const w of WHERE) active += layers[w].update(w === "part" && !partShown ? NO_PULSES : pulses[w], tick.since, state.viewport.dpr);
+    if (PROBE) {
+      if (tick.fired) probeStats.pulsesFired++;
+      probeStats.photonsActive = active;
+    }
     const glow = tick.since >= 0 ? LINE_GLOW * Math.sin(Math.PI * Math.min(1, tick.since / PULSE_DURATION_S)) : 0;
     for (const w of WHERE) {
       const line = lineRefs.current[w];
@@ -90,21 +100,30 @@ export function DimensionLines({ design, units, showParts }: { design: CrateDesi
     frontRef.current?.position.set(0, -out, 0);
     rightRef.current?.position.set(out, 0, 0);
     const groups: Record<Where, Group | null> = { front: frontRef.current, right: rightRef.current, part: partRef.current };
-    const shown = anim.lidAlpha < 0.5 || anim.explode > 0.5;
-    if (shown !== insideShown) setInsideShown(shown);
 
-    anchors.forEach((a, i) => {
+    // Labels in two passes (read every size, then write every style) so no read follows a write.
+    pills.length = 0;
+    labels.forEach((l, i) => {
       const el = labelElements[i];
-      const g = groups[a.where];
+      const g = groups[l.where];
+      shown[i] = false;
       if (!el || !g) return;
-      g.localToWorld(v.set(...a.at)).project(camera);
-      if (v.z > 1 || v.z < -1) {
+      g.localToWorld(v.set(...l.at)).project(camera);
+      if ((l.where === "part" && !partShown) || v.z > 1 || v.z < -1) return;
+      shown[i] = true;
+      pillOf[i] = pills.push({ x: ((v.x + 1) / 2) * size.width, y: ((1 - v.y) / 2) * size.height, w: el.offsetWidth, h: el.offsetHeight }) - 1;
+    });
+    // The part's pill, which comes last, steps clear of the crate's rather than overlap them.
+    separatePills(pills);
+    labels.forEach((_, i) => {
+      const el = labelElements[i];
+      if (!el) return;
+      if (!shown[i]) {
         el.style.visibility = "hidden";
         return;
       }
-      const x = ((v.x + 1) / 2) * size.width;
-      const y = ((1 - v.y) / 2) * size.height;
-      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+      const p = pills[pillOf[i]];
+      el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -50%)`;
       el.style.visibility = "visible";
     });
   });
@@ -114,7 +133,9 @@ export function DimensionLines({ design, units, showParts }: { design: CrateDesi
     <>
       {lines[w].length > 0 && (
         <Line
-          ref={(l) => void (lineRefs.current[w] = l)}
+          ref={(l) => {
+            lineRefs.current[w] = l;
+          }}
           points={lines[w].flat()}
           segments
           color={color}
@@ -133,19 +154,9 @@ export function DimensionLines({ design, units, showParts }: { design: CrateDesi
     <group>
       <group ref={frontRef}>{draw("front", LINE)}</group>
       <group ref={rightRef}>{draw("right", LINE)}</group>
-      <group ref={partRef}>{draw("part", PART_LINE)}</group>
+      <group ref={partRef} visible={false}>
+        {draw("part", PART_LINE)}
+      </group>
     </group>
-  );
-}
-
-/**
- * Anchors of the crate's size labels (length, width, height) in crate-interior mm, moved out
- * with the walls by explode amount `e`, as `DimensionLines` draws them. `Director` frames these.
- * The part's labels sit inside the crate, so they don't need their own room.
- */
-export function crateLabelAnchors(design: CrateDesign, e: number): Vec3[] {
-  const out = EXPLODE_WALL_MM * e;
-  return buildLines(design, false).anchors.map(({ at, where }) =>
-    where === "front" ? [at[0], at[1] - out, at[2]] : where === "right" ? [at[0] + out, at[1], at[2]] : at,
   );
 }

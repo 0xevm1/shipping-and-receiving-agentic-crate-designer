@@ -1,0 +1,28 @@
+/*
+ * The 3D view's "graphics connection lost" cover. It paints the navy itself: a canvas that has lost
+ * its WebGL context shows blank white, which leaves the header text unreadable.
+ */
+
+.lost {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 40%, var(--navy-light), var(--navy-deep) 70%);
+  color: var(--soft);
+}
+
+.lost p {
+  margin: 0;
+  max-width: 34ch;
+}
+
+.lost .title {
+  font: 500 16px/1.3 var(--sans);
+  color: var(--text);
+}

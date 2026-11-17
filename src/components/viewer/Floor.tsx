@@ -4,8 +4,8 @@ import { useEffect, useMemo } from "react";
 import { BufferGeometry, Float32BufferAttribute, ShaderMaterial, Vector2 } from "three";
 import type { Vec3 } from "@/domain/schema";
 import { gridStepMm, type Units } from "@/lib/units";
+import { MM_TO_M } from "./scene";
 
-const MM_TO_M = 0.001;
 /** How far the light pool spreads past the crate footprint, in m. */
 const POOL_SOFT_M = 0.9;
 /** Grid radius around the crate, in m: at least this, or a multiple of the crate's longest side. */
@@ -44,6 +44,7 @@ export function Floor({ external, units }: { external: Vec3; units: Units }) {
       }),
     [half],
   );
+  useEffect(() => () => pool.dispose(), [pool]);
   const step = gridStepMm(units) * MM_TO_M;
   const longest = Math.max(external[0], external[1]) * MM_TO_M;
   const radius = Math.max(GRID_MIN_RADIUS_M, longest * GRID_RADIUS_PER_LENGTH);

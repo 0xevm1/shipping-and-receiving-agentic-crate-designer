@@ -1,4 +1,3 @@
-
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, Points, ShaderMaterial } from "three";
 import { easePulse, PULSE_DURATION_S, type DimensionPulse } from "./dimensionPulse";
 
@@ -39,7 +38,7 @@ const fragmentShader = /* glsl */ `
 `;
 
 /**
- * The photons of one group of size lines (#65): a single `Points` object, added to the same
+ * The photons of one group of size lines: a single `Points` object, added to the same
  * group as the lines so it follows explode, rotation and modes. Not a React component on purpose:
  * `DimensionLines` calls `update` from its one `useFrame`, so nothing re-renders per frame.
  * Additive blending, no depth test (like the lines). Hidden between pulses, so it costs nothing.
@@ -84,10 +83,9 @@ export class PhotonLayer {
     let legs = 0;
     if (since >= 0) {
       for (const p of pulses) {
-        const t = since - p.delay;
-        if (t < 0 || t > PULSE_DURATION_S) continue;
-        const head = easePulse(t / PULSE_DURATION_S) * (p.total + p.tail);
-        const emerge = Math.min(1, t / EMERGE_S);
+        if (since > PULSE_DURATION_S) continue;
+        const head = easePulse(since / PULSE_DURATION_S) * (p.total + p.tail);
+        const emerge = Math.min(1, since / EMERGE_S);
         for (const leg of p.legs) {
           if (legs >= MAX_LEGS || head < leg.start || head - p.tail > leg.end) continue;
           const span = leg.end - leg.start;

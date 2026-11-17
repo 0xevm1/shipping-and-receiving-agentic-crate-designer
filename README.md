@@ -112,8 +112,14 @@ tab at a time.
 4. **See the crate in 3D:** closed, open (lid and front wall fade away) or exploded, with size
    labels. The real part models sit in each slot. With the size labels come gold
    **fork-entry arrows** at both ends, one per opening between the skids, and, only when the centre of gravity is off-centre or high,
-   the **centre-of-gravity mark** stencilled on the outside faces. Left alone for 5 s, the crate slowly turns and
-   cycles through the modes.
+   the **centre-of-gravity mark** stencilled on the outside faces. An arrow the crate hides from
+   the current camera fades out, and the straight-on Top, Front and End views leave out the size
+   line that points at you. In the open and exploded views the part's three sizes share one pill.
+   Drag to turn, right-drag (or two fingers on a touch screen) to pan, scroll to zoom (the **View**
+   menu says so); a pan never takes the crate out from the free area, and picking a camera preset in
+   **View** puts the view back. Left alone for 5 s, the crate slowly turns and
+   cycles through the modes, easing back to the middle first if you had panned. If the browser takes
+   the graphics away, a cover with a **Bring back the 3D view** button replaces the blank canvas.
 5. **Read off the build data:**
    - **Overview:** outside size, a one-line verdict ("All checks clear", or "1 caution: parts
      are not restrained" linking to Checks), gross weight, then the **scorecard** (#17): crate cost
@@ -266,7 +272,7 @@ tab at a time.
 | **Units, internally** | Millimetres and kilograms everywhere in `src/domain/`. The app shows inches and pounds by default, with a metric toggle; units are converted only at the UI and export edges (`src/lib/units.ts`, `src/lib/lumber.ts`) |
 | **Axes** | Right-handed, **Z up**: the same frame as the source GLBs. X is the crate's long axis (the skids run along X) |
 | **GLB files** | Metres, Z up, not centred on their origin. The viewer scales by ×1000 and re-centres each part on its bounding box. A loaded file more than 20 units across is read as millimetres, and the UI says so |
-| **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m. Nothing else converts |
+| **three.js** | Y up, metres. A single root group in `CrateViewer` rotates Z-up → Y-up and scales mm → m; the few world-space users (camera framing, floor) convert with the helpers in `viewer/scene.ts` |
 | **Crate origin** | The interior min corner, on the top face of the floor |
 
 ## Key assumptions

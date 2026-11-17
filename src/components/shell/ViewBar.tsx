@@ -95,7 +95,15 @@ function ViewPopover() {
   return (
     <div className="viewwrap hideable" {...wrapProps}>
       {/* aria-controls only while the popover exists, so it never points at a missing id. */}
-      <button ref={triggerRef} type="button" className="glass pillbtn" aria-expanded={open} aria-controls={open ? "view-pop" : undefined} onClick={toggle}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="glass pillbtn"
+        title="Camera and display. Drag to turn, right-drag to pan, scroll to zoom."
+        aria-expanded={open}
+        aria-controls={open ? "view-pop" : undefined}
+        onClick={toggle}
+      >
         View
       </button>
       {open && (
@@ -146,8 +154,8 @@ function ViewPopover() {
             />
           </div>
           <span className="lab">
-            <span className="hint-mouse">Drag to turn, scroll to zoom, right-drag to move.</span>
-            <span className="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to move.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
+            <span className="hint-mouse">Drag to turn, scroll to zoom, right-drag to pan.</span>
+            <span className="hint-touch">Drag to turn, pinch to zoom, drag with two fingers to pan.</span> Floor squares are {units === "imperial" ? "1 ft" : "500 mm"}.
           </span>
         </div>
       )}

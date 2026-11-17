@@ -262,8 +262,8 @@ test.describe("size labels stay in the free area", () => {
       for (const mode of ["closed", "open", "exploded"] as const) {
         await pollCrate(page, (s) => s.mode).toBe(mode);
         const { boxes, island: box } = await labelBoxes(page);
-        // Crate length, width and height, plus the part's three once the inside shows.
-        expect(boxes.length, mode).toBe(mode === "closed" ? 3 : 6);
+        // Crate length, width and height, plus the part's one pill (its three sizes) once the inside shows.
+        expect(boxes.length, mode).toBe(mode === "closed" ? 3 : 4);
         for (const b of boxes) {
           expect(overlaps(b, box), `${mode}: "${b.text}" is under the island`).toBe(false);
           const onScreen = b.x >= 0 && b.y >= 0 && b.x + b.width <= viewport.width && b.y + b.height <= viewport.height;
