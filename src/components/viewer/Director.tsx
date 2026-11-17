@@ -177,6 +177,11 @@ export function Director({ active }: { active: boolean }) {
         sincePick.current = 0;
         getThree().events.update?.();
       }
+    } else if (autoplay.on) {
+      // Held (a pinned row, the open drawer, a drag) without any input on the view: auto-play is off
+      // until the hold ends, and then starts again from the mode on screen.
+      autoplay.on = false;
+      autoplay.slow = false;
     }
 
     const k = reduce ? 1 : 1 - Math.exp(-dt * (autoplay.slow ? EASE_SLOW : EASE_FAST));
