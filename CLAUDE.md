@@ -20,4 +20,6 @@
   merging (not enforced by GitHub on this private repo; see the README "Pull requests" note).
 - **UI changes must update the e2e specs in `e2e/`; check the UI by running `bun run e2e`**
   (spec §10), and use its screenshots in the PR.
+  In a parallel worktree, set a distinct port: `E2E_PORT=33xx bun run e2e`. A local run reuses any server
+  already listening on the port.
 - **Work tracking:** GitHub issues in `0xevm1/shipping-ui`. Name branches `<type>/<issue>-<slug>`.
