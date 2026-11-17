@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import type { CrateDesign } from "@/domain/crate";
+import { noRecommendationMessage } from "@/domain/explainRecommendation";
 import { renderMessage } from "@/lib/message";
 import { useBestQuantity } from "@/state/bestQuantity";
 import { useDesigner } from "@/state/store";
@@ -23,7 +24,7 @@ export function BestQuantity({ design }: { design: CrateDesign }) {
   const whyId = useId();
   const rec = sweep?.recommendation;
   if (!sweep) return <p className={styles.hint}>Finding the best quantity per crate…</p>;
-  if (!rec) return <p className={styles.hint}>No quantity per crate passes every hard check with these rules.</p>;
+  if (!rec) return <p className={styles.hint}>{renderMessage(noRecommendationMessage(sweep) ?? [], units)}</p>;
 
   const inUse = quantity === rec.quantity && design.layout.key === rec.crate.layoutKey;
   const apply = () => {

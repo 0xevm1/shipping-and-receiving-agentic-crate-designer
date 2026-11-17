@@ -10,6 +10,7 @@
  * Content-addressed: `designPartHash` names the version of the part; a sweep's configurations
  * carry it (`configuration.part_hash`), and only the current version's are served.
  */
+import { catalog } from "@/domain/catalog";
 import type { DesignPart } from "@/domain/schema";
 import { designPartOf } from "@/engine/engine";
 import { designPartHash } from "@/engine/request";
@@ -18,9 +19,21 @@ import type { OrgContext } from "../db/org";
 import type { DesignJob, JobConfiguration, Part, Repository } from "../db/repository";
 import { runPartChangedHooks } from "./hooks";
 
-/** The engine's part from the part row's facts: what a job designs from until a browser sends its own. */
+/**
+ * The engine's part from the part row's facts: what a job designs from until a browser sends its
+ * own. A catalog part brings the catalog's suggested quantities (#133); any other part none, so
+ * its sweep chooses among the defaults (1, 4 and 8).
+ */
 export function rowDesignPart(p: Part): DesignPart {
-  return { id: p.id, name: p.name, mass_kg: p.massKg, dimensions_mm: [p.sizeXMm, p.sizeYMm, p.sizeZMm], ...(p.material ? { material: p.material } : {}) };
+  const suggested = p.catalogId ? catalog.parts.find((c) => c.id === p.catalogId)?.suggested_quantities : undefined;
+  return {
+    id: p.id,
+    name: p.name,
+    mass_kg: p.massKg,
+    dimensions_mm: [p.sizeXMm, p.sizeYMm, p.sizeZMm],
+    ...(p.material ? { material: p.material } : {}),
+    ...(suggested ? { suggested_quantities: suggested } : {}),
+  };
 }
 
 /** The stored design part, parsed; null when there is none or it no longer parses. */

@@ -41,6 +41,8 @@ describe('the job\'s design part (#46 "same inputs")', () => {
       mass_kg: row.massKg,
       dimensions_mm: catalog.dimensions_mm,
       material: catalog.material,
+      // A catalog part brings the catalog's suggested quantities, which choose its sweep's recommendation (#133).
+      suggested_quantities: catalog.suggested_quantities,
     });
     expect(jobPartHash(empty, row)).toBe(designPartHash(rowDesignPart(row)));
   });

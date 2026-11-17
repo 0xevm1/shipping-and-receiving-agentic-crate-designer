@@ -1,6 +1,7 @@
 import type { Ranking } from "@/domain/design";
 import type { CrateSettings, DesignPart } from "@/domain/schema";
 import type { ShopStandards } from "@/domain/standards";
+import { candidateQuantities } from "@/domain/sweep";
 import { canonicalJson } from "./canonical";
 import { designPartOf } from "./engine";
 import type { DesignRequest } from "./schemas";
@@ -21,7 +22,12 @@ import type { SweepRequest } from "./sweep";
 /** The packing rules a sweep holds fixed: every setting but the quantity. */
 export type SweepRules = Omit<CrateSettings, "quantity">;
 
-/** The sweep request for a part, its packing rules and the shop standards. */
+/**
+ * The sweep request for a part, its packing rules and the shop standards. The recommendation
+ * chooses among the part's suggested quantities (#133): `candidates` is set here, from the part's
+ * `suggested_quantities` (1, 4 and 8 when it has none), so the browser, the server's queue job,
+ * `POST /designs` and the CLI send the same ones for the same part.
+ */
 export function sweepRequestFor(input: {
   part: DesignPart;
   rules: SweepRules;
@@ -35,6 +41,7 @@ export function sweepRequestFor(input: {
     part: designPartOf(input.part),
     rules: { keepUpright, maxLayers, partGapMm, wallClearanceMm, panelThickness },
     standards: input.standards,
+    candidates: candidateQuantities(input.part.suggested_quantities),
     ...(input.freightRates !== undefined ? { freightRates: input.freightRates } : {}),
     ...(input.maxQuantity !== undefined ? { maxQuantity: input.maxQuantity } : {}),
     ...(input.total !== undefined ? { total: input.total } : {}),

@@ -85,7 +85,7 @@ export async function runOffline(opts: CliOptions, bytes: Uint8Array, now = new 
       unitsGuessed: guessed,
       mmPerUnit: MM_PER_UNIT[frame.units],
       rawSize: sizeUnits,
-      suggested_quantities: [],
+      suggested_quantities: design.part.suggested_quantities ?? [],
       massAssumed: false,
     };
     const glb = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
