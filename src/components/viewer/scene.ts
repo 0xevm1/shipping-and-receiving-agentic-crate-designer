@@ -26,7 +26,7 @@ export const CAMERA_FAR_M = 200;
 export { cloneWithMaterial, partMaterial, WOOD } from "@/lib/sceneMaterials";
 
 export const EDGE = new Color("#291a0a");
-/** Selection: Hadrian sky blue. */
+/** Selection: sky blue. */
 export const ICE = new Color("#70b8fd");
 export const ICE_EDGE = new Color("#e3f1ff");
 export const GHOST_EDGE = new Color("#d9ccb3");

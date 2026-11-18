@@ -12,7 +12,6 @@ import { SizeLabels } from "../viewer/SizeLabels";
 import { StageMessage } from "../viewer/StageMessage";
 import { Flash } from "./ChangeFeedback";
 import { FileCheckDialog } from "./FileCheckDialog";
-import { Credit } from "./Credit";
 import styles from "./DesignerShell.module.css";
 import { PartHeader } from "./PartHeader";
 import { Tooltip } from "./Tooltip";
@@ -55,11 +54,10 @@ function useNarrow() {
 /**
  * Full-bleed layout: the 3D stage fills the window and four overlay regions
  * float above it — part title (top left), the island (upper right), the load
- * hint and credit (bottom left) and the view bar (bottom right).
+ * hint (bottom left) and the view bar (bottom right).
  *
  * Narrow screens: the stage still fills the window; the island becomes a right-side
- * drawer behind a hamburger, a summary chip shows the answer above a compact view bar, and the
- * credit moves to the foot of the drawer.
+ * drawer behind a hamburger, and a summary chip shows the answer above a compact view bar.
  */
 export function DesignerShell() {
   const panelsHidden = useView((s) => s.panelsHidden);
@@ -146,7 +144,7 @@ export function DesignerShell() {
       } else if (!island) {
         s.setInsets({ left: 0, top: 0, right: 0, bottom: 0 });
       } else if (s.panelsHidden) {
-        // Only the credit remains, bottom left; keep the crate above it.
+        // Only the view bar remains, bottom right; keep the crate above it.
         s.setInsets({ left: 0, top: 0, right: 0, bottom: FREE_BOTTOM });
       } else {
         s.setInsets({ left: FREE_LEFT, top: FREE_TOP, right: island.offsetWidth + ISLAND_GAP, bottom: FREE_BOTTOM });
@@ -235,9 +233,8 @@ export function DesignerShell() {
         />
         <ViewBar />
       </div>
-      {!narrow && <Credit />}
       {narrow && <div className={styles.scrim} data-testid="scrim" hidden={!drawerOpen} aria-hidden="true" onClick={closeDrawer} />}
-      <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} footer={narrow ? <Credit inline /> : undefined} />
+      <Island ref={islandRef} drawer={narrow ? { open: drawerOpen, onClose: closeDrawer } : undefined} />
       <FileCheckDialog />
       {dragging && (
         <div className={styles.veil} data-testid="drop-veil">

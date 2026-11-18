@@ -1,6 +1,6 @@
 /*
  * The shell's own pieces: the full-bleed stage, the file-drop veil, and the narrow-screen foot,
- * hamburger, summary chip and scrim. The overlays (header, island, view bar, credit) own their
+ * hamburger, summary chip and scrim. The overlays (header, island, view bar) own their
  * styles. They react to Hide panels through the `data-panels-hidden` attribute on the shell root.
  *
  * Narrow (`max-width: 980px`, matching `NARROW` in DesignerShell.tsx): the scene stays full-bleed;

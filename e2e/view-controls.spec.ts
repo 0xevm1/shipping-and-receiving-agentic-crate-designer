@@ -102,9 +102,8 @@ test("switches and Pull apart change the scene", async ({ page }) => {
   expect((await crate(page)).mode).toBeNull();
 });
 
-test("Hide panels hides the island, header and Export pill for real, but keeps the credit", async ({ page }) => {
+test("Hide panels hides the island, header and Export pill for real", async ({ page }) => {
   const before = await crate(page);
-  const credit = page.getByLabel("Hadrian × Eric White, interview candidate");
   await hidePanelsButton(page).click();
 
   await expect(showPanelsButton(page)).toBeVisible();
@@ -126,9 +125,6 @@ test("Hide panels hides the island, header and Export pill for real, but keeps t
     expect(focused.inside).toBe(false);
     expect(focused.label).not.toMatch(/^(View|mm kg|in lb|Export Packing Specs)|view\. Click for/);
   }
-  await expect(credit).toBeVisible();
-  await expect(credit).toHaveCSS("opacity", "1");
-  await expect(credit).toContainText("HADRIAN");
   // The crate is re-framed for the bigger free area.
   await pollCrate(page, (s) => s.cameraDistance).not.toBeCloseTo(before.cameraDistance!, 2);
   await shot(page, "view-controls-panels-hidden");
