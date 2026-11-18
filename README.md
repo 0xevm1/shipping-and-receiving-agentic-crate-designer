@@ -41,4 +41,5 @@ without Docker.
 
 Everything else (commands, environment, the command line, pull requests, who it's for, what it
 does, scope, assumptions and the project layout) is in **[docs/GUIDE.md](docs/GUIDE.md)**. The rules
-and algorithms are in [docs/SPECIFICATION.md](docs/SPECIFICATION.md).
+and algorithms are in [docs/SPECIFICATION.md](docs/SPECIFICATION.md). For a short, spoken tour of the
+architecture, data model and main decisions, read [docs/architecture.md](docs/architecture.md).
