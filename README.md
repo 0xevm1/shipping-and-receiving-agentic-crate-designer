@@ -25,8 +25,6 @@ Requirements: [Bun](https://bun.sh) 1.3+, Node 24 and Docker (Docker Desktop, or
 compose plugin), running.
 
 ```bash
-git clone git@github.com:0xevm1/shipping-ui.git
-cd shipping-ui
 bun install
 bun run dev          # starts Postgres and blob storage in Docker, migrates, serves http://localhost:3000
 bun run worker       # optional, in a second terminal: background sweeps and large bundles
