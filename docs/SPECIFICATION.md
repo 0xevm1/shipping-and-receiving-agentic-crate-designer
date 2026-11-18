@@ -10,7 +10,7 @@
 
 ## 1. Problem
 
-Hadrian ships precision metal parts. Heavy or large parts go in custom wooden crates, designed
+The shop ships precision metal parts. Heavy or large parts go in custom wooden crates, designed
 around the part's geometry. A crate may hold one part, a few identical parts, or a whole batch.
 It must protect the contents in transit while staying cheap to build, easy to handle and
 economical to ship. Today this takes someone who understands the part's geometry, material and
@@ -2547,15 +2547,14 @@ with the 3D view as the main element and detail one click away.
 
 ### 8.1 Visual system
 
-Layout, glass and behaviour come from the design handoff. **Colours and type come from
-hadrian.co**, read from its live CSS:
+Layout, glass and behaviour come from the design handoff. Colours and type:
 
 - **Colours:**
-  - **Ground:** Hadrian navy `#002548`, lifted toward `#13497D` behind the crate, with a vignette.
+  - **Ground:** navy `#002548`, lifted toward `#13497D` behind the crate, with a vignette.
   - **Text:** white, with soft and muted variants.
   - **Gold `#F3A000`** marks the answer, warnings, the tagline and the cut-list group headers.
   - **Sky blue `#70B8FD`** marks selection (highlighted boards, pinned rows, part dimension
-    lines). It is also the floor grid colour, echoing Hadrian's blueprint line art.
+    lines). It is also the floor grid colour, like blueprint line art.
   - **Green `#7BD88F`** marks passed checks. The Export pill (#51) is filled with it deepened
     to `#1E7B45` (`--green-fill`; hover `#1A6B3C`), so its white label passes AA (5.3:1), with
     a `--green` border.
@@ -2563,16 +2562,14 @@ hadrian.co**, read from its live CSS:
   `blur(16px) saturate(170%)`, a 1 px border, an inset highlight and a drop shadow. Islands
   have a 30 px radius; pills are fully round. The translucency is deliberate; don't make it more
   opaque.
-- **Type:** Hadrian uses Klim's **Söhne** family, which is a licensed typeface. The app uses the
-  closest open fonts, all through `next/font/google`:
+- **Type:** the type roles were designed around Klim's **Söhne** family, which is a licensed
+  typeface. The app uses the closest open fonts, all through `next/font/google`:
 
-  | Hadrian | Role | Here |
+  | Söhne | Role | Here |
   |---|---|---|
   | Söhne | Display and body; headings at weight 400 with −0.03em tracking | **Inter Tight** |
-  | Söhne Breit | Wide uppercase eyebrows (tagline, cut-list groups, the HADRIAN credit) | **Archivo** at `font-stretch: 125%` |
+  | Söhne Breit | Wide uppercase eyebrows (tagline, cut-list groups) | **Archivo** at `font-stretch: 125%` |
   | Söhne Mono | Measured values, and uppercase button labels | **Geist Mono** |
-  | — | Narrow label under the signature | **Archivo** at `font-stretch: 62%` |
-  | — | Credit signature | **Mrs Saint Delafield** |
 
   To use real Söhne, license it and point `--font-sans`, `--font-wide` and the mono variable at
   `next/font/local` in `src/app/layout.tsx`.
@@ -2594,13 +2591,12 @@ hadrian.co**, read from its live CSS:
 
 ### 8.2 Layout
 
-The canvas fills the window. Four regions float above it:
+The canvas fills the window. Three regions float above it:
 
 | Region | Contents |
 |---|---|
 | Top left (no glass) | "Crate Designer", the tagline, then the part as a mono sentence: id · name; material · mass each · crate gross; measured size · model check; then the change note (§8.5a), then the green **Export** pill (#51, §7.13), left-aligned with the lines, with its status note beside it. Unknown parts get inline underlined name, material and mass fields in the same sentence (§8.5) |
 | Upper right island (440 px) | Part name + "Load a part"; the turntable part view (170 px), which folds away (0.25 s, none with reduced motion) once the panel is scrolled, and altogether in windows under 760 px tall, so a laptop gets the room for content (#62); the tabs; the selected tab's panel, which is the only thing that scrolls. The island keeps its fixed height |
-| Bottom left (no glass) | The credit: "HADRIAN × Eric White", with the name as a solid cursive signature tilted 6° up from the left (`Credit.tsx`), and "Interview Candidate" in narrow Archivo beneath, letter-spaced with SVG `textLength` to span exactly the signature's on-screen width (measured after the script font loads).  |
 | Bottom right view bar | Pin bar (when pinned), mode icon, units (mm kg / in lb; in lb by default, remembered per browser, §4), View popover, Hide panels |
 
 - **Crate centring:** the crate is centred in the area the overlays leave free, not in the

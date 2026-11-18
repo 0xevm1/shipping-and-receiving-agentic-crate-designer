@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useRef, type KeyboardEvent, type ReactNode, type Ref, type UIEvent } from "react";
+import { useMemo, useRef, type KeyboardEvent, type Ref, type UIEvent } from "react";
 import { allChecks, cautionCount } from "@/lib/checks";
 import { countsText, type FileReport } from "@/lib/fileCheckReport";
 import type { ChangeSource } from "@/state/designEvents";
@@ -75,9 +75,9 @@ export interface DrawerProps {
  * and the selected tab's panel — the only thing on the page that scrolls.
  *
  * With `drawer` (narrow screens) it is a right-side modal dialog with a close button, inert
- * while closed. `footer` renders below the panel (the credit, on narrow screens).
+ * while closed.
  */
-export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?: DrawerProps; footer?: ReactNode }) {
+export function Island({ ref, drawer }: { ref: Ref<HTMLElement>; drawer?: DrawerProps }) {
   const part = useDesigner((s) => s.part);
   const selected = useView((s) => s.tab);
   const design = useDesigner((s) => s.result.design);
@@ -222,8 +222,6 @@ export function Island({ ref, drawer, footer }: { ref: Ref<HTMLElement>; drawer?
         ) : (
           <ChecksTab checks={checks} />
         )}
-        {/* The credit scrolls with the content: pinned, it cost a phone 69 px of a 505 px panel. */}
-        {footer && <div className={styles.foot}>{footer}</div>}
       </div>
     </aside>
   );

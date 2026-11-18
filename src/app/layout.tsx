@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Geist_Mono, Inter_Tight, Mrs_Saint_Delafield } from "next/font/google";
+import { Archivo, Geist_Mono, Inter_Tight } from "next/font/google";
 import "./globals.css";
 
 /*
- * Type roles follow hadrian.co, which uses Klim's Söhne family. Söhne is
- * licensed, so these are the closest open substitutes; see globals.css.
+ * Type roles were designed around Klim's Söhne family. Söhne is licensed, so
+ * these are the closest open substitutes; see globals.css.
  */
 
 /** Söhne → Inter Tight: display and body text. */
@@ -13,7 +13,7 @@ const sans = Inter_Tight({
   subsets: ["latin"],
 });
 
-/** Söhne Breit → Archivo, whose width axis covers both wide eyebrows (125%) and narrow labels (62%). */
+/** Söhne Breit → Archivo, at 125% width for the wide eyebrows. */
 const wide = Archivo({
   variable: "--font-wide",
   subsets: ["latin"],
@@ -23,13 +23,6 @@ const wide = Archivo({
 /** Söhne Mono → Geist Mono: measured values, labels and buttons. */
 const mono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-/** The credit signature. */
-const signature = Mrs_Saint_Delafield({
-  variable: "--font-signature",
-  weight: "400",
   subsets: ["latin"],
 });
 
@@ -54,7 +47,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${wide.variable} ${mono.variable} ${signature.variable}`}>
+    <html lang="en" className={`${sans.variable} ${wide.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

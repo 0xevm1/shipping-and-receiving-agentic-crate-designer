@@ -213,20 +213,15 @@ test("all five tabs fit the drawer without scrolling or clipping, with a caution
   );
 });
 
-test("scrolling the drawer folds the part thumbnail away and returns it at the top; the credit scrolls with the content", async ({ page }) => {
+test("scrolling the drawer folds the part thumbnail away and returns it at the top", async ({ page }) => {
   await openApp(page);
   await openDrawer(page);
   await openTab(page, "Cut list");
   const thumb = drawer(page).getByRole("group", { name: /The part on its own/ });
-  const credit = drawer(page).getByLabel("Hadrian × Eric White, interview candidate");
   await expect(thumb).toBeVisible();
-  // The credit is the last thing in the scrolling panel, not pinned under it.
-  await expect(credit).not.toBeInViewport();
   const tabpanel = panel(page);
   await tabpanel.evaluate((el) => el.scrollTo(0, 120));
   await expect(thumb).toBeHidden();
-  await tabpanel.evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  await expect(credit).toBeInViewport();
   await tabpanel.evaluate((el) => el.scrollTo(0, 0));
   await expect(thumb).toBeVisible();
 });

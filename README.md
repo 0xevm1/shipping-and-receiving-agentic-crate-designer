@@ -12,7 +12,6 @@ A browser app that designs **custom wooden shipping crates** for one or more ide
 parts. Load a part (a GLB, with an optional `parts.json` entry) and a quantity: it packs the parts,
 builds a crate around them from plywood, lumber and wood screws, shows it in 3D, checks it, prices
 it, and exports the packing specs for the shop: a cut list, a build sheet and a shipping label.
-Built for Hadrian's Shipping Crate Designer exercise.
 
 ![The crate pulled apart in 3D: four brackets held by blocking, with the size, checks, cost, build time and freight class beside it](docs/screenshots/readme/exploded.png)
 

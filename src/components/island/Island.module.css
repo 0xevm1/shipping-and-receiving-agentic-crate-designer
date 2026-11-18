@@ -292,12 +292,6 @@
   .panel button {
     min-height: var(--touch);
   }
-  /* The credit is the last thing in the scrolling panel (`Credit` with `inline`). */
-  .foot {
-    margin-top: 18px;
-    padding-top: 8px;
-    border-top: 1px solid var(--hair);
-  }
 }
 
 /*

@@ -70,7 +70,7 @@ export function Floor({ external, units }: { external: Vec3; units: Units }) {
         uniform float uRadius; varying vec2 vP;
         void main() {
           float a = 1.0 - smoothstep(uRadius * 0.35, uRadius, length(vP));
-          // Hadrian sky blue, like the line art on hadrian.co.
+          // Sky blue, the line colour (--sky).
           gl_FragColor = vec4(0.44, 0.72, 0.99, 0.24 * a);
         }`,
     });

@@ -11,7 +11,7 @@
 
 /*
  * Crate Designer visual system. Layout and glass from docs/design-handoff;
- * colours and type roles from hadrian.co:
+ * colours and type roles:
  *   navy #002548 ground, white text, gold #F3A000 accent, sky #70B8FD lines.
  *   Söhne (display/body) → Inter Tight; Söhne Breit (wide eyebrows) → Archivo
  *   at 125% width; Söhne Mono (labels, buttons) → Geist Mono. Söhne is a
@@ -52,7 +52,6 @@
   --sans: var(--font-sans), "Helvetica Neue", Arial, sans-serif;
   --wide: var(--font-wide), "Helvetica Neue", Arial, sans-serif;
   --mono: var(--font-geist-mono), ui-monospace, Menlo, monospace;
-  --signature: var(--font-signature), "Snell Roundhand", cursive;
   --pad: 28px;
   /* Smallest comfortable touch target. */
   --touch: 44px;
